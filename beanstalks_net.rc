@@ -1,0 +1,20 @@
+# This is a sample .beanstalkrc file
+#isfrontend
+#ports=2080,2025,2443,2222
+#protos=http,https
+
+# Enable the HTTP UI
+httpd=localhost:9999
+
+# Connect a specific front-end:
+#frontend=is-rvk-01.beanstalks-project.net:2222
+#frontend=eu-west-01.beanstalks-project.net:2222
+
+# Auto-choose and connect to the 2 closest front-ends!
+frontends=2:frontends.b5p.us:2222
+dyndns=beanstalks.net
+# new - use this to *not* open a tunnel to our old FEs
+
+# Set up one tunnel, for now.
+backend=http:YOU.test.beanstalks.me:localhost:9999:SECRET
+
