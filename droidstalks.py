@@ -45,7 +45,7 @@ def Start(host, secret):
   ds.Configure(['--frontends=1:frontends.b5p.us:2222',
                 '--httpd=localhost:9999',
                 '--dyndns=beanstalks.net',
-                '--backend=http:%s:localhost:9999:%s' % config])
+                '--backend=http:%s:localhost:9999:%s' % (host, secret)])
   ds.Start()
 
 
