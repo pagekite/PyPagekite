@@ -1473,6 +1473,7 @@ class BeanstalksNet(object):
       elif opt == '--nofrontend': self.isfrontend = False
       elif opt == '--nodaemonize': self.daemonize = False
       elif opt == '--noall': self.require_all = False
+      elif opt == '--clean': pass
 
       else:
         print DOC

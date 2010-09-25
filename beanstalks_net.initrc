@@ -28,7 +28,8 @@ case "$1" in
     start)
         log_daemon_msg "Starting $DESC"
         log_progress_msg "$NAME"
-        start_daemon -p $BSPNETD_PID $BSPNETD --daemonize \
+        start_daemon -p $BSPNETD_PID $BSPNETD --pidfile=$BSPNETD_PID \
+                                              --daemonize \
                                               --clean --optfile=$BSPNETD_CONF
         log_end_msg "$?"
         ;;
