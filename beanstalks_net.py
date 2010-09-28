@@ -12,7 +12,6 @@
 # FIXME: Add XMPP and incoming SMTP support.
 # FIXME: Add a basic HTTP and HTTPS server for configuring, monitoring and
 #        proof of concept. 
-# FIXME: Make HTTP proxy HTTP/1.1 compliant? Or is Varnish good enough?
 # FIXME: Add throttling, bandwidth shaping and auto-slowdown for freebies?
 # FIXME: Add support for dedicated ports (PageKitePNP, ha ha).
 #
@@ -51,7 +50,8 @@
 #    are fully implemented, we only implement the bare minimum required to
 #    figure out which back-end should handle a given request, and then forward
 #    the bytes unmodified over that channel. As a result, the current HTTP
-#    proxy code is not HTTP 1.1 compliant - this is a FIXME.
+#    proxy code is not HTTP 1.1 compliant - but if you put beanstalks_net.py
+#    behind something else that is (e.g. Varnish), then you're golden.
 #
 #  * The UserConn object represents connections on behalf of users. It can
 #    be created as a FrontEnd, which will find the right tunnel and send
@@ -77,7 +77,7 @@
 #
 #
 PROTOVER = '0.2'
-APPVER = '0.2.1'
+APPVER = '0.3.0'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 DOC = """\
@@ -90,6 +90,7 @@ both the front- and back-end. This following protocols are supported:
   HTTP    - HTTP 1.1 only, requires a valid HTTP Host: header
   HTTPS   - Recent versions of TLS only, requires the SNI extension.
   XMPP    - ...unfinished... (FIXME)
+  SMTP    - ...unfinished... (FIXME)
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the GNU Affero General Public License. For the full text of the
@@ -219,6 +220,11 @@ import threading
 import time
 import traceback
 import urllib
+
+try:
+  import syslog
+except Exception:
+  pass
  
 import BaseHTTPServer
 try:
@@ -327,13 +333,28 @@ def HTTP_Unavailable(where, proto, domain):
 
 LOG = []
 
-def Log(values):
-  words = [('ts', '%x' % time.time())]
-  words.extend([(kv[0], ('%s' % kv[1]).replace('\t', ' ').replace('\n', ' ')) for kv in values])
-  print '\t'.join(['='.join(x) for x in words])
-
-  LOG.append(dict(words))
+def LogValues(values):
+  words = [(kv[0], ('%s' % kv[1]).replace('\t', ' ').replace('\n', ' ').replace(';', ',').strip()) for kv in values]
+  words.append(('ts', '%x' % time.time()))
+  wdict = dict(words)
+  LOG.append(wdict)
   if len(LOG) > 100: LOG.pop()
+  return (words, wdict)
+ 
+def LogSyslog(values):
+  words, wdict = LogValues(values)
+  if 'err' in wdict:
+    syslog.syslog(syslog.LOG_ERR, '; '.join(['='.join(x) for x in words]))
+  elif 'debug' in wdict:
+    syslog.syslog(syslog.LOG_DEBUG, '; '.join(['='.join(x) for x in words]))
+  else:
+    syslog.syslog(syslog.LOG_INFO, '; '.join(['='.join(x) for x in words]))
+
+def LogStdout(values):
+  words, wdict = LogValues(values)
+  print '; '.join(['='.join(x) for x in words])
+
+Log = LogStdout
 
 def LogError(msg, parms=None):
   emsg = [('err', msg)]
@@ -440,8 +461,8 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         tinfo = '%s: <a href="%s://%s">%s</a>' % (proto, proto, domain, domain)
         binfo = '<a href="%s://%s">%s</a>' % (proto, backend, backend)
       else:
-        tinfo = '%s: %s' % (proto, domain) 
-        binfo = '%s' % backend
+        tinfo = '%s: <b>%s</b>' % (proto, domain) 
+        binfo = '<b>%s</b>' % backend
 
       for tunnel in conns.tunnels[tid]:
         html.append(('<li><span class=tid>%s</span></b>'
@@ -838,11 +859,18 @@ TLS_CLIENTHELLO = '%c' % 026
 class MagicProtocolParser(LineParser):
   """A Selectable which recognizes HTTP, TLS or XMPP preambles."""
 
-  def __init__(self, fd=None, address=None):
+  def __init__(self, fd=None, address=None, port_hint=None):
     LineParser.__init__(self, fd, address)
+    self.port_hint = port_hint
     self.leftovers = ''
+
     self.might_be_tls = True
     self.is_tls = False
+
+    self.first_line = True
+    self.is_xmpp = False
+    self.is_smtp = False
+    self.is_http = False
 
   def ProcessData(self, data):
     if self.might_be_tls:
@@ -855,6 +883,39 @@ class MagicProtocolParser(LineParser):
       return self.ProcessTls(data)
     else:
       return LineParser.ProcessData(self, data)
+
+  def ProcessLine(self, line, lines):
+    if self.first_line:
+      self.first_line = False
+      if line.strip().startswith('<'):
+        # FIXME: XMPP is not line-based!
+        self.is_xmpp = True
+      elif (self.port_hint % 100) == 25 or line.startswith('HELO') or line.startswith('EHLO'):
+        self.is_smtp = True
+      else:
+        self.is_http = True
+        
+    if self.is_http:
+      return self.ProcessHttp(line, lines)
+    elif self.is_xmpp:
+      return self.ProcessXmpp(line, lines)
+    elif self.is_smtp:
+      return self.ProcessSmtp(line, lines)
+    else:
+      self.LogError('TlsOrLineParser::ProcessLine: Unknown connection!')
+      return None
+         
+  def ProcessXmpp(self, line, lines):
+    self.LogError('TlsOrLineParser::ProcessXml: Should be overridden!')
+    return None
+
+  def ProcessHttp(self, line, lines):
+    self.LogError('TlsOrLineParser::ProcessHttp: Should be overridden!')
+    return None
+
+  def ProcessTls(self, data):
+    self.LogError('TlsOrLineParser::ProcessTls: Should be overridden!')
+    return None
 
   def GetMsg(self, data):
     mtype, ml24, mlen = struct.unpack('>BBH', data[0:4])    
@@ -895,10 +956,6 @@ class MagicProtocolParser(LineParser):
         # ClientHello!
         sni.extend(self.GetSniNames(self.GetClientHelloExtensions(msg)))
     return sni
-
-  def ProcessTls(self, data):
-    self.LogError('TlsOrLineParser::ProcessTls: Should be overridden!')
-    return None
 
 
 class ChunkParser(Selectable):
@@ -1222,23 +1279,47 @@ class UserConn(Selectable):
 class UnknownConn(MagicProtocolParser):
   """This class is a connection which we're not sure what is yet."""
 
-  def __init__(self, fd, address, conns):
-    MagicProtocolParser.__init__(self, fd, address)
-    self.parser = HttpParser()
+  def __init__(self, fd, address, conns, local_port=None):
+    MagicProtocolParser.__init__(self, fd, address, port_hint=local_port)
+    self.http_parser = None
+    self.smtp_parser = None
+    self.xmpp_parser = None
     self.conns = conns
     self.conns.Add(self)
     self.host = None
     self.sid = -1
 
-  def ProcessLine(self, line, lines):
-    if not self.parser:
-      return 1
+    if (local_port % 100) == 25:
+      self.Send('220 Hi, I am the Beanstalks Project SMTP router.\n')
 
-    if self.parser.Parse(line) is None:
-      return None
+  def ProcessSmtp(self, line, lines):
+    pass
 
-    if (self.parser.state == self.parser.IN_BODY):
-      hosts = self.parser.Header('Host')
+  def ProcessXmpp(self, line, lines):
+    # FIXME: XmppParser does not exist yet.
+    if not self.xmpp_parser: self.xmpp_parser = XmppParser()
+    if self.xmpp_parser.Parse(line) is None: return None
+
+    if self.xmpp_parser.state == self.xmpp_parser.HAVE_DEST:
+      user, host = self.xmpp_parser.to.split('@')
+      if UserConn.FrontEnd(self, 'http', host,
+                           self.xmpp_parser.lines + lines, self.conns) is None:
+        self.Send(XMPP_Unavailable('fe', 'http', host))
+        return None
+
+      # Cleanup
+      self.conns.Remove(self)
+      self.xmpp_parser = None
+      self.conns = None
+
+    return 1
+
+  def ProcessHttp(self, line, lines):
+    if not self.http_parser: self.http_parser = HttpParser()
+    if self.http_parser.Parse(line) is None: return None
+
+    if (self.http_parser.state == self.http_parser.IN_BODY):
+      hosts = self.http_parser.Header('Host')
       if not hosts:
         self.Send(HTTP_Response(400, 'Bad request', 
                   ['<html><body><h1>400 Bad request</h1>',
@@ -1246,21 +1327,18 @@ class UnknownConn(MagicProtocolParser):
                    '</body></html>']))
         return None
 
-
-      if self.parser.method == 'POST' and self.parser.path == MAGIC_PATH:
+      if self.http_parser.method == 'POST' and self.http_parser.path == MAGIC_PATH:
         if Tunnel.FrontEnd(self, lines, self.conns) is None: 
           return None
       else:
         if UserConn.FrontEnd(self, 'http', hosts[0],
-                             self.parser.lines + lines, self.conns) is None:
+                             self.http_parser.lines + lines, self.conns) is None:
           self.Send(HTTP_Unavailable('fe', 'http', hosts[0]))
           return None
 
-      # We are done!
+      # Cleanup
       self.conns.Remove(self)
-
-      # Break any circular references we might have
-      self.parser = None
+      self.http_parser = None
       self.conns = None
 
     return 1
@@ -1271,12 +1349,10 @@ class UnknownConn(MagicProtocolParser):
       if UserConn.FrontEnd(self, 'https', domains[0], [data], self.conns) is None:
         return None
 
-    # We are done!
+    # Cleanup
     self.conns.Remove(self)
-
-    # Break any circular references we might have
-    self.parser = None
     self.conns = None
+
     return 1
 
 
@@ -1285,6 +1361,7 @@ class Listener(Selectable):
 
   def __init__(self, host, port, conns, backlog=100):
     Selectable.__init__(self)
+    self.listen_port = port
     self.fd.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     self.fd.bind((host, port))
     self.fd.listen(backlog)
@@ -1298,7 +1375,7 @@ class Listener(Selectable):
     client, address = self.fd.accept()
 #   print address
     if client:
-      uc = UnknownConn(client, address, self.conns)
+      uc = UnknownConn(client, address, self.conns, local_port=self.listen_port)
       self.Log([('accept', ':'.join(['%s' % x for x in address]))])
       return 1
     else:
@@ -1456,13 +1533,15 @@ class PageKite(object):
                            payload='%s:%s:%s:%s' % (proto, domain, srand, token))
 
   def GetDomainQuota(self, proto, domain, srand, token, sign, recurse=True):
+    if proto not in self.server_protos: return None
+
     bid = '%s:%s' % (proto, domain)
     data = '%s:%s' % (bid, srand)
     if not token or token == signToken(token=token, payload=data):
       if self.auth_domain:
         lookup = '.'.join([srand, token, sign, proto, domain, self.auth_domain])
         try:
-          print 'LOOKUP: %s' % lookup
+          LogDebug('LOOKUP: %s' % lookup)
           ip = socket.gethostbyname(lookup)
 
           # High bit not set, then access is granted and the "ip" is a quota.
@@ -1733,6 +1812,14 @@ class PageKite(object):
     return failures
 
   def LogTo(self, filename):
+    if filename == 'syslog':
+      global Log
+      Log = LogSyslog
+      filename = '/dev/null'
+      syslog.openlog((sys.argv[0] or 'beanstalks_net.py').split('/')[-1],
+                     syslog.LOG_PID, syslog.LOG_DAEMON)
+      return
+
     for fd in range(0, 1024): # Not MAXFD, but should be enough.
       try:
         os.close(fd)
@@ -1800,8 +1887,7 @@ class PageKite(object):
     except Exception, msg:
       epoll = None 
 
-    if epoll:
-      print "FIXME: Should try epoll!"
+    if epoll: LogDebug("FIXME: Should try epoll!")
     self.SelectLoop()
 
   def Start(self):
