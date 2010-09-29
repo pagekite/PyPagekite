@@ -3,7 +3,6 @@
 # pagekite.py, Copyright 2010, the Beanstalks Project ehf.
 #                                  and Bjarni Runar Einarsson
 #
-# FIXME: Add ZChunks: zlib compression on a chunk-by-chunk basis.
 # FIXME: Implement epoll() support.
 # FIXME: Stress test this thing: when do we need a C rewrite?
 # FIXME: Make multi-process?  N workers handling pools of backends.
@@ -220,6 +219,7 @@ import threading
 import time
 import traceback
 import urllib
+import zlib
 
 try:
   import syslog
@@ -296,6 +296,7 @@ def HTTP_PageKiteRequest(server, backends, tokens=None):
   req = ['POST %s HTTP/1.1\r\n' % MAGIC_PATH,
          'Host: %s\r\n' % server,
          'Content-Type: application/octet-stream\r\n',
+         'X-Beanstalk-Features: ZChunks\r\n',
          'Transfer-Encoding: chunked\r\n']
 
   tokens = tokens or {}
@@ -686,6 +687,12 @@ class Selectable(object):
     else:
       self.log_id = 's%s' % self.sid
 
+    self.zw = None
+
+  def SendZChunks(self, level):
+    self.LogDebug('Selectable::SendZChunks: ZChunks enabled!')
+    self.zw = zlib.compressobj(level)
+
   def SetFD(self, fd):
     self.fd = fd
     self.fd.setblocking(0)
@@ -730,10 +737,8 @@ class Selectable(object):
       return None
 
     if data is None or data == '':
-      self.Log([('R', '<EOF>')])
       return None
     else:
-      self.Log([('R', len(data))])
       self.read_bytes += len(data)
       return self.ProcessData(data)
 
@@ -749,13 +754,14 @@ class Selectable(object):
         self.LogError('Error sending: %s' % err)
 
     self.write_blocked = sending[sent_bytes:]
-    self.Log([('S', sent_bytes), ('P', len(sending)), ('B', len(self.write_blocked))])
-
     return 1
 
   def SendChunked(self, data):
-    sending = ''.join(data)
-    return self.Send(['%x\r\n%s' % (len(sending), sending)])
+    sdata = ''.join(data)
+    if not self.zw: return self.Send(['%x\r\n%s' % (len(sdata), sdata)])
+
+    zdata = self.zw.compress(sdata) + self.zw.flush(zlib.Z_SYNC_FLUSH)
+    return self.Send(['%xZ%x\r\n%s' % (len(sdata), len(zdata), zdata)])
 
   def Flush(self):
     while self.write_blocked: self.Send([])
@@ -963,8 +969,11 @@ class ChunkParser(Selectable):
 
   def __init__(self, fd=None, address=None):
     Selectable.__init__(self, fd, address)
+    self.want_cbytes = 0
     self.want_bytes = 0
+    self.compressed = False
     self.chunk = ''
+    self.zr = zlib.decompressobj()
 
   def Cleanup(self):
     Selectable.Cleanup(self)
@@ -973,7 +982,14 @@ class ChunkParser(Selectable):
     if self.want_bytes == 0:
       try:
         size, data = data.split('\r\n', 1)
-        self.want_bytes = int(size, 16)
+        if 'Z' in size:
+          csize, zsize = size.split('Z')
+          self.compressed = True
+          self.want_cbytes = int(csize, 16)
+          self.want_bytes = int(zsize, 16)
+        else:   
+          self.compressed = False
+          self.want_bytes = int(size, 16)
       except ValueError, err:
         self.LogError('ChunkParser::ProcessData: %s' % err)
         self.Log([('bad_data', data)])
@@ -990,7 +1006,14 @@ class ChunkParser(Selectable):
     self.want_bytes -= len(process)
 
     if self.want_bytes == 0:
-      self.ProcessChunk(self.chunk)
+      if self.compressed:
+        cchunk = self.rz.uncompress(self.chunk)
+        if len(cchunk) != self.want_cbytes:
+          self.LogError('ChunkParser::ProcessData: %d != %d zlib bytes' % (len(cchunk), self.cbytes))
+          return None
+        self.ProcessChunk(cchunk)
+      else:
+        self.ProcessChunk(self.chunk)
       self.chunk = ''
       if leftover:
         return self.ProcessData(leftover)
@@ -1030,6 +1053,9 @@ class Tunnel(ChunkParser):
     self = Tunnel(conns)
     requests = []
     try:
+      for accept in conn.parser.Header('X-Beanstalk-Features'):
+        if accept == 'ZChunks': self.SendZChunks(1)
+
       for bs in conn.parser.Header('X-Beanstalk'):
         # X-Beanstalk: proto:my.domain.com:token:signature
         proto, domain, srand, token, sign = bs.split(':') 
@@ -1051,7 +1077,8 @@ class Tunnel(ChunkParser):
   def AuthCallback(self, conn, results):
     
     output = [HTTP_ResponseHeader(200, 'OK'),
-              HTTP_Header('Content-Transfer-Encoding', 'chunked')]
+              HTTP_Header('Content-Transfer-Encoding', 'chunked'),
+              'X-Beanstalk-Features: ZChunks']
     ok = {}
     for r in results:
       output.append('X-Beanstalk-%s: %s\r\n' % r)
@@ -1125,6 +1152,9 @@ class Tunnel(ChunkParser):
           data, parse = self._Connect(server, conns, tokens)
 
         if data and parse:
+          for accept in parse.Header('X-Beanstalk-Features'):
+            if accept == 'ZChunks': self.SendZChunks(9)
+
           for request in parse.Header('X-Beanstalk-OK'):
             proto, domain, srand = request.split(':')
             self.Log([('FE', self.server_name), ('proto', proto), ('domain', domain)])
