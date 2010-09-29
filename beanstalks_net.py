@@ -739,10 +739,15 @@ class Selectable(object):
     if self.log_id: values.append(('id', self.log_id))
     LogError(error, values)
 
-  def Cleanup(self):
-    self.fd.close()
+  def LogTraffic(self):
     self.Log([('wrote', '%d' % self.wrote_bytes),
               ('read', '%d' % self.read_bytes)])
+    self.wrote_bytes = 0
+    self.read_bytes = 0
+
+  def Cleanup(self):
+    self.fd.close()
+    self.LogTraffic()
 
   def ProcessData(self, data):
     self.LogError('Selectable::ProcessData: Should be overridden!')
@@ -760,6 +765,7 @@ class Selectable(object):
       return False
     else:
       self.read_bytes += len(data)
+      if self.read_bytes > 102400: self.LogTraffic()
       return self.ProcessData(data)
 
   def Send(self, data):
@@ -774,6 +780,7 @@ class Selectable(object):
         self.LogError('Error sending: %s' % err)
 
     self.write_blocked = sending[sent_bytes:]
+    if self.wrote_bytes > 102400: self.LogTraffic()
     return True
 
   def SendChunked(self, data, compress=True):
