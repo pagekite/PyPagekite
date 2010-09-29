@@ -766,6 +766,7 @@ class Selectable(object):
     if not self.zw: return self.Send(['%x\r\n%s' % (len(sdata), sdata)])
 
     zdata = self.zw.compress(sdata) + self.zw.flush(zlib.Z_SYNC_FLUSH)
+    LogDebug('Sending %d bytes as %d' % (len(sdata), len(zdata)))
     return self.Send(['%xZ%x\r\n%s' % (len(sdata), len(zdata), zdata)])
 
   def Flush(self):
@@ -990,6 +991,8 @@ class ChunkParser(Selectable):
         if len(cchunk) != self.want_cbytes:
           self.LogError('ChunkParser::ProcessData: %d != %d zlib bytes' % (len(cchunk), self.cbytes))
           return None
+        else:
+          LogDebug('ChunkParser::ProcessData: inflated %d bytes to %d' % (len(self.chunk), self.want_cbytes))
         self.ProcessChunk(cchunk)
       else:
         self.ProcessChunk(self.chunk)
@@ -1365,7 +1368,7 @@ class Listener(Selectable):
       client, address = self.fd.accept()
 #     print address
       if client:
-        uc = UnknownConn(client, address, self.conns, local_port=self.listen_port)
+        uc = UnknownConn(client, address, self.conns)
         self.Log([('accept', ':'.join(['%s' % x for x in address]))])
         return 1
     except Exception:
