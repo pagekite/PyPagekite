@@ -233,7 +233,6 @@ except Exception, e:
   from cgi import parse_qs
   from urlparse import urlparse
 
-
 try:
   import hashlib
   def sha1hex(data):
@@ -244,6 +243,26 @@ except Exception:
   import sha
   def sha1hex(data):
     return sha.new(data).hexdigest() 
+
+
+class MockYamonD(object):
+  def __init__(self, sspec, server=None, handler=None): pass
+  def vmax(self, var, value): pass
+  def vscale(self, var, ratio, add=0): pass
+  def vset(self, var, value): pass
+  def vmin(self, var, value): pass
+  def lcreate(self, listn, elems): pass
+  def ladd(self, listn, value): pass
+  def render_vars_text(self): return ''
+  def quit(self): pass
+  def run(self): pass
+ 
+try:
+  import yamond
+  YamonD=yamond.YamonD
+except Exception:
+  YamonD=MockYamonD
+
 
 gSecret = None
 def globalSecret():
@@ -513,7 +532,6 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
   def do_GET(self):
     (scheme, netloc, path, params, query, frag) = urlparse(self.path) 
-    qs = parse_qs(query)
     
     if path == '/vars.txt':
       self.send_response(200)
@@ -1432,6 +1450,7 @@ class PageKite(object):
     self.ui_http_server = UiHttpServer
     self.ui_sspec = None
     self.ui_httpd = None
+    self.yamond = MockYamonD(())
 
     self.client_mode = 0
 

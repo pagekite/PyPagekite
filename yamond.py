@@ -45,18 +45,11 @@ except Exception, e:
 
 class YamonRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def do_yamon_vars(self):
-    yamond = self.server.yamond
-    yamond.values['yamond_hits'] += 1
-    yamond.scale('bjarni', 0.9)
-
     self.send_response(200)
     self.send_header('Content-Type', 'text/plain')
     self.send_header('Cache-Control', 'no-cache')
     self.end_headers()
-
-    self.wfile.write('unixtime: %d\n' % time.time())
-    for var in yamond.values:
-      self.wfile.write('%s: %s\n' % (var, yamond.values[var]))
+    self.wfile.write(self.server.yamond.render_vars_text())
 
   def do_404(self):
     self.send_response(404)
@@ -79,6 +72,9 @@ class YamonRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.do_404()
 
   def do_GET(self):
+    self.server.yamond.ladd('yamond_hits', time.time()*1000)
+    self.server.yamond.vscale('yamond_hits', 1, 1)
+
     (scheme, netloc, path, params, query, frag) = urlparse(self.path) 
     qs = parse_qs(query)
     return self.handle_path(path, query)
@@ -98,18 +94,30 @@ class YamonD(threading.Thread):
                handler=YamonRequestHandler):
     threading.Thread.__init__(self)
     self.sspec = sspec
-    self.httpd = server(self, handler)
+    self.httpd = None
     self.serve = True
-    self.values = {'yamond_hits': 0}
+    self.values = {}
     self.lists = {}
 
-  def scale(self, var, ratio, add=0):
+    self.vset('yamond_hits', 0)
+    self.lcreate('yamond_hits', 50)
+
+  def vmax(self, var, value):
+    if value > self.values[var]: self.values[var] = value
+
+  def vscale(self, var, ratio, add=0):
     if var in self.values: 
       self.values[var] *= ratio
       self.values[var] += add
 
+  def vset(self, var, value):
+    self.values[var] = value
+
+  def vmin(self, var, value):
+    if value < self.values[var]: self.values[var] = value
+
   def lcreate(self, listn, elems):
-    self.lists[listn] = [elems, 0, []]
+    self.lists[listn] = [elems, 0, ['' for x in xrange(0, elems)]]
 
   def ladd(self, listn, value):
     list = self.lists[listn]
@@ -117,15 +125,36 @@ class YamonD(threading.Thread):
     list[1] += 1
     list[1] %= list[0]
 
+  def render_vars_text(self):
+    data = []
+    for var in self.values:
+      data.append('%s: %s\n' % (var, self.values[var]))
+
+    for lname in self.lists:
+      (elems, offset, list) = self.lists[lname]
+      l = list[offset:]
+      l.extend(list[:offset])
+      data.append('%s: %s\n' % (lname, ' '.join(['%s' % x for x in l])))
+
+    return ''.join(data)
+
   def quit(self):
-    self.serve = False
-    urllib.urlopen('http://%s:%s/exiting/' % self.sspec,
-                   proxies={}).readlines()
+    if self.httpd:
+      self.serve = False
+      urllib.urlopen('http://%s:%s/exiting/' % self.sspec,
+                     proxies={}).readlines()
 
   def run(self):
+    self.httpd = server(self, handler)
     while self.serve: self.httpd.handle_request()
 
 
-yd = YamonD(('', 7999))
-yd.values['bjarni'] = 100
-yd.run()
+if __name__ == '__main__':
+  yd = YamonD(('', 7999))
+  yd.vset('bjarni', 100)
+  yd.lcreate('foo', 2)
+  yd.ladd('foo', 1)
+  yd.ladd('foo', 2)
+  yd.ladd('foo', 3)
+  yd.run()
+
