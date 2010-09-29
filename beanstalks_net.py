@@ -11,7 +11,6 @@
 # FIXME: Add XMPP and incoming SMTP support.
 # FIXME: Add a basic HTTP and HTTPS server for configuring, monitoring and
 #        proof of concept. 
-# FIXME: Make HTTP proxy HTTP/1.1 compliant? Or is Varnish good enough?
 # FIXME: Add throttling, bandwidth shaping and auto-slowdown for freebies?
 # FIXME: Add support for dedicated ports (PageKitePNP, ha ha).
 #
@@ -50,7 +49,8 @@
 #    are fully implemented, we only implement the bare minimum required to
 #    figure out which back-end should handle a given request, and then forward
 #    the bytes unmodified over that channel. As a result, the current HTTP
-#    proxy code is not HTTP 1.1 compliant - this is a FIXME.
+#    proxy code is not HTTP 1.1 compliant - but if you put it behind Varnish
+#    or something that is, then there is no problem.
 #
 #  * The UserConn object represents connections on behalf of users. It can
 #    be created as a FrontEnd, which will find the right tunnel and send
@@ -89,6 +89,7 @@ both the front- and back-end. This following protocols are supported:
   HTTP    - HTTP 1.1 only, requires a valid HTTP Host: header
   HTTPS   - Recent versions of TLS only, requires the SNI extension.
   XMPP    - ...unfinished... (FIXME)
+  SMTP    - ...unfinished... (FIXME)
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the GNU Affero General Public License. For the full text of the
@@ -333,13 +334,28 @@ def HTTP_Unavailable(where, proto, domain):
 
 LOG = []
 
-def Log(values):
-  words = [('ts', '%x' % time.time())]
-  words.extend([(kv[0], ('%s' % kv[1]).replace('\t', ' ').replace('\n', ' ')) for kv in values])
-  print '\t'.join(['='.join(x) for x in words])
-
-  LOG.append(dict(words))
+def LogValues(values):
+  words = [(kv[0], ('%s' % kv[1]).replace('\t', ' ').replace('\n', ' ').replace('; ', ', ').strip()) for kv in values]
+  words.append(('ts', '%x' % time.time()))
+  wdict = dict(words)
+  LOG.append(wdict)
   if len(LOG) > 100: LOG.pop()
+  return (words, wdict)
+ 
+def LogSyslog(values):
+  words, wdict = LogValues(values)
+  if 'err' in wdict:
+    syslog.syslog(syslog.LOG_ERR, '; '.join(['='.join(x) for x in words]))
+  elif 'debug' in wdict:
+    syslog.syslog(syslog.LOG_DEBUG, '; '.join(['='.join(x) for x in words]))
+  else:
+    syslog.syslog(syslog.LOG_INFO, '; '.join(['='.join(x) for x in words]))
+
+def LogStdout(values):
+  words, wdict = LogValues(values)
+  print '; '.join(['='.join(x) for x in words])
+ 
+Log = LogStdout
 
 def LogError(msg, parms=None):
   emsg = [('err', msg)]
@@ -970,7 +986,7 @@ class ChunkParser(Selectable):
 
     if self.want_bytes == 0:
       if self.compressed:
-        cchunk = self.rz.uncompress(self.chunk)
+        cchunk = self.zr.decompress(self.chunk)
         if len(cchunk) != self.want_cbytes:
           self.LogError('ChunkParser::ProcessData: %d != %d zlib bytes' % (len(cchunk), self.cbytes))
           return None
@@ -1016,10 +1032,10 @@ class Tunnel(ChunkParser):
     self = Tunnel(conns)
     requests = []
     try:
-      for feature in conn.http_parser.Header('X-Beanstalk-Features'):
+      for feature in conn.parser.Header('X-Beanstalk-Features'):
         if feature == 'ZChunks': self.SendZChunks(1)
 
-      for bs in conn.http_parser.Header('X-Beanstalk'):
+      for bs in conn.parser.Header('X-Beanstalk'):
         # X-Beanstalk: proto:my.domain.com:token:signature
         proto, domain, srand, token, sign = bs.split(':') 
         requests.append((proto.lower(), domain.lower(), srand, token, sign))
@@ -1508,13 +1524,15 @@ class PageKite(object):
                            payload='%s:%s:%s:%s' % (proto, domain, srand, token))
 
   def GetDomainQuota(self, proto, domain, srand, token, sign, recurse=True):
+    if proto not in self.server_protos: return None
+
     bid = '%s:%s' % (proto, domain)
     data = '%s:%s' % (bid, srand)
     if not token or token == signToken(token=token, payload=data):
       if self.auth_domain:
         lookup = '.'.join([srand, token, sign, proto, domain, self.auth_domain])
         try:
-          print 'LOOKUP: %s' % lookup
+          LogDebug('LOOKUP: %s' % lookup)
           ip = socket.gethostbyname(lookup)
 
           # High bit not set, then access is granted and the "ip" is a quota.
@@ -1642,7 +1660,7 @@ class PageKite(object):
         print DOC
         sys.exit(0)
 
-    if not self.servers and not self.servers_auto and not self.isfrontend:
+    if not self.servers_manual and not self.servers_auto and not self.isfrontend:
       if not self.servers:
         raise ConfigError('Nothing to do!  List some servers, or run me as one.')      
           
@@ -1676,7 +1694,7 @@ class PageKite(object):
           self.servers.append(server)
           self.servers_preferred.append(ipaddr)
       except Exception, e:
-        print 'FIXME: Should narrow this down: %s' % e
+        LogDebug('FIXME: Should narrow this down: %s' % e)
 
     # Lookup and choose from the auto-list (and our old domain).
     if self.servers_auto:
@@ -1692,7 +1710,7 @@ class PageKite(object):
               server = '%s:%s' % (ip, port)
               if server not in self.servers: self.servers.append(server)
           except Exception, e:
-            print 'FIXME: Self lookup: %s, %s' % (bdom, e)
+            LogDebug('FIXME: Self lookup: %s, %s' % (bdom, e))
 
       try:
         (hn, al, ips) = socket.gethostbyname_ex(domain)
@@ -1708,7 +1726,7 @@ class PageKite(object):
           del times[mIdx]
           del ips[mIdx]
       except Exception, e:
-        print 'FIXME: Should narrow this down: %s' % e
+        LogDebug('FIXME: Should narrow this down: %s' % e)
 
   def CreateTunnels(self, conns):
     live_servers = conns.TunnelServers()
@@ -1785,6 +1803,13 @@ class PageKite(object):
     return failures
 
   def LogTo(self, filename):
+    if filename == 'syslog':
+      global Log
+      Log = LogSyslog
+      filename = '/dev/null'
+      syslog.openlog((sys.argv[0] or 'beanstalks_net.py').split('/')[-1],
+                     syslog.LOG_PID, syslog.LOG_DAEMON)
+
     for fd in range(0, 1024): # Not MAXFD, but should be enough.
       try:
         os.close(fd)
@@ -1856,8 +1881,7 @@ class PageKite(object):
     except Exception, msg:
       epoll = None 
 
-    if epoll:
-      print "FIXME: Should try epoll!"
+    if epoll: LogDebug("FIXME: Should try epoll!")
     self.SelectLoop()
 
   def Start(self):
