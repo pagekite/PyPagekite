@@ -763,11 +763,16 @@ class Selectable(object):
 
   def SendChunked(self, data):
     sdata = ''.join(data)
-    if not self.zw: return self.Send(['%x\r\n%s' % (len(sdata), sdata)])
+    if not self.zw:
+      return self.Send(['%x\r\n%s' % (len(sdata), sdata)])
 
     zdata = self.zw.compress(sdata) + self.zw.flush(zlib.Z_SYNC_FLUSH)
-    LogDebug('Sending %d bytes as %d' % (len(sdata), len(zdata)))
-    return self.Send(['%xZ%x\r\n%s' % (len(sdata), len(zdata), zdata)])
+    if len(zdata)+5 < 0.8*len(sdata):
+      LogDebug('Sending %d bytes as %d' % (len(sdata), len(zdata)))
+      return self.Send(['%xZ%x\r\n%s' % (len(sdata), len(zdata), zdata)])
+    else:
+      LogDebug('Not worth compressing...')
+      return self.Send(['%x\r\n%s' % (len(sdata), sdata)])
 
   def Flush(self):
     while self.write_blocked: self.Send([])
@@ -1181,12 +1186,19 @@ class Tunnel(ChunkParser):
       del self.users[sid]
 
   def ProcessChunk(self, data):
-    headers, data = data.split('\r\n\r\n', 1)
-    parse = HttpParser(lines=headers.splitlines(), state=HttpParser.IN_HEADERS)
+    try:
+      headers, data = data.split('\r\n\r\n', 1)
+      parse = HttpParser(lines=headers.splitlines(), state=HttpParser.IN_HEADERS)
+    except ValueError:
+      return None
 
     conn = None
-    sid = int(parse.Header('SID')[0])
-    eof = parse.Header('EOF')
+    sid = None
+    try:
+      sid = int(parse.Header('SID')[0])
+      eof = parse.Header('EOF')
+    except IndexError, e:
+      return None
 
     if eof:
       self.Disconnect(None, sid=sid)
