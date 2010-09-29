@@ -105,6 +105,7 @@ Common Options:
  --httpd=X:P    -H X:P  Enable the HTTP user interface on hostname X, port P.
  --pemfile=X    -P X    Along with -H, use X as a PEM key for the HTTPS UI.
  --httppass=X   -X X    Require password X to access the user interface.
+ --nozlib               Disable zlib tunnel compression.
  --logfile=F    -L F    Log to file F.
  --daemonize    -Z      Run as a daemon.
  --runas        -U U:G  Set UID:GID after opening our listening sockets.
@@ -183,7 +184,7 @@ OPT_ARGS = ['clean', 'optfile=', 'httpd=', 'pemfile=', 'httppass=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults',
             'authdomain=', 'register=', 'host=', 'ports=', 'protos=',
             'backend=', 'frontend=', 'frontends=', 'new',
-            'all', 'noall', 'dyndns=', 'backend=']
+            'all', 'noall', 'dyndns=', 'backend=', 'nozlib']
 
 AUTH_ERRORS           = '128.'
 AUTH_ERR_USER_UNKNOWN = '128.0.0.0'
@@ -292,13 +293,15 @@ class ConnectError(Exception):
   pass
 
 
-def HTTP_PageKiteRequest(server, backends, tokens=None):
+def HTTP_PageKiteRequest(server, backends, tokens=None, nozlib=False):
   req = ['POST %s HTTP/1.1\r\n' % MAGIC_PATH,
          'Host: %s\r\n' % server,
          'Content-Type: application/octet-stream\r\n',
-         'X-Beanstalk-Features: ZChunks\r\n',
          'Transfer-Encoding: chunked\r\n']
 
+  if not nozlib:
+    req.append('X-Beanstalk-Features: ZChunks\r\n')
+         
   tokens = tokens or {}
   for d in backends.keys():
     token = d in tokens and tokens[d] or ''
@@ -310,7 +313,7 @@ def HTTP_PageKiteRequest(server, backends, tokens=None):
   return ''.join(req)
 
 def HTTP_ResponseHeader(code, title, mimetype='text/html'):
-  return 'HTTP/1.1 %s %s\r\nContent-Type: %s\r\nConnection: close\r\n' % (code, title, mimetype)
+  return 'HTTP/1.1 %s %s\r\nContent-Type: %s\r\nCache-Control: private\r\nConnection: close\r\n' % (code, title, mimetype)
 
 def HTTP_Header(name, value):
   return '%s: %s\r\n' % (name, value)
@@ -319,13 +322,12 @@ def HTTP_StartBody():
   return '\r\n'
 
 def HTTP_Response(code, title, body, mimetype='text/html'):
-  return ''.join([HTTP_ResponseHeader(code, title, mimetype),
-                  HTTP_StartBody(),
+  return ''.join([HTTP_ResponseHeader(code, title, mimetype), HTTP_StartBody(),
                   ''.join(body)])
 
 def HTTP_Unavailable(where, proto, domain):
-  return HTTP_Response(503, 'Unavailable', 
-                       ['<html><body><h1>503 Unavailable (', where, ')</h1>',
+  return HTTP_Response(200, 'OK', 
+                       ['<html><body><h1>Sorry! (', where, ')</h1>',
                         '<p>The ', proto.upper(),' <a href="', WWWHOME, '">',
                         'PageKite</a> for <b>', domain, 
                         '</b> is unavailable at the moment.</p>',
@@ -366,6 +368,8 @@ def LogDebug(msg, parms=None):
   emsg = [('debug', msg)]
   if parms: emsg.extend(parms)
   Log(emsg)
+
+
 
 
 # FIXME: This could easily be a pool of threads to let us handle more
@@ -437,6 +441,9 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 ' <a href="' + WWWHOME + '">PageKite.net</a>.</i></div>\n'
               '</body></html>\n')
  
+  def log_message(self, format, *args):
+    Log([('uireq', format % args)])
+
   def fmt_size(self, count):
     if count > 2*(1024*1024*1024):
       return '%dGB' % (count / (1024*1024*1024))
@@ -603,50 +610,49 @@ class HttpParser(object):
 
     if lines is not None:
       for line in lines:
-        self.Parse(line)
+        if not self.Parse(line): break
 
   def ParseResponse(self, line):
     self.version, self.code, self.message = line.split()
 
     if not self.version.upper() in HTTP_VERSIONS:
       LogError('Invalid version: %s' % self.version)
-      return None
+      return False
 
     self.state = self.IN_HEADERS
-    return 1
+    return True
 
   def ParseRequest(self, line):
     self.method, self.path, self.version = line.split()
 
     if not self.method in HTTP_METHODS:
       LogError('Invalid method: %s' % self.method)
-      return None
+      return False
 
     if not self.version.upper() in HTTP_VERSIONS:
       LogError('Invalid version: %s' % self.version)
-      return None
+      return False
 
     self.state = self.IN_HEADERS
-    return 1
+    return True
 
   def ParseHeader(self, line):
-    if line == '' or line == '\n' or line == '\r\n':
+    if line == '\r' or line == '\n' or line == '\r\n' or not line:
       self.state = self.IN_BODY
-      return 1
+      return True
 
     header, value = line.split(': ', 1)
     self.headers.append((header.lower(), value)) 
-    return 1
+    return True
 
   def ParseBody(self, line):
     # Could be overridden by subclasses, for now we just play dumb.
-    return None
+    return False
 
   def Parse(self, line):
     self.lines.append(line)
     try:
-      if not line:
-        return 1
+      if not line: return True
         
       elif (self.state == self.IN_RESPONSE):
         return self.ParseResponse(line)
@@ -664,7 +670,7 @@ class HttpParser(object):
       LogError('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
       pass
 
-    return None
+    return False
 
   def Header(self, header):
     return [h[1].strip() for h in self.headers if h[0] == header.lower()]
@@ -693,9 +699,17 @@ class Selectable(object):
       self.log_id = 's%s' % self.sid
 
     self.zw = None
+    self.zlevel = 1
+    self.zreset = False
 
-  def SendZChunks(self, level):
-    LogDebug('Selectable::SendZChunks: ZChunks enabled!')
+  def ResetZChunks(self):
+    if self.zw:
+      self.zreset = True
+      self.zw = zlib.compressobj(self.zlevel)
+
+  def EnableZChunks(self, level=1):
+    LogDebug('Selectable::EnableZChunks: ZChunks enabled!')
+    self.zlevel = level
     self.zw = zlib.compressobj(level)
 
   def SetFD(self, fd):
@@ -732,17 +746,18 @@ class Selectable(object):
 
   def ProcessData(self, data):
     self.LogError('Selectable::ProcessData: Should be overridden!')
-    return None
+    return False
 
   def ReadData(self):
     try:
       data = self.fd.recv(self.maxread)
 #     print '< %s' % data
     except socket.error, err:
-      return None
+      LogDebug('Error reading socket: %s' % err)
+      return False
 
     if data is None or data == '':
-      return None
+      return False
     else:
       self.read_bytes += len(data)
       return self.ProcessData(data)
@@ -759,20 +774,25 @@ class Selectable(object):
         self.LogError('Error sending: %s' % err)
 
     self.write_blocked = sending[sent_bytes:]
-    return 1
+    return True
 
-  def SendChunked(self, data):
+  def SendChunked(self, data, compress=True):
+    rst = ''
+    if self.zreset:
+      self.zreset = False
+      rst = 'R'
+
     sdata = ''.join(data)
-    if not self.zw:
-      return self.Send(['%x\r\n%s' % (len(sdata), sdata)])
+    if self.zw and compress:
+      try:
+        zdata = self.zw.compress(sdata) + self.zw.flush(zlib.Z_SYNC_FLUSH)
+        LogDebug('Sending %d bytes as %d' % (len(sdata), len(zdata)))
+        return self.Send(['%xZ%x%s\r\n%s' % (len(sdata), len(zdata), rst, zdata)])
+      except zlib.error:
+        LogDebug('Error compressing, resetting ZChunks.')
+        self.ResetZChunks()
 
-    zdata = self.zw.compress(sdata) + self.zw.flush(zlib.Z_SYNC_FLUSH)
-    if len(zdata)+5 < 0.8*len(sdata):
-      LogDebug('Sending %d bytes as %d' % (len(sdata), len(zdata)))
-      return self.Send(['%xZ%x\r\n%s' % (len(sdata), len(zdata), zdata)])
-    else:
-      LogDebug('Not worth compressing...')
-      return self.Send(['%x\r\n%s' % (len(sdata), sdata)])
+    return self.Send(['%x%s\r\n%s' % (len(sdata), rst, sdata)])
 
   def Flush(self):
     while self.write_blocked: self.Send([])
@@ -866,16 +886,16 @@ class LineParser(Selectable):
       line = lines[0]
       lines = lines[1:]
       if line.endswith('\n'):
-        if self.ProcessLine(line, lines) is None:
-          return None 
+        if self.ProcessLine(line, lines) is False:
+          return False
       else:
         self.leftovers += line
 
-    return 1
+    return True
 
   def ProcessLine(self, line, lines):
     self.LogError('LineParser::ProcessLine: Should be overridden!')
-    return None
+    return False
 
 
 TLS_CLIENTHELLO = '%c' % 026
@@ -946,7 +966,7 @@ class MagicProtocolParser(LineParser):
 
   def ProcessTls(self, data):
     self.LogError('TlsOrLineParser::ProcessTls: Should be overridden!')
-    return None
+    return False
 
 
 class ChunkParser(Selectable):
@@ -967,6 +987,10 @@ class ChunkParser(Selectable):
     if self.want_bytes == 0:
       try:
         size, data = data.split('\r\n', 1)
+        if size.endswith('R'):
+          self.zr = zlib.decompressobj()
+          size = size[0:-1]
+
         if 'Z' in size:
           csize, zsize = size.split('Z')
           self.compressed = True
@@ -975,14 +999,15 @@ class ChunkParser(Selectable):
         else:   
           self.compressed = False
           self.want_bytes = int(size, 16)
+
       except ValueError, err:
         self.LogError('ChunkParser::ProcessData: %s' % err)
         self.Log([('bad_data', data)])
-        return None
+        return False
 
       if self.want_bytes == 0:
         self.LogDebug('ChunkParser::ProcessData: end of chunk')
-        return None
+        return False
 
     process = data[:self.want_bytes]
     leftover = data[self.want_bytes:]
@@ -990,26 +1015,34 @@ class ChunkParser(Selectable):
     self.chunk += process
     self.want_bytes -= len(process)
 
+    result = 1
     if self.want_bytes == 0:
       if self.compressed:
-        cchunk = self.zr.decompress(self.chunk)
+        try:
+          cchunk = self.zr.decompress(self.chunk)
+        except zlib.error:
+          cchunk = ''
+
         if len(cchunk) != self.want_cbytes:
-          self.LogError('ChunkParser::ProcessData: %d != %d zlib bytes' % (len(cchunk), self.cbytes))
-          return None
+          result = self.ProcessCorruptChunk(self.chunk)
         else:
           LogDebug('ChunkParser::ProcessData: inflated %d bytes to %d' % (len(self.chunk), self.want_cbytes))
-        self.ProcessChunk(cchunk)
+          result = self.ProcessChunk(cchunk)
       else:
-        self.ProcessChunk(self.chunk)
+        result = self.ProcessChunk(self.chunk)
       self.chunk = ''
       if leftover:
-        return self.ProcessData(leftover)
+        return self.ProcessData(leftover) and result
 
-    return 1
+    return result
+
+  def ProcessCorruptChunk(self, chunk):
+    self.LogError('ChunkParser::ProcessData: ProcessCorruptChunk not overridden!')
+    return False
 
   def ProcessChunk(self, chunk):
     self.LogError('ChunkParser::ProcessData: ProcessChunk not overridden!')
-    return None
+    return False
 
 
 # FIXME: Add metrics to measure performance of tunnel, so we can prioritize
@@ -1041,7 +1074,7 @@ class Tunnel(ChunkParser):
     requests = []
     try:
       for feature in conn.parser.Header('X-Beanstalk-Features'):
-        if feature == 'ZChunks': self.SendZChunks(1)
+        if feature == 'ZChunks': self.EnableZChunks(level=1)
 
       for bs in conn.parser.Header('X-Beanstalk'):
         # X-Beanstalk: proto:my.domain.com:token:signature
@@ -1098,7 +1131,8 @@ class Tunnel(ChunkParser):
     else:
       self.fd.connect((server, 80))
 
-    self.Send(HTTP_PageKiteRequest(server, conns.config.backends, tokens)) 
+    self.Send(HTTP_PageKiteRequest(server, conns.config.backends, tokens,
+                                    nozlib=conns.config.disable_zlib)) 
     self.Flush()
 
     data = ''
@@ -1139,8 +1173,9 @@ class Tunnel(ChunkParser):
           data, parse = self._Connect(server, conns, tokens)
 
         if data and parse:
-          for feature in parse.Header('X-Beanstalk-Features'):
-            if feature == 'ZChunks': self.SendZChunks(9)
+          if not conns.config.disable_zlib:
+            for feature in parse.Header('X-Beanstalk-Features'):
+              if feature == 'ZChunks': self.EnableZChunks(level=9)
 
           for request in parse.Header('X-Beanstalk-OK'):
             proto, domain, srand = request.split(':')
@@ -1174,23 +1209,35 @@ class Tunnel(ChunkParser):
     sid = int(sid or conn.sid)
     if conn: self.users[sid] = conn
     if host and proto:
-      return self.SendChunked(['SID: %s\r\nProto: %s\r\nHost: %s\r\n\r\n' % (sid, proto, host), data]) 
+      return self.SendChunked(['SID: %s\nProto: %s\nHost: %s\r\n\r\n' % (sid, proto, host), data]) 
     else:
       return self.SendChunked(['SID: %s\r\n\r\n' % sid, data]) 
 
   def Disconnect(self, conn, sid=None):
     sid = int(sid or conn.sid)
     if sid in self.users:
-      self.SendChunked('SID: %s\r\nEOF: eof\r\n\r\nBye!' % sid) 
+      LogDebug('Sending EOF for %s' % sid)
+      self.SendChunked('SID: %s\nEOF: eof\r\n\r\nBye!' % sid, compress=False) 
       if self.users[sid] is not None: self.users[sid].Disconnect()
       del self.users[sid]
+
+  def ResetRemoteZChunks(self):
+    self.SendChunked('NOOP: 1\nZRST: 1\r\n\r\n!' % sid, compress=False) 
+
+  def ProcessCorruptChunk(self, data):
+    self.ResetRemoteZChunks()
+    return True
 
   def ProcessChunk(self, data):
     try:
       headers, data = data.split('\r\n\r\n', 1)
       parse = HttpParser(lines=headers.splitlines(), state=HttpParser.IN_HEADERS)
     except ValueError:
-      return None
+      LogError('Tunnel::ProcessChunk: Corrupt packet!')
+      return False
+
+    if parse.Header('ZRST'): self.ResetZChunks() 
+    if parse.Header('NOOP'): return True
 
     conn = None
     sid = None
@@ -1198,9 +1245,11 @@ class Tunnel(ChunkParser):
       sid = int(parse.Header('SID')[0])
       eof = parse.Header('EOF')
     except IndexError, e:
-      return None
+      LogError('Tunnel::ProcessChunk: Corrupt packet!')
+      return False
 
     if eof:
+      LogDebug('Got EOF for %s' % sid)
       self.Disconnect(None, sid=sid)
     else:
       if sid in self.users:
@@ -1213,7 +1262,8 @@ class Tunnel(ChunkParser):
           if not conn and proto == 'http':
             self.SendChunked('SID: %s\r\n\r\n%s' % (sid, HTTP_Unavailable('be', proto, host))) 
 
-          self.users[sid] = conn
+          if conn:
+            self.users[sid] = conn
 
       if not conn:
         self.Disconnect(None, sid=sid)
@@ -1221,7 +1271,7 @@ class Tunnel(ChunkParser):
         # FIXME: We should probably be adding X-Forwarded-For headers
         conn.Send(data)
 
-    return 1
+    return True
 
 
 class UserConn(Selectable):
@@ -1313,10 +1363,10 @@ class UnknownConn(MagicProtocolParser):
 
   def ProcessLine(self, line, lines):
     if not self.parser:
-      return 1
+      return True
 
-    if self.parser.Parse(line) is None:
-      return None
+    if self.parser.Parse(line) is False:
+      return False
 
     if (self.parser.state == self.parser.IN_BODY):
       hosts = self.parser.Header('Host')
@@ -1325,17 +1375,17 @@ class UnknownConn(MagicProtocolParser):
                   ['<html><body><h1>400 Bad request</h1>',
                    '<p>Invalid request, no Host: found.</p>',
                    '</body></html>']))
-        return None
+        return False
 
 
       if self.parser.method == 'POST' and self.parser.path == MAGIC_PATH:
         if Tunnel.FrontEnd(self, lines, self.conns) is None: 
-          return None
+          return False
       else:
         if UserConn.FrontEnd(self, 'http', hosts[0],
                              self.parser.lines + lines, self.conns) is None:
           self.Send(HTTP_Unavailable('fe', 'http', hosts[0]))
-          return None
+          return False
 
       # We are done!
       self.conns.Remove(self)
@@ -1344,13 +1394,13 @@ class UnknownConn(MagicProtocolParser):
       self.parser = None
       self.conns = None
 
-    return 1
+    return True
 
   def ProcessTls(self, data):
     domains = self.GetSni(data)
     if domains:
       if UserConn.FrontEnd(self, 'https', domains[0], [data], self.conns) is None:
-        return None
+        return False
 
     # We are done!
     self.conns.Remove(self)
@@ -1358,7 +1408,7 @@ class UnknownConn(MagicProtocolParser):
     # Break any circular references we might have
     self.parser = None
     self.conns = None
-    return 1
+    return True
 
 
 class Listener(Selectable):
@@ -1382,10 +1432,10 @@ class Listener(Selectable):
       if client:
         uc = UnknownConn(client, address, self.conns)
         self.Log([('accept', ':'.join(['%s' % x for x in address]))])
-        return 1
-    except Exception:
-      pass
-    return None
+        return True
+    except Exception, e:
+      LogDebug('Listener::ReadData: %s' % e)
+    return False
 
 
 class PageKite(object):
@@ -1408,6 +1458,7 @@ class PageKite(object):
     self.ui_sspec = None
     self.ui_httpd = None
     self.yamond = MockYamonD(())
+    self.disable_zlib = False
 
     self.client_mode = 0
 
@@ -1660,6 +1711,7 @@ class PageKite(object):
       elif opt == '--nofrontend': self.isfrontend = False
       elif opt == '--nodaemonize': self.daemonize = False
       elif opt == '--noall': self.require_all = False
+      elif opt == '--nozlib': self.disable_zlib = True
       elif opt == '--clean': pass
 
       elif opt == '--defaults':
@@ -1854,6 +1906,8 @@ class PageKite(object):
       try:
         iready, oready, eready = select.select(conns.Sockets(),
                                                conns.Blocked(), [], 5)
+      except KeyboardInterrupt, e:
+        raise KeyboardInterrupt()
       except Exception, e:
         LogError('Select error: %s' % e)
         conns.CleanFds()
@@ -1875,7 +1929,7 @@ class PageKite(object):
 
       for socket in iready:
         conn = conns.Connection(socket)
-        if conn and conn.ReadData() is None:
+        if conn and conn.ReadData() is False:
           conn.Cleanup()
           conns.Remove(conn)
 
