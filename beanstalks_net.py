@@ -457,13 +457,18 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     for tid in conns.tunnels:
       proto, domain = tid.split(':')
-      backend = backends[tid][BE_BACKEND]
+      if tid in backends:
+        backend = backends[tid][BE_BACKEND]
+        if proto.startswith('http'):
+          binfo = '<a href="%s://%s">%s</a>' % (proto, backend, backend)
+        else:
+          binfo = '<b>%s</b>' % backend
+      else:
+        binfo = '<i>none</i>'
       if proto.startswith('http'):
         tinfo = '%s: <a href="%s://%s">%s</a>' % (proto, proto, domain, domain)
-        binfo = '<a href="%s://%s">%s</a>' % (proto, backend, backend)
       else:
         tinfo = '%s: <b>%s</b>' % (proto, domain) 
-        binfo = '<b>%s</b>' % backend
 
       for tunnel in conns.tunnels[tid]:
         html.append(('<li><span class=tid>%s</span></b>'
@@ -625,7 +630,7 @@ class HttpParser(object):
     return 1
 
   def ParseHeader(self, line):
-    if line == '\n' or line == '\r\n':
+    if line == '' or line == '\n' or line == '\r\n':
       self.state = self.IN_BODY
       return 1
 
@@ -656,7 +661,7 @@ class HttpParser(object):
         return self.ParseBody(line)
 
     except ValueError, err:
-      LogError('Parse failed: >%s<' % line)
+      LogError('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
       pass
 
     return None
@@ -690,7 +695,7 @@ class Selectable(object):
     self.zw = None
 
   def SendZChunks(self, level):
-    self.LogDebug('Selectable::SendZChunks: ZChunks enabled!')
+    LogDebug('Selectable::SendZChunks: ZChunks enabled!')
     self.zw = zlib.compressobj(level)
 
   def SetFD(self, fd):
@@ -799,6 +804,16 @@ class Connections(object):
     # FIXME: This is O(n)
     return [s.fd for s in self.conns if s.fd and s.write_blocked]
 
+  def CleanFds(self):
+    evil = []
+    for s in self.conns:
+      try:
+        if s.fd.closed(): evil.append(s)
+      except Exception:
+        evil.append(s)
+    for s in evil:
+      self.conns.remove(s) 
+
   def Connection(self, fd):
     for conn in self.conns:
       if conn.fd == fd:
@@ -891,22 +906,21 @@ class MagicProtocolParser(LineParser):
       return LineParser.ProcessData(self, data)
 
   def ProcessLine(self, line, lines):
+    return self.ProcessHttp(line, lines)
+
     if self.first_line:
       self.first_line = False
-      if line.strip().startswith('<'):
-        # FIXME: XMPP is not line-based!
-        self.is_xmpp = True
-      elif (self.port_hint % 100) == 25 or line.startswith('HELO') or line.startswith('EHLO'):
-        self.is_smtp = True
-      else:
-        self.is_http = True
+      self.is_http = True
+#      if line.strip().startswith('<'):
+#        # FIXME: XMPP is not line-based!
+#        self.is_xmpp = True
+#     elif (self.port_hint % 100) == 25 or line.startswith('HELO') or line.startswith('EHLO'):
+#       self.is_smtp = True
+#      else:
         
-    if self.is_http:
-      return self.ProcessHttp(line, lines)
-    elif self.is_xmpp:
-      return self.ProcessXmpp(line, lines)
-    elif self.is_smtp:
-      return self.ProcessSmtp(line, lines)
+    if self.is_http: return self.ProcessHttp(line, lines)
+    elif self.is_xmpp: return self.ProcessXmpp(line, lines)
+    elif self.is_smtp: return self.ProcessSmtp(line, lines)
     else:
       self.LogError('TlsOrLineParser::ProcessLine: Unknown connection!')
       return None
@@ -1038,7 +1052,7 @@ class Tunnel(ChunkParser):
     # read here.
     self.maxread *= 2
 
-    self.server_name = None
+    self.server_name = '0:0'
     self.conns = conns
     self.users = {}
     self.backends = {}
@@ -1053,10 +1067,10 @@ class Tunnel(ChunkParser):
     self = Tunnel(conns)
     requests = []
     try:
-      for accept in conn.parser.Header('X-Beanstalk-Features'):
-        if accept == 'ZChunks': self.SendZChunks(1)
+      for feature in conn.http_parser.Header('X-Beanstalk-Features'):
+        if feature == 'ZChunks': self.SendZChunks(1)
 
-      for bs in conn.parser.Header('X-Beanstalk'):
+      for bs in conn.http_parser.Header('X-Beanstalk'):
         # X-Beanstalk: proto:my.domain.com:token:signature
         proto, domain, srand, token, sign = bs.split(':') 
         requests.append((proto.lower(), domain.lower(), srand, token, sign))
@@ -1078,7 +1092,7 @@ class Tunnel(ChunkParser):
     
     output = [HTTP_ResponseHeader(200, 'OK'),
               HTTP_Header('Content-Transfer-Encoding', 'chunked'),
-              'X-Beanstalk-Features: ZChunks']
+              HTTP_Header('X-Beanstalk-Features', 'ZChunks')]
     ok = {}
     for r in results:
       output.append('X-Beanstalk-%s: %s\r\n' % r)
@@ -1152,8 +1166,8 @@ class Tunnel(ChunkParser):
           data, parse = self._Connect(server, conns, tokens)
 
         if data and parse:
-          for accept in parse.Header('X-Beanstalk-Features'):
-            if accept == 'ZChunks': self.SendZChunks(9)
+          for feature in parse.Header('X-Beanstalk-Features'):
+            if feature == 'ZChunks': self.SendZChunks(9)
 
           for request in parse.Header('X-Beanstalk-OK'):
             proto, domain, srand = request.split(':')
@@ -1346,7 +1360,10 @@ class UnknownConn(MagicProtocolParser):
 
   def ProcessHttp(self, line, lines):
     if not self.http_parser: self.http_parser = HttpParser()
-    if self.http_parser.Parse(line) is None: return None
+    LogDebug(line)
+
+    if self.http_parser.Parse(line) is None:
+      return None
 
     if (self.http_parser.state == self.http_parser.IN_BODY):
       hosts = self.http_parser.Header('Host')
@@ -1402,14 +1419,17 @@ class Listener(Selectable):
     self.conns.Add(self)
 
   def ReadData(self):
-    client, address = self.fd.accept()
-#   print address
-    if client:
-      uc = UnknownConn(client, address, self.conns, local_port=self.listen_port)
-      self.Log([('accept', ':'.join(['%s' % x for x in address]))])
-      return 1
-    else:
-      return None
+    try:
+      client, address = self.fd.accept()
+#     print address
+      if client:
+        uc = UnknownConn(client, address, self.conns, local_port=self.listen_port)
+        self.Log([('accept', ':'.join(['%s' % x for x in address]))])
+        return 1
+    except Exception:
+      pass
+    return None
+  
 
 
 class PageKite(object):
@@ -1876,12 +1896,16 @@ class PageKite(object):
     last_loop = time.time()
     retry = 5
     while True:
-      iready, oready, eready = select.select(conns.Sockets(),
-                                             conns.Blocked(), [], 5)
+      try:
+        iready, oready, eready = select.select(conns.Sockets(),
+                                               conns.Blocked(), [], 5)
+      except Exception, e:
+        LogError('Select error: %s' % e)
+        conns.CleanFds()
+        
       now = time.time()
       if not iready and not oready:
         if now < last_loop + 1:
-          # FIXME: Handle broken sockets?
           LogError('Spinning')
 
         if now > last_tick + retry:
