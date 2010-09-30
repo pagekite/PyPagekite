@@ -293,7 +293,8 @@ class ConnectError(Exception):
   pass
 
 
-def HTTP_PageKiteRequest(server, backends, tokens=None, nozlib=False):
+def HTTP_PageKiteRequest(server, backends, tokens=None, nozlib=False,
+                          testtoken=None):
   req = ['POST %s HTTP/1.1\r\n' % MAGIC_PATH,
          'Host: %s\r\n' % server,
          'Content-Type: application/octet-stream\r\n',
@@ -305,8 +306,11 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozlib=False):
   tokens = tokens or {}
   for d in backends.keys():
     token = d in tokens and tokens[d] or ''
-    data = '%s:%s:%s' % (d, signToken(token=globalSecret(), payload=globalSecret(), secret=server), token)
-    sign = signToken(secret=backends[d][BE_SECRET], payload=data)
+    data = '%s:%s:%s' % (d, signToken(token=globalSecret(),
+                                      payload=globalSecret(),
+                                      secret=server),
+                         token)
+    sign = signToken(secret=backends[d][BE_SECRET], payload=data, token=testtoken)
     req.append('X-Beanstalk: %s:%s\r\n' % (data, sign))
 
   req.append('\r\nOK\r\n')
