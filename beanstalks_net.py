@@ -360,7 +360,7 @@ def LogSyslog(values):
 def LogStdout(values):
   words, wdict = LogValues(values)
   print '; '.join(['='.join(x) for x in words])
- 
+
 Log = LogStdout
 
 def LogError(msg, parms=None):
@@ -600,8 +600,9 @@ class HttpParser(object):
   IN_HEADERS = 2
   IN_BODY = 3
   IN_RESPONSE = 4
+  PARSE_FAILED = -1
 
-  def __init__(self, lines=None, state=None):
+  def __init__(self, lines=None, state=None, testbody=False):
     self.state = state or self.IN_REQUEST
     self.method = None
     self.path = None
@@ -610,7 +611,7 @@ class HttpParser(object):
     self.message = None
     self.headers = []
     self.lines = []
-    self.body = []
+    self.body_result = testbody
 
     if lines is not None:
       for line in lines:
@@ -641,7 +642,7 @@ class HttpParser(object):
     return True
 
   def ParseHeader(self, line):
-    if line == '\r' or line == '\n' or line == '\r\n' or not line:
+    if line in ('', '\r', '\n', '\r\n'):
       self.state = self.IN_BODY
       return True
 
@@ -651,14 +652,12 @@ class HttpParser(object):
 
   def ParseBody(self, line):
     # Could be overridden by subclasses, for now we just play dumb.
-    return False
+    return self.body_result
 
   def Parse(self, line):
     self.lines.append(line)
     try:
-      if not line: return True
-        
-      elif (self.state == self.IN_RESPONSE):
+      if (self.state == self.IN_RESPONSE):
         return self.ParseResponse(line)
 
       elif (self.state == self.IN_REQUEST):
@@ -672,8 +671,8 @@ class HttpParser(object):
 
     except ValueError, err:
       LogError('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
-      pass
 
+    self.state = self.PARSE_FAILED
     return False
 
   def Header(self, header):
