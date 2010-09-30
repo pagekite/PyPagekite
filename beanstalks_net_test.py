@@ -50,6 +50,7 @@ class MockSocketFD(object):
     self.recv_values = recv_values or []
     self.sent_values = []
     self.maxsend = maxsend
+    self.closed = False
 
   def recv(self, maxread):
     if self.recv_values:
@@ -73,7 +74,32 @@ class MockSocketFD(object):
   def setblocking(self, val): pass
   def setsockopt(self, a, b, c): pass
   def flush(self): pass
-  def close(self): pass
+  def close(self): self.closed = True
+  def closed(self): return self.closed
+
+
+class MockBeanstalksNet(beanstalks_net.BeanstalksNet):
+  def __init__(self):
+    beanstalks_net.BeanstalksNet.__init__(self)
+    self.felldown = None
+
+  def FallDown(self, message, help=True):
+    raise Exception(message)
+  
+  def HelpAndExit(self):
+    raise Exception('Should print help')
+  
+  def LookupDomainQuota(lookup):
+    return -1 
+
+  def Ping(self, host, port):
+    return len(host)+port
+
+  def GetHostIpAddr(self, host):
+    return '10.1.2.%d' % len(host)
+
+  def GetHostDetails(self, host):
+    return (host, [host], ['10.1.2.%d' % len(host), '192.168.1.%d' % len(host)])
 
 
 class TestInternals(unittest.TestCase):
@@ -127,7 +153,7 @@ class TestInternals(unittest.TestCase):
     # Basic request, no servers, zchunks disabled.
     req = request[:]
     req.append(reqbody)
-    self.assertEqual(beanstalks_net.HTTP_BeanstalkRequest('x', {}, nozlib=True),
+    self.assertEqual(beanstalks_net.HTTP_BeanstalkRequest('x', {}, nozchunks=True),
                      ''.join(req))
     
     # Full request, single server.
@@ -261,12 +287,6 @@ class TestInternals(unittest.TestCase):
     self.assertEquals(ss.fd.sent_values[1], 'This is a line\n')
     self.assertEquals(ss.fd.sent_values[2], 'This is a line\n')
 
-  def test_Connections(self):
-    pass
-
-  def test_MagicProtocolParser(self):
-    pass
-
   def test_ChunkParser(self):
     # Easily compressed raw data...
     unchunked = ['This would be chunk one, one, one, one, one!!1',
@@ -307,6 +327,46 @@ class TestInternals(unittest.TestCase):
 
     # FIXME: Corrupt chunks aren't tested.
 
+  def test_BeanstalksNet(self):
+    bn = MockBeanstalksNet()
+
+    bn.Configure(['--httpd=localhost:1234'])
+    self.assertEquals(('localhost', 1234), bn.ui_sspec)
+    bn.Configure(['-H', 'localhost:4321'])
+    self.assertEquals(('localhost', 4321), bn.ui_sspec)
+
+    bn.Configure(['--httppass=password'])
+    self.assertEquals('password', bn.ui_password)
+    bn.Configure(['-X', 'passx'])
+    self.assertEquals('passx', bn.ui_password)
+
+    bn.Configure(['--httpopen'])
+    self.assertEquals(True, bn.ui_open)
+    bn.ui_open = False
+    bn.Configure(['-W'])
+    self.assertEquals(True, bn.ui_open)
+
+    bn.Configure(['--nozchunks'])
+    self.assertEquals(True, bn.disable_zchunks)
+
+  def test_BeanstalksNetFixmes(self):
+    bn.Configure(['--pemfile=/dev/null'])
+    self.assertEquals('/dev/null', bn.ui_pemfile)
+    bn.Configure(['-P', '/dev/zero'])
+    self.assertEquals('/dev/zero', bn.ui_pemfile)
+
+
+
+  def test_AuthThread(self):
+    at = beanstalks_net.AuthThread(None)
+    pass
+
+  def test_Connections(self):
+    pass
+
+  def test_MagicProtocolParser(self):
+    pass
+
   def test_Tunnel(self):
     pass
 
@@ -316,8 +376,6 @@ class TestInternals(unittest.TestCase):
   def test_UnknownConn(self):
     pass
 
-  def test_BeanstalksNet(self):
-    pass
 
 
 class TestNetwork(unittest.TestCase):

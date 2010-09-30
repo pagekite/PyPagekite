@@ -13,6 +13,11 @@
 #        proof of concept. 
 # FIXME: Add throttling, bandwidth shaping and auto-slowdown for freebies?
 # FIXME: Add support for dedicated ports (PageKitePNP, ha ha).
+# FIXME: Add direct (un-tunneled) proxying as well.
+# FIXME: Create a derivative BaseHTTPServer which doesn't actually listen()
+#        on a real socket, but instead communicates with the tunnel directly.
+# FIXME: Add a scheduler for deferred/periodic processing.
+# FIXME: Move DynDNS updates to a separate thread, blocking on them is dumb.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -50,7 +55,7 @@
 #    figure out which back-end should handle a given request, and then forward
 #    the bytes unmodified over that channel. As a result, the current HTTP
 #    proxy code is not HTTP 1.1 compliant - but if you put it behind Varnish
-#    or something that is, then there is no problem.
+#    or some other decent reverse-proxy, then *the combination* is.
 #
 #  * The UserConn object represents connections on behalf of users. It can
 #    be created as a FrontEnd, which will find the right tunnel and send
@@ -59,7 +64,7 @@
 # 
 #  * The Tunnel object represents one end of a PageKite tunnel and is also
 #    created either as a FrontEnd or BackEnd, depending on which end it is.
-#    The Tunnels handle multiplexing and demultiplexing all the traffic for
+#    Tunnels handle multiplexing and demultiplexing all the traffic for
 #    a given back-end so multiple requests can share a single TCP/IP
 #    connection.
 #
@@ -73,6 +78,10 @@
 #
 #  * The HttpUiThread implements a basic HTTP (or HTTPS) server, for basic
 #    monitoring and interactive configuration.
+#
+# WARNING: The UI threading code assumes it is running in CPython, where the
+#          GIL makes snooping across the thread-boundary relatively safe, even
+#          without explicit locking. Beware!
 #
 #
 PROTOVER = '0.2'
@@ -103,9 +112,9 @@ Common Options:
 
  --optfile=X    -o X    Read options from file X. Default is ~/.pagekiterc.
  --httpd=X:P    -H X:P  Enable the HTTP user interface on hostname X, port P.
- --pemfile=X    -P X    Along with -H, use X as a PEM key for the HTTPS UI.
- --httppass=X   -X X    Require password X to access the user interface.
- --nozlib               Disable zlib tunnel compression.
+ --pemfile=X    -P X    Use X as a PEM key for the HTTPS UI. FIXME!
+ --httppass=X   -X X    Require password X to access the user interface. FIXME!
+ --nozchunks            Disable zlib tunnel compression.
  --logfile=F    -L F    Log to file F.
  --daemonize    -Z      Run as a daemon.
  --runas        -U U:G  Set UID:GID after opening our listening sockets.
@@ -184,7 +193,7 @@ OPT_ARGS = ['clean', 'optfile=', 'httpd=', 'pemfile=', 'httppass=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults',
             'authdomain=', 'register=', 'host=', 'ports=', 'protos=',
             'backend=', 'frontend=', 'frontends=', 'new',
-            'all', 'noall', 'dyndns=', 'backend=', 'nozlib']
+            'all', 'noall', 'dyndns=', 'backend=', 'nozchunks']
 
 AUTH_ERRORS           = '128.'
 AUTH_ERR_USER_UNKNOWN = '128.0.0.0'
@@ -293,14 +302,14 @@ class ConnectError(Exception):
   pass
 
 
-def HTTP_PageKiteRequest(server, backends, tokens=None, nozlib=False,
+def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
                           testtoken=None):
   req = ['POST %s HTTP/1.1\r\n' % MAGIC_PATH,
          'Host: %s\r\n' % server,
          'Content-Type: application/octet-stream\r\n',
          'Transfer-Encoding: chunked\r\n']
 
-  if not nozlib:
+  if not nozchunks:
     req.append('X-Beanstalk-Features: ZChunks\r\n')
          
   tokens = tokens or {}
@@ -1142,7 +1151,7 @@ class Tunnel(ChunkParser):
       self.fd.connect((server, 80))
 
     self.Send(HTTP_PageKiteRequest(server, conns.config.backends, tokens,
-                                    nozlib=conns.config.disable_zlib)) 
+                                    nozchunks=conns.config.disable_zchunks)) 
     self.Flush()
 
     data = ''
@@ -1183,7 +1192,7 @@ class Tunnel(ChunkParser):
           data, parse = self._Connect(server, conns, tokens)
 
         if data and parse:
-          if not conns.config.disable_zlib:
+          if not conns.config.disable_zchunks:
             for feature in parse.Header('X-Beanstalk-Features'):
               if feature == 'ZChunks': self.EnableZChunks(level=9)
 
@@ -1467,8 +1476,10 @@ class PageKite(object):
     self.ui_http_server = UiHttpServer
     self.ui_sspec = None
     self.ui_httpd = None
+    self.ui_password = None
+    self.ui_open = None
     self.yamond = MockYamonD(())
-    self.disable_zlib = False
+    self.disable_zchunks = False
 
     self.client_mode = 0
 
@@ -1599,6 +1610,20 @@ class PageKite(object):
     return sign == signToken(token=sign, secret=secret,
                            payload='%s:%s:%s:%s' % (proto, domain, srand, token))
 
+  def LookupDomainQuota(self, lookup):
+    LogDebug('LOOKUP: %s' % lookup)
+    ip = socket.gethostbyname(lookup)
+
+    # High bit not set, then access is granted and the "ip" is a quota.
+    if not ip.startswith(AUTH_ERRORS):
+      return 1024 # FIXME: Decode and return quota.
+  
+    # Errors on real errors are final.
+    if ip != AUTH_ERR_USER_UNKNOWN: return None
+
+    # User unknown, fall through to local test.
+    return -1 
+
   def GetDomainQuota(self, proto, domain, srand, token, sign, recurse=True):
     if proto not in self.server_protos: return None
 
@@ -1608,19 +1633,8 @@ class PageKite(object):
       if self.auth_domain:
         lookup = '.'.join([srand, token, sign, proto, domain, self.auth_domain])
         try:
-          LogDebug('LOOKUP: %s' % lookup)
-          ip = socket.gethostbyname(lookup)
-
-          # High bit not set, then access is granted and the "ip" is a quota.
-          if not ip.startswith(AUTH_ERRORS):
-            return 1024 # FIXME: Decode and return quota.
-  
-          # Errors on real errors are final.
-          if ip != AUTH_ERR_USER_UNKNOWN: return None
-
-          # User unknown, fall through to local test.
-          pass
-
+          rv = self.LookupDomainQuota(lookup)
+          if rv is None or rv >= 0: return rv
         except Exception:
           # Lookup failed, fall through to local test.
           pass
@@ -1652,6 +1666,10 @@ class PageKite(object):
     self.Configure(args)
     self.rcfile_recursion -= 1
 
+  def HelpAndExit(self):
+    print DOC
+    sys.exit(0)
+
   def Configure(self, argv):
     opts, args = getopt.getopt(argv, OPT_FLAGS, OPT_ARGS) 
 
@@ -1671,6 +1689,8 @@ class PageKite(object):
         else:
           self.setuid = pwd.getpwnam(parts[0])[2]
 
+      elif opt in ('-X', '--httppass'): self.ui_password = arg
+      elif opt in ('-W', '--httpopen'): self.ui_open = True
       elif opt in ('-H', '--httpd'):
         parts = arg.split(':')
         host = parts[0] or 'localhost'
@@ -1721,7 +1741,7 @@ class PageKite(object):
       elif opt == '--nofrontend': self.isfrontend = False
       elif opt == '--nodaemonize': self.daemonize = False
       elif opt == '--noall': self.require_all = False
-      elif opt == '--nozlib': self.disable_zlib = True
+      elif opt == '--nozchunks': self.disable_zchunks = True
       elif opt == '--clean': pass
 
       elif opt == '--defaults':
@@ -1734,9 +1754,9 @@ class PageKite(object):
         sys.exit(0)
 
       else:
-        print DOC
-        sys.exit(0)
+        self.HelpAndExit()
 
+  def CheckConfig(self):
     if not self.servers_manual and not self.servers_auto and not self.isfrontend:
       if not self.servers:
         raise ConfigError('Nothing to do!  List some servers, or run me as one.')      
@@ -1757,6 +1777,12 @@ class PageKite(object):
       return 100000 
     return (time.time() - start)
 
+  def GetHostIpAddr(self, host):
+    return socket.gethostbyname(host)
+
+  def GetHostDetails(self, host):
+    return socket.gethostbyname_ex(bdom)
+ 
   def ChooseFrontEnds(self):
     self.servers = []
     self.servers_preferred = []
@@ -1765,7 +1791,7 @@ class PageKite(object):
     for server in self.servers_manual:
       (host, port) = server.split(':')
       try:
-        ipaddr = socket.gethostbyname(host)
+        ipaddr = self.GetHostIpAddr(host)
         server = '%s:%s' % (ipaddr, port)
         if server not in self.servers:
           self.servers.append(server)
@@ -1782,7 +1808,7 @@ class PageKite(object):
         for bid in self.backends: 
           (proto, bdom) = bid.split(':')
           try:
-            (hn, al, ips) = socket.gethostbyname_ex(bdom)
+            (hn, al, ips) = self.GetHostDetails(bdom)
             for ip in ips:
               server = '%s:%s' % (ip, port)
               if server not in self.servers: self.servers.append(server)
@@ -1977,6 +2003,7 @@ class PageKite(object):
 
     # Start the UI thread
     if self.ui_sspec:
+      # FIXME: ui_open, ui_password, ui_pemfile
       self.ui_httpd = HttpUiThread(self, conns,
                                    handler=self.ui_request_handler,
                                    server=self.ui_http_server)
@@ -2019,6 +2046,7 @@ if __name__ == '__main__':
     if '--clean' not in sys.argv:
       if os.path.exists(bsn.rcfile): bsn.ConfigureFromFile()
     bsn.Configure(sys.argv[1:])
+    bsn.CheckConfig()
     bsn.Start()
 
   except ConfigError, msg:
