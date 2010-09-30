@@ -73,6 +73,7 @@ class MockSocketFD(object):
   def setblocking(self, val): pass
   def setsockopt(self, a, b, c): pass
   def flush(self): pass
+  def close(self): pass
 
 
 class TestInternals(unittest.TestCase):
@@ -212,26 +213,112 @@ class TestInternals(unittest.TestCase):
     self.assertEquals(beanstalks_net.LOG[0]['err'][-11:-2], "BadHeader")
 
   def test_Selectable(self):
-    packets = ['abc', '123']
+    packets = ['abc', '123', 'This is a long packet', 'short']
 
-    class TestSelectable(beanstalks_net.Selectable):
+    class EchoSelectable(beanstalks_net.Selectable):
       def __init__(self, data=None):
         beanstalks_net.Selectable.__init__(self,
-                                           fd=MockSocketFD(recv_values=data))
-        self.processed = []
-        self.sent = self.fd.sent_values
+                                           fd=MockSocketFD(data, maxsend=6))
       def ProcessData(self, data):
-        self.processed.append(data)
+        return self.Send(data)
 
+    # This is a basic test of the EchoSelectable, which simply reads all
+    # the available data and echos it back...
     beanstalks_net.LOG = []
-    ss = TestSelectable(packets[:])
-    ss.ReadData()
-    ss.Send('hello world')
-    ss.ReadData()
-    self.assertEquals(beanstalks_net.LOG, [])
-    self.assertEquals(ss.processed, packets)
-    self.assertEquals(ss.sent, packets)
-    
+    ss = EchoSelectable(packets[:])
+    while ss.ReadData() is not False: pass
+    ss.Flush()
+    ss.Cleanup()
+    self.assertEquals(beanstalks_net.LOG[0]['read'], '%d' % len(''.join(packets)))
+    self.assertEquals(beanstalks_net.LOG[0]['wrote'], '%d' % len(''.join(ss.fd.sent_values)))
+    self.assertEquals(''.join(ss.fd.sent_values), ''.join(packets))
+
+    # NOTE: This test does not cover the compression code and the SendChunked
+    #       method, those are tested in the ChunkParser test below.
+
+  def test_LineParser(self):
+    packets = ['This is a line\n', 'This ', 'is', ' a line\nThis',
+               ' is a line\n']
+     
+    class EchoLineParser(beanstalks_net.LineParser):
+      def __init__(self, data=None):
+        beanstalks_net.LineParser.__init__(self, fd=MockSocketFD(data))
+      def ProcessLine(self, line, lines):
+        return self.Send(line)
+
+    # This is a basic test of the EchoLineParser, which simply reads all
+    # the available data and echos it back...
+    beanstalks_net.LOG = []
+    ss = EchoLineParser(packets[:])
+    while ss.ReadData() is not False: pass
+    ss.Flush()
+    ss.Cleanup()
+    self.assertEquals(beanstalks_net.LOG[0]['read'], '%d' % len(''.join(packets)))
+    self.assertEquals(beanstalks_net.LOG[0]['wrote'], '%d' % len(''.join(ss.fd.sent_values)))
+    self.assertEquals(''.join(ss.fd.sent_values), ''.join(packets))
+    # Verify that the data was reassembled into complete lines.
+    self.assertEquals(ss.fd.sent_values[0], 'This is a line\n')
+    self.assertEquals(ss.fd.sent_values[1], 'This is a line\n')
+    self.assertEquals(ss.fd.sent_values[2], 'This is a line\n')
+
+  def test_Connections(self):
+    pass
+
+  def test_MagicProtocolParser(self):
+    pass
+
+  def test_ChunkParser(self):
+    # Easily compressed raw data...
+    unchunked = ['This would be chunk one, one, one, one, one!!1',
+                 'This is chunk two, chunk two, chunk two, woot!',
+                 'And finally, chunk three, three, chunk, three chunk three']
+
+    chunker = beanstalks_net.Selectable(fd=MockSocketFD())
+    chunked = chunker.fd.sent_values
+
+    # First, let's just test the basic chunk generation
+    for chunk in unchunked: chunker.SendChunked(chunk) 
+    for i in [0, 1, 2]:
+      self.assertEquals(chunked[i], '%x\r\n%s' % (len(unchunked[i]), 
+                                                  unchunked[i]))
+    # Second, test compressed chunk generation
+    chunker.EnableZChunks(9)
+    for chunk in unchunked: chunker.SendChunked(chunk) 
+    for i in [0, 1, 2]:
+      self.assertTrue(chunked[i+3].startswith('%xZ' % len(unchunked[i])))
+      self.assertTrue(len(chunked[i+3]) < len(unchunked[i]))
+
+    # Define our EchoChunkParser...
+    class EchoChunkParser(beanstalks_net.ChunkParser):
+      def __init__(self, data=None):
+        beanstalks_net.ChunkParser.__init__(self, fd=MockSocketFD(data))
+      def ProcessChunk(self, chunk):
+        return self.Send(chunk)
+   
+    # Finally, let's let the ChunkParser unchunk it all again.   
+    beanstalks_net.LOG = []
+    ss = EchoChunkParser(chunked[:])
+    while ss.ReadData() is not False: pass
+    ss.Flush()
+    ss.Cleanup()
+    self.assertEquals(beanstalks_net.LOG[-1]['read'], '%d' % len(''.join(chunked)))
+    self.assertEquals(beanstalks_net.LOG[-1]['wrote'], '%d' % (2*len(''.join(unchunked))))
+    self.assertEquals(''.join(ss.fd.sent_values), 2 * ''.join(unchunked))
+
+    # FIXME: Corrupt chunks aren't tested.
+
+  def test_Tunnel(self):
+    pass
+
+  def test_UserConn(self):
+    pass
+
+  def test_UnknownConn(self):
+    pass
+
+  def test_BeanstalksNet(self):
+    pass
+
 
 class TestNetwork(unittest.TestCase):
 
