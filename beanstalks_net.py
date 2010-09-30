@@ -340,9 +340,9 @@ def HTTP_Unavailable(where, proto, domain):
 
 LOG = []
 
-def LogValues(values):
-  words = [(kv[0], ('%s' % kv[1]).replace('\t', ' ').replace('\n', ' ').replace('; ', ', ').strip()) for kv in values]
-  words.append(('ts', '%x' % time.time()))
+def LogValues(values, testtime=None):
+  words = [(kv[0], ('%s' % kv[1]).replace('\t', ' ').replace('\r', ' ').replace('\n', ' ').replace('; ', ', ').strip()) for kv in values]
+  words.append(('ts', '%x' % (testtime or time.time())))
   wdict = dict(words)
   LOG.append(wdict)
   if len(LOG) > 100: LOG.pop()

@@ -23,10 +23,13 @@
 #############################################################################
 # DESIGN:
 #
-#  1. Basic unittests of key parts of the code - protocol parsers,
-#     signatures, things that need to stay strictly compatible.
-#
-#  2. Network behavior testing harness:
+#  TestInternals:
+#    Basic unittests of key parts of the code - protocol parsers, signatures,
+#    things that need to stay strictly compatible.
+# 
+#  TestNetwork:
+#    Tests network communication by creating multiple threads and making
+#    them talk to each-other:
 #        - FrontEnd threads (mocked DNS code)
 #        - BackEnd threads (mocked DNS code)
 #        - HTTPD threads
@@ -34,13 +37,13 @@
 #        - XMPP threads
 #        - Client threads checking results
 #
-#  3. Compatibility testing harness:
-#        - Network behavior tests + external front/back-ends
-#        - Network behavior tests + external HTTP/SMTP/XMPP clients/daemons
-#
+#  TextNetworkExternal:
+#    Similar to TestNetwork, but adds the ability to use external servers
+#    as well, for verifying compatibility with other implementations.
 #
 import beanstalks_net
 import unittest
+
 
 class TestInternals(unittest.TestCase):
 
@@ -111,8 +114,23 @@ class TestInternals(unittest.TestCase):
                                                           testtoken=token),
                      ''.join(req))
     
+  def test_LogValues(self):
+    words, wdict = beanstalks_net.LogValues([('spaces', '  bar  '),
+                                             ('tab', 'one\ttwo'),
+                                             ('cr', 'one\rtwo'),
+                                             ('lf', 'one\ntwo'),
+                                             ('semi', 'one;two; three')],
+                                            testtime=1000)
+    self.assertEqual(wdict['ts'], '%x' % 1000)
+    self.assertEqual(wdict['spaces'], 'bar')
+    self.assertEqual(wdict['tab'], 'one two')
+    self.assertEqual(wdict['cr'], 'one two')
+    self.assertEqual(wdict['lf'], 'one two')
+    self.assertEqual(wdict['semi'], 'one;two, three')
+    for key, val in words: self.assertEqual(wdict[key], val)
 
-
+  def test_HttpParser(self):
+    pass
 
 
 if __name__ == '__main__':
