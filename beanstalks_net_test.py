@@ -330,30 +330,43 @@ class TestInternals(unittest.TestCase):
   def test_BeanstalksNet(self):
     bn = MockBeanstalksNet()
 
-    bn.Configure(['--httpd=localhost:1234'])
-    self.assertEquals(('localhost', 1234), bn.ui_sspec)
-    bn.Configure(['-H', 'localhost:4321'])
-    self.assertEquals(('localhost', 4321), bn.ui_sspec)
+    def C1(arg): return bn.Configure([arg]) or True
+    def C2(a1,a2): return bn.Configure([a1,a2]) or True
+    def EQ(val, var): return self.assertEquals(val, var) or True
 
-    bn.Configure(['--httppass=password'])
-    self.assertEquals('password', bn.ui_password)
-    bn.Configure(['-X', 'passx'])
-    self.assertEquals('passx', bn.ui_password)
+    ##[ Common options ]######################################################
 
-    bn.Configure(['--httpopen'])
-    self.assertEquals(True, bn.ui_open)
+    C1('--httpd=localhost:1234') and EQ(('localhost', 1234), bn.ui_sspec)
+    C2('-H', 'localhost:4321') and EQ(('localhost', 4321), bn.ui_sspec)
+
+    C1('--httppass=password') and EQ('password', bn.ui_password)
+    C2('-X', 'passx') and EQ('passx', bn.ui_password)
+
+    C1('--httpopen') and EQ(True, bn.ui_open)
     bn.ui_open = False
-    bn.Configure(['-W'])
-    self.assertEquals(True, bn.ui_open)
+    C1('-W') and EQ(True, bn.ui_open)
 
-    bn.Configure(['--nozchunks'])
-    self.assertEquals(True, bn.disable_zchunks)
+#   C1('--pemfile=/dev/null') and EQ('/dev/null', bn.ui_pemfile)
+#   C2('-P', '/dev/zero') and EQ('/dev/zero', bn.ui_pemfile)
 
-  def test_BeanstalksNetFixmes(self):
-    bn.Configure(['--pemfile=/dev/null'])
-    self.assertEquals('/dev/null', bn.ui_pemfile)
-    bn.Configure(['-P', '/dev/zero'])
-    self.assertEquals('/dev/zero', bn.ui_pemfile)
+    C1('--nozchunks') and EQ(True, bn.disable_zchunks)
+    
+    C1('--logfile=/dev/null') and EQ('/dev/null', bn.logfile)
+    C2('-L', '/dev/zero') and EQ('/dev/zero', bn.logfile)
+
+    C1('--daemonize') and EQ(True, bn.daemonize)
+    bn.daemonize = False
+    C1('-Z') and EQ(True, bn.daemonize)
+
+    C1('--runas=root:root') and EQ(0, bn.setuid) and EQ(0, bn.setgid)
+    C1('--runas=daemon') and EQ(1, bn.setuid)
+    C2('-U', 'root:daemon') and EQ(0, bn.setuid) and EQ(1, bn.setgid)
+
+    C1('--pidfile=/dev/null') and EQ('/dev/null', bn.pidfile)
+    C2('-I', '/dev/zero') and EQ('/dev/zero', bn.pidfile)
+
+
+    ##[ Front-end options ]###################################################
 
 
 
