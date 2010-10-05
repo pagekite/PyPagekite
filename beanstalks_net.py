@@ -1701,7 +1701,8 @@ class BeanstalksNet(object):
           conns.Remove(conn)
 
       for socket in oready:
-        conns.Connection(socket).Send([])
+        conn = conns.Connection(socket)
+        if conn: conn.Send([])
 
       last_loop = now
 
