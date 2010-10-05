@@ -408,21 +408,39 @@ class TestInternals(unittest.TestCase):
     EQ(bn.backends, {'http:a.com': ('http', 'a.com', 'localhost:80', 'x')})
 
   def test_Connections(self):
+    class MockTunnel(beanstalks_net.Selectable):
+      def __init__(self, sname):
+        beanstalks_net.Selectable.__init__(self, fd=MockSocketFD([]))
+        self.server_name = sname
+    class MockAuthThread(beanstalks_net.AuthThread):
+      def __init__(self, conns):
+        self.conns = conns
+      def start(self):
+        self.started = True
+
     conns = beanstalks_net.Connections(MockBeanstalksNet())
-
-    sel = beanstalks_net.Selectable(fd=MockSocketFD([]))
+    sel = MockTunnel('test.com')
     conns.Add(sel)
+    conns.start(auth_thread=MockAuthThread(conns))
 
+    self.assertEqual(conns.auth.started, True)
     self.assertEqual(conns.Sockets(), [sel.fd])
     self.assertEqual(conns.Blocked(), [])
+    sel.write_blocked = ['block']
+    self.assertEqual(conns.Blocked(), [sel.fd])
     self.assertEqual(conns.Connection(sel.fd), sel)
 
     sel.fd.close()
     conns.CleanFds()
     self.assertEqual(conns.Sockets(), [])
 
-    
-    pass
+    sel.fd.closed = False
+    conns.Tunnel('http', 'test.com', conn=sel)
+    self.assertEqual(conns.TunnelServers(), ['test.com'])
+    self.assertEqual(conns.Tunnel('http', 'test.com'), [sel])
+
+    conns.Remove(sel)
+    self.assertEqual(conns.Tunnel('http', 'test.com'), None)
 
   def test_AuthThread(self):
     at = beanstalks_net.AuthThread(None)

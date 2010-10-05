@@ -326,7 +326,7 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
   return ''.join(req)
 
 def HTTP_ResponseHeader(code, title, mimetype='text/html'):
-  return 'HTTP/1.1 %s %s\r\nContent-Type: %s\r\nCache-Control: private\r\nConnection: close\r\n' % (code, title, mimetype)
+  return 'HTTP/1.1 %s %s\r\nContent-Type: %s\r\nPragma: no-cache\r\nCache-Control: no-cache\r\nConnection: close\r\n' % (code, title, mimetype)
 
 def HTTP_Header(name, value):
   return '%s: %s\r\n' % (name, value)
@@ -557,6 +557,8 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     if path == '/vars.txt':
       self.send_response(200)
       self.send_header('Content-Type', 'text/plain')
+      self.send_header('Cache-Control', 'no-cache')
+      self.send_header('Pragma', 'no-cache')
       self.end_headers()
       self.wfile.write(self.server.pkite.yamond.render_vars_text())
 
@@ -564,6 +566,8 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       qs = parse_qs(query)
       self.send_response(200)
       self.send_header('Content-Type', 'text/html')
+      self.send_header('Cache-Control', 'no-cache')
+      self.send_header('Pragma', 'no-cache')
       self.end_headers()
 
       data = {
@@ -826,8 +830,8 @@ class Connections(object):
     self.tunnels = {}
     self.auth = None
 
-  def start(self):
-    self.auth = AuthThread(self)
+  def start(self, auth_thread=None):
+    self.auth = auth_thread or AuthThread(self)
     self.auth.start()
 
   def Add(self, conn):
