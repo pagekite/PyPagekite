@@ -365,16 +365,67 @@ class TestInternals(unittest.TestCase):
     C1('--pidfile=/dev/null') and EQ('/dev/null', bn.pidfile)
     C2('-I', '/dev/zero') and EQ('/dev/zero', bn.pidfile)
 
-
     ##[ Front-end options ]###################################################
 
+    C1('--isfrontend') and EQ(True, bn.isfrontend)
+    bn.isfrontend = False
+    C1('-f') and EQ(True, bn.isfrontend)
 
+    C1('--authdomain=a.com') and EQ('a.com', bn.auth_domain)
+    C2('-A', 'b.com') and EQ('b.com', bn.auth_domain)
+
+#   C1('--register=a.com') and EQ('a.com', bn.register_with)
+#   C2('-R', 'b.com') and EQ('b.com', bn.register_with)
+
+    C1('--host=a.com') and EQ('a.com', bn.server_host)
+    C2('-h', 'b.com') and EQ('b.com', bn.server_host)
+   
+    C1('--ports=1,2,3') and EQ([1,2,3], bn.server_ports) 
+    C2('-p', '4,5') and EQ([4,5], bn.server_ports) 
+    
+    C1('--protos=HTTP,https') and EQ(['http', 'https'], bn.server_protos)
+    
+#   C1('--domain=http,https:a.com:secret')
+
+    ##[ Back-end options ]###################################################
+
+    C1('--all') and EQ(True, bn.require_all)
+    bn.require_all = False
+    C1('-a') and EQ(True, bn.require_all)
+
+    C1('--dyndns=beanstalks.net') and EQ(bn.dyndns[0], beanstalks_net.DYNDNS['beanstalks.net'])
+    C2('-D', 'a@no-ip.com') and EQ(bn.dyndns, (beanstalks_net.DYNDNS['no-ip.com'], {'user': 'a', 'pass': ''}))
+    C1('--dyndns=a:b@c') and EQ(bn.dyndns, ('c', {'user': 'a', 'pass': 'b'}))
+   
+    C1('--frontends=2:a.com:80') and EQ((2, 'a.com', 80), bn.servers_auto)
+    C1('--frontend=b.com:80') and EQ(['b.com:80'], bn.servers_manual)
+
+    C1('--new') and EQ(True, bn.servers_new_only)
+    bn.servers_new_only = False
+    C1('-N') and EQ(True, bn.servers_new_only)
+
+    C1('--backend=http:a.com:localhost:80:x')
+    EQ(bn.backends, {'http:a.com': ('http', 'a.com', 'localhost:80', 'x')})
+
+  def test_Connections(self):
+    conns = beanstalks_net.Connections(MockBeanstalksNet())
+
+    sel = beanstalks_net.Selectable(fd=MockSocketFD([]))
+    conns.Add(sel)
+
+    self.assertEqual(conns.Sockets(), [sel.fd])
+    self.assertEqual(conns.Blocked(), [])
+    self.assertEqual(conns.Connection(sel.fd), sel)
+
+    sel.fd.close()
+    conns.CleanFds()
+    self.assertEqual(conns.Sockets(), [])
+
+    
+    pass
 
   def test_AuthThread(self):
     at = beanstalks_net.AuthThread(None)
-    pass
-
-  def test_Connections(self):
     pass
 
   def test_MagicProtocolParser(self):

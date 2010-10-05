@@ -112,8 +112,8 @@ Common Options:
 
  --optfile=X    -o X    Read options from file X. Default is ~/.pagekiterc.
  --httpd=X:P    -H X:P  Enable the HTTP user interface on hostname X, port P.
- --pemfile=X    -P X    Use X as a PEM key for the HTTPS UI. FIXME!
- --httppass=X   -X X    Require password X to access the user interface. FIXME!
+ --pemfile=X    -P X    Use X as a PEM key for the HTTPS UI. (FIXME)
+ --httppass=X   -X X    Require password X to access the UI. (FIXME)
  --nozchunks            Disable zlib tunnel compression.
  --logfile=F    -L F    Log to file F.
  --daemonize    -Z      Run as a daemon.
@@ -135,7 +135,7 @@ Front-end Options:
  --domain=proto,proto2,pN:domain:secret
                   Accept tunneling requests for the named protocols and
                  specified domain, using the given secret.  A * may be
-               used as a wildcard for subdomains.
+               used as a wildcard for subdomains. (FIXME)
 
 Back-end Options:
 
@@ -1704,16 +1704,18 @@ class PageKite(object):
           self.dyndns = (arg, {'user': '', 'pass': ''})
         elif '@' in arg:
           usrpwd, provider = arg.split('@', 1)
+          if provider in DYNDNS: provider = DYNDNS[provider]
           if ':' in usrpwd:
             usr, pwd = usrpwd.split(':', 1)
-            self.dyndns = (DYNDNS[provider], {'user': usr, 'pass': pwd})
+            self.dyndns = (provider, {'user': usr, 'pass': pwd})
           else:
-            self.dyndns = (DYNDNS[provider], {'user': usrpwd, 'pass': ''})
+            self.dyndns = (provider, {'user': usrpwd, 'pass': ''})
         else:
-          self.dyndns = (DYNDNS[arg], {'user': '', 'pass': ''})
+          if arg in DYNDNS: arg = DYNDNS[arg]
+          self.dyndns = (arg, {'user': '', 'pass': ''})
 
       elif opt in ('-p', '--ports'): self.server_ports = [int(x) for x in arg.split(',')]
-      elif opt in ('-p', '--protos'): self.server_protos = [x.lower() for x in arg.split(',')]
+      elif opt == '--protos': self.server_protos = [x.lower() for x in arg.split(',')]
       elif opt in ('-h', '--host'): self.server_host = arg
       elif opt in ('-A', '--authdomain'): self.auth_domain = arg
       elif opt in ('-f', '--isfrontend'): self.isfrontend = True
