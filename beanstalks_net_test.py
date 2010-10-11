@@ -459,9 +459,12 @@ class TestInternals(unittest.TestCase):
     pass
 
 
-
 class TestNetwork(unittest.TestCase):
+  def setUp(self):
+    pass
 
+
+class TestNetworkExternal(unittest.TestCase):
   def setUp(self):
     pass
 

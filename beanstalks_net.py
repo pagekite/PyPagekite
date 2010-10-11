@@ -147,6 +147,7 @@ Back-end Options:
  --frontends=N:X:P      Choose N front-ends from X (a DNS domain name), port P.
  --frontend=host:port   Connect to the named front-end server.
  --new          -N      Don't attempt to connect to the domain's old front-end.           
+ --socksify=S:P         Connect va SOCKS server S, port P (requires socks.py)
 
  --backend=proto:domain:host:port:secret
                   Configure a back-end service on host:port, using
@@ -192,7 +193,7 @@ OPT_ARGS = ['clean', 'optfile=', 'httpd=', 'pemfile=', 'httppass=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults',
             'authdomain=', 'register=', 'host=', 'ports=', 'protos=',
-            'backend=', 'frontend=', 'frontends=', 'new',
+            'backend=', 'frontend=', 'frontends=', 'socksify=', 'new',
             'all', 'noall', 'dyndns=', 'backend=', 'nozchunks']
 
 AUTH_ERRORS           = '128.'
@@ -381,8 +382,6 @@ def LogDebug(msg, parms=None):
   emsg = [('debug', msg)]
   if parms: emsg.extend(parms)
   Log(emsg)
-
-
 
 
 # FIXME: This could easily be a pool of threads to let us handle more
@@ -1145,7 +1144,12 @@ class Tunnel(ChunkParser):
 
   def _Connect(self, server, conns, tokens=None):
     if self.fd: self.fd.close()
-    self.SetFD(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
+    if conns.config.socks_server:
+      sock = socks.socksocket()
+      sock.setproxy(socks.PROXY_TYPE_SOCKS5, conns.config.socks_server)
+      self.SetFD(sock)
+    else:
+      self.SetFD(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
     self.fd.setblocking(1)
 
     sspec = server.split(':')
@@ -1487,6 +1491,7 @@ class PageKite(object):
 
     self.client_mode = 0
 
+    self.socks_server = None
     self.require_all = False
     self.servers = []
     self.servers_manual = []
@@ -1726,6 +1731,9 @@ class PageKite(object):
 
       elif opt in ('-a', '--all'): self.require_all = True
       elif opt in ('-N', '--new'): self.servers_new_only = True
+      elif opt == '--socksify': 
+        import socks
+        self.socks_server = arg
       elif opt == '--frontend': self.servers_manual.append(arg)
       elif opt == '--frontends':
         count, domain, port = arg.split(':')
@@ -1787,7 +1795,7 @@ class PageKite(object):
     return socket.gethostbyname(host)
 
   def GetHostDetails(self, host):
-    return socket.gethostbyname_ex(bdom)
+    return socket.gethostbyname_ex(host)
  
   def ChooseFrontEnds(self):
     self.servers = []
