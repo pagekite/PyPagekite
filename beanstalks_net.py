@@ -77,12 +77,12 @@
 #
 #
 PROTOVER = '0.2'
-APPVER = '0.2'
+APPVER = '0.2.1'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 DOC = """\
 pagekite.py is Copyright 2010, the Beanstalks Project ehf. 
-     v%s                           http://pagekite.net/
+     v%s                         http://pagekite.net/
 
 This the reference implementation of the PageKite tunneling protocol,
 both the front- and back-end. This following protocols are supported:
