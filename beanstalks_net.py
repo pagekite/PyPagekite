@@ -14,6 +14,7 @@
 #        proof of concept. 
 # FIXME: Make HTTP proxy HTTP/1.1 compliant? Or is Varnish good enough?
 # FIXME: Add throttling, bandwidth shaping and auto-slowdown for freebies?
+# FIXME: Add support for dedicated ports (PageKitePNP, ha ha).
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -104,20 +105,19 @@ Common Options:
  --httpd=X:P    -H X:P  Enable the HTTP user interface on hostname X, port P.
  --pemfile=X    -P X    Along with -H, use X as a PEM key for the HTTPS UI.
  --httppass=X   -X X    Require password X to access the user interface.
- --httpopen     -W      Accept non-local (non 127.0.0.1) HTTP UI requests.
  --logfile=F    -L F    Log to file F.
  --daemonize    -Z      Run as a daemon.
  --runas        -U U:G  Set UID:GID after opening our listening sockets.
  --pidfile=P    -I P    Write PID to the named file.
  --clean                Skip loading the default configuration file.              
- --defaults             Dump the default settings to STDOUT, formatted as
+ --defaults             Set some reasonable default setings.
+ --settings             Dump the current settings to STDOUT, formatted as
                        an options file would be.
 
 Front-end Options:
 
  --isfrontend   -f      Enable front-end mode.
  --authdomain=X -A X    Use X as a remote authentication domain.
- --register=X   -R X    Announce to X that we are open for business.
  --host=H       -h H    Listen on H (hostname).
  --ports=A,B,C  -p A,B  Listen on ports A, B, C, ...
  --protos=A,B,C         Accept the listed protocols for tunneling.
@@ -161,8 +161,8 @@ options files, and options files can include other options files.
 Examples:
 
 # Create a config-file with default options, and then edit it.
-pagekite.py --defaults > .pagekite.rc
-vim .pagekite.rc 
+pagekite.py --defaults --settings > ~/.pagekite.rc
+vim ~/.pagekite.rc 
 
 # Run pagekite with the HTTP UI, for interactive configuration.
 pagekite.py --httpd=localhost:8888
@@ -179,9 +179,8 @@ pagekite.py \\
 MAGIC_PATH = '/Beanstalk~Magic~Beans/%s' % PROTOVER
 OPT_FLAGS = 'o:H:P:X:WL:ZI:fA:R:h:p:aD:U:N'
 OPT_ARGS = ['clean', 'optfile=', 'httpd=', 'pemfile=', 'httppass=',
-            'httpopen', 'nohttpopen',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
-            'isfrontend', 'noisfrontend', 'defaults',
+            'isfrontend', 'noisfrontend', 'settings', 'defaults',
             'authdomain=', 'register=', 'host=', 'ports=', 'protos=',
             'backend=', 'frontend=', 'frontends=', 'new',
             'all', 'noall', 'dyndns=', 'backend=']
@@ -1353,6 +1352,78 @@ class PageKite(object):
       # The above stuff may fail in some cases, e.g. on Android in SL4A.
       self.rcfile = 'pagekite.cfg'
 
+  def PrintSettings(self):
+    print '### Current settings for PageKite v%s. ###' % APPVER    
+    print
+    print '# HTTP control-panel settings:'
+    print (self.ui_sspec and 'httpd=%s:%d' % self.ui_sspec or '#httpd=host:port')
+    # FIXME: Other settings!
+    print
+    print '# Back-end Options:'
+    print (self.servers_auto and 'frontends=%d:%s:%d' % self.servers_auto or '#frontends=1:frontends.b5p.us:2222')
+    if self.dyndns:
+      provider, args = self.dyndns
+      for prov in DYNDNS:
+        if DYNDNS[prov] == provider and prov != 'beanstalks.net':
+          args['prov'] = prov
+      if 'prov' not in args:
+        args['prov'] = provider
+      if args['pass']:
+        print 'dyndns=%(user)s:%(pass)s@%(prov)s' % args
+      elif args['user']:
+        print 'dyndns=%(user)s@%(prov)s' % args
+      else:
+        print 'dyndns=%(prov)s' % args
+    else:
+      print '#dyndns=pagekite.net OR' 
+      print '#dyndns=user:pass@dyndns.org OR' 
+      print '#dyndns=user:pass@no-ip.com' 
+    bprinted=0
+    for bid in self.backends:
+      be = self.backends[bid]
+      if be[BE_BACKEND]:
+        print 'backend=%s:%s:%s' % (bid, be[BE_BACKEND], be[BE_SECRET])
+        bprinted += 1
+    if bprinted == 0:
+      print '#backend=http:YOU.pagekite.me:localhost:80:SECRET'  
+      print '#backend=https:YOU.pagekite.me:localhost:443:SECRET'  
+    print (self.servers_new_only and 'new' or '#new')
+    print (self.require_all and 'all' or '#all')
+    print
+    print
+    print '### The following stuff can usually be ignored. ###'
+    print
+    print '# Includes (should usually be at the top of the file)'
+    print '#optfile=/path/to/common/settings'
+    print
+    print '# Front-end Options:'
+    print (self.isfrontend and 'isfrontend' or '#isfrontend')
+    comment = (self.isfrontend and '' or '#')
+    print (self.server_host and '%shost=%s' % (comment, self.server_host) or '#host=machine.domain.com')
+    print '%sports=%s' % (comment, ','.join(['%s' % x for x in self.server_ports] or []))
+    print '%sprotos=%s' % (comment, ','.join(['%s' % x for x in self.server_protos] or []))
+    # FIXME: --register ?
+    print (self.auth_domain and '%sauthdomain=%s' % (comment, self.auth_domain) or '#authdomain=foo.com')
+    for bid in self.backends:
+      be = self.backends[bid]
+      if not be[BE_BACKEND]:
+        print 'domain=%s:%s:%s' % (bid, be[BE_SECRET])
+    print '#domain=http:*.pagekite.me:SECRET1'  
+    print '#domain=http,https:THEM.pagekite.me:SECRET2'  
+
+    print
+    print '# Systems administration settings:'
+    print (self.logfile and 'logfile=%s' % self.logfile or '#logfile=/path/file')
+    print (self.daemonize and 'daemonize' % self.logfile or '#daemonize')
+    if self.setuid and self.setgid:
+      print 'runas=%s:%s' % (self.setuid, self.setgid)
+    elif self.setuid:
+      print 'runas=%s' % self.setuid
+    else:
+      print '#runas=uid:gid'
+    print (self.pidfile and 'pidfile=%s' % self.pidfile or '#pidfile=/path/file')
+    print
+
   def FallDown(self, message, help=True):
     if self.conns and self.conns.auth: self.conns.auth.quit()
     if self.ui_httpd: self.ui_httpd.quit()
@@ -1489,15 +1560,31 @@ class PageKite(object):
         self.servers_auto = (int(count), domain, int(port))
 
       elif opt == '--backend':
-        proto, domain, bhost, bport, secret = arg.split(':')
-        bid = '%s:%s' % (proto, domain)
-        backend = '%s:%s' % (bhost, bport)
-        self.backends[bid] = (proto, domain, backend, secret)
+        protos, domain, bhost, bport, secret = arg.split(':')
+        for proto in protos.split(','): 
+          bid = '%s:%s' % (proto, domain)
+          backend = '%s:%s' % (bhost, bport)
+          self.backends[bid] = (proto, domain, backend, secret)
+
+      elif opt == '--domain':
+        protos, domain, secret = arg.split(':')
+        for proto in protos.split(','): 
+          bid = '%s:%s' % (proto, domain)
+          self.backends[bid] = (proto, domain, None, secret)
 
       elif opt == '--nofrontend': self.isfrontend = False
       elif opt == '--nodaemonize': self.daemonize = False
       elif opt == '--noall': self.require_all = False
       elif opt == '--clean': pass
+
+      elif opt == '--defaults':
+        self.ui_sspec = ('127.0.0.1', 9999) 
+        self.dyndns = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
+        self.servers_auto = (1, 'frontends.b5p.us', 2222)
+
+      elif opt == '--settings':
+        self.PrintSettings()
+        sys.exit(0)
 
       else:
         print DOC
