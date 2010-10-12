@@ -1,10 +1,13 @@
 #!/usr/bin/python -u
 #
-# droidstalks.py, Copyright 2010, The Beanstalks Project ehf.
-#                                 http://beanstalks-project.net/
+# droidkite.py, Copyright 2010, The Beanstalks Project ehf.
+#                               http://beanstalks-project.net/
 #
-# This is a proof-of-concept Beanstalks enabled HTTP server for Android.
+# This is a proof-of-concept PageKite enabled HTTP server for Android.
 # It has been developed and tested in the SL4A Python environment.
+#
+DOMAIN='YOU.test.beanstalks.me'
+SECRET='EDIT_ME'
 #
 #############################################################################
 #
@@ -33,7 +36,7 @@ class UiRequestHandler(pagekite.UiRequestHandler):
     return pagekite.UiRequestHandler.do_GET(self)
 
 
-class Droidstalk(pagekite.PageKite):
+class DroidKite(pagekite.PageKite):
   def __init__(self, droid):
     pagekite.PageKite.__init__(self)
     self.droid = droid
@@ -41,12 +44,10 @@ class Droidstalk(pagekite.PageKite):
 
 
 def Start(host, secret):
-  ds = Droidstalk(android.Android())
-  ds.Configure(['--frontends=1:frontends.b5p.us:2222',
-                '--httpd=localhost:9999',
-                '--dyndns=beanstalks.net',
+  ds = DroidKite(android.Android())
+  ds.Configure(['--defaults',
                 '--backend=http:%s:localhost:9999:%s' % (host, secret)])
   ds.Start()
 
 
-Start('YOU.test.beanstalks.me', 'SECRET')
+Start(DOMAIN, SECRET)
