@@ -342,10 +342,6 @@ class TestInternals(unittest.TestCase):
     C1('--httppass=password') and EQ('password', bn.ui_password)
     C2('-X', 'passx') and EQ('passx', bn.ui_password)
 
-    C1('--httpopen') and EQ(True, bn.ui_open)
-    bn.ui_open = False
-    C1('-W') and EQ(True, bn.ui_open)
-
 #   C1('--pemfile=/dev/null') and EQ('/dev/null', bn.ui_pemfile)
 #   C2('-P', '/dev/zero') and EQ('/dev/zero', bn.ui_pemfile)
 

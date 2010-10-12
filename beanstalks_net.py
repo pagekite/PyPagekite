@@ -188,7 +188,7 @@ pagekite.py \\
 
 """ % APPVER
 MAGIC_PATH = '/Beanstalk~Magic~Beans/%s' % PROTOVER
-OPT_FLAGS = 'o:H:P:X:WL:ZI:fA:R:h:p:aD:U:N'
+OPT_FLAGS = 'o:H:P:X:L:ZI:fA:R:h:p:aD:U:N'
 OPT_ARGS = ['clean', 'optfile=', 'httpd=', 'pemfile=', 'httppass=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults',
@@ -1485,7 +1485,6 @@ class PageKite(object):
     self.ui_sspec = None
     self.ui_httpd = None
     self.ui_password = None
-    self.ui_open = None
     self.yamond = MockYamonD(())
     self.disable_zchunks = False
 
@@ -1699,7 +1698,6 @@ class PageKite(object):
           self.setuid = pwd.getpwnam(parts[0])[2]
 
       elif opt in ('-X', '--httppass'): self.ui_password = arg
-      elif opt in ('-W', '--httpopen'): self.ui_open = True
       elif opt in ('-H', '--httpd'):
         parts = arg.split(':')
         host = parts[0] or 'localhost'
@@ -2017,7 +2015,7 @@ class PageKite(object):
 
     # Start the UI thread
     if self.ui_sspec:
-      # FIXME: ui_open, ui_password, ui_pemfile
+      # FIXME: ui_password, ui_pemfile
       self.ui_httpd = HttpUiThread(self, conns,
                                    handler=self.ui_request_handler,
                                    server=self.ui_http_server)
