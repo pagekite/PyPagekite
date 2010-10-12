@@ -24,18 +24,18 @@
 #############################################################################
 #
 import android
-import beanstalks_net
+import pagekite
 
 
-class UiRequestHandler(beanstalks_net.UiRequestHandler):
+class UiRequestHandler(pagekite.UiRequestHandler):
   def do_GET(self):
-    self.server.beanstalk.droid.makeToast('Oh, a visitor!')
-    return beanstalks_net.UiRequestHandler.do_GET(self)
+    self.server.pkite.droid.makeToast('Oh, a visitor!')
+    return pagekite.UiRequestHandler.do_GET(self)
 
 
-class Droidstalk(beanstalks_net.BeanstalksNet):
+class Droidstalk(pagekite.PageKite):
   def __init__(self, droid):
-    beanstalks_net.BeanstalksNet.__init__(self)
+    pagekite.PageKite.__init__(self)
     self.droid = droid
     self.ui_request_handler = UiRequestHandler
 
