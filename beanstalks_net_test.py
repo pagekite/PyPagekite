@@ -1,9 +1,9 @@
 #!/usr/bin/python -u
 #
-# beanstalks_net_test.py, Copyright 2010, The Beanstalks Project ehf.
-#                                         http://beanstalks-project.net/
+# pagekite_test.py, Copyright 2010, The PageKites Project ehf.
+#                                   http://beanstalks-project.net/
 #
-# Testing for the core beanstalks_net code.
+# Testing for the core pagekite code.
 #
 #############################################################################
 #
@@ -41,7 +41,7 @@
 #    Similar to TestNetwork, but adds the ability to use external servers
 #    as well, for verifying compatibility with other implementations.
 #
-import beanstalks_net
+import pagekite
 import unittest
 
 
@@ -78,9 +78,9 @@ class MockSocketFD(object):
   def closed(self): return self.closed
 
 
-class MockBeanstalksNet(beanstalks_net.BeanstalksNet):
+class MockPageKite(pagekite.PageKite):
   def __init__(self):
-    beanstalks_net.BeanstalksNet.__init__(self)
+    pagekite.PageKite.__init__(self)
     self.felldown = None
 
   def FallDown(self, message, help=True):
@@ -105,38 +105,38 @@ class MockBeanstalksNet(beanstalks_net.BeanstalksNet):
 class TestInternals(unittest.TestCase):
 
   def setUp(self):
-    beanstalks_net.Log = beanstalks_net.LogValues
-    self.gSecret = beanstalks_net.globalSecret()
+    pagekite.Log = pagekite.LogValues
+    self.gSecret = pagekite.globalSecret()
   
   def test_signToken(self):
     # Basic signature
-    self.assertEqual(beanstalks_net.signToken(token='1234567812',
+    self.assertEqual(pagekite.signToken(token='1234567812',
                                               secret='Bjarni',
                                               payload='Bjarni'),
                      '1234567843b16458418175599012be884a18')
 
     # Make sure it varies based on all variables
-    self.assertNotEqual(beanstalks_net.signToken(token='1234567812345689',
+    self.assertNotEqual(pagekite.signToken(token='1234567812345689',
                                                  secret='BjarniTheDude',
                                                  payload='Bjarni'),
                      '1234567843b16458418175599012be884a18')
-    self.assertNotEqual(beanstalks_net.signToken(token='234567812345689',
+    self.assertNotEqual(pagekite.signToken(token='234567812345689',
                                                  secret='Bjarni',
                                                  payload='Bjarni'),
                      '1234567843b16458418175599012be884a18')
-    self.assertNotEqual(beanstalks_net.signToken(token='1234567812345689',
+    self.assertNotEqual(pagekite.signToken(token='1234567812345689',
                                                  secret='Bjarni',
                                                  payload='BjarniTheDude'),
                      '1234567843b16458418175599012be884a18')
 
     # Test non-standard signature lengths
-    self.assertEqual(beanstalks_net.signToken(token='1234567812',
+    self.assertEqual(pagekite.signToken(token='1234567812',
                                               secret='Bjarni',
                                               payload='Bjarni',
                                               length=1000),
                      '1234567843b16458418175599012be884a18963f10be4670')
 
-  def test_BeanstalkRequest(self):
+  def test_PageKiteRequest(self):
     request = ['POST /Beanstalk~Magic~Beans/0.2 HTTP/1.1\r\n',
                'Host: x\r\n',
                'Content-Type: application/octet-stream\r\n',
@@ -147,27 +147,27 @@ class TestInternals(unittest.TestCase):
     # Basic request, no servers.
     req = request[:]
     req.extend([zlibreq, reqbody])
-    self.assertEqual(beanstalks_net.HTTP_BeanstalkRequest('x', {}),
+    self.assertEqual(pagekite.HTTP_PageKiteRequest('x', {}),
                      ''.join(req))
 
     # Basic request, no servers, zchunks disabled.
     req = request[:]
     req.append(reqbody)
-    self.assertEqual(beanstalks_net.HTTP_BeanstalkRequest('x', {}, nozchunks=True),
+    self.assertEqual(pagekite.HTTP_PageKiteRequest('x', {}, nozchunks=True),
                      ''.join(req))
     
     # Full request, single server.
     bid = 'http:a'
     token = '0123456789'
     backends = {bid: ['a', 'b', 'c', 'd']}
-    backends[bid][beanstalks_net.BE_SECRET] = 'Secret'
-    data = '%s:%s:%s' % (bid, beanstalks_net.signToken(token=self.gSecret,
+    backends[bid][pagekite.BE_SECRET] = 'Secret'
+    data = '%s:%s:%s' % (bid, pagekite.signToken(token=self.gSecret,
                                                        payload=self.gSecret,
                                                        secret='x'), token) 
-    sign = beanstalks_net.signToken(secret='Secret', payload=data, token=token)
+    sign = pagekite.signToken(secret='Secret', payload=data, token=token)
     req = request[:]
     req.extend([zlibreq, 'X-Beanstalk: %s:%s\r\n' % (data, sign), reqbody])
-    self.assertEqual(beanstalks_net.HTTP_BeanstalkRequest('x', backends,
+    self.assertEqual(pagekite.HTTP_PageKiteRequest('x', backends,
                                                           tokens={bid: token},
                                                           testtoken=token),
                      ''.join(req))
@@ -175,7 +175,7 @@ class TestInternals(unittest.TestCase):
   def test_LogValues(self):
     # Make sure the LogValues dumbs down our messages so they are easy
     # to parse and survive a trip through syslog etc.
-    words, wdict = beanstalks_net.LogValues([('spaces', '  bar  '),
+    words, wdict = pagekite.LogValues([('spaces', '  bar  '),
                                              ('tab', 'one\ttwo'),
                                              ('cr', 'one\rtwo'),
                                              ('lf', 'one\ntwo'),
@@ -200,12 +200,12 @@ class TestInternals(unittest.TestCase):
     Body = 'This is the Body'
 
     # Parse a valid request.
-    beanstalks_net.LOG = []
+    pagekite.LOG = []
     GoodRequest = [Request11]
     GoodRequest.extend(Headers)
     GoodRequest.extend(['', Body])
-    goodRParse = beanstalks_net.HttpParser(lines=GoodRequest, testbody=True)
-    self.assertEquals(beanstalks_net.LOG, [])
+    goodRParse = pagekite.HttpParser(lines=GoodRequest, testbody=True)
+    self.assertEquals(pagekite.LOG, [])
     self.assertEquals(goodRParse.state, goodRParse.IN_BODY)
     self.assertEquals(goodRParse.lines, GoodRequest)
     # Make sure the headers parsed properly and that we aren't case-sensitive.
@@ -216,47 +216,47 @@ class TestInternals(unittest.TestCase):
     self.assertEquals(goodRParse.Header('noheader'), [])
 
     # Parse a valid response.
-    beanstalks_net.LOG = []
+    pagekite.LOG = []
     GoodMessage = [Response11]
     GoodMessage.extend(Headers)
     GoodMessage.extend(['', Body])
-    goodParse = beanstalks_net.HttpParser(lines=GoodMessage,
-                                          state=beanstalks_net.HttpParser.IN_RESPONSE,
+    goodParse = pagekite.HttpParser(lines=GoodMessage,
+                                          state=pagekite.HttpParser.IN_RESPONSE,
                                           testbody=True)
-    self.assertEquals(beanstalks_net.LOG, [])
+    self.assertEquals(pagekite.LOG, [])
     self.assertEquals(goodParse.state, goodParse.IN_BODY)
     self.assertEquals(goodParse.lines, GoodMessage)
 
     # Fail to parse a bad request.
-    beanstalks_net.LOG = []
+    pagekite.LOG = []
     BadRequest = Headers[:]
     BadRequest.extend([BadHeader, '', Body])
-    badParse = beanstalks_net.HttpParser(lines=BadRequest,
-                                         state=beanstalks_net.HttpParser.IN_HEADERS,
+    badParse = pagekite.HttpParser(lines=BadRequest,
+                                         state=pagekite.HttpParser.IN_HEADERS,
                                          testbody=True)
     self.assertEquals(badParse.state, badParse.PARSE_FAILED)
-    self.assertNotEqual(beanstalks_net.LOG, [])
-    self.assertEquals(beanstalks_net.LOG[0]['err'][-11:-2], "BadHeader")
+    self.assertNotEqual(pagekite.LOG, [])
+    self.assertEquals(pagekite.LOG[0]['err'][-11:-2], "BadHeader")
 
   def test_Selectable(self):
     packets = ['abc', '123', 'This is a long packet', 'short']
 
-    class EchoSelectable(beanstalks_net.Selectable):
+    class EchoSelectable(pagekite.Selectable):
       def __init__(self, data=None):
-        beanstalks_net.Selectable.__init__(self,
+        pagekite.Selectable.__init__(self,
                                            fd=MockSocketFD(data, maxsend=6))
       def ProcessData(self, data):
         return self.Send(data)
 
     # This is a basic test of the EchoSelectable, which simply reads all
     # the available data and echos it back...
-    beanstalks_net.LOG = []
+    pagekite.LOG = []
     ss = EchoSelectable(packets[:])
     while ss.ReadData() is not False: pass
     ss.Flush()
     ss.Cleanup()
-    self.assertEquals(beanstalks_net.LOG[0]['read'], '%d' % len(''.join(packets)))
-    self.assertEquals(beanstalks_net.LOG[0]['wrote'], '%d' % len(''.join(ss.fd.sent_values)))
+    self.assertEquals(pagekite.LOG[0]['read'], '%d' % len(''.join(packets)))
+    self.assertEquals(pagekite.LOG[0]['wrote'], '%d' % len(''.join(ss.fd.sent_values)))
     self.assertEquals(''.join(ss.fd.sent_values), ''.join(packets))
 
     # NOTE: This test does not cover the compression code and the SendChunked
@@ -266,21 +266,21 @@ class TestInternals(unittest.TestCase):
     packets = ['This is a line\n', 'This ', 'is', ' a line\nThis',
                ' is a line\n']
      
-    class EchoLineParser(beanstalks_net.LineParser):
+    class EchoLineParser(pagekite.LineParser):
       def __init__(self, data=None):
-        beanstalks_net.LineParser.__init__(self, fd=MockSocketFD(data))
+        pagekite.LineParser.__init__(self, fd=MockSocketFD(data))
       def ProcessLine(self, line, lines):
         return self.Send(line)
 
     # This is a basic test of the EchoLineParser, which simply reads all
     # the available data and echos it back...
-    beanstalks_net.LOG = []
+    pagekite.LOG = []
     ss = EchoLineParser(packets[:])
     while ss.ReadData() is not False: pass
     ss.Flush()
     ss.Cleanup()
-    self.assertEquals(beanstalks_net.LOG[0]['read'], '%d' % len(''.join(packets)))
-    self.assertEquals(beanstalks_net.LOG[0]['wrote'], '%d' % len(''.join(ss.fd.sent_values)))
+    self.assertEquals(pagekite.LOG[0]['read'], '%d' % len(''.join(packets)))
+    self.assertEquals(pagekite.LOG[0]['wrote'], '%d' % len(''.join(ss.fd.sent_values)))
     self.assertEquals(''.join(ss.fd.sent_values), ''.join(packets))
     # Verify that the data was reassembled into complete lines.
     self.assertEquals(ss.fd.sent_values[0], 'This is a line\n')
@@ -293,7 +293,7 @@ class TestInternals(unittest.TestCase):
                  'This is chunk two, chunk two, chunk two, woot!',
                  'And finally, chunk three, three, chunk, three chunk three']
 
-    chunker = beanstalks_net.Selectable(fd=MockSocketFD())
+    chunker = pagekite.Selectable(fd=MockSocketFD())
     chunked = chunker.fd.sent_values
 
     # First, let's just test the basic chunk generation
@@ -309,26 +309,26 @@ class TestInternals(unittest.TestCase):
       self.assertTrue(len(chunked[i+3]) < len(unchunked[i]))
 
     # Define our EchoChunkParser...
-    class EchoChunkParser(beanstalks_net.ChunkParser):
+    class EchoChunkParser(pagekite.ChunkParser):
       def __init__(self, data=None):
-        beanstalks_net.ChunkParser.__init__(self, fd=MockSocketFD(data))
+        pagekite.ChunkParser.__init__(self, fd=MockSocketFD(data))
       def ProcessChunk(self, chunk):
         return self.Send(chunk)
    
     # Finally, let's let the ChunkParser unchunk it all again.   
-    beanstalks_net.LOG = []
+    pagekite.LOG = []
     ss = EchoChunkParser(chunked[:])
     while ss.ReadData() is not False: pass
     ss.Flush()
     ss.Cleanup()
-    self.assertEquals(beanstalks_net.LOG[-1]['read'], '%d' % len(''.join(chunked)))
-    self.assertEquals(beanstalks_net.LOG[-1]['wrote'], '%d' % (2*len(''.join(unchunked))))
+    self.assertEquals(pagekite.LOG[-1]['read'], '%d' % len(''.join(chunked)))
+    self.assertEquals(pagekite.LOG[-1]['wrote'], '%d' % (2*len(''.join(unchunked))))
     self.assertEquals(''.join(ss.fd.sent_values), 2 * ''.join(unchunked))
 
     # FIXME: Corrupt chunks aren't tested.
 
-  def test_BeanstalksNet(self):
-    bn = MockBeanstalksNet()
+  def test_PageKite(self):
+    bn = MockPageKite()
 
     def C1(arg): return bn.Configure([arg]) or True
     def C2(a1,a2): return bn.Configure([a1,a2]) or True
@@ -393,8 +393,8 @@ class TestInternals(unittest.TestCase):
     bn.require_all = False
     C1('-a') and EQ(True, bn.require_all)
 
-    C1('--dyndns=beanstalks.net') and EQ(bn.dyndns[0], beanstalks_net.DYNDNS['beanstalks.net'])
-    C2('-D', 'a@no-ip.com') and EQ(bn.dyndns, (beanstalks_net.DYNDNS['no-ip.com'], {'user': 'a', 'pass': ''}))
+    C1('--dyndns=beanstalks.net') and EQ(bn.dyndns[0], pagekite.DYNDNS['beanstalks.net'])
+    C2('-D', 'a@no-ip.com') and EQ(bn.dyndns, (pagekite.DYNDNS['no-ip.com'], {'user': 'a', 'pass': ''}))
     C1('--dyndns=a:b@c') and EQ(bn.dyndns, ('c', {'user': 'a', 'pass': 'b'}))
    
     C1('--frontends=2:a.com:80') and EQ((2, 'a.com', 80), bn.servers_auto)
@@ -408,17 +408,17 @@ class TestInternals(unittest.TestCase):
     EQ(bn.backends, {'http:a.com': ('http', 'a.com', 'localhost:80', 'x')})
 
   def test_Connections(self):
-    class MockTunnel(beanstalks_net.Selectable):
+    class MockTunnel(pagekite.Selectable):
       def __init__(self, sname):
-        beanstalks_net.Selectable.__init__(self, fd=MockSocketFD([]))
+        pagekite.Selectable.__init__(self, fd=MockSocketFD([]))
         self.server_name = sname
-    class MockAuthThread(beanstalks_net.AuthThread):
+    class MockAuthThread(pagekite.AuthThread):
       def __init__(self, conns):
         self.conns = conns
       def start(self):
         self.started = True
 
-    conns = beanstalks_net.Connections(MockBeanstalksNet())
+    conns = pagekite.Connections(MockPageKite())
     sel = MockTunnel('test.com')
     conns.Add(sel)
     conns.start(auth_thread=MockAuthThread(conns))
@@ -443,7 +443,7 @@ class TestInternals(unittest.TestCase):
     self.assertEqual(conns.Tunnel('http', 'test.com'), None)
 
   def test_AuthThread(self):
-    at = beanstalks_net.AuthThread(None)
+    at = pagekite.AuthThread(None)
     pass
 
   def test_MagicProtocolParser(self):
