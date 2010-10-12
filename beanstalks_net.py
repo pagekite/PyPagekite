@@ -1,7 +1,7 @@
 #!/usr/bin/python -u
 #
-# beanstalks_net.py, Copyright 2010, the Beanstalks Project ehf.
-#                                    and Bjarni Runar Einarsson
+# pagekite.py, Copyright 2010, the Beanstalks Project ehf.
+#                                  and Bjarni Runar Einarsson
 #
 # FIXME: Add ZChunks: zlib compression on a chunk-by-chunk basis.
 # FIXME: Implement epoll() support.
@@ -36,7 +36,7 @@
 # Here's a brief intro to how the program is structured, to encourage people
 # to hack and improve.
 #
-#  * The BeanstalksNet object contains the master configuration and some related
+#  * The PageKite object contains the master configuration and some related
 #    routines. It takes care of parsing configuration files and implements
 #    things like the authentication protocol. It also contains the main event
 #    loop, which is select() or epoll() based. In short, it's the boss.
@@ -54,16 +54,16 @@
 #
 #  * The UserConn object represents connections on behalf of users. It can
 #    be created as a FrontEnd, which will find the right tunnel and send
-#    traffic to the back-end Beanstalks.net process, where a BackEnd UserConn
+#    traffic to the back-end PageKite process, where a BackEnd UserConn
 #    will be created to connect to the actual HTTP server.
 # 
-#  * The Tunnel object represents one end of a Beanstalks.net tunnel and is also
+#  * The Tunnel object represents one end of a PageKite tunnel and is also
 #    created either as a FrontEnd or BackEnd, depending on which end it is.
 #    The Tunnels handle multiplexing and demultiplexing all the traffic for
 #    a given back-end so multiple requests can share a single TCP/IP
 #    connection.
 #
-# Although most of the work done by beanstalks_net.py happens in an event-loop 
+# Although most of the work done by pagekite.py happens in an event-loop 
 # on a single thread, there are some exceptions:
 #
 #  * The AuthThread handles checking whether an incoming tunnel request is
@@ -78,12 +78,12 @@
 PROTOVER = '0.2'
 APPVER = '0.2'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
-WWWHOME = 'http://beanstalks-project.net/'
+WWWHOME = 'http://pagekite.net/'
 DOC = """\
-beanstalks_net.py is Copyright 2010, the Beanstalks Project ehf.
-     v%s                                http://beanstalks-project.net/
+pagekite.py is Copyright 2010, the Beanstalks Project ehf. 
+     v%s                           http://pagekite.net/
 
-This the reference implementation of the Beanstalks Project tunneling protocol,
+This the reference implementation of the PageKite tunneling protocol,
 both the front- and back-end. This following protocols are supported:
 
   HTTP    - HTTP 1.1 only, requires a valid HTTP Host: header
@@ -96,11 +96,11 @@ license, see: http://www.gnu.org/licenses/agpl-3.0.html
 
 Usage:
 
-  beanstalks_net.py [options]
+  pagekite.py [options]
 
 Common Options:
 
- --optfile=X    -o X    Read options from file X. Default is ~/.beanstalksrc.
+ --optfile=X    -o X    Read options from file X. Default is ~/.pagekiterc.
  --httpd=X:P    -H X:P  Enable the HTTP user interface on hostname X, port P.
  --pemfile=X    -P X    Along with -H, use X as a PEM key for the HTTPS UI.
  --httppass=X   -X X    Require password X to access the user interface.
@@ -161,20 +161,16 @@ options files, and options files can include other options files.
 Examples:
 
 # Create a config-file with default options, and then edit it.
-beanstalks_net.py --defaults > .beanstalks_net.rc
-vim .beanstalks_net.rc 
+pagekite.py --defaults > .pagekite.rc
+vim .pagekite.rc 
 
-# Run beanstalks_net with the HTTP UI, for interactive configuration.
-beanstalks_net.py --httpd=localhost:8888
+# Run pagekite with the HTTP UI, for interactive configuration.
+pagekite.py --httpd=localhost:8888
 firefox http://localhost:8888/
 
-# Run a Beanstalks Project community front-end server.
-beanstalks_net.py -f -S -A b5p.us -R community.beanstalks.net
-
-# Grow a Beanstalk to the Beanstalks Project Community service for
-# somedomain.com, and register the new front-ends with the No-IP Dynamic
-# DNS provider.
-beanstalks_net.py \\
+# Fly a PageKite on pagekite.net for somedomain.com, and register the new
+# front-ends with the No-IP Dynamic DNS provider.
+pagekite.py \\
        --frontends=1:frontends.b5p.us \\
        --dyndns=user:pass@no-ip.com \\
        --backend=http:somedomain.com:localhost:80:mygreatsecret
@@ -200,6 +196,8 @@ BE_BACKEND = 2
 BE_SECRET = 3
 
 DYNDNS = {
+  'pagekite.net': ('http://up.b5p.us/'
+                   '?hostname=%(domain)s&myip=%(ips)s&sign=%(sign)s'),
   'beanstalks.net': ('http://up.b5p.us/'
                      '?hostname=%(domain)s&myip=%(ips)s&sign=%(sign)s'),
   'dyndns.org': ('https://%(username)s:%(password)s@members.dyndns.org'
@@ -289,7 +287,7 @@ class ConnectError(Exception):
   pass
 
 
-def HTTP_BeanstalkRequest(server, backends, tokens=None):
+def HTTP_PageKiteRequest(server, backends, tokens=None):
   req = ['POST %s HTTP/1.1\r\n' % MAGIC_PATH,
          'Host: %s\r\n' % server,
          'Content-Type: application/octet-stream\r\n',
@@ -323,7 +321,7 @@ def HTTP_Unavailable(where, proto, domain):
   return HTTP_Response(503, 'Unavailable', 
                        ['<html><body><h1>503 Unavailable (', where, ')</h1>',
                         '<p>The ', proto.upper(),' <a href="', WWWHOME, '">',
-                        'Beanstalk</a> for <b>', domain, 
+                        'PageKite</a> for <b>', domain, 
                         '</b> is unavailable at the moment.</p>',
                         '<p>Please try again later.</p>',
                         '</body></html>'])
@@ -407,16 +405,15 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
   TEMPLATE = ('<html><head>\n'
                '<link rel="stylesheet" media="screen, screen"'
-                ' href="http://beanstalks-project.net/static/beanstalks_net.css"'
+                ' href="http://pagekite.net/css/pagekite.css"'
                 ' type="text/css" title="Default stylesheet" />\n'
                '<title>%(title)s - %(prog)s v%(ver)s</title>\n'
               '</head><body>\n'
                '<h1>%(title)s</h1>\n'
                '<div id=body>%(body)s</div>\n'
-               '<div id=footer><hr><i>Powered by <b>beanstalks_net.py'
+               '<div id=footer><hr><i>Powered by <b>pagekite.py'
                 ' v%(ver)s</b> and'
-                ' <a href="http://beanstalks-project.net/">the Beanstalks'
-                ' Project</a>.</i></div>\n'
+                ' <a href="' + WWWHOME + '">PageKite.net</a>.</i></div>\n'
               '</body></html>\n')
  
   def fmt_size(self, count):
@@ -430,11 +427,11 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
   def html_overview(self):
     conns = self.server.conns
-    backends = self.server.beanstalk.backends
+    backends = self.server.pkite.backends
 
     html = [(
-      '<div id=welcome><p>Welcome to your Beanstalks.net control panel!</p></div>\n'
-      '<div id=live><h2>Live Beanstalks:</h2><ul>\n'
+      '<div id=welcome><p>Welcome to your PageKite control panel!</p></div>\n'
+      '<div id=live><h2>Flying kites:</h2><ul>\n'
     )]
 
     for tid in conns.tunnels:
@@ -514,7 +511,7 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.send_response(200)
       self.send_header('Content-Type', 'text/plain')
       self.end_headers()
-      self.wfile.write(self.server.beanstalk.yamond.render_vars_text())
+      self.wfile.write(self.server.pkite.yamond.render_vars_text())
 
     else:
       qs = parse_qs(query)
@@ -523,7 +520,7 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.end_headers()
 
       data = {
-        'prog': (sys.argv[0] or 'beanstalks_net.py').split('/')[-1],
+        'prog': (sys.argv[0] or 'pagekite.py').split('/')[-1],
         'ver': APPVER
       }
       data.update(self.html_overview())
@@ -531,21 +528,20 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.wfile.write(self.TEMPLATE % data)
 
 class UiHttpServer(BaseHTTPServer.HTTPServer):
-  def __init__(self, sspec, beanstalk, conns,
-               handler=UiRequestHandler):
+  def __init__(self, sspec, pkite, conns, handler=UiRequestHandler):
     BaseHTTPServer.HTTPServer.__init__(self, sspec, handler)
-    self.beanstalk = beanstalk
+    self.pkite = pkite
     self.conns = conns
-    beanstalk.yamond = YamonD(sspec)
+    pkite.yamond = YamonD(sspec)
 
 class HttpUiThread(threading.Thread):
   """Handle HTTP UI in a separate thread."""
 
-  def __init__(self, beanstalk, conns, 
+  def __init__(self, pkite, conns, 
                server=UiHttpServer, handler=UiRequestHandler):
     threading.Thread.__init__(self)
-    self.ui_sspec = beanstalk.ui_sspec
-    self.httpd = server(self.ui_sspec, beanstalk, conns, handler=handler)
+    self.ui_sspec = pkite.ui_sspec
+    self.httpd = server(self.ui_sspec, pkite, conns, handler=handler)
     self.serve = True
 
   def quit(self):
@@ -953,7 +949,7 @@ class ChunkParser(Selectable):
 # FIXME: Add metrics to measure performance of tunnel, so we can prioritize
 #        client DNS records accordingly.
 class Tunnel(ChunkParser):
-  """A Selectable representing a Beanstalk tunnel."""
+  """A Selectable representing a PageKite tunnel."""
   
   def __init__(self, conns):
     ChunkParser.__init__(self)
@@ -1032,7 +1028,7 @@ class Tunnel(ChunkParser):
     else:
       self.fd.connect((server, 80))
 
-    self.Send(HTTP_BeanstalkRequest(server, conns.config.backends, tokens)) 
+    self.Send(HTTP_PageKiteRequest(server, conns.config.backends, tokens)) 
     self.Flush()
 
     data = ''
@@ -1310,7 +1306,7 @@ class Listener(Selectable):
       return None
 
 
-class BeanstalksNet(object):
+class PageKite(object):
   """Configuration and master select loop."""
 
   def __init__(self):
@@ -1349,13 +1345,13 @@ class BeanstalksNet(object):
     try:
       if os.getenv('USERPROFILE'):
         # Windows
-        self.rcfile = os.path.join(os.getenv('USERPROFILE'), 'beanstalks_net.cfg')
+        self.rcfile = os.path.join(os.getenv('USERPROFILE'), 'pagekite.cfg')
       else:
         # Everything else
-        self.rcfile = os.path.join(os.getenv('HOME'), '.beanstalks_net.rc')
+        self.rcfile = os.path.join(os.getenv('HOME'), '.pagekite.rc')
     except Exception, e:
       # The above stuff may fail in some cases, e.g. on Android in SL4A.
-      self.rcfile = 'beanstalks_net.cfg'
+      self.rcfile = 'pagekite.cfg'
 
   def FallDown(self, message, help=True):
     if self.conns and self.conns.auth: self.conns.auth.quit()
@@ -1660,7 +1656,7 @@ class BeanstalksNet(object):
     os.dup2(0, 1)
     os.dup2(0, 2)
 
-    Log([('started', 'beanstalks_net.py'), ('version', APPVER)])
+    Log([('started', 'pagekite.py'), ('version', APPVER)])
 
   def Daemonize(self):
     # Fork once...
@@ -1771,7 +1767,7 @@ class BeanstalksNet(object):
 ##[ Main ]#####################################################################
 
 if __name__ == '__main__':
-  bsn = BeanstalksNet()
+  bsn = PageKite()
 
   try:
     if '--clean' not in sys.argv:
