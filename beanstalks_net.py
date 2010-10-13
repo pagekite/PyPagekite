@@ -800,16 +800,22 @@ class Selectable(object):
     if self.wrote_bytes > 102400: self.LogTraffic()
     return True
 
-  def SendChunked(self, data, compress=True):
+  def SendChunked(self, data, compress=True, zhistory=None):
     rst = ''
     if self.zreset:
       self.zreset = False
       rst = 'R'
 
+    # Stop compressing streams that just get bigger.
+    if zhistory and (zhistory[0] < zhistory[1]): compress = False
+
     sdata = ''.join(data)
     if self.zw and compress:
       try:
         zdata = self.zw.compress(sdata) + self.zw.flush(zlib.Z_SYNC_FLUSH)
+        if zhistory:
+          zhistory[0] = len(sdata)
+          zhistory[1] = len(zdata)
         LogDebug('Sending %d bytes as %d' % (len(sdata), len(zdata)))
         return self.Send(['%xZ%x%s\r\n%s' % (len(sdata), len(zdata), rst, zdata)])
       except zlib.error:
@@ -1011,7 +1017,7 @@ class ChunkParser(Selectable):
   def ProcessData(self, data):
     if self.want_bytes == 0:
       self.header += data
-      if '\r\n' not in self.header: return 1
+      if self.header.find('\r\n') < 0: return 1
       try:
         size, data = self.header.split('\r\n', 1)
         self.header = ''
@@ -1090,6 +1096,7 @@ class Tunnel(ChunkParser):
     self.server_name = '0:0'
     self.conns = conns
     self.users = {}
+    self.zhistory = {}
     self.backends = {}
     self.rtt = 100000
 
@@ -1242,10 +1249,13 @@ class Tunnel(ChunkParser):
   def SendData(self, conn, data, sid=None, host=None, proto=None):
     sid = int(sid or conn.sid)
     if conn: self.users[sid] = conn
+    if not sid in self.zhistory: self.zhistory[sid] = [0, 0]
     if host and proto:
-      return self.SendChunked(['SID: %s\nProto: %s\nHost: %s\r\n\r\n' % (sid, proto, host), data]) 
+      return self.SendChunked(['SID: %s\nProto: %s\nHost: %s\r\n\r\n' % (sid, proto, host), data],
+                              zhistory=self.zhistory[sid]) 
     else:
-      return self.SendChunked(['SID: %s\r\n\r\n' % sid, data]) 
+      return self.SendChunked(['SID: %s\r\n\r\n' % sid, data],
+                              zhistory=self.zhistory[sid]) 
 
   def Disconnect(self, conn, sid=None, sendeof=True):
     sid = int(sid or conn.sid)
@@ -1255,6 +1265,7 @@ class Tunnel(ChunkParser):
     if sid in self.users:
       if self.users[sid] is not None: self.users[sid].Disconnect()
       del self.users[sid]
+      del self.zhistory[sid]
 
   def ResetRemoteZChunks(self):
     self.SendChunked('NOOP: 1\nZRST: 1\r\n\r\n!' % sid, compress=False) 
