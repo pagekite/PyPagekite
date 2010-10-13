@@ -5,9 +5,7 @@
 #
 # FIXME: Implement epoll() support.
 # FIXME: Stress test this thing: when do we need a C rewrite?
-# FIXME: Make multi-process?  N workers handling pools of backends.
-#        Multi-threading would hit the GIL, use the FD-over-socket trick?
-# FIXME: Make tunneling protocol SPDY compatible?
+# FIXME: Make multi-process, use the FD-over-socket trick? Threads=>GIL=>bleh
 # FIXME: Add XMPP and incoming SMTP support.
 # FIXME: Add a basic HTTP and HTTPS server for configuring, monitoring and
 #        proof of concept. 
@@ -147,7 +145,7 @@ Back-end Options:
  --frontends=N:X:P      Choose N front-ends from X (a DNS domain name), port P.
  --frontend=host:port   Connect to the named front-end server.
  --new          -N      Don't attempt to connect to the domain's old front-end.           
- --socksify=S:P         Connect va SOCKS server S, port P (requires socks.py)
+ --socksify=S:P         Connect via SOCKS server S, port P (requires socks.py)
 
  --backend=proto:domain:host:port:secret
                   Configure a back-end service on host:port, using
@@ -794,7 +792,7 @@ class Selectable(object):
         self.wrote_bytes += sent_bytes
 #       print '> %s' % sending[0:sent_bytes]
       except socket.error, err:
-        self.LogError('Error sending: %s' % err)
+        self.LogDebug('Error sending: %s' % err)
 
     self.write_blocked = sending[sent_bytes:]
     if self.wrote_bytes > 102400: self.LogTraffic()
@@ -1159,8 +1157,8 @@ class Tunnel(ChunkParser):
   def _Connect(self, server, conns, tokens=None):
     if self.fd: self.fd.close()
     if conns.config.socks_server:
+      import socks
       sock = socks.socksocket()
-      sock.setproxy(socks.PROXY_TYPE_SOCKS5, conns.config.socks_server)
       self.SetFD(sock)
     else:
       self.SetFD(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
@@ -1753,8 +1751,14 @@ class PageKite(object):
       elif opt in ('-a', '--all'): self.require_all = True
       elif opt in ('-N', '--new'): self.servers_new_only = True
       elif opt == '--socksify': 
-        import socks
-        self.socks_server = arg
+        try:
+          import socks
+          (host, port) = arg.split(':')
+          self.socks_server = (host, port)
+          socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, host, int(port))
+        except Exception, e:
+          raise ConfigError("Please instally SocksiPy: "
+                            " http://code.google.com/p/socksipy-branch/")
       elif opt == '--frontend': self.servers_manual.append(arg)
       elif opt == '--frontends':
         count, domain, port = arg.split(':')
