@@ -146,6 +146,7 @@ Back-end Options:
  --frontend=host:port   Connect to the named front-end server.
  --new          -N      Don't attempt to connect to the domain's old front-end.           
  --socksify=S:P         Connect via SOCKS server S, port P (requires socks.py)
+ --torify=S:P           Same as socksify, but more paranoid.
 
  --backend=proto:domain:host:port:secret
                   Configure a back-end service on host:port, using
@@ -191,8 +192,8 @@ OPT_ARGS = ['clean', 'optfile=', 'httpd=', 'pemfile=', 'httppass=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'register=', 'host=', 'ports=', 'protos=',
-            'backend=', 'frontend=', 'frontends=', 'socksify=', 'new',
-            'all', 'noall', 'dyndns=', 'backend=', 'nozchunks']
+            'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
+            'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks']
 
 AUTH_ERRORS           = '128.'
 AUTH_ERR_USER_UNKNOWN = '128.0.0.0'
@@ -1515,6 +1516,7 @@ class PageKite(object):
     self.servers_manual = []
     self.servers_auto = None
     self.servers_new_only = False
+    self.servers_no_ping = False
     self.servers_preferred = []
 
     self.dyndns = None
@@ -1750,7 +1752,11 @@ class PageKite(object):
 
       elif opt in ('-a', '--all'): self.require_all = True
       elif opt in ('-N', '--new'): self.servers_new_only = True
-      elif opt == '--socksify': 
+      elif opt in ('--socksify', '--torify'): 
+        if opt == '--torify':
+          self.servers_new_only = True  # Disable initial DNS lookups (leaks)
+          self.servers_no_ping = True   # Disable front-end pings
+
         try:
           import socks
           (host, port) = arg.split(':')
@@ -1812,6 +1818,8 @@ class PageKite(object):
       self.FallDown('No tunnel for %s' % missing, help=False) 
 
   def Ping(self, host, port):
+    if self.servers_no_ping: return 0
+
     start = time.time() 
     try:
       socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
