@@ -314,6 +314,8 @@ class TestInternals(unittest.TestCase):
     chunker = pagekite.Selectable(fd=MockSocketFD())
     chunked = chunker.fd.sent_values
 
+    # FIXME: Need to test incomplete chunks and incomplete chunk headers.
+
     # First, let's just test the basic chunk generation
     for chunk in unchunked: chunker.SendChunked(chunk) 
     for i in [0, 1, 2]:

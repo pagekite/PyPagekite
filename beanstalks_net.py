@@ -658,7 +658,9 @@ class HttpParser(object):
       self.state = self.IN_BODY
       return True
 
-    header, value = line.split(': ', 1)
+    header, value = line.split(':', 1)
+    if value and value.startswith(' '): value = value[1:]
+
     self.headers.append((header.lower(), value)) 
     return True
 
@@ -999,6 +1001,7 @@ class ChunkParser(Selectable):
     self.want_cbytes = 0
     self.want_bytes = 0
     self.compressed = False
+    self.header = ''
     self.chunk = ''
     self.zr = zlib.decompressobj()
 
@@ -1007,8 +1010,12 @@ class ChunkParser(Selectable):
 
   def ProcessData(self, data):
     if self.want_bytes == 0:
+      self.header += data
+      if '\r\n' not in self.header: return 1
       try:
-        size, data = data.split('\r\n', 1)
+        size, data = self.header.split('\r\n', 1)
+        self.header = ''
+
         if size.endswith('R'):
           self.zr = zlib.decompressobj()
           size = size[0:-1]
