@@ -54,14 +54,16 @@ import pagekite
 
 
 class MockSocketFD(object):
-  def __init__(self, recv_values=None, maxsend=1500):
+  def __init__(self, recv_values=None, maxsend=1500, maxread=5000):
     self.recv_values = recv_values or []
     self.sent_values = []
     self.maxsend = maxsend
+    self.maxread = maxread
     self.closed = False
 
   def recv(self, maxread):
     if self.recv_values:
+      if maxread > self.maxread: maxread = self.maxread
       if len(self.recv_values[0]) <= maxread:
         data = self.recv_values.pop(0)
       else:
@@ -261,8 +263,7 @@ class TestInternals(unittest.TestCase):
 
     class EchoSelectable(pagekite.Selectable):
       def __init__(self, data=None):
-        pagekite.Selectable.__init__(self,
-                                           fd=MockSocketFD(data, maxsend=6))
+        pagekite.Selectable.__init__(self, fd=MockSocketFD(data, maxsend=6))
       def ProcessData(self, data):
         return self.Send(data)
 
@@ -314,8 +315,6 @@ class TestInternals(unittest.TestCase):
     chunker = pagekite.Selectable(fd=MockSocketFD())
     chunked = chunker.fd.sent_values
 
-    # FIXME: Need to test incomplete chunks and incomplete chunk headers.
-
     # First, let's just test the basic chunk generation
     for chunk in unchunked: chunker.SendChunked(chunk) 
     for i in [0, 1, 2]:
@@ -331,7 +330,7 @@ class TestInternals(unittest.TestCase):
     # Define our EchoChunkParser...
     class EchoChunkParser(pagekite.ChunkParser):
       def __init__(self, data=None):
-        pagekite.ChunkParser.__init__(self, fd=MockSocketFD(data))
+        pagekite.ChunkParser.__init__(self, fd=MockSocketFD(data, maxread=1))
       def ProcessChunk(self, chunk):
         return self.Send(chunk)
    
