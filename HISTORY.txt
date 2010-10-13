@@ -5,7 +5,7 @@ v0.3.0   2010.10.??
 ------
   * BUG: Fixed chunking 
   - Added support for zlib compressed tunnels
-  - Added support for connecting to front-ends via. socks5 (or tor!)
+  - Added support for connecting to front-ends via. socks5, or tor!
   - Added basic unit-tests!
 
 

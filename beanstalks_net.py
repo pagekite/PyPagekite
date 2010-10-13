@@ -223,6 +223,8 @@ import random
 import re
 import select
 import socket
+rawsocket = socket.socket
+
 import struct
 import sys
 import threading
@@ -594,7 +596,9 @@ class HttpUiThread(threading.Thread):
 
   def quit(self):
     self.serve = False
-    urllib.urlopen('http://%s:%s/gbye/' % self.ui_sspec, proxies={}).readlines()
+    knock = rawsocket(socket.AF_INET, socket.SOCK_STREAM)
+    knock.connect(self.ui_sspec)
+    knock.close()
 
   def run(self):
     while self.serve:
@@ -698,7 +702,7 @@ class Selectable(object):
   """A wrapper around a socket, for use with select."""
 
   def __init__(self, fd=None, address=None, maxread=32000):
-    self.SetFD(fd or socket.socket(socket.AF_INET, socket.SOCK_STREAM))
+    self.SetFD(fd or rawsocket(socket.AF_INET, socket.SOCK_STREAM))
     self.maxread = maxread
     self.address = address
     self.read_bytes = 0
@@ -1162,7 +1166,7 @@ class Tunnel(ChunkParser):
       sock = socks.socksocket()
       self.SetFD(sock)
     else:
-      self.SetFD(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
+      self.SetFD(rawsocket(socket.AF_INET, socket.SOCK_STREAM))
     self.fd.setblocking(1)
 
     sspec = server.split(':')
@@ -1372,7 +1376,7 @@ class UserConn(Selectable):
       return None
 
     try:
-      self.SetFD(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
+      self.SetFD(rawsocket(socket.AF_INET, socket.SOCK_STREAM))
       self.fd.setblocking(1)
 
       sspec = backend.split(':')
@@ -1753,18 +1757,20 @@ class PageKite(object):
       elif opt in ('-a', '--all'): self.require_all = True
       elif opt in ('-N', '--new'): self.servers_new_only = True
       elif opt in ('--socksify', '--torify'): 
-        if opt == '--torify':
-          self.servers_new_only = True  # Disable initial DNS lookups (leaks)
-          self.servers_no_ping = True   # Disable front-end pings
-
         try:
           import socks
           (host, port) = arg.split(':')
-          self.socks_server = (host, port)
           socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, host, int(port))
+          self.socks_server = (host, port)
         except Exception, e:
           raise ConfigError("Please instally SocksiPy: "
                             " http://code.google.com/p/socksipy-branch/")
+
+        if opt == '--torify':
+          self.servers_new_only = True  # Disable initial DNS lookups (leaks)
+          self.servers_no_ping = True   # Disable front-end pings
+          socks.wrapmodule(urllib)      # Make DynDNS updates go via tor
+
       elif opt == '--frontend': self.servers_manual.append(arg)
       elif opt == '--frontends':
         count, domain, port = arg.split(':')
@@ -1822,7 +1828,7 @@ class PageKite(object):
 
     start = time.time() 
     try:
-      socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
+      rawsocket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
     except Exception, e:
       return 100000 
     return (time.time() - start)
