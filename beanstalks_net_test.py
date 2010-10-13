@@ -41,8 +41,16 @@
 #    Similar to TestNetwork, but adds the ability to use external servers
 #    as well, for verifying compatibility with other implementations.
 #
-import pagekite
+import os
+import random
+import socket
+import sys
+import time
+import threading
 import unittest
+import urllib
+
+import pagekite
 
 
 class MockSocketFD(object):
@@ -78,6 +86,15 @@ class MockSocketFD(object):
   def closed(self): return self.closed
 
 
+class MockUiRequestHandler(pagekite.UiRequestHandler):
+  def do_GET(self):
+    self.send_response(200)
+    self.send_header('Content-Type', 'text/plain')
+    self.end_headers()
+    self.wfile.write('I am %s\n' % self.server.pkite)
+    self.wfile.write('asdf random junk junk crap! ' * random.randint(0, 200))
+
+
 class MockPageKite(pagekite.PageKite):
   def __init__(self):
     pagekite.PageKite.__init__(self)
@@ -96,6 +113,7 @@ class MockPageKite(pagekite.PageKite):
     return len(host)+port
 
   def GetHostIpAddr(self, host):
+    if host == 'localhost': return '127.0.0.1'
     return '10.1.2.%d' % len(host)
 
   def GetHostDetails(self, host):
@@ -162,25 +180,25 @@ class TestInternals(unittest.TestCase):
     backends = {bid: ['a', 'b', 'c', 'd']}
     backends[bid][pagekite.BE_SECRET] = 'Secret'
     data = '%s:%s:%s' % (bid, pagekite.signToken(token=self.gSecret,
-                                                       payload=self.gSecret,
-                                                       secret='x'), token) 
+                                                 payload=self.gSecret,
+                                                 secret='x'), token) 
     sign = pagekite.signToken(secret='Secret', payload=data, token=token)
     req = request[:]
     req.extend([zlibreq, 'X-Beanstalk: %s:%s\r\n' % (data, sign), reqbody])
     self.assertEqual(pagekite.HTTP_PageKiteRequest('x', backends,
-                                                          tokens={bid: token},
-                                                          testtoken=token),
+                                                        tokens={bid: token},
+                                                        testtoken=token),
                      ''.join(req))
     
   def test_LogValues(self):
     # Make sure the LogValues dumbs down our messages so they are easy
     # to parse and survive a trip through syslog etc.
     words, wdict = pagekite.LogValues([('spaces', '  bar  '),
-                                             ('tab', 'one\ttwo'),
-                                             ('cr', 'one\rtwo'),
-                                             ('lf', 'one\ntwo'),
-                                             ('semi', 'one;two; three')],
-                                            testtime=1000)
+                                       ('tab', 'one\ttwo'),
+                                       ('cr', 'one\rtwo'),
+                                       ('lf', 'one\ntwo'),
+                                       ('semi', 'one;two; three')],
+                                      testtime=1000)
     self.assertEqual(wdict['ts'], '%x' % 1000)
     self.assertEqual(wdict['spaces'], 'bar')
     self.assertEqual(wdict['tab'], 'one two')
@@ -440,28 +458,149 @@ class TestInternals(unittest.TestCase):
 
   def test_AuthThread(self):
     at = pagekite.AuthThread(None)
+    # FIXME
     pass
 
   def test_MagicProtocolParser(self):
+    # FIXME
     pass
 
   def test_Tunnel(self):
+    # FIXME
     pass
 
   def test_UserConn(self):
+    # FIXME
     pass
 
   def test_UnknownConn(self):
+    # FIXME
     pass
+
+
+class KiteRunner(threading.Thread):
+  def __init__(self, pagekite_object):
+    threading.Thread.__init__(self)
+    self.pagekite_object = pagekite_object 
+  def run(self):
+    self.pagekite_object.Start()
+
+class RequestRunner(threading.Thread):
+  def __init__(self, loops, urls, expect):
+    threading.Thread.__init__(self)
+    self.loops = loops
+    self.urls = urls
+    self.expect = expect
+    self.errors = []
+
+  def run(self):
+    while self.loops > 0:
+      try:
+        url = self.urls[random.randint(0, len(self.urls)-1)]
+        result = ''.join(urllib.urlopen(url).readlines())
+        if self.expect not in result:
+          self.errors.append('Bad result: %s' % result)
+      except Exception, e:
+        self.loops = 0
+        self.errors.append('Error: %s' % e)
+      finally:
+        self.loops -= 1 
+  
+
+class ForkRequestRunner(RequestRunner):
+  def start(self):
+    if 0 == os.fork():
+      self.run()
+      os._exit(0)
 
 
 class TestNetwork(unittest.TestCase):
   def setUp(self):
-    pass
+    pagekite.LOG = []
+    self.fe = []
+    self.be = []
+    self.startFrontEnds(2)
 
+  def startFrontEnds(self, count):
+    n = 0
+    while n < count:
+      fe = MockPageKite().Configure([
+        '--isfrontend', 
+        '--host=localhost',
+        '--ports=99%d0' % n,
+        '--httpd=:99%d1' % n,
+        '--domain=http,https:localhost:1234'
+      ])
+      KiteRunner(fe).start()
+      self.fe.append(fe)
+      n += 1
+
+    for fe in self.fe:
+      while not fe.looping: time.sleep(1)
+
+  def stopPageKites(self, pks):
+    for pk in pks:
+      pk.looping = False
+      fd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+      fd.connect((pk.server_host, pk.server_ports[0]))
+
+  def LogData(self, data=None):
+    return ''.join(['\n%s' % l for l in (data or pagekite.LOG) if 'debug' not in l])
+
+  def tearDown(self):
+    self.stopPageKites(self.fe)
+    self.stopPageKites(self.be)
+
+  # TESTS:
+  #  - End-to-end test of web-server behind multiple FE=BE tunnel,
+  #    multiple clients, large number of requests in parallel.
+  #  - Test reconnection logic.
+  # 
+
+  def test_OneBackEnd(self):
+    be = MockPageKite().Configure([
+      '--isfrontend', 
+      '--host=localhost',
+      '--ports=9800',
+      '--httpd=:9801',
+      '--frontend=localhost:9900',
+      '--frontend=localhost:9910',
+      '--backend=http,https:localhost:localhost:9801:1234'
+    ]) 
+    be.ui_request_handler = MockUiRequestHandler
+
+    pagekite.LOG = []
+    KiteRunner(be).start()
+    self.be.append(be)
+
+    # Parse the log until we see connections are up and running...
+    waiting = len(self.fe) 
+    loops = 5
+    parsed = []
+    while waiting > 0 and loops > 0:
+      loops -= 1
+      while pagekite.LOG:
+        line = pagekite.LOG.pop(0)
+        parsed.append(line)
+        if 'connect' in line: waiting -= 1
+      if waiting > 0:
+        time.sleep(1)
+    if not loops:
+      raise Exception('No connection after 5 seconds\n%s' % self.LogData(data=parsed))
+
+    urls = ['http://localhost:%d/' % pk.server_ports[0] for pk in self.fe]
+    ForkRequestRunner(100, urls, 'MockPageKite').start()
+    ForkRequestRunner(100, urls, 'MockPageKite').start()
+    rr = RequestRunner(150, urls, 'MockPageKite') 
+    rr.start()
+    while rr.loops > 0: time.sleep(1)
+    if rr.errors: raise Exception('Ick: %s' % rr.errors)
+   
+    
 
 class TestNetworkExternal(unittest.TestCase):
   def setUp(self):
+    # FIXME
     pass
 
 

@@ -191,7 +191,7 @@ MAGIC_PATH = '/Beanstalk~Magic~Beans/%s' % PROTOVER
 OPT_FLAGS = 'o:H:P:X:L:ZI:fA:R:h:p:aD:U:N'
 OPT_ARGS = ['clean', 'optfile=', 'httpd=', 'pemfile=', 'httppass=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
-            'isfrontend', 'noisfrontend', 'settings', 'defaults',
+            'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'register=', 'host=', 'ports=', 'protos=',
             'backend=', 'frontend=', 'frontends=', 'socksify=', 'new',
             'all', 'noall', 'dyndns=', 'backend=', 'nozchunks']
@@ -339,14 +339,14 @@ def HTTP_Response(code, title, body, mimetype='text/html'):
   return ''.join([HTTP_ResponseHeader(code, title, mimetype), HTTP_StartBody(),
                   ''.join(body)])
 
-def HTTP_Unavailable(where, proto, domain):
+def HTTP_Unavailable(where, proto, domain, comment=''):
   return HTTP_Response(200, 'OK', 
                        ['<html><body><h1>Sorry! (', where, ')</h1>',
                         '<p>The ', proto.upper(),' <a href="', WWWHOME, '">',
                         'PageKite</a> for <b>', domain, 
                         '</b> is unavailable at the moment.</p>',
                         '<p>Please try again later.</p>',
-                        '</body></html>'])
+                        '</body><!-- ', comment, ' --></html>'])
 
 LOG = []
 
@@ -1139,7 +1139,7 @@ class Tunnel(ChunkParser):
       return self
     else:
       conn.LogError('No tunnels configured, closing connection.')
-      self.Disconnect(conn)
+      self.Cleanup()
       return None
 
   def _Connect(self, server, conns, tokens=None):
@@ -1240,11 +1240,12 @@ class Tunnel(ChunkParser):
     else:
       return self.SendChunked(['SID: %s\r\n\r\n' % sid, data]) 
 
-  def Disconnect(self, conn, sid=None):
+  def Disconnect(self, conn, sid=None, sendeof=True):
     sid = int(sid or conn.sid)
-    if sid in self.users:
+    if sendeof:
       LogDebug('Sending EOF for %s' % sid)
       self.SendChunked('SID: %s\nEOF: eof\r\n\r\nBye!' % sid, compress=False) 
+    if sid in self.users:
       if self.users[sid] is not None: self.users[sid].Disconnect()
       del self.users[sid]
 
@@ -1277,7 +1278,7 @@ class Tunnel(ChunkParser):
 
     if eof:
       LogDebug('Got EOF for %s' % sid)
-      self.Disconnect(None, sid=sid)
+      self.Disconnect(None, sid=sid, sendeof=False)
     else:
       if sid in self.users:
         conn = self.users[sid]
@@ -1287,8 +1288,10 @@ class Tunnel(ChunkParser):
         if proto and host:
           conn = UserConn.BackEnd(proto, host, sid, self)
           if not conn and proto == 'http':
-            self.SendChunked('SID: %s\r\n\r\n%s' % (sid, HTTP_Unavailable('be', proto, host))) 
-
+            self.SendChunked('SID: %s\r\n\r\n%s' % (sid, 
+                               HTTP_Unavailable('be', proto, host,
+                                                comment='%s' % self.conns.config)
+                             )) 
           if conn:
             self.users[sid] = conn
 
@@ -1502,6 +1505,7 @@ class PageKite(object):
     self.last_updates = []
     self.backends = {}  # These are the backends we want tunnels for.
     self.conns = None
+    self.looping = False
 
     self.rcfile_recursion = 0
     try:
@@ -1673,6 +1677,7 @@ class PageKite(object):
     self.rcfile_recursion += 1
     self.Configure(args)
     self.rcfile_recursion -= 1
+    return self
 
   def HelpAndExit(self):
     print DOC
@@ -1768,10 +1773,13 @@ class PageKite(object):
       else:
         self.HelpAndExit()
 
+    return self
+
   def CheckConfig(self):
     if not self.servers_manual and not self.servers_auto and not self.isfrontend:
       if not self.servers:
         raise ConfigError('Nothing to do!  List some servers, or run me as one.')      
+    return self
           
   def CheckAllTunnels(self, conns):
     missing = []
@@ -1935,8 +1943,6 @@ class PageKite(object):
     os.dup2(0, 1)
     os.dup2(0, 2)
 
-    Log([('started', 'pagekite.py'), ('version', APPVER)])
-
   def Daemonize(self):
     # Fork once...
     if os.fork() != 0: os._exit(0)
@@ -1950,7 +1956,9 @@ class PageKite(object):
     last_tick = time.time()
     last_loop = time.time()
     retry = 5
-    while True:
+
+    self.looping = True
+    while self.looping:
       try:
         iready, oready, eready = select.select(conns.Sockets(),
                                                conns.Blocked(), [], 5)
@@ -2046,7 +2054,12 @@ class PageKite(object):
     if self.require_all: self.CheckAllDomains(conns)
 
     # Finally, run our select/epoll loop.
+    Log([('started', 'pagekite.py'), ('version', APPVER)])
     self.Loop()
+
+    Log([('stopping', 'pagekite.py')])
+    if self.conns and self.conns.auth: self.conns.auth.quit()
+    if self.ui_httpd: self.ui_httpd.quit()
 
 
 ##[ Main ]#####################################################################
