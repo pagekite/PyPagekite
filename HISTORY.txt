@@ -3,9 +3,10 @@ Version history - highlights
 
 v0.3.0   2010.10.??
 ------
-  * BUG: Fixed chunking 
+  * BUG: Fixed chunking alignment problem. 
+  * BUG: Fixed HTTP header parsing problem
+  - Added support for tunneling through tor, or other socks5 proxies.
   - Added support for zlib compressed tunnels
-  - Added support for connecting to front-ends via. socks5, or tor!
   - Added basic unit-tests!
 
 
