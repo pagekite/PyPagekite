@@ -1,0 +1,20 @@
+Version history - highlights
+============================
+
+v0.3.0   2010.10.??
+------
+  * BUG: Fixed chunking 
+  - Added support for zlib compressed tunnels
+  - Added support for connecting to front-ends via. socks5 (or tor!)
+  - Added basic unit-tests!
+
+
+v0.2.1   2010.10.12
+------
+  - Added support for --defaults and --settings
+  - Renamed from beanstalks_net.py to pagekite.py
+
+v0.2.0   2010.09.22 
+------
+  - First alpha-testing release.
+
