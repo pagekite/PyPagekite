@@ -118,6 +118,7 @@ Common Options:
  --runas        -U U:G  Set UID:GID after opening our listening sockets.
  --pidfile=P    -I P    Write PID to the named file.
  --clean                Skip loading the default configuration file.              
+ --nocrashreport        Don't send anonymous crash reports to PageKite.net.
  --defaults             Set some reasonable default setings.
  --settings             Dump the current settings to STDOUT, formatted as
                        an options file would be.
@@ -188,7 +189,8 @@ pagekite.py \\
 """ % APPVER
 MAGIC_PATH = '/Beanstalk~Magic~Beans/%s' % PROTOVER
 OPT_FLAGS = 'o:H:P:X:L:ZI:fA:R:h:p:aD:U:N'
-OPT_ARGS = ['clean', 'optfile=', 'httpd=', 'pemfile=', 'httppass=',
+OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
+            'optfile=', 'httpd=', 'pemfile=', 'httppass=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'register=', 'host=', 'ports=', 'protos=',
@@ -596,6 +598,7 @@ class HttpUiThread(threading.Thread):
     threading.Thread.__init__(self)
     self.ui_sspec = pkite.ui_sspec
     self.httpd = server(self.ui_sspec, pkite, conns, handler=handler)
+    self.httpd.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     self.serve = True
 
   def quit(self):
@@ -607,6 +610,8 @@ class HttpUiThread(threading.Thread):
   def run(self):
     while self.serve:
       self.httpd.handle_request()
+    LogDebug('HttpUiThread: done')
+    self.httpd.socket.close()
 
 
 HTTP_METHODS = ['OPTIONS', 'GET', 'POST', 'PUT']
@@ -1534,6 +1539,7 @@ class PageKite(object):
     self.conns = None
     self.looping = False
 
+    self.crash_report_url = '%scgi-bin/crashes.pl' % WWWHOME
     self.rcfile_recursion = 0
     try:
       if os.getenv('USERPROFILE'):
@@ -1618,14 +1624,14 @@ class PageKite(object):
     print (self.pidfile and 'pidfile=%s' % self.pidfile or '#pidfile=/path/file')
     print
 
-  def FallDown(self, message, help=True):
+  def FallDown(self, message, help=True, noexit=False):
     if self.conns and self.conns.auth: self.conns.auth.quit()
     if self.ui_httpd: self.ui_httpd.quit()
     if help:
       print DOC
       print '*****'
     if message: print 'Error: %s' % message
-    sys.exit(1);
+    if not noexit: sys.exit(1);
 
   def GetBackendData(self, proto, domain, field, recurse=True):
     backend = '%s:%s' % (proto.lower(), domain.lower())
@@ -1798,7 +1804,9 @@ class PageKite(object):
       elif opt == '--nodaemonize': self.daemonize = False
       elif opt == '--noall': self.require_all = False
       elif opt == '--nozchunks': self.disable_zchunks = True
+      elif opt == '--nocrashreport': self.crash_report_url = None
       elif opt == '--clean': pass
+      elif opt == '--noloop': pass
 
       elif opt == '--defaults':
         self.ui_sspec = ('127.0.0.1', 9999) 
@@ -2106,26 +2114,50 @@ class PageKite(object):
 ##[ Main ]#####################################################################
 
 if __name__ == '__main__':
-  bsn = PageKite()
 
-  try:
-    if '--clean' not in sys.argv:
-      if os.path.exists(bsn.rcfile): bsn.ConfigureFromFile()
-    bsn.Configure(sys.argv[1:])
-    bsn.CheckConfig()
-    bsn.Start()
+  noexit = ('--noloop' not in sys.argv)
+  crashes = 1
 
-  except ConfigError, msg:
-    bsn.FallDown(msg)
+  while True:
+    pk = PageKite()
+    try:
+      try:
+        if '--clean' not in sys.argv:
+          if os.path.exists(pk.rcfile): pk.ConfigureFromFile()
+        pk.Configure(sys.argv[1:])
+        pk.CheckConfig()
+        pk.Start()
 
-  except getopt.GetoptError, msg:
-    bsn.FallDown(msg)
+      except ConfigError, msg:
+        pk.FallDown(msg)
 
-  except KeyboardInterrupt, msg:
-    bsn.FallDown(None, help=False)
+      except getopt.GetoptError, msg:
+        pk.FallDown(msg)
 
-  except Exception, msg:
-    traceback.print_exc(file=sys.stdout)
-    bsn.FallDown(msg, help=False)
+      except KeyboardInterrupt, msg:
+        pk.FallDown(None, help=False)
+
+    except Exception, msg:
+      if pk.crash_report_url:
+        try:
+          print 'Submitting crash report to %s' % pk.crash_report_url
+          LogDebug(''.join(urllib.urlopen(pk.crash_report_url, 
+                                          urllib.urlencode({ 
+                                            'crash': traceback.format_exc() 
+                                          })).readlines()))
+        except Exception:
+          pass
+
+      traceback.print_exc(file=sys.stderr)
+      pk.FallDown(msg, help=False, noexit=noexit)
+
+      # If we get this far, then we're looping. Clean up.
+      for fd in pk.conns.Sockets(): fd.close()
+
+      # Exponential fall-back.
+      LogDebug('Restarting in %d seconds...' % (2 ** crashes))
+      time.sleep(2 ** crashes)
+      crashes += 1
+      if crashes > 9: crashes = 9
 
 # vi:ts=2 expandtab

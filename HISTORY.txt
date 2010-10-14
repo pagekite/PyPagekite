@@ -8,12 +8,14 @@ v0.3.0   2010.10.??
   - Added support for tunneling through tor, or other socks5 proxies.
   - Added support for zlib compressed tunnels
   - Added basic unit-tests!
+  - Added crash report feature and auto-restart on crash.
 
 
 v0.2.1   2010.10.12
 ------
   - Added support for --defaults and --settings
   - Renamed from beanstalks_net.py to pagekite.py
+
 
 v0.2.0   2010.09.22 
 ------
