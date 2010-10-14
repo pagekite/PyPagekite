@@ -801,7 +801,7 @@ class Selectable(object):
         self.wrote_bytes += sent_bytes
 #       print '> %s' % sending[0:sent_bytes]
       except socket.error, err:
-        self.LogDebug('Error sending: %s' % err)
+        LogDebug('Error sending: %s' % err)
 
     self.write_blocked = sending[sent_bytes:]
     if self.wrote_bytes > 102400: self.LogTraffic()
@@ -1048,7 +1048,7 @@ class ChunkParser(Selectable):
         return False
 
       if self.want_bytes == 0:
-        self.LogDebug('ChunkParser::ProcessData: end of chunk')
+        LogDebug('ChunkParser::ProcessData: end of chunk')
         return False
 
     process = data[:self.want_bytes]
