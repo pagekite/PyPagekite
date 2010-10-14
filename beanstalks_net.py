@@ -182,7 +182,7 @@ firefox http://localhost:8888/
 # Fly a PageKite on pagekite.net for somedomain.com, and register the new
 # front-ends with the No-IP Dynamic DNS provider.
 pagekite.py \\
-       --frontends=1:frontends.b5p.us \\
+       --frontends=1:frontends.b5p.us:2222 \\
        --dyndns=user:pass@no-ip.com \\
        --backend=http:somedomain.com:localhost:80:mygreatsecret
 
@@ -2129,10 +2129,7 @@ if __name__ == '__main__':
         pk.CheckConfig()
         pk.Start()
 
-      except ConfigError, msg:
-        pk.FallDown(msg)
-
-      except getopt.GetoptError, msg:
+      except (ValueError, ConfigError, getopt.GetoptError), msg:
         pk.FallDown(msg)
 
       except KeyboardInterrupt, msg:
