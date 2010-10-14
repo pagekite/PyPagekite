@@ -214,6 +214,7 @@ class TestInternals(unittest.TestCase):
     Request11 = 'GET / HTTP/1.1'
     Headers = ['Host: foo.com',
                'Content-Type: text/html',
+               'Borked:',
                'Multi: foo',
                'Multi: bar']
     BadHeader = 'BadHeader'

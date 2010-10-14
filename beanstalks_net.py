@@ -352,7 +352,11 @@ def HTTP_Unavailable(where, proto, domain, comment=''):
 LOG = []
 
 def LogValues(values, testtime=None):
-  words = [(kv[0], ('%s' % kv[1]).replace('\t', ' ').replace('\r', ' ').replace('\n', ' ').replace('; ', ', ').strip()) for kv in values]
+  words = [(kv[0], ('%s' % kv[1]).replace('\t', ' ')
+                                 .replace('\r', ' ')
+                                 .replace('\n', ' ')
+                                 .replace('; ', ', ')
+                                 .strip()) for kv in values]
   words.append(('ts', '%x' % (testtime or time.time())))
   wdict = dict(words)
   LOG.append(wdict)
@@ -1268,6 +1272,7 @@ class Tunnel(ChunkParser):
     if sid in self.users:
       if self.users[sid] is not None: self.users[sid].Disconnect()
       del self.users[sid]
+    if sid in self.zhistory:
       del self.zhistory[sid]
 
   def ResetRemoteZChunks(self):
