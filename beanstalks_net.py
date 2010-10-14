@@ -1780,6 +1780,7 @@ class PageKite(object):
         if opt == '--torify':
           self.servers_new_only = True  # Disable initial DNS lookups (leaks)
           self.servers_no_ping = True   # Disable front-end pings
+          self.crash_report_url = None  # Disable crash reports
           socks.wrapmodule(urllib)      # Make DynDNS updates go via tor
 
       elif opt == '--frontend': self.servers_manual.append(arg)
