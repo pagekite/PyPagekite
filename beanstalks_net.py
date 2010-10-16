@@ -219,6 +219,7 @@ DYNDNS = {
                 '&hostname=%(domain)s&myip=%(ip)s'),
 }
 
+from cgi import escape as escape_html
 import getopt
 import os
 import random
@@ -556,14 +557,27 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     }
 
   def html_conns(self):
-    html = []
+    html = ['<ul>']
+    for sid in SELECTABLES:
+      sel = SELECTABLES[sid]
+      html.append('<li><a href="/conn/%s">%s: %s</a>%s'
+                  ' ' % (sid, sid, escape_html('%s' % sel),
+                         sel.dead and ' ' or ' <i>alive</i>'))
+    html.append('</ul>')
     return {
       'title': 'Connection log',
       'body': ''.join(html)
     }
 
   def html_conn(self, path):
-    html = []
+    sid = int(path[len('/conn/'):])
+    if sid in SELECTABLES:
+      sel = SELECTABLES[sid]
+      html = ['<h2>%s</h2>' % escape_html('%s' % sel),
+              '<pre><b>Last recv:</b>\n%s</pre>' % escape_html(sel.lastio[0]),
+              '<pre><b>Last sent:</b>\n%s</pre>' % escape_html(sel.lastio[1])]
+    else:
+      html = ['<h2>Connection %s not found. Expired?</h2>' % sid]
     return {
       'title': 'Connection details',
       'body': ''.join(html)
@@ -723,6 +737,7 @@ class HttpParser(object):
 
 
 selectable_id = 0
+SELECTABLES = {}
 
 class Selectable(object):
   """A wrapper around a socket, for use with select."""
@@ -734,13 +749,17 @@ class Selectable(object):
     self.read_bytes = 0
     self.wrote_bytes = 0
     self.write_blocked = ''
+    self.dead = False
 
     # FIXME: This should go away after testing!
-    self.first = ['', '']
+    self.lastio = ['', '']
 
     global selectable_id
     selectable_id += 1
     self.sid = selectable_id
+
+    SELECTABLES[selectable_id] = self
+    if (selectable_id-50) in SELECTABLES: del SELECTABLES[selectable_id-50]
 
     if address:
       self.log_id = ':'.join(['%s' % x for x in address])
@@ -789,12 +808,14 @@ class Selectable(object):
     LogError(error, values)
 
   def LogTraffic(self):
-    self.Log([('wrote', '%d' % self.wrote_bytes),
-              ('read', '%d' % self.read_bytes)])
-    self.wrote_bytes = 0
-    self.read_bytes = 0
+    if self.wrote_bytes or self.read_bytes:
+      self.Log([('wrote', '%d' % self.wrote_bytes),
+                ('read', '%d' % self.read_bytes)])
+      self.wrote_bytes = 0
+      self.read_bytes = 0
 
   def Cleanup(self):
+    self.dead = True
     self.fd.close()
     self.LogTraffic()
 
@@ -805,8 +826,6 @@ class Selectable(object):
   def ReadData(self):
     try:
       data = self.fd.recv(self.maxread)
-      if not self.first[0]: self.first[0] = data
-#     print '< %s' % data
     except socket.error, err:
       LogDebug('Error reading socket: %s' % err)
       return False
@@ -814,13 +833,14 @@ class Selectable(object):
     if data is None or data == '':
       return False
     else:
+      self.lastio[0] = data
       self.read_bytes += len(data)
       if self.read_bytes > 102400: self.LogTraffic()
       return self.ProcessData(data)
 
   def Send(self, data):
     sending = self.write_blocked+(''.join(data))
-    if not self.first[1]: self.first[1] = sending
+    self.lastio[1] = sending
     sent_bytes = 0
     if sending:
       try:
@@ -1213,12 +1233,12 @@ class Tunnel(ChunkParser):
     data = ''
     while not data.endswith('\r\n\r\n'):
       buf = self.fd.recv(4096)
-#     print '< %s' % buf
       if buf is None or buf == '':
         LogDebug('Remote end closed connection.')
         return None, None
       data += buf
       self.read_bytes += len(buf)
+      self.lastio[0] = data
 
     self.fd.setblocking(0)
     parse = HttpParser(lines=data.splitlines(), state=HttpParser.IN_RESPONSE)
@@ -1285,17 +1305,17 @@ class Tunnel(ChunkParser):
     if conn: self.users[sid] = conn
     if not sid in self.zhistory: self.zhistory[sid] = [0, 0]
     if host and proto:
-      return self.SendChunked(['SID: %s\nProto: %s\nHost: %s\r\n\r\n' % (sid, proto, host), data],
+      return self.SendChunked(['SID:%s\nProto:%s\nHost:%s\r\n\r\n' % (sid, proto, host), data],
                               zhistory=self.zhistory[sid]) 
     else:
-      return self.SendChunked(['SID: %s\r\n\r\n' % sid, data],
+      return self.SendChunked(['SID:%s\r\n\r\n' % sid, data],
                               zhistory=self.zhistory[sid]) 
 
   def Disconnect(self, conn, sid=None, sendeof=True):
     sid = int(sid or conn.sid)
     if sendeof:
       LogDebug('Sending EOF for %s' % sid)
-      self.SendChunked('SID: %s\nEOF: eof\r\n\r\nBye!' % sid, compress=False) 
+      self.SendChunked('SID:%s\nEOF:1\r\n\r\nBye!' % sid, compress=False) 
     if sid in self.users:
       if self.users[sid] is not None: self.users[sid].Disconnect()
       del self.users[sid]
