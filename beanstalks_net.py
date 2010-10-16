@@ -447,7 +447,8 @@ class AuthThread(threading.Thread):
 
 class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
-  TEMPLATE = ('<html><head>\n'
+  TEMPLATE_TEXT = ('%(body)s')
+  TEMPLATE_HTML = ('<html><head>\n'
                '<link rel="stylesheet" media="screen, screen"'
                 ' href="http://pagekite.net/css/pagekite.css"'
                 ' type="text/css" title="Default stylesheet" />\n'
@@ -478,6 +479,8 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     html = [(
       '<div id=welcome><p>Welcome to your PageKite control panel!</p></div>\n'
+      '<p id=links>[ <a href="log.html">Logs</a>, '
+                    '<a href="/conns/">Connections</a> ]</p>\n'
       '<div id=live><h2>Flying kites:</h2><ul>\n'
     )]
 
@@ -518,70 +521,84 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       'body': ''.join(html)
     }
 
+  def txt_log(self):
+    return '\n'.join(['%s' % x for x in LOG])
+
+  def html_log(self, path):
+    debug = path.find('debug') >= 0
+    httpd = path.find('httpd') >= 0
+    alllog = path.find('all') >= 0
+    html = ['<p id=links>[ <a href="/">Control Panel</a> | Logs: '
+                         ' <a href="log.html">normal</a>,'
+                         ' <a href="debug-log.html">debug</a>,'
+                         ' <a href="httpd-log.html">httpd</a>,'
+                         ' <a href="all-log.html">all</a>,'
+                         ' <a href="log.txt">raw</a> ]</p>'
+            '<table>']
+    for line in LOG:
+      if not alllog and ('debug' in line) != debug: continue
+      if not alllog and ('uireq' in line) != httpd: continue
+
+      keys = line.keys()
+      keys.sort()
+      html.append('<tr><td colspan=3><b>%s</b></td>'
+                  '</tr>' % time.strftime('%Y-%m-%d %H:%M:%S',
+                                          time.localtime(int(line['ts'], 16))))
+      for key in keys:
+        if key != 'ts':
+          html.append('<tr><td></td><td align=right>%s =</td><td>%s</td>'
+                      '</tr>' % (key, line[key]))
+
+    html.append('</table>')
+    return {
+      'title': 'Log viewer, recent events',
+      'body': ''.join(html)
+    }
+
   def html_conns(self):
-    html = ['<div id=connections><h2>Connections</h2>',
-            '<table cellpadding=2 cellspacing=0 border=1>',
-            '<tr><th>SID<th>FD<th>Local<th>Remote<th>Rcvd<th>Sent</tr>']
-    for conn in self.server.conns.conns:
-      try:
-        peername = '%s:%d' % conn.fd.getpeername()
-      except Exception, e:
-        peername = '*'
-      
-      html.append('<tr><td>%s<td>%s<td>%s<td>%s<td>%d<td>%d</tr>' % (
-                    conn.sid,
-                    conn.fd.fileno(),
-                    '%s:%d' % conn.fd.getsockname(),
-                    peername,
-                    conn.read_bytes,
-                    conn.wrote_bytes))
-    html.append('</table></div>')
-    return ''.join(html)
+    html = []
+    return {
+      'title': 'Connection log',
+      'body': ''.join(html)
+    }
 
-  def html_tunnels(self):
-    html = ['<div id=tunnels><h2>Tunnels</h2>',
-            '<table cellpadding=2 cellspacing=0 border=1>',
-            '<tr><th>TID<th>FD<th>Local<th>Remote<th>Rcvd<th>Sent</tr>']
-    for tid in self.server.conns.tunnels:
-      for tunnel in self.server.conns.tunnels[tid]:
-        html.append('<tr><td>%s<td>%s<td>%s<td>%s<td>%d<td>%d</tr>' % (
-                      tid,
-                      tunnel.fd.fileno(), 
-                      '%s:%d' % tunnel.fd.getsockname(),
-                      '%s:%d' % tunnel.fd.getpeername(),
-                      tunnel.read_bytes,
-                      tunnel.wrote_bytes))
-    html.append('</table></div>')
-    return ''.join(html)
-
-  def html_logs(self):
-    return ''.join(['<pre>', '\n'.join(['%s' % x for x in LOG]), '</pre>'])
+  def html_conn(self, path):
+    html = []
+    return {
+      'title': 'Connection details',
+      'body': ''.join(html)
+    }
 
   def do_GET(self):
     (scheme, netloc, path, params, query, frag) = urlparse(self.path) 
     
-    if path == '/vars.txt':
-      self.send_response(200)
+    self.send_response(200)
+    self.send_header('Cache-Control', 'no-cache')
+    self.send_header('Pragma', 'no-cache')
+    if path.endswith('.txt'):
       self.send_header('Content-Type', 'text/plain')
-      self.send_header('Cache-Control', 'no-cache')
-      self.send_header('Pragma', 'no-cache')
-      self.end_headers()
-      self.wfile.write(self.server.pkite.yamond.render_vars_text())
-
+      template = self.TEMPLATE_TEXT
     else:
-      qs = parse_qs(query)
-      self.send_response(200)
       self.send_header('Content-Type', 'text/html')
-      self.send_header('Cache-Control', 'no-cache')
-      self.send_header('Pragma', 'no-cache')
-      self.end_headers()
+      template = self.TEMPLATE_HTML
+    self.end_headers()
 
-      data = {
-        'prog': (sys.argv[0] or 'pagekite.py').split('/')[-1],
-        'ver': APPVER
-      }
-      data.update(self.html_overview())
-      self.wfile.write(self.TEMPLATE % data)
+    qs = parse_qs(query)
+    data = {
+      'prog': (sys.argv[0] or 'pagekite.py').split('/')[-1],
+      'ver': APPVER
+    }
+
+    if path == '/vars.txt':
+      data['body'] = self.server.pkite.yamond.render_vars_text()
+
+    elif path == '/log.txt':        data['body'] = self.txt_log()
+    elif path.endswith('log.html'): data.update(self.html_log(path))
+    elif path == '/conns/':         data.update(self.html_conns())
+    elif path.startswith('/conn/'): data.update(self.html_conn(path))
+    else: data.update(self.html_overview())
+        
+    self.wfile.write(template % data)
 
 class UiHttpServer(BaseHTTPServer.HTTPServer):
   def __init__(self, sspec, pkite, conns, handler=UiRequestHandler):
@@ -718,6 +735,9 @@ class Selectable(object):
     self.wrote_bytes = 0
     self.write_blocked = ''
 
+    # FIXME: This should go away after testing!
+    self.first = ['', '']
+
     global selectable_id
     selectable_id += 1
     self.sid = selectable_id
@@ -785,6 +805,7 @@ class Selectable(object):
   def ReadData(self):
     try:
       data = self.fd.recv(self.maxread)
+      if not self.first[0]: self.first[0] = data
 #     print '< %s' % data
     except socket.error, err:
       LogDebug('Error reading socket: %s' % err)
@@ -799,6 +820,7 @@ class Selectable(object):
 
   def Send(self, data):
     sending = self.write_blocked+(''.join(data))
+    if not self.first[1]: self.first[1] = sending
     sent_bytes = 0
     if sending:
       try:
