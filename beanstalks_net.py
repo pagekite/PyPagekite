@@ -364,7 +364,7 @@ def LogValues(values, testtime=None):
   words.append(('ts', '%x' % (testtime or time.time())))
   wdict = dict(words)
   LOG.append(wdict)
-  if len(LOG) > 100: LOG.pop()
+  if len(LOG) > 100: LOG.pop(0)
   return (words, wdict)
  
 def LogSyslog(values):
@@ -803,9 +803,7 @@ class Selectable(object):
     self.zreset = False
 
   def __str__(self):
-    return '%s id:%s fd:%s' % (self.__class__,
-                               self.log_id, 
-                       self.fd and (not self.dead) and self.fd.fileno() or '_')
+    return '%s: %s' % (self.log_id, self.__class__)
 
   def html(self):
     return ('<b>Outgoing ZChunks</b>: %s<br>'
