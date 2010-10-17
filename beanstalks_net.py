@@ -766,6 +766,10 @@ class HttpParser(object):
     return [h[1].strip() for h in self.headers if h[0] == header.lower()]
 
 
+def obfuIp(ip):
+  quads = ('%s' % ip).split('.')
+  return '~%s' % '.'.join([q for q in quads[2:]])
+
 selectable_id = 0
 SELECTABLES = {}
 
@@ -789,14 +793,9 @@ class Selectable(object):
     selectable_id += 1
     self.sid = selectable_id
 
-    SELECTABLES[selectable_id] = self
-    old = selectable_id-50
-    ancient = selectable_id-5000
-    if old in SELECTABLES and SELECTABLES[old].dead: del SELECTABLES[old]
-    if ancient in SELECTABLES: del SELECTABLES[ancient]
-
     if address:
-      self.log_id = ':'.join(['%s' % x for x in address])
+      addr = address or ('x.x.x.x', 'x')
+      self.log_id = 's%s/%s:%s' % (self.sid, obfuIp(addr[0]), addr[1])
     else:
       self.log_id = 's%s' % self.sid
 
@@ -804,10 +803,23 @@ class Selectable(object):
     self.zlevel = 1
     self.zreset = False
 
+    SELECTABLES[selectable_id] = self
+    old = selectable_id-50
+    ancient = selectable_id-5000
+    if old in SELECTABLES and SELECTABLES[old].dead: del SELECTABLES[old]
+    if ancient in SELECTABLES: del SELECTABLES[ancient]
+
   def __str__(self):
     return '%s: %s' % (self.log_id, self.__class__)
 
   def html(self):
+    try:
+      peer = self.fd.getpeername()
+      sock = self.fd.getsockname()
+    except Exception:
+      peer = ('x.x.x.x', 'x')
+      sock = ('x.x.x.x', 'x')
+
     return ('<b>Outgoing ZChunks</b>: %s<br>'
             '<b>Remote address</b>: %s<br>'
             '<b>Local address</b>: %s<br>'
@@ -817,8 +829,8 @@ class Selectable(object):
             '<pre><b>Last recv:</b>\n%s</pre>'
             '<pre><b>Last sent:</b>\n%s</pre>'
             '\n') % (self.zw and ('level %d' % self.zlevel) or 'off',
-                     self.dead and '-' or self.fd.getpeername(),
-                     self.dead and '-' or self.fd.getsockname(),
+                     self.dead and '-' or (obfuIp(peer[0]), peer[1]),
+                     self.dead and '-' or (obfuIp(sock[0]), sock[1]),
                      fmt_size(self.all_in + self.read_bytes),
                      fmt_size(self.all_out + self.wrote_bytes),
                      time.strftime('%Y-%m-%d %H:%M:%S',
@@ -1219,7 +1231,7 @@ class Tunnel(ChunkParser):
     # read here.
     self.maxread *= 2
 
-    self.server_name = '0:0'
+    self.server_name = 'x.x.x.x:x'
     self.conns = conns
     self.users = {}
     self.zhistory = {}
@@ -1228,8 +1240,7 @@ class Tunnel(ChunkParser):
 
   def html(self):
     return ('<b>Server name</b>: %s<br>'
-            '%s') % (self.server_name,
-                     ChunkParser.html(self))
+            '%s') % (self.server_name, ChunkParser.html(self))
 
   def Cleanup(self):
     # FIXME: Send good-byes to everyone?
@@ -1626,7 +1637,7 @@ class Listener(Selectable):
       client, address = self.fd.accept()
       if client:
         uc = self.connclass(client, address, self.conns)
-        self.Log([('accept', ':'.join(['%s' % x for x in address]))])
+        self.Log([('accept', '%s:%s' % (obfuIp(address[0]), address[1]))])
         return True
     except Exception, e:
       LogDebug('Listener::ReadData: %s' % e)
