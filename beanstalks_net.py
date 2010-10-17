@@ -332,7 +332,9 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
   return ''.join(req)
 
 def HTTP_ResponseHeader(code, title, mimetype='text/html'):
-  return 'HTTP/1.1 %s %s\r\nContent-Type: %s\r\nPragma: no-cache\r\nCache-Control: no-cache\r\nConnection: close\r\n' % (code, title, mimetype)
+  return ('HTTP/1.1 %s %s\r\nContent-Type: %s\r\nPragma: no-cache\r\n'
+          'Cache-Control: no-cache\r\nConnection: close'
+          '\r\n') % (code, title, mimetype)
 
 def HTTP_Header(name, value):
   return '%s: %s\r\n' % (name, value)
