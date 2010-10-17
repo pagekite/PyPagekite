@@ -1390,7 +1390,7 @@ class Tunnel(ChunkParser):
     sid = int(sid or conn.sid)
     if sendeof:
       LogDebug('Sending EOF for %s' % sid)
-      self.SendChunked('SID: %s\nEOF: 1\r\n\r\nBye!' % sid, compress=False) 
+      self.SendChunked('SID: %s\nEOF: 1\r\n\r\nBye!' % sid) 
     if sid in self.users:
       if self.users[sid] is not None: self.users[sid].Disconnect()
       del self.users[sid]
@@ -1460,7 +1460,10 @@ class UserConn(Selectable):
     self.tunnel = None
 
   def html(self):
-    return Selectable.html(self)
+    return ('<b>Tunnel</b>: <a href="/conn/%s">%s</a><br>'
+            '%s') % (self.tunnel and self.tunnel.sid or '',
+                     escape_html('%s' % (self.tunnel or '')),
+                     Selectable.html(self))
  
   def Cleanup(self):
     self.tunnel.Disconnect(self)
@@ -1597,7 +1600,7 @@ class UnknownConn(MagicProtocolParser):
 class Listener(Selectable):
   """This class listens for incoming connections and accepts them."""
 
-  def __init__(self, host, port, conns, backlog=100):
+  def __init__(self, host, port, conns, backlog=100, connclass=UnknownConn):
     Selectable.__init__(self)
     self.fd.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     self.fd.bind((host, port))
@@ -1605,18 +1608,22 @@ class Listener(Selectable):
     self.fd.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     self.Log([('listen', '%s:%s' % (host, port))])
 
+    self.connclass = connclass
+    self.port = port
     self.conns = conns
     self.conns.Add(self)
 
+  def __str__(self):
+    return '%s port=%s' % (Selectable.__str__(self), self.port)
+
   def html(self):
-    return 'Just listening...'
+    return '<p>Listening on port %s</p>' % self.port
  
   def ReadData(self):
     try:
       client, address = self.fd.accept()
-#     print address
       if client:
-        uc = UnknownConn(client, address, self.conns)
+        uc = self.connclass(client, address, self.conns)
         self.Log([('accept', ':'.join(['%s' % x for x in address]))])
         return True
     except Exception, e:
