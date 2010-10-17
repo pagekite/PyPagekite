@@ -1801,7 +1801,6 @@ class PageKite(object):
                            payload='%s:%s:%s:%s' % (proto, domain, srand, token))
 
   def LookupDomainQuota(self, lookup):
-    LogDebug('LOOKUP: %s' % lookup)
     ip = socket.gethostbyname(lookup)
 
     # High bit not set, then access is granted and the "ip" is a quota.
@@ -2125,7 +2124,7 @@ class PageKite(object):
       global Log
       Log = LogSyslog
       filename = '/dev/null'
-      syslog.openlog((sys.argv[0] or 'beanstalks_net.py').split('/')[-1],
+      syslog.openlog((sys.argv[0] or 'pagekite.py').split('/')[-1],
                      syslog.LOG_PID, syslog.LOG_DAEMON)
 
     for fd in range(0, 1024): # Not MAXFD, but should be enough.
