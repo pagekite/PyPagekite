@@ -3,15 +3,13 @@ Version history - highlights
 
 v0.3.2   2010.10.??
 ------
+  * HTTP UI now has logs, connection debugging tools, and --httppass works.
 
 
 v0.3.1   2010.10.14
+v0.3.0
 ------
   * BUG: ValueErrors in invalid configs generated crash report spam.
-
-
-v0.3.0   2010.10.14
-------
   * BUG: Fixed chunking alignment problem. 
   * BUG: Fixed HTTP header parsing problem
   - Added support for tunneling through tor, or other socks5 proxies.

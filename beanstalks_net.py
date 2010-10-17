@@ -111,7 +111,7 @@ Common Options:
  --optfile=X    -o X    Read options from file X. Default is ~/.pagekiterc.
  --httpd=X:P    -H X:P  Enable the HTTP user interface on hostname X, port P.
  --pemfile=X    -P X    Use X as a PEM key for the HTTPS UI. (FIXME)
- --httppass=X   -X X    Require password X to access the UI. (FIXME)
+ --httppass=X   -X X    Require password X to access the UI.
  --nozchunks            Disable zlib tunnel compression.
  --logfile=F    -L F    Log to file F.
  --daemonize    -Z      Run as a daemon.
@@ -219,6 +219,7 @@ DYNDNS = {
                 '&hostname=%(domain)s&myip=%(ip)s'),
 }
 
+import base64
 from cgi import escape as escape_html
 import getopt
 import os
@@ -446,6 +447,16 @@ class AuthThread(threading.Thread):
     self.qc.release()
 
 
+def fmt_size(count):
+  if count > 2*(1024*1024*1024):
+    return '%dGB' % (count / (1024*1024*1024))
+  if count > 2*(1024*1024):
+    return '%dMB' % (count / (1024*1024))
+  if count > 2*(1024):
+    return '%dKB' % (count / 1024)
+  return '%dB' % count
+
+
 class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
   TEMPLATE_TEXT = ('%(body)s')
@@ -459,20 +470,12 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                '<div id=body>%(body)s</div>\n'
                '<div id=footer><hr><i>Powered by <b>pagekite.py'
                 ' v%(ver)s</b> and'
-                ' <a href="' + WWWHOME + '">PageKite.net</a>.</i></div>\n'
+                ' <a href="' + WWWHOME + '">PageKite.net</a>.<br>'
+                'Local time is %(now)s.</i></div>\n'
               '</body></html>\n')
  
   def log_message(self, format, *args):
     Log([('uireq', format % args)])
-
-  def fmt_size(self, count):
-    if count > 2*(1024*1024*1024):
-      return '%dGB' % (count / (1024*1024*1024))
-    if count > 2*(1024*1024):
-      return '%dMB' % (count / (1024*1024))
-    if count > 2*(1024):
-      return '%dKB' % (count / 1024)
-    return '%dB' % count
 
   def html_overview(self):
     conns = self.server.conns
@@ -509,8 +512,8 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                      '</li>\n') % (tinfo,
                                    tunnel.server_name.split(':')[0],
                                    binfo,
-                                   self.fmt_size(tunnel.read_bytes),
-                                   self.fmt_size(tunnel.wrote_bytes))) 
+                                   fmt_size(tunnel.all_in + tunnel.read_bytes),
+                                   fmt_size(tunnel.all_out + tunnel.wrote_bytes))) 
     if not conns.tunnels:
       html.append('<i>None</i>')
     
@@ -536,20 +539,23 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                          ' <a href="all-log.html">all</a>,'
                          ' <a href="log.txt">raw</a> ]</p>'
             '<table>']
+    lines = []
     for line in LOG:
       if not alllog and ('debug' in line) != debug: continue
       if not alllog and ('uireq' in line) != httpd: continue
 
       keys = line.keys()
       keys.sort()
-      html.append('<tr><td colspan=3><b>%s</b></td>'
-                  '</tr>' % time.strftime('%Y-%m-%d %H:%M:%S',
-                                          time.localtime(int(line['ts'], 16))))
+      lhtml = ('<tr><td colspan=3><b>%s</b></td>'
+               '</tr>' % time.strftime('%Y-%m-%d %H:%M:%S',
+                                       time.localtime(int(line['ts'], 16))))
       for key in keys:
         if key != 'ts':
-          html.append('<tr><td></td><td align=right>%s =</td><td>%s</td>'
-                      '</tr>' % (key, line[key]))
+          lhtml += ('<tr><td></td><td align=right>%s&nbsp;=</td><td>%s</td>'
+                    '</tr>' % (key, escape_html(line[key])))
+      lines.insert(0, lhtml)
 
+    html.extend(lines)
     html.append('</table>')
     return {
       'title': 'Log viewer, recent events',
@@ -558,10 +564,12 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
   def html_conns(self):
     html = ['<ul>']
-    for sid in SELECTABLES:
+    sids = SELECTABLES.keys()
+    sids.sort(reverse=True)
+    for sid in sids:
       sel = SELECTABLES[sid]
-      html.append('<li><a href="/conn/%s">%s: %s</a>%s'
-                  ' ' % (sid, sid, escape_html('%s' % sel),
+      html.append('<li><a href="/conn/%s">%s</a>%s'
+                  ' ' % (sid, escape_html(str(sel)),
                          sel.dead and ' ' or ' <i>alive</i>'))
     html.append('</ul>')
     return {
@@ -572,10 +580,8 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def html_conn(self, path):
     sid = int(path[len('/conn/'):])
     if sid in SELECTABLES:
-      sel = SELECTABLES[sid]
-      html = ['<h2>%s</h2>' % escape_html('%s' % sel),
-              '<pre><b>Last recv:</b>\n%s</pre>' % escape_html(sel.lastio[0]),
-              '<pre><b>Last sent:</b>\n%s</pre>' % escape_html(sel.lastio[1])]
+      html = ['<h2>%s</h2>' % escape_html('%s' % SELECTABLES[sid]),
+              SELECTABLES[sid].html()]
     else:
       html = ['<h2>Connection %s not found. Expired?</h2>' % sid]
     return {
@@ -583,25 +589,47 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       'body': ''.join(html)
     }
 
-  def do_GET(self):
-    (scheme, netloc, path, params, query, frag) = urlparse(self.path) 
-    
-    self.send_response(200)
+  def begin_headers(self, code, mimetype):
+    self.send_response(code)
     self.send_header('Cache-Control', 'no-cache')
     self.send_header('Pragma', 'no-cache')
+    self.send_header('Content-Type', mimetype)
+
+  def do_GET(self):
+    (scheme, netloc, path, params, query, frag) = urlparse(self.path) 
+
+    data = {
+      'prog': (sys.argv[0] or 'pagekite.py').split('/')[-1],
+      'now': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
+      'ver': APPVER
+    }
+
+    authenticated = False
+    if self.server.pkite.ui_password: 
+      auth = self.headers.get('authorization')
+      if auth:
+        (how, ab64) = auth.split()
+        if how.lower() == 'basic':
+          (uid, password) = base64.b64decode(ab64).split(':')
+          authenticated = (password == self.server.pkite.ui_password)
+      if not authenticated:
+        self.begin_headers(401, 'text/html')
+        self.send_header('WWW-Authenticate',
+                         'Basic realm=PK%d' % (time.time()/3600))
+        self.end_headers()
+        data['title'] = data['body'] = 'Authentication required.'
+        self.wfile.write(self.TEMPLATE_HTML % data)
+        return
+    
     if path.endswith('.txt'):
-      self.send_header('Content-Type', 'text/plain')
       template = self.TEMPLATE_TEXT
+      self.begin_headers(200, 'text/plain')
     else:
-      self.send_header('Content-Type', 'text/html')
       template = self.TEMPLATE_HTML
+      self.begin_headers(200, 'text/html')
     self.end_headers()
 
     qs = parse_qs(query)
-    data = {
-      'prog': (sys.argv[0] or 'pagekite.py').split('/')[-1],
-      'ver': APPVER
-    }
 
     if path == '/vars.txt':
       data['body'] = self.server.pkite.yamond.render_vars_text()
@@ -746,8 +774,9 @@ class Selectable(object):
     self.SetFD(fd or rawsocket(socket.AF_INET, socket.SOCK_STREAM))
     self.maxread = maxread
     self.address = address
-    self.read_bytes = 0
-    self.wrote_bytes = 0
+    self.created = self.bytes_logged = time.time()
+    self.read_bytes = self.all_in = 0
+    self.wrote_bytes = self.all_out = 0
     self.write_blocked = ''
     self.dead = False
 
@@ -759,7 +788,10 @@ class Selectable(object):
     self.sid = selectable_id
 
     SELECTABLES[selectable_id] = self
-    if (selectable_id-50) in SELECTABLES: del SELECTABLES[selectable_id-50]
+    old = selectable_id-50
+    ancient = selectable_id-5000
+    if old in SELECTABLES and SELECTABLES[old].dead: del SELECTABLES[old]
+    if ancient in SELECTABLES: del SELECTABLES[ancient]
 
     if address:
       self.log_id = ':'.join(['%s' % x for x in address])
@@ -769,6 +801,31 @@ class Selectable(object):
     self.zw = None
     self.zlevel = 1
     self.zreset = False
+
+  def __str__(self):
+    return '%s id:%s fd:%s' % (self.__class__,
+                               self.log_id, 
+                       self.fd and (not self.dead) and self.fd.fileno() or '_')
+
+  def html(self):
+    return ('<b>Outgoing ZChunks</b>: %s<br>'
+            '<b>Remote address</b>: %s<br>'
+            '<b>Local address</b>: %s<br>'
+            '<b>Bytes in / out</b>: %s / %s<br>'
+            '<b>Created</b>: %s<br>'
+            '<b>Status</b>: %s<br>'
+            '<pre><b>Last recv:</b>\n%s</pre>'
+            '<pre><b>Last sent:</b>\n%s</pre>'
+            '\n') % (self.zw and ('level %d' % self.zlevel) or 'off',
+                     self.dead and '-' or self.fd.getpeername(),
+                     self.dead and '-' or self.fd.getsockname(),
+                     fmt_size(self.all_in + self.read_bytes),
+                     fmt_size(self.all_out + self.wrote_bytes),
+                     time.strftime('%Y-%m-%d %H:%M:%S',
+                                   time.localtime(self.created)),
+                     self.dead and 'dead' or 'alive',
+                     escape_html(self.lastio[0]),
+                     escape_html(self.lastio[1]))
 
   def ResetZChunks(self):
     if self.zw:
@@ -811,8 +868,12 @@ class Selectable(object):
     if self.wrote_bytes or self.read_bytes:
       self.Log([('wrote', '%d' % self.wrote_bytes),
                 ('read', '%d' % self.read_bytes)])
-      self.wrote_bytes = 0
-      self.read_bytes = 0
+
+      self.all_out += self.wrote_bytes
+      self.all_in += self.read_bytes
+
+      self.bytes_logged = time.time()
+      self.wrote_bytes = self.read_bytes = 0
 
   def Cleanup(self):
     self.dead = True
@@ -959,6 +1020,9 @@ class LineParser(Selectable):
     Selectable.__init__(self, fd, address)
     self.leftovers = ''
 
+  def html(self):
+    return Selectable.html(self)
+
   def Cleanup(self):
     Selectable.Cleanup(self)
 
@@ -995,6 +1059,11 @@ class MagicProtocolParser(LineParser):
     self.leftovers = ''
     self.might_be_tls = True
     self.is_tls = False
+
+  def html(self):
+    return ('<b>Detected TLS</b>: %s<br>'
+            '%s') % (self.is_tls,
+                     LineParser.html(self))
 
   def ProcessData(self, data):
     if self.might_be_tls:
@@ -1064,6 +1133,9 @@ class ChunkParser(Selectable):
     self.header = ''
     self.chunk = ''
     self.zr = zlib.decompressobj()
+
+  def html(self):
+    return Selectable.html(self)
 
   def Cleanup(self):
     Selectable.Cleanup(self)
@@ -1153,6 +1225,11 @@ class Tunnel(ChunkParser):
     self.zhistory = {}
     self.backends = {}
     self.rtt = 100000
+
+  def html(self):
+    return ('<b>Server name</b>: %s<br>'
+            '%s') % (self.server_name,
+                     ChunkParser.html(self))
 
   def Cleanup(self):
     # FIXME: Send good-byes to everyone?
@@ -1305,17 +1382,17 @@ class Tunnel(ChunkParser):
     if conn: self.users[sid] = conn
     if not sid in self.zhistory: self.zhistory[sid] = [0, 0]
     if host and proto:
-      return self.SendChunked(['SID:%s\nProto:%s\nHost:%s\r\n\r\n' % (sid, proto, host), data],
+      return self.SendChunked(['SID: %s\nProto: %s\nHost: %s\r\n\r\n' % (sid, proto, host), data],
                               zhistory=self.zhistory[sid]) 
     else:
-      return self.SendChunked(['SID:%s\r\n\r\n' % sid, data],
+      return self.SendChunked(['SID: %s\r\n\r\n' % sid, data],
                               zhistory=self.zhistory[sid]) 
 
   def Disconnect(self, conn, sid=None, sendeof=True):
     sid = int(sid or conn.sid)
     if sendeof:
       LogDebug('Sending EOF for %s' % sid)
-      self.SendChunked('SID:%s\nEOF:1\r\n\r\nBye!' % sid, compress=False) 
+      self.SendChunked('SID: %s\nEOF: 1\r\n\r\nBye!' % sid, compress=False) 
     if sid in self.users:
       if self.users[sid] is not None: self.users[sid].Disconnect()
       del self.users[sid]
@@ -1384,6 +1461,9 @@ class UserConn(Selectable):
     Selectable.__init__(self)
     self.tunnel = None
 
+  def html(self):
+    return Selectable.html(self)
+ 
   def Cleanup(self):
     self.tunnel.Disconnect(self)
     Selectable.Cleanup(self)
@@ -1491,6 +1571,7 @@ class UnknownConn(MagicProtocolParser):
           return False
 
       # We are done!
+      self.dead = True
       self.conns.Remove(self)
 
       # Break any circular references we might have
@@ -1506,6 +1587,7 @@ class UnknownConn(MagicProtocolParser):
         return False
 
     # We are done!
+    self.dead = True
     self.conns.Remove(self)
 
     # Break any circular references we might have
@@ -1528,6 +1610,9 @@ class Listener(Selectable):
     self.conns = conns
     self.conns.Add(self)
 
+  def html(self):
+    return 'Just listening...'
+ 
   def ReadData(self):
     try:
       client, address = self.fd.accept()
@@ -1599,7 +1684,7 @@ class PageKite(object):
     print
     print '# HTTP control-panel settings:'
     print (self.ui_sspec and 'httpd=%s:%d' % self.ui_sspec or '#httpd=host:port')
-    # FIXME: Other settings!
+    print (self.ui_password and 'httppass=%s' % self.ui_password or '#httppass=YOURSECRET')
     print
     print '# Back-end Options:'
     print (self.servers_auto and 'frontends=%d:%s:%d' % self.servers_auto or '#frontends=1:frontends.b5p.us:2222')
