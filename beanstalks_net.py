@@ -806,7 +806,9 @@ class Selectable(object):
     SELECTABLES[selectable_id] = self
     old = selectable_id-50
     ancient = selectable_id-5000
-    if old in SELECTABLES and SELECTABLES[old].dead: del SELECTABLES[old]
+    if old in SELECTABLES:
+      sel = SELECTABLES[old]
+      if sel.dead or (sel.all_out + sel.wrote_bytes) == 0: del SELECTABLES[old]
     if ancient in SELECTABLES: del SELECTABLES[ancient]
 
   def __str__(self):
