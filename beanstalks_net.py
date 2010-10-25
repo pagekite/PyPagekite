@@ -361,10 +361,25 @@ def HTTP_NoFeConnection():
 def HTTP_NoBeConnection():
   # FIXME: Make this different...
   return HTTP_Response(200, 'OK', base64.decodestring(
-    'R0lGODlhCgAKAMQCAN4hIf/+/v///+EzM+AuLvGkpORISPW+vudgYOhiYvKpqeZY'
-    'WPbAwOdaWup1dfOurvW7u++Rkepycu6PjwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAACH5BAEAAAIALAAAAAAKAAoAAAUtoCAcyEA0jyhEQOs6AuPO'
-    'QJHQrjEAQe+3O98PcMMBDAdjTTDBSVSQEmGhEIUAADs='), mimetype='image/gif')
+    'R0lGODlhCgAKAPcAAI9hE6t2Fv/GAf/NH//RMf/hd7u6uv/mj/ntq8XExMbFxc7N'
+    'zc/Ozv/xwfj31+jn5+vq6v///////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAACH5BAEAABIALAAAAAAKAAoAAAhDACUIlBAgwMCDARo4MHiQ'
+    '4IEGDAcGKAAAAESEBCoiiBhgQEYABzYK7OiRQIEDBgMIEDCgokmUKlcOKFkgZcGb'
+    'BSUEBAA7'), mimetype='image/gif')
                             
 def HTTP_GoodBeConnection():
   return HTTP_Response(200, 'OK', base64.decodestring(
@@ -1451,10 +1466,19 @@ class Tunnel(ChunkParser):
     self.ResetRemoteZChunks()
     return True
 
+  def Probe(self, host):
+    for bid in self.conns.config.backends:
+      be = self.conns.config.backends[bid]
+      if be[BE_DOMAIN] == host:
+        bhost, bport = be[BE_BACKEND].split(':')
+        if self.conns.config.Ping(bhost, int(bport)) > 2: return False
+    return True
+
   def ProcessChunk(self, data):
     try:
       headers, data = data.split('\r\n\r\n', 1)
-      parse = HttpParser(lines=headers.splitlines(), state=HttpParser.IN_HEADERS)
+      parse = HttpParser(lines=headers.splitlines(), 
+                         state=HttpParser.IN_HEADERS)
     except ValueError:
       LogError('Tunnel::ProcessChunk: Corrupt packet!')
       return False
@@ -1481,20 +1505,18 @@ class Tunnel(ChunkParser):
         proto = (parse.Header('Proto') or [''])[0]
         host = (parse.Header('Host') or [''])[0]
         if proto and host:
-          conn = UserConn.BackEnd((proto == 'probe') and 'http' or proto,
-                                  host, sid, self)
-          if conn:
-            if proto == 'probe':
+          if proto == 'probe':
+            if self.Probe(host):
               self.SendChunked('SID: %s\r\n\r\n%s' % (
                                  sid, HTTP_GoodBeConnection() )) 
-              conn = None 
-          else:
-            if proto == 'http':
-              self.SendChunked('SID: %s\r\n\r\n%s' % (
-                                 sid, HTTP_Unavailable('be', proto, host) )) 
-            elif proto == 'probe':
+            else:
               self.SendChunked('SID: %s\r\n\r\n%s' % (
                                  sid, HTTP_NoBeConnection() )) 
+          else:
+            conn = UserConn.BackEnd(proto, host, sid, self)
+            if proto == 'http' and not conn:
+              self.SendChunked('SID: %s\r\n\r\n%s' % (
+                                 sid, HTTP_Unavailable('be', proto, host) )) 
           if conn:
             self.users[sid] = conn
 
@@ -2043,6 +2065,7 @@ class PageKite(object):
     try:
       rawsocket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
     except Exception, e:
+      LogDebug('Ping %s:%s failed: %s' % (host, port, e))
       return 100000 
     return (time.time() - start)
 
