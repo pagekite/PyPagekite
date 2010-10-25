@@ -337,7 +337,7 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
 
 def HTTP_ResponseHeader(code, title, mimetype='text/html'):
   return ('HTTP/1.1 %s %s\r\nContent-Type: %s\r\nPragma: no-cache\r\n'
-          'Expires: 0\r\nCache-Control: no-cache\r\nConnection: close'
+          'Expires: 0\r\nCache-Control: no-store\r\nConnection: close'
           '\r\n') % (code, title, mimetype)
 
 def HTTP_Header(name, value):
@@ -646,7 +646,7 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
   def begin_headers(self, code, mimetype):
     self.send_response(code)
-    self.send_header('Cache-Control', 'no-cache')
+    self.send_header('Cache-Control', 'no-store')
     self.send_header('Pragma', 'no-cache')
     self.send_header('Content-Type', mimetype)
 
