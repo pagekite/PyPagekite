@@ -1,6 +1,10 @@
 Version history - highlights
 ============================
 
+v0.3.3   2010.11.??
+------
+
+
 v0.3.2   2010.10.25
 ------
   - HTTP UI now has logs & connection details, and --httppass works.
