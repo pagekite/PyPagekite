@@ -337,7 +337,7 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
 
 def HTTP_ResponseHeader(code, title, mimetype='text/html'):
   return ('HTTP/1.1 %s %s\r\nContent-Type: %s\r\nPragma: no-cache\r\n'
-          'Cache-Control: no-cache\r\nConnection: close'
+          'Expires: 0\r\nCache-Control: no-cache\r\nConnection: close'
           '\r\n') % (code, title, mimetype)
 
 def HTTP_Header(name, value):
@@ -1654,7 +1654,7 @@ class UnknownConn(MagicProtocolParser):
 
         if UserConn.FrontEnd(self, proto, host,
                              self.parser.lines + lines, self.conns) is None:
-          if magic_parts and magic_parts[-1] == 'status.gif':
+          if magic_parts:
             self.Send(HTTP_NoFeConnection())
           else:
             self.Send(HTTP_Unavailable('fe', proto, host))
