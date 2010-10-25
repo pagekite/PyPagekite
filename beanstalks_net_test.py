@@ -157,11 +157,11 @@ class TestInternals(unittest.TestCase):
                      '1234567843b16458418175599012be884a18963f10be4670')
 
   def test_PageKiteRequest(self):
-    request = ['POST /Beanstalk~Magic~Beans/0.2 HTTP/1.1\r\n',
+    request = ['POST /~:PageKite:~/v0.8 HTTP/1.1\r\n',
                'Host: x\r\n',
                'Content-Type: application/octet-stream\r\n',
                'Transfer-Encoding: chunked\r\n'] 
-    zlibreq = 'X-Beanstalk-Features: ZChunks\r\n'
+    zlibreq = 'X-PageKite-Features: ZChunks\r\n'
     reqbody = '\r\nOK\r\n'
 
     # Basic request, no servers.
@@ -186,7 +186,7 @@ class TestInternals(unittest.TestCase):
                                                  secret='x'), token) 
     sign = pagekite.signToken(secret='Secret', payload=data, token=token)
     req = request[:]
-    req.extend([zlibreq, 'X-Beanstalk: %s:%s\r\n' % (data, sign), reqbody])
+    req.extend([zlibreq, 'X-PageKite: %s:%s\r\n' % (data, sign), reqbody])
     self.assertEqual(pagekite.HTTP_PageKiteRequest('x', backends,
                                                         tokens={bid: token},
                                                         testtoken=token),
@@ -591,14 +591,16 @@ class TestNetwork(unittest.TestCase):
       raise Exception('No connection after 5 seconds\n%s' % self.LogData(data=parsed))
 
     urls = ['http://localhost:%d/' % pk.server_ports[0] for pk in self.fe]
-    ForkRequestRunner(100, urls, 'MockPageKite').start()
-    ForkRequestRunner(100, urls, 'MockPageKite').start()
-    rr = RequestRunner(150, urls, 'MockPageKite') 
+    ForkRequestRunner(10, urls, 'MockPageKite').start()
+    ForkRequestRunner(10, urls, 'MockPageKite').start()
+    rr = RequestRunner(15, urls, 'MockPageKite') 
     rr.start()
     while rr.loops > 0: time.sleep(1)
-    if rr.errors: raise Exception('Ick: %s' % rr.errors)
-   
-    
+    if rr.errors: raise Exception('Ick: %s, %s%s' % (
+                                    rr.errors,
+                                    self.LogData(data=parsed),
+                                    self.LogData(data=pagekite.LOG)))
+
 
 class TestNetworkExternal(unittest.TestCase):
   def setUp(self):

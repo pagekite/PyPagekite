@@ -82,7 +82,7 @@
 #          without explicit locking. Beware!
 #
 #
-PROTOVER = '0.2'
+PROTOVER = '0.8'
 APPVER = '0.3.2'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
@@ -187,7 +187,11 @@ pagekite.py \\
        --backend=http:somedomain.com:localhost:80:mygreatsecret
 
 """ % APPVER
-MAGIC_PATH = '/Beanstalk~Magic~Beans/%s' % PROTOVER
+
+MAGIC_PREFIX = '/~:PageKite:~/'
+MAGIC_PATH = '%sv%s' % (MAGIC_PREFIX, PROTOVER)
+MAGIC_PATHS = (MAGIC_PATH, '/Beanstalk~Magic~Beans/0.2')
+
 OPT_FLAGS = 'o:H:P:X:L:ZI:fA:R:h:p:aD:U:N'
 OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
             'optfile=', 'httpd=', 'pemfile=', 'httppass=',
@@ -316,7 +320,7 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
          'Transfer-Encoding: chunked\r\n']
 
   if not nozchunks:
-    req.append('X-Beanstalk-Features: ZChunks\r\n')
+    req.append('X-PageKite-Features: ZChunks\r\n')
          
   tokens = tokens or {}
   for d in backends.keys():
@@ -326,7 +330,7 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
                                       secret=server),
                          token)
     sign = signToken(secret=backends[d][BE_SECRET], payload=data, token=testtoken)
-    req.append('X-Beanstalk: %s:%s\r\n' % (data, sign))
+    req.append('X-PageKite: %s:%s\r\n' % (data, sign))
 
   req.append('\r\nOK\r\n')
   return ''.join(req)
@@ -346,6 +350,32 @@ def HTTP_Response(code, title, body, mimetype='text/html'):
   return ''.join([HTTP_ResponseHeader(code, title, mimetype), HTTP_StartBody(),
                   ''.join(body)])
 
+# FIXME: Replace all these GIF images with little json snippets for better UI.
+def HTTP_NoFeConnection():
+  return HTTP_Response(200, 'OK', base64.decodestring(
+    'R0lGODlhCgAKAMQCAN4hIf/+/v///+EzM+AuLvGkpORISPW+vudgYOhiYvKpqeZY'
+    'WPbAwOdaWup1dfOurvW7u++Rkepycu6PjwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAACH5BAEAAAIALAAAAAAKAAoAAAUtoCAcyEA0jyhEQOs6AuPO'
+    'QJHQrjEAQe+3O98PcMMBDAdjTTDBSVSQEmGhEIUAADs='), mimetype='image/gif')
+
+def HTTP_NoBeConnection():
+  # FIXME: Make this different...
+  return HTTP_Response(200, 'OK', base64.decodestring(
+    'R0lGODlhCgAKAMQCAN4hIf/+/v///+EzM+AuLvGkpORISPW+vudgYOhiYvKpqeZY'
+    'WPbAwOdaWup1dfOurvW7u++Rkepycu6PjwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAACH5BAEAAAIALAAAAAAKAAoAAAUtoCAcyEA0jyhEQOs6AuPO'
+    'QJHQrjEAQe+3O98PcMMBDAdjTTDBSVSQEmGhEIUAADs='), mimetype='image/gif')
+                            
+def HTTP_GoodBeConnection():
+  return HTTP_Response(200, 'OK', base64.decodestring(
+    'R0lGODlhCgAKANUCAEKtP0StQf8AAG2/a97w3qbYpd/x3mu/aajZp/b79vT69Mnn'
+    'yK7crXTDcqraqcfmxtLr0VG0T0ivRpbRlF24Wr7jveHy4Pv9+53UnPn8+cjnx4LI'
+    'gNfu1v///37HfKfZpq/crmG6XgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAACH5BAEAAAIALAAAAAAKAAoAAAZIQIGAUDgMEASh4BEANAGA'
+    'xRAaaHoYAAPCCZUoOIDPAdCAQhIRgJGiAG0uE+igAMB0MhYoAFmtJEJcBgILVU8B'
+    'GkpEAwMOggJBADs='), mimetype='image/gif')
+ 
 def HTTP_Unavailable(where, proto, domain, comment=''):
   return HTTP_Response(200, 'OK', 
                        ['<html><body><h1>Sorry! (', where, ')</h1>',
@@ -427,18 +457,18 @@ class AuthThread(threading.Thread):
         self.qc.release()
 
         results = []
-        for (proto, domain, srand, token, sign) in requests:
+        for (proto, domain, srand, token, sign, prefix) in requests:
           what = '%s:%s:%s' % (proto, domain, srand)
           if not token or not sign:
-            results.append(('SignThis', '%s:%s' % (what,
-                                                   signToken(payload=what))))
+            results.append(('%s-SignThis' % prefix,
+                            '%s:%s' % (what, signToken(payload=what))))
           elif not self.conns.config.GetDomainQuota(proto, domain, srand, token, sign):
-            results.append(('Invalid', what))
+            results.append(('%s-Invalid' % prefix, what))
           elif self.conns.Tunnel(proto, domain) is not None:
             # FIXME: Allow multiple backends!
-            results.append(('Duplicate', what))
+            results.append(('%s-Duplicate' % prefix, what))
           else:
-            results.append(('OK', what))
+            results.append(('%s-OK' % prefix, what))
 
         callback(results) 
 
@@ -1253,13 +1283,15 @@ class Tunnel(ChunkParser):
     self = Tunnel(conns)
     requests = []
     try:
-      for feature in conn.parser.Header('X-Beanstalk-Features'):
-        if feature == 'ZChunks': self.EnableZChunks(level=1)
+      for prefix in ('X-Beanstalk', 'X-PageKite'):
+        for feature in conn.parser.Header(prefix+'-Features'):
+          if feature == 'ZChunks': self.EnableZChunks(level=1)
 
-      for bs in conn.parser.Header('X-Beanstalk'):
-        # X-Beanstalk: proto:my.domain.com:token:signature
-        proto, domain, srand, token, sign = bs.split(':') 
-        requests.append((proto.lower(), domain.lower(), srand, token, sign))
+        for bs in conn.parser.Header(prefix):
+          # X-Beanstalk: proto:my.domain.com:token:signature
+          proto, domain, srand, token, sign = bs.split(':') 
+          requests.append((proto.lower(), domain.lower(), srand, token, sign,
+                           prefix))
       
     except ValueError, err:
       self.LogError('Discarding connection: %s' % err)
@@ -1278,11 +1310,11 @@ class Tunnel(ChunkParser):
     
     output = [HTTP_ResponseHeader(200, 'OK'),
               HTTP_Header('Content-Transfer-Encoding', 'chunked'),
-              HTTP_Header('X-Beanstalk-Features', 'ZChunks')]
+              HTTP_Header('X-PageKite-Features', 'ZChunks')]
     ok = {}
     for r in results:
-      output.append('X-Beanstalk-%s: %s\r\n' % r)
-      if r[0] == 'OK': ok[r[1]] = 1
+      output.append('%s: %s\r\n' % r)
+      if r[0] in ('X-PageKite-OK', 'X-Beanstalk-OK'): ok[r[1]] = 1
 
     output.append(HTTP_StartBody())
     self.Send(output)
@@ -1348,7 +1380,7 @@ class Tunnel(ChunkParser):
 
         tryagain = False
         tokens = {}
-        for request in parse.Header('X-Beanstalk-SignThis'):
+        for request in parse.Header('X-PageKite-SignThis'):
           proto, domain, srand, token = request.split(':')
           tokens['%s:%s' % (proto, domain)] = token
           tryagain = True
@@ -1359,19 +1391,19 @@ class Tunnel(ChunkParser):
 
         if data and parse:
           if not conns.config.disable_zchunks:
-            for feature in parse.Header('X-Beanstalk-Features'):
+            for feature in parse.Header('X-PageKite-Features'):
               if feature == 'ZChunks': self.EnableZChunks(level=9)
 
-          for request in parse.Header('X-Beanstalk-OK'):
+          for request in parse.Header('X-PageKite-OK'):
             proto, domain, srand = request.split(':')
             self.Log([('FE', self.server_name), ('proto', proto), ('domain', domain)])
             conns.Tunnel(proto, domain, self)
 
-          for request in parse.Header('X-Beanstalk-Invalid'):
+          for request in parse.Header('X-PageKite-Invalid'):
             proto, domain, srand = request.split(':')
             self.Log([('FE', self.server_name), ('err', 'Rejected'), ('proto', proto), ('domain', domain)])
 
-          for request in parse.Header('X-Beanstalk-Duplicate'):
+          for request in parse.Header('X-PageKite-Duplicate'):
             proto, domain, srand = request.split(':')
             self.Log([('FE', self.server_name),
                       ('err', 'Duplicate'),
@@ -1449,12 +1481,20 @@ class Tunnel(ChunkParser):
         proto = (parse.Header('Proto') or [''])[0]
         host = (parse.Header('Host') or [''])[0]
         if proto and host:
-          conn = UserConn.BackEnd(proto, host, sid, self)
-          if not conn and proto == 'http':
-            self.SendChunked('SID: %s\r\n\r\n%s' % (sid, 
-                               HTTP_Unavailable('be', proto, host,
-                                                comment='%s' % self.conns.config)
-                             )) 
+          conn = UserConn.BackEnd((proto == 'probe') and 'http' or proto,
+                                  host, sid, self)
+          if conn:
+            if proto == 'probe':
+              self.SendChunked('SID: %s\r\n\r\n%s' % (
+                                 sid, HTTP_GoodBeConnection() )) 
+              conn = None 
+          else:
+            if proto == 'http':
+              self.SendChunked('SID: %s\r\n\r\n%s' % (
+                                 sid, HTTP_Unavailable('be', proto, host) )) 
+            elif proto == 'probe':
+              self.SendChunked('SID: %s\r\n\r\n%s' % (
+                                 sid, HTTP_NoBeConnection() )) 
           if conn:
             self.users[sid] = conn
 
@@ -1498,7 +1538,7 @@ class UserConn(Selectable):
     if ':' in host: host, port = host.split(':')
     self.proto = proto
     self.host = host
-    tunnels = conns.Tunnel(proto, host)
+    tunnels = conns.Tunnel((proto == 'probe') and 'http' or proto, host)
     if tunnels: self.tunnel = tunnels[0]
 
     if self.tunnel and self.tunnel.SendData(self, ''.join(body), host=host, proto=proto):
@@ -1577,13 +1617,26 @@ class UnknownConn(MagicProtocolParser):
         return False
 
 
-      if self.parser.method == 'POST' and self.parser.path == MAGIC_PATH:
+      if self.parser.method == 'POST' and self.parser.path in MAGIC_PATHS:
         if Tunnel.FrontEnd(self, lines, self.conns) is None: 
           return False
       else:
-        if UserConn.FrontEnd(self, 'http', hosts[0],
+        if self.parser.path.startswith(MAGIC_PREFIX):
+          magic_parts = self.parser.path.split('/')
+          host = magic_parts[2]
+          proto = 'probe'
+        else:
+          host = hosts[0]
+          magic_parts = None
+          proto = 'http'
+
+        if UserConn.FrontEnd(self, proto, host,
                              self.parser.lines + lines, self.conns) is None:
-          self.Send(HTTP_Unavailable('fe', 'http', hosts[0]))
+          if magic_parts and magic_parts[-1] == 'status.gif':
+            self.Send(HTTP_NoFeConnection())
+          else:
+            self.Send(HTTP_Unavailable('fe', proto, host))
+
           return False
 
       # We are done!
