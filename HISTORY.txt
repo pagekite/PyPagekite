@@ -1,10 +1,12 @@
 Version history - highlights
 ============================
 
-v0.3.2   2010.10.??
+v0.3.2   2010.10.25
 ------
   - HTTP UI now has logs & connection details, and --httppass works.
   - Anonymized IP addresses in HTTP UI and all logs.
+  - Protocol tweaks: front-end is backwards compatible, back-end is not.
+  - Added support for probe requests, showing status in the UI.
 
 
 v0.3.1   2010.10.14
