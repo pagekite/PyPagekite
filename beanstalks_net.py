@@ -346,9 +346,11 @@ def HTTP_Header(name, value):
 def HTTP_StartBody():
   return '\r\n'
 
-def HTTP_Response(code, title, body, mimetype='text/html'):
-  return ''.join([HTTP_ResponseHeader(code, title, mimetype), HTTP_StartBody(),
-                  ''.join(body)])
+def HTTP_Response(code, title, body, mimetype='text/html', headers=None):
+  data = [HTTP_ResponseHeader(code, title, mimetype)]
+  if headers: data.extend(headers)
+  data.extend([HTTP_StartBody(), ''.join(body)])
+  return ''.join(data)
 
 # FIXME: Replace all these GIF images with little json snippets for better UI.
 def HTTP_NoFeConnection():
@@ -356,7 +358,9 @@ def HTTP_NoFeConnection():
     'R0lGODlhCgAKAMQCAN4hIf/+/v///+EzM+AuLvGkpORISPW+vudgYOhiYvKpqeZY'
     'WPbAwOdaWup1dfOurvW7u++Rkepycu6PjwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
     'AAAAAAAAAAAAAAAAACH5BAEAAAIALAAAAAAKAAoAAAUtoCAcyEA0jyhEQOs6AuPO'
-    'QJHQrjEAQe+3O98PcMMBDAdjTTDBSVSQEmGhEIUAADs='), mimetype='image/gif')
+    'QJHQrjEAQe+3O98PcMMBDAdjTTDBSVSQEmGhEIUAADs='),
+      headers=[HTTP_Header('X-PageKite-Status', 'Down-FE')],
+      mimetype='image/gif')
 
 def HTTP_NoBeConnection():
   # FIXME: Make this different...
@@ -379,7 +383,9 @@ def HTTP_NoBeConnection():
     'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
     'AAAAAAAAAAAAAAAAACH5BAEAABIALAAAAAAKAAoAAAhDACUIlBAgwMCDARo4MHiQ'
     '4IEGDAcGKAAAAESEBCoiiBhgQEYABzYK7OiRQIEDBgMIEDCgokmUKlcOKFkgZcGb'
-    'BSUEBAA7'), mimetype='image/gif')
+    'BSUEBAA7'),
+      headers=[HTTP_Header('X-PageKite-Status', 'Down-BE')],
+      mimetype='image/gif')
                             
 def HTTP_GoodBeConnection():
   return HTTP_Response(200, 'OK', base64.decodestring(
@@ -389,7 +395,9 @@ def HTTP_GoodBeConnection():
     'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
     'AAAAAAAAAAAAAAAAACH5BAEAAAIALAAAAAAKAAoAAAZIQIGAUDgMEASh4BEANAGA'
     'xRAaaHoYAAPCCZUoOIDPAdCAQhIRgJGiAG0uE+igAMB0MhYoAFmtJEJcBgILVU8B'
-    'GkpEAwMOggJBADs='), mimetype='image/gif')
+    'GkpEAwMOggJBADs='),
+      headers=[HTTP_Header('X-PageKite-Status', 'OK')],
+      mimetype='image/gif')
  
 def HTTP_Unavailable(where, proto, domain, comment=''):
   return HTTP_Response(200, 'OK', 
