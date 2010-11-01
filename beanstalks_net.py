@@ -16,6 +16,8 @@
 #        on a real socket, but instead communicates with the tunnel directly.
 # FIXME: Add a scheduler for deferred/periodic processing.
 # FIXME: Move DynDNS updates to a separate thread, blocking on them is dumb.
+# FIXME: Security: Add same-origin cookie enforcement to front-end. Or is
+#        that pointless due to Javascript side-channels?
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -1861,7 +1863,7 @@ class PageKite(object):
       print DOC
       print '*****'
     if message: print 'Error: %s' % message
-    if not noexit: sys.exit(1);
+    if not noexit: sys.exit(1)
 
   def GetBackendData(self, proto, domain, field, recurse=True):
     backend = '%s:%s' % (proto.lower(), domain.lower())
@@ -2364,6 +2366,9 @@ if __name__ == '__main__':
 
       except KeyboardInterrupt, msg:
         pk.FallDown(None, help=False)
+
+    except SystemExit:
+      sys.exit(1)
 
     except Exception, msg:
       if pk.crash_report_url:
