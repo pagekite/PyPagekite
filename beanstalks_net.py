@@ -405,7 +405,7 @@ def HTTP_Unavailable(where, proto, domain, comment=''):
   return HTTP_Response(200, 'OK', 
                        ['<html><body><h1>Sorry! (', where, ')</h1>',
                         '<p>The ', proto.upper(),' <a href="', WWWHOME, '">',
-                        'PageKite</a> for <b>', domain, 
+                        '<i>pageKite</i></a> for <b>', domain, 
                         '</b> is unavailable at the moment.</p>',
                         '<p>Please try again later.</p>',
                         '</body><!-- ', comment, ' --></html>'])
@@ -527,7 +527,7 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                '<div id=body>%(body)s</div>\n'
                '<div id=footer><hr><i>Powered by <b>pagekite.py'
                 ' v%(ver)s</b> and'
-                ' <a href="' + WWWHOME + '">PageKite.net</a>.<br>'
+                ' <a href="' + WWWHOME + '"><i>pageKite.net</i></a>.<br>'
                 'Local time is %(now)s.</i></div>\n'
               '</body></html>\n')
  
@@ -539,7 +539,7 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     backends = self.server.pkite.backends
 
     html = [(
-      '<div id=welcome><p>Welcome to your PageKite control panel!</p></div>\n'
+      '<div id=welcome><p>Welcome to your <i>pageKite</i> control panel!</p></div>\n'
       '<p id=links>[ <a href="log.html">Logs</a>, '
                     '<a href="/conns/">Connections</a> ]</p>\n'
       '<div id=live><h2>Flying kites:</h2><ul>\n'
