@@ -1,12 +1,12 @@
 #!/bin/bash
 ADB=/home/bre/Projects/android-sdk/tools/adb
 case "$1" in
-  push) for f in pagekite.py droidkite.py yamond.py; do
+  push) for f in pagekite.py droiddemo.py droidkite.py yamond.py; do
           $ADB push $f /sdcard/sl4a/scripts/
         done
   ;;
 
-  pull) for f in pagekite.py droidkite.py yamond.py; do
+  pull) for f in pagekite.py droiddemo.py droidkite.py yamond.py; do
           $ADB pull /sdcard/sl4a/scripts/$f . && chmod +x $f
         done
   ;;

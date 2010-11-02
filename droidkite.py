@@ -6,7 +6,7 @@
 # This is a proof-of-concept PageKite enabled HTTP server for Android.
 # It has been developed and tested in the SL4A Python environment.
 #
-DOMAIN='YOU.test.beanstalks.me'
+DOMAIN='YOU.pagekite.me'
 SECRET='EDIT_ME'
 #
 #############################################################################

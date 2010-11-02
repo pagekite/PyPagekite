@@ -3,6 +3,7 @@ Version history - highlights
 
 v0.3.3   2010.11.??
 ------
+  - Fixed crash report misbehavior on some Python versions.
 
 
 v0.3.2   2010.10.25
