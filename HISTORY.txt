@@ -1,7 +1,12 @@
 Version history - highlights
 ============================
 
-v0.3.4   2010.11.??
+v0.3.4   2010.11.09
+------
+  - Added basic flow-control to avoid excessive memory use on large file
+    transfers with fast backends and slow upstream pipes.
+
+
 v0.3.3   2010.11.03
 ------
   - Fixed crash report misbehavior on some Python versions.

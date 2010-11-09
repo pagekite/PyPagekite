@@ -115,6 +115,7 @@ Common Options:
  --pemfile=X    -P X    Use X as a PEM key for the HTTPS UI. (FIXME)
  --httppass=X   -X X    Require password X to access the UI.
  --nozchunks            Disable zlib tunnel compression.
+ --buffers       N      Buffer at most N kB of back-end data before blocking.
  --logfile=F    -L F    Log to file F.
  --daemonize    -Z      Run as a daemon.
  --runas        -U U:G  Set UID:GID after opening our listening sockets.
@@ -201,7 +202,8 @@ OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'register=', 'host=', 'ports=', 'protos=',
             'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
-            'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks']
+            'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks',
+            'buffers=']
 
 AUTH_ERRORS           = '128.'
 AUTH_ERR_USER_UNKNOWN = '128.0.0.0'
@@ -501,6 +503,7 @@ class AuthThread(threading.Thread):
       else:
         self.qc.wait()
       
+    self.buffering = 0
     self.qc.release()
 
 
@@ -826,6 +829,7 @@ def obfuIp(ip):
   return '~%s' % '.'.join([q for q in quads[2:]])
 
 selectable_id = 0
+buffered_bytes = 0
 SELECTABLES = {}
 
 class Selectable(object):
@@ -969,6 +973,9 @@ class Selectable(object):
       return self.ProcessData(data)
 
   def Send(self, data):
+    global buffered_bytes
+    buffered_bytes -= len(self.write_blocked)
+
     sending = self.write_blocked+(''.join(data))
     self.lastio[1] = sending
     sent_bytes = 0
@@ -981,6 +988,8 @@ class Selectable(object):
         LogDebug('Error sending: %s' % err)
 
     self.write_blocked = sending[sent_bytes:]
+    buffered_bytes += len(self.write_blocked)
+
     if self.wrote_bytes > 102400: self.LogTraffic()
     return True
 
@@ -1753,6 +1762,7 @@ class PageKite(object):
     self.ui_password = None
     self.yamond = MockYamonD(())
     self.disable_zchunks = False
+    self.buffer_max = 256
 
     self.client_mode = 0
 
@@ -2036,6 +2046,7 @@ class PageKite(object):
       elif opt == '--nodaemonize': self.daemonize = False
       elif opt == '--noall': self.require_all = False
       elif opt == '--nozchunks': self.disable_zchunks = True
+      elif opt == '--buffers': self.buffer_max = int(arg)
       elif opt == '--nocrashreport': self.crash_report_url = None
       elif opt == '--clean': pass
       elif opt == '--noloop': pass
@@ -2234,6 +2245,8 @@ class PageKite(object):
     if os.fork() != 0: os._exit(0)
 
   def SelectLoop(self):
+    global buffered_bytes
+
     conns = self.conns
     last_tick = time.time()
     last_loop = time.time()
@@ -2265,15 +2278,19 @@ class PageKite(object):
           else:
             retry = 5
 
-      for socket in iready:
-        conn = conns.Connection(socket)
-        if conn and conn.ReadData() is False:
-          conn.Cleanup()
-          conns.Remove(conn)
-
       for socket in oready:
         conn = conns.Connection(socket)
         if conn: conn.Send([])
+
+      for socket in iready:
+        conn = conns.Connection(socket)
+        if buffered_bytes < 1024 * self.buffer_max:
+          if conn and conn.ReadData() is False:
+            conn.Cleanup()
+            conns.Remove(conn)
+        else:
+          # Pause to let buffers clear...
+          time.sleep(0.1)
 
       last_loop = now
 
