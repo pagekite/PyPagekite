@@ -1,6 +1,12 @@
 Version history - highlights
 ============================
 
+
+v0.3.4   2010.11.??
+------
+  - Misc. minor bugfixes.
+
+
 v0.3.4   2010.11.09
 ------
   - Added basic flow-control to avoid excessive memory use on large file
