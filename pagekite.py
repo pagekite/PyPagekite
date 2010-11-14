@@ -1179,7 +1179,7 @@ class MagicProtocolParser(LineParser):
         namelist = extensions[6:4+elen]  
         while namelist:
           ntype, nlen = struct.unpack('>BH', namelist[0:3])
-          if ntype == 0: names.append(namelist[3:3+nlen])
+          if ntype == 0: names.append(namelist[3:3+nlen].lower())
           namelist = namelist[3+nlen:]
       extensions = extensions[4+elen:]
     return names 
