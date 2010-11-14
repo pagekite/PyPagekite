@@ -5,6 +5,7 @@ Version history - highlights
 v0.3.4   2010.11.??
 ------
   - Misc. minor bugfixes.
+  - Added support for WebDAV and other missing HTTP request methods.
 
 
 v0.3.4   2010.11.09

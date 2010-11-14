@@ -733,7 +733,9 @@ class HttpUiThread(threading.Thread):
     self.httpd.socket.close()
 
 
-HTTP_METHODS = ['OPTIONS', 'GET', 'POST', 'PUT']
+HTTP_METHODS = ['OPTIONS', 'GET', 'HEAD', 'POST', 'PUT', 'TRACE',
+                'PROPFIND', 'PROPPATCH', 'MKCOL', 'DELETE', 'COPY', 'MOVE',
+                'LOCK', 'UNLOCK' ]
 HTTP_VERSIONS = ['HTTP/1.0', 'HTTP/1.1']
 
 class HttpParser(object):
