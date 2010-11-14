@@ -2349,7 +2349,7 @@ class PageKite(object):
     self.CreateTunnels(conns)
 
     # Make sure we have what we need
-    if self.require_all: self.CheckAllDomains(conns)
+    if self.require_all: self.CheckAllTunnels(conns)
 
     # Finally, run our select/epoll loop.
     Log([('started', 'pagekite.py'), ('version', APPVER)])
