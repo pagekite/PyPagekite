@@ -1521,8 +1521,8 @@ class Tunnel(ChunkParser):
       if sid in self.users:
         conn = self.users[sid]
       else:
-        proto = (parse.Header('Proto') or [''])[0]
-        host = (parse.Header('Host') or [''])[0]
+        proto = (parse.Header('Proto') or [''])[0].lower()
+        host = (parse.Header('Host') or [''])[0].lower()
         if proto and host:
           if proto == 'probe':
             if self.Probe(host):
@@ -1657,7 +1657,6 @@ class UnknownConn(MagicProtocolParser):
                    '</body></html>']))
         return False
 
-
       if self.parser.method == 'POST' and self.parser.path in MAGIC_PATHS:
         if Tunnel.FrontEnd(self, lines, self.conns) is None: 
           return False
@@ -1667,7 +1666,7 @@ class UnknownConn(MagicProtocolParser):
           host = magic_parts[2]
           proto = 'probe'
         else:
-          host = hosts[0]
+          host = hosts[0].lower()
           magic_parts = None
           proto = 'http'
 
@@ -2032,9 +2031,9 @@ class PageKite(object):
       elif opt == '--backend':
         protos, domain, bhost, bport, secret = arg.split(':')
         for proto in protos.split(','): 
-          bid = '%s:%s' % (proto, domain)
-          backend = '%s:%s' % (bhost, bport)
-          self.backends[bid] = (proto, domain, backend, secret)
+          bid = '%s:%s' % (proto.lower(), domain.lower())
+          backend = '%s:%s' % (bhost.lower(), bport)
+          self.backends[bid] = (proto.lower(), domain.lower(), backend, secret)
 
       elif opt == '--domain':
         protos, domain, secret = arg.split(':')

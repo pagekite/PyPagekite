@@ -420,7 +420,7 @@ class TestInternals(unittest.TestCase):
     bn.servers_new_only = False
     C1('-N') and EQ(True, bn.servers_new_only)
 
-    C1('--backend=http:a.com:localhost:80:x')
+    C1('--backend=http:a.com:LOCALhost:80:x')
     EQ(bn.backends, {'http:a.com': ('http', 'a.com', 'localhost:80', 'x')})
 
   def test_Connections(self):
@@ -590,7 +590,7 @@ class TestNetwork(unittest.TestCase):
     if not loops:
       raise Exception('No connection after 5 seconds\n%s' % self.LogData(data=parsed))
 
-    urls = ['http://localhost:%d/' % pk.server_ports[0] for pk in self.fe]
+    urls = ['http://LOCALhost:%d/' % pk.server_ports[0] for pk in self.fe]
     ForkRequestRunner(10, urls, 'MockPageKite').start()
     ForkRequestRunner(10, urls, 'MockPageKite').start()
     rr = RequestRunner(15, urls, 'MockPageKite') 
