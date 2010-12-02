@@ -72,9 +72,6 @@ class YamonRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.do_404()
 
   def do_GET(self):
-    self.server.yamond.ladd('yamond_hits', time.time()*1000)
-    self.server.yamond.vscale('yamond_hits', 1, 1)
-
     (scheme, netloc, path, params, query, frag) = urlparse(self.path) 
     qs = parse_qs(query)
     return self.handle_path(path, query)
@@ -99,22 +96,28 @@ class YamonD(threading.Thread):
     self.values = {}
     self.lists = {}
 
-    self.vset('yamond_hits', 0)
-    self.lcreate('yamond_hits', 50)
-
   def vmax(self, var, value):
     if value > self.values[var]: self.values[var] = value
 
   def vscale(self, var, ratio, add=0):
-    if var in self.values: 
-      self.values[var] *= ratio
-      self.values[var] += add
+    if var not in self.values: self.values[var] = 0
+    self.values[var] *= ratio
+    self.values[var] += add
 
   def vset(self, var, value):
     self.values[var] = value
 
+  def vadd(self, var, value, wrap=None):
+    if var not in self.values: self.values[var] = 0
+    self.values[var] += value
+    if wrap is not None and self.values[var] >= wrap:
+      self.values[var] -= wrap
+
   def vmin(self, var, value):
     if value < self.values[var]: self.values[var] = value
+
+  def vdel(self, var):
+    if var in self.values: del self.values[var]
 
   def lcreate(self, listn, elems):
     self.lists[listn] = [elems, 0, ['' for x in xrange(0, elems)]]
