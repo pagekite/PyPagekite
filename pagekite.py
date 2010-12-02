@@ -722,6 +722,7 @@ class UiHttpServer(BaseHTTPServer.HTTPServer):
     global gYamon
     gYamon = YamonD(sspec)
     gYamon.vset('version', APPVER)
+    gYamon.vset('errors', 0)
 
 class HttpUiThread(threading.Thread):
   """Handle HTTP UI in a separate thread."""
