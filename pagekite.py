@@ -274,7 +274,9 @@ class MockYamonD(object):
   def vmax(self, var, value): pass
   def vscale(self, var, ratio, add=0): pass
   def vset(self, var, value): pass
+  def vadd(self, var, value, wrap=None): pass
   def vmin(self, var, value): pass
+  def vdel(self, var): pass
   def lcreate(self, listn, elems): pass
   def ladd(self, listn, value): pass
   def render_vars_text(self): return ''
@@ -286,6 +288,8 @@ try:
   YamonD=yamond.YamonD
 except Exception:
   YamonD=MockYamonD
+
+gYamon = MockYamonD(())
 
 
 gSecret = None
@@ -445,6 +449,9 @@ def LogError(msg, parms=None):
   emsg = [('err', msg)]
   if parms: emsg.extend(parms)
   Log(emsg)
+
+  global gYamon
+  gYamon.vadd('errors', 1, wrap=1000000)
 
 def LogDebug(msg, parms=None):
   emsg = [('debug', msg)]
@@ -672,6 +679,9 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if how.lower() == 'basic':
           (uid, password) = base64.b64decode(ab64).split(':')
           authenticated = (password == self.server.pkite.ui_password)
+      elif query.find('auth=%s' % self.server.pkite.ui_password) != -1:
+        authenticated = True
+
       if not authenticated:
         self.begin_headers(401, 'text/html')
         self.send_header('WWW-Authenticate',
@@ -692,7 +702,8 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     qs = parse_qs(query)
 
     if path == '/vars.txt':
-      data['body'] = self.server.pkite.yamond.render_vars_text()
+      global gYamon
+      data['body'] = gYamon.render_vars_text()
 
     elif path == '/log.txt':        data['body'] = self.txt_log()
     elif path.endswith('log.html'): data.update(self.html_log(path))
@@ -707,7 +718,10 @@ class UiHttpServer(BaseHTTPServer.HTTPServer):
     BaseHTTPServer.HTTPServer.__init__(self, sspec, handler)
     self.pkite = pkite
     self.conns = conns
-    pkite.yamond = YamonD(sspec)
+
+    global gYamon
+    gYamon = YamonD(sspec)
+    gYamon.vset('version', APPVER)
 
 class HttpUiThread(threading.Thread):
   """Handle HTTP UI in a separate thread."""
@@ -872,6 +886,21 @@ class Selectable(object):
       if sel.dead or (sel.all_out + sel.wrote_bytes) == 0: del SELECTABLES[old]
     if ancient in SELECTABLES: del SELECTABLES[ancient]
 
+    global gYamon
+    self.countas = 'selectables_live'
+    gYamon.vadd(self.countas, 1)
+    gYamon.vadd('selectables', 1)
+
+  def CountAs(self, what):
+    gYamon.vadd(self.countas, -1)
+    self.countas = what
+    gYamon.vadd(self.countas, 1)
+
+  def __del__(self):
+    global gYamon
+    gYamon.vadd(self.countas, -1)
+    gYamon.vadd('selectables', -1)
+
   def __str__(self):
     return '%s: %s' % (self.log_id, self.__class__)
 
@@ -952,8 +981,9 @@ class Selectable(object):
 
   def Cleanup(self):
     self.dead = True
-    self.fd.close()
+    if self.fd: self.fd.close()
     self.LogTraffic()
+    self.CountAs('selectables_dead')
 
   def ProcessData(self, data):
     self.LogError('Selectable::ProcessData: Should be overridden!')
@@ -1337,6 +1367,7 @@ class Tunnel(ChunkParser):
       self.LogError('Discarding connection: %s')
       return None
 
+    self.CountAs('backends_live')
     self.SetConn(conn)
     conns.auth.check(requests, lambda r: self.AuthCallback(conn, r))
 
@@ -1452,6 +1483,7 @@ class Tunnel(ChunkParser):
       return None
 
     conns.Add(self)
+    self.CountAs('frontends_live')
 
     return self
 
@@ -1620,6 +1652,7 @@ class UserConn(Selectable):
 
     except socket.error, err:
       self.Log([('err', '%s' % err), ('proto', proto), ('domain', host)])
+      Selectable.Cleanup(self)
       return None
 
     self.conns.Add(self)
@@ -1761,7 +1794,6 @@ class PageKite(object):
     self.ui_sspec = None
     self.ui_httpd = None
     self.ui_password = None
-    self.yamond = MockYamonD(())
     self.disable_zchunks = False
     self.buffer_max = 256
 
