@@ -2,10 +2,12 @@ Version history - highlights
 ============================
 
 
-v0.3.4   2010.11.??
+v0.3.5   2010.12.??
 ------
   - Misc. minor bugfixes.
   - Added support for WebDAV and other missing HTTP request methods.
+  - Added some real Yamon variables for monitoring
+  - Bugfix: minor memory leak when target servers are down (BE unavailable).
 
 
 v0.3.4   2010.11.09
