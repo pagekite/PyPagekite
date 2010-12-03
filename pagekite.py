@@ -723,6 +723,7 @@ class UiHttpServer(BaseHTTPServer.HTTPServer):
     gYamon = YamonD(sspec)
     gYamon.vset('version', APPVER)
     gYamon.vset('errors', 0)
+    gYamon.vset("bytes_all", 0)
 
 class HttpUiThread(threading.Thread):
   """Handle HTTP UI in a separate thread."""
@@ -971,6 +972,10 @@ class Selectable(object):
 
   def LogTraffic(self):
     if self.wrote_bytes or self.read_bytes:
+      global gYamon
+      gYamon.vadd("bytes_all", self.wrote_bytes
+                             + self.read_bytes, wrap=1000000000)
+
       self.Log([('wrote', '%d' % self.wrote_bytes),
                 ('read', '%d' % self.read_bytes)])
 
