@@ -75,8 +75,68 @@ class PageKiteLogParser(object):
           fd.seek(pos)
 
 
+class PageKiteLogTracker(PageKiteLogParser):
+  def __init__(self):
+    PageKiteLogParser.__init__(self)
+    self.streams = {}
+
+  def ProcessRestart(self, data):
+    # Program just restarted, discard streams state.
+    self.streams = {}
+
+  def ProcessBandwidthInfo(self, sid, data):
+    if 'read' in data:
+      self.streams[sid]['read'] += int(data['read'])
+    if 'wrote' in data:
+      self.streams[sid]['wrote'] += int(data['wrote'])
+
+  def ProcessEof(self, sid, data):
+    del self.streams[sid]
+
+  def ProcessNewStream(self, sid, data):
+    data['read'] = 0
+    data['wrote'] = 0
+    self.streams[sid] = data
+
+  def ProcessData(self, data):
+    if 'id' in data:
+      # This is info about a specific stream...
+      sid = data['id'] 
+
+      if sid in self.streams:
+        if 'read' in data or 'wrote' in data:
+          self.ProcessBandwidthInfo(sid, data)
+
+        if 'eof' in data:
+          self.ProcessEof(sid, data)
+          
+      elif 'proto' in data and 'domain' in data:
+        self.ProcessNewStream(sid, data)
+
+    elif 'started' in data and 'version' in data:
+      self.ProcessRestart(data)
+
+
+class PageKiteLogTrackerDebug(PageKiteLogTracker):
+
+  def ProcessRestart(self, data):
+    PageKiteLogTracker.ProcessRestart(self, data)
+    print 'RESTARTED %s' % data
+
+  def ProcessNewStream(self, sid, data):
+    PageKiteLogTracker.ProcessNewStream(self, sid, data)
+    print '[%s] NEW %s' % (sid, data)
+
+  def ProcessBandwidthInfo(self, sid, data):
+    PageKiteLogTracker.ProcessBandwidthInfo(self, sid, data)
+    print '[%s] BW  %s' % (sid, data)
+
+  def ProcessEof(self, sid, data):
+    PageKiteLogTracker.ProcessEof(self, sid, data)
+    print '[%s] EOF %s' % (sid, data)
+
+
 if __name__ == '__main__':
   sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
-  PageKiteLogParser().ReadSyslog('/var/log/daemon.log', after=time.time(), 
-                                                        follow=True)
+  PageKiteLogTrackerDebug().ReadSyslog('/var/log/daemon.log', follow=True)
 
