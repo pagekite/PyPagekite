@@ -970,26 +970,34 @@ class Selectable(object):
     if self.log_id: values.append(('id', self.log_id))
     LogError(error, values)
 
-  def LogTraffic(self):
+  def LogTraffic(self, final=False):
     if self.wrote_bytes or self.read_bytes:
       global gYamon
       gYamon.vadd("bytes_all", self.wrote_bytes
                              + self.read_bytes, wrap=1000000000)
 
-      self.Log([('wrote', '%d' % self.wrote_bytes),
-                ('read', '%d' % self.read_bytes)])
+      if final:
+        self.Log([('wrote', '%d' % self.wrote_bytes),
+                  ('read', '%d' % self.read_bytes),
+                  ('eof', '1')])
+      else:
+        self.Log([('wrote', '%d' % self.wrote_bytes),
+                  ('read', '%d' % self.read_bytes)])
 
       self.all_out += self.wrote_bytes
       self.all_in += self.read_bytes
 
       self.bytes_logged = time.time()
       self.wrote_bytes = self.read_bytes = 0
+    elif final:
+      self.Log([('eof', '1')])
 
   def Cleanup(self):
-    self.dead = True
-    if self.fd: self.fd.close()
-    self.LogTraffic()
-    self.CountAs('selectables_dead')
+    if not self.dead:
+      self.dead = True
+      if self.fd: self.fd.close()
+      self.LogTraffic(final=True)
+      self.CountAs('selectables_dead')
 
   def ProcessData(self, data):
     self.LogError('Selectable::ProcessData: Should be overridden!')
@@ -1623,11 +1631,11 @@ class UserConn(Selectable):
     if tunnels: self.tunnel = tunnels[0]
 
     if self.tunnel and self.tunnel.SendData(self, ''.join(body), host=host, proto=proto):
-      self.Log([('rhost', self.host), ('rproto', self.proto)])
+      self.Log([('fhost', self.host), ('fproto', self.proto)])
       self.conns.Add(self)
       return self
     else:
-      self.Log([('err', 'No back-end'), ('proto', self.proto), ('domain', self.host)])
+      self.Log([('err', 'No back-end'), ('fproto', self.proto), ('fhost', self.host)])
       return None
 
   def _BackEnd(proto, host, sid, tunnel):
@@ -1641,7 +1649,7 @@ class UserConn(Selectable):
 
     backend = self.conns.config.GetBackendServer(proto, host)
     if not backend:
-      self.Log([('err', 'No backend found'), ('proto', proto), ('domain', host)])
+      self.Log([('err', 'No back-end'), ('bproto', proto), ('bhost', host)])
       return None
 
     try:
@@ -1657,10 +1665,11 @@ class UserConn(Selectable):
       self.fd.setblocking(0)
 
     except socket.error, err:
-      self.Log([('err', '%s' % err), ('proto', proto), ('domain', host)])
+      self.Log([('err', '%s' % err), ('bproto', proto), ('bhost', host)])
       Selectable.Cleanup(self)
       return None
 
+    self.Log([('bproto', proto), ('bhost', host)])
     self.conns.Add(self)
     return self
     
