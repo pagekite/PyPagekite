@@ -117,7 +117,7 @@ class PageKiteLogTracker(PageKiteLogParser):
       self.ProcessRestart(data)
 
 
-class PageKiteLogTrackerDebug(PageKiteLogTracker):
+class DebugPKLT(PageKiteLogTracker):
 
   def ProcessRestart(self, data):
     PageKiteLogTracker.ProcessRestart(self, data)
@@ -138,5 +138,5 @@ class PageKiteLogTrackerDebug(PageKiteLogTracker):
 
 if __name__ == '__main__':
   sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
-  PageKiteLogTrackerDebug().ReadSyslog('/var/log/daemon.log', follow=True)
+  DebugPKLT().ReadSyslog('/var/log/daemon.log', follow=True)
 
