@@ -3,7 +3,8 @@
 # pagekite_logparse.py, Copyright 2010, The Beanstalks Project ehf.
 #                                       http://beanstalks-project.net/
 #
-# Tool for processing and parsing the Pagekite logs.
+# Basic tool for processing and parsing the Pagekite logs. This class
+# doesn't actually do anything much, it's meant for subclassing.
 #
 #############################################################################
 # This program is free software: you can redistribute it and/or modify
@@ -21,16 +22,14 @@
 #
 #############################################################################
 #
-import getopt
 import os
-import re
 import sys
 import time
  
 
 class PageKiteLogParser(object):
   def __init__(self):
-    self.lines = []
+    pass
 
   def ParseLine(self, line, data=None):
     if data is None: data = {}
@@ -40,7 +39,7 @@ class PageKiteLogParser(object):
     return data
 
   def ProcessData(self, data):
-    self.lines.append(data)
+    print '%s' % data
 
   def ProcessLine(self, line, data=None):
     self.ProcessData(self.ParseLine(line, data))
@@ -48,6 +47,7 @@ class PageKiteLogParser(object):
   def ReadSyslog(self, filename, pname='pagekite.py', after=None, follow=False):
     fd = open(filename, 'r')
     tag = ' %s[' % pname
+    sleep = 1
     while follow:
       for line in fd:
         try:
@@ -56,18 +56,27 @@ class PageKiteLogParser(object):
             data = self.ParseLine(parts[3].strip())
             if after is None or int(data['ts'], 16) > after:
               self.ProcessData(data) 
-              print '%s' % data
+            sleep = 1
         except ValueError, e:
-          print 'ValueError: %s' % e
           pass
+
       if follow:
-        time.sleep(1)
-        fd.seek(fd.tell())
+        # Record last position...      
+        pos = fd.tell()
+
+        if os.stat(filename).st_size < pos:
+          # Re-open log-file if it's been rotated/trucated
+          fd.close() 
+          fd = open(filename, 'r')
+        else:
+          # Else, sleep a bit and then try to read some more
+          time.sleep(sleep)
+          if sleep < 10: sleep += 1
+          fd.seek(pos)
 
 
 if __name__ == '__main__':
-  # Make stdout unbuffered
   sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
-
-  PageKiteLogParser().ReadSyslog('/var/log/daemon.log', follow=True)
+  PageKiteLogParser().ReadSyslog('/var/log/daemon.log', after=time.time(), 
+                                                        follow=True)
 
