@@ -1631,11 +1631,11 @@ class UserConn(Selectable):
     if tunnels: self.tunnel = tunnels[0]
 
     if self.tunnel and self.tunnel.SendData(self, ''.join(body), host=host, proto=proto):
-      self.Log([('fhost', self.host), ('fproto', self.proto)])
+      self.Log([('fdomain', self.host), ('fproto', self.proto)])
       self.conns.Add(self)
       return self
     else:
-      self.Log([('err', 'No back-end'), ('fproto', self.proto), ('fhost', self.host)])
+      self.Log([('err', 'No back-end'), ('fproto', self.proto), ('fdomain', self.host)])
       return None
 
   def _BackEnd(proto, host, sid, tunnel):
@@ -1649,7 +1649,7 @@ class UserConn(Selectable):
 
     backend = self.conns.config.GetBackendServer(proto, host)
     if not backend:
-      self.Log([('err', 'No back-end'), ('bproto', proto), ('bhost', host)])
+      self.Log([('err', 'No back-end'), ('bproto', proto), ('bdomain', host)])
       return None
 
     try:
@@ -1665,11 +1665,11 @@ class UserConn(Selectable):
       self.fd.setblocking(0)
 
     except socket.error, err:
-      self.Log([('err', '%s' % err), ('bproto', proto), ('bhost', host)])
+      self.Log([('err', '%s' % err), ('bproto', proto), ('bdomain', host)])
       Selectable.Cleanup(self)
       return None
 
-    self.Log([('bproto', proto), ('bhost', host)])
+    self.Log([('bproto', proto), ('bdomain', host)])
     self.conns.Add(self)
     return self
     
