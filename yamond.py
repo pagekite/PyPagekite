@@ -90,6 +90,8 @@ class YamonD(threading.Thread):
                server=YamonHttpServer,
                handler=YamonRequestHandler):
     threading.Thread.__init__(self)
+    self.server = server
+    self.handler = handler
     self.sspec = sspec
     self.httpd = None
     self.serve = True
@@ -148,12 +150,13 @@ class YamonD(threading.Thread):
                      proxies={}).readlines()
 
   def run(self):
-    self.httpd = server(self, handler)
+    self.httpd = self.server(self, self.handler)
+    self.sspec = self.httpd.server_address
     while self.serve: self.httpd.handle_request()
 
 
 if __name__ == '__main__':
-  yd = YamonD(('', 7999))
+  yd = YamonD(('', 0))
   yd.vset('bjarni', 100)
   yd.lcreate('foo', 2)
   yd.ladd('foo', 1)
