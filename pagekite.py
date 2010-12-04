@@ -1631,11 +1631,11 @@ class UserConn(Selectable):
     if tunnels: self.tunnel = tunnels[0]
 
     if self.tunnel and self.tunnel.SendData(self, ''.join(body), host=host, proto=proto):
-      self.Log([('fdomain', self.host), ('fproto', self.proto)])
+      self.Log([('domain', self.host), ('proto', self.proto), ('is', 'FE')])
       self.conns.Add(self)
       return self
     else:
-      self.Log([('err', 'No back-end'), ('fproto', self.proto), ('fdomain', self.host)])
+      self.Log([('err', 'No back-end'), ('proto', self.proto), ('domain', self.host), ('is', 'FE')])
       return None
 
   def _BackEnd(proto, host, sid, tunnel):
@@ -1649,7 +1649,7 @@ class UserConn(Selectable):
 
     backend = self.conns.config.GetBackendServer(proto, host)
     if not backend:
-      self.Log([('err', 'No back-end'), ('bproto', proto), ('bdomain', host)])
+      self.Log([('err', 'No back-end'), ('proto', proto), ('domain', host), ('is', 'BE')])
       return None
 
     try:
@@ -1665,11 +1665,11 @@ class UserConn(Selectable):
       self.fd.setblocking(0)
 
     except socket.error, err:
-      self.Log([('err', '%s' % err), ('bproto', proto), ('bdomain', host)])
+      self.Log([('err', '%s' % err), ('proto', proto), ('domain', host), ('is', 'BE')])
       Selectable.Cleanup(self)
       return None
 
-    self.Log([('bproto', proto), ('bdomain', host)])
+    self.Log([('proto', proto), ('domain', host), ('is', 'BE')])
     self.conns.Add(self)
     return self
     
@@ -2363,6 +2363,9 @@ class PageKite(object):
     if self.logfile:
       self.LogTo(self.logfile)
 
+    # Log that we've started up
+    Log([('started', 'pagekite.py'), ('version', APPVER)])
+
     # Set up our listeners if we are a server.
     if self.isfrontend:
       for port in self.server_ports:
@@ -2401,7 +2404,6 @@ class PageKite(object):
     if self.require_all: self.CheckAllTunnels(conns)
 
     # Finally, run our select/epoll loop.
-    Log([('started', 'pagekite.py'), ('version', APPVER)])
     self.Loop()
 
     Log([('stopping', 'pagekite.py')])
