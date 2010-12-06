@@ -60,17 +60,24 @@ class PageKiteLogParser(object):
     return fd
 
   def ReadLog(self, filename=None, after=None, follow=False):
-    fd = (filename and open(filename, 'r')) or sys.stdin
-    while follow:
+    if filename is not None:
+      fd = open(filename, 'r')
+    else:
+      fd = sys.stdin
+
+    first = True
+    while first or follow:
       for line in fd:
         self.ProcessLine(line) 
 
       if follow: fd = self.Follow(fd, filename)
+      first = False
 
   def ReadSyslog(self, filename, pname='pagekite.py', after=None, follow=False):
     fd = open(filename, 'r')
     tag = ' %s[' % pname
-    while follow:
+    first = True
+    while first or follow:
       for line in fd:
         try:
           parts = line.split(':', 3)
@@ -82,6 +89,7 @@ class PageKiteLogParser(object):
           pass
 
       if follow: fd = self.Follow(fd, filename)
+      first = False
 
 class PageKiteLogTracker(PageKiteLogParser):
   def __init__(self):
