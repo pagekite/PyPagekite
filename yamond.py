@@ -94,7 +94,7 @@ class YamonD(threading.Thread):
     self.handler = handler
     self.sspec = sspec
     self.httpd = None
-    self.serve = True
+    self.running = False
     self.values = {}
     self.lists = {}
 
@@ -145,14 +145,15 @@ class YamonD(threading.Thread):
 
   def quit(self):
     if self.httpd:
-      self.serve = False
+      self.running = False
       urllib.urlopen('http://%s:%s/exiting/' % self.sspec,
                      proxies={}).readlines()
 
   def run(self):
     self.httpd = self.server(self, self.handler)
     self.sspec = self.httpd.server_address
-    while self.serve: self.httpd.handle_request()
+    self.running = True
+    while self.running: self.httpd.handle_request()
 
 
 if __name__ == '__main__':
