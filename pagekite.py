@@ -1055,7 +1055,6 @@ class Selectable(object):
         if zhistory:
           zhistory[0] = len(sdata)
           zhistory[1] = len(zdata)
-        LogDebug('Sending %d bytes as %d' % (len(sdata), len(zdata)))
         return self.Send(['%xZ%x%s\r\n%s' % (len(sdata), len(zdata), rst, zdata)])
       except zlib.error:
         LogDebug('Error compressing, resetting ZChunks.')
@@ -1311,7 +1310,6 @@ class ChunkParser(Selectable):
         if len(cchunk) != self.want_cbytes:
           result = self.ProcessCorruptChunk(self.chunk)
         else:
-          LogDebug('ChunkParser::ProcessData: inflated %d bytes to %d' % (len(self.chunk), self.want_cbytes))
           result = self.ProcessChunk(cchunk)
       else:
         result = self.ProcessChunk(self.chunk)
@@ -1518,7 +1516,6 @@ class Tunnel(ChunkParser):
   def Disconnect(self, conn, sid=None, sendeof=True):
     sid = int(sid or conn.sid)
     if sendeof:
-      LogDebug('Sending EOF for %s' % sid)
       self.SendChunked('SID: %s\nEOF: 1\r\n\r\nBye!' % sid) 
     if sid in self.users:
       if self.users[sid] is not None: self.users[sid].Disconnect()
