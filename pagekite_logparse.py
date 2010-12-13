@@ -44,11 +44,40 @@ class PageKiteLogParser(object):
   def ProcessLine(self, line, data=None):
     self.ProcessData(self.ParseLine(line, data))
 
+  def Follow(self, fd, filename):
+    # Record last position...      
+    pos = fd.tell()
+
+    if os.stat(filename).st_size < pos:
+      # Re-open log-file if it's been rotated/trucated
+      fd.close() 
+      fd = open(filename, 'r')
+    else:
+      # Else, sleep a bit and then try to read some more
+      time.sleep(1)
+      fd.seek(pos)
+
+    return fd
+
+  def ReadLog(self, filename=None, after=None, follow=False):
+    if filename is not None:
+      fd = open(filename, 'r')
+    else:
+      fd = sys.stdin
+
+    first = True
+    while first or follow:
+      for line in fd:
+        self.ProcessLine(line) 
+
+      if follow: fd = self.Follow(fd, filename)
+      first = False
+
   def ReadSyslog(self, filename, pname='pagekite.py', after=None, follow=False):
     fd = open(filename, 'r')
     tag = ' %s[' % pname
-    sleep = 1
-    while follow:
+    first = True
+    while first or follow:
       for line in fd:
         try:
           parts = line.split(':', 3)
@@ -56,24 +85,11 @@ class PageKiteLogParser(object):
             data = self.ParseLine(parts[3].strip())
             if after is None or int(data['ts'], 16) > after:
               self.ProcessData(data) 
-            sleep = 1
         except ValueError, e:
           pass
 
-      if follow:
-        # Record last position...      
-        pos = fd.tell()
-
-        if os.stat(filename).st_size < pos:
-          # Re-open log-file if it's been rotated/trucated
-          fd.close() 
-          fd = open(filename, 'r')
-        else:
-          # Else, sleep a bit and then try to read some more
-          time.sleep(sleep)
-          if sleep < 10: sleep += 1
-          fd.seek(pos)
-
+      if follow: fd = self.Follow(fd, filename)
+      first = False
 
 class PageKiteLogTracker(PageKiteLogParser):
   def __init__(self):
@@ -84,9 +100,14 @@ class PageKiteLogTracker(PageKiteLogParser):
     # Program just restarted, discard streams state.
     self.streams = {}
 
-  def ProcessBandwidthInfo(self, stream, data):
-    if 'read' in data: stream['read'] += int(data['read'])
-    if 'wrote' in data: stream['wrote'] += int(data['wrote'])
+  def ProcessBandwidthRead(self, stream, data):
+    stream['read'] += int(data['read'])
+
+  def ProcessBandwidthWrote(self, stream, data):
+    stream['wrote'] += int(data['wrote'])
+
+  def ProcessError(self, stream, data):
+    stream['err'] = data['err']
 
   def ProcessEof(self, stream, data):
     del self.streams[stream['id']]
@@ -101,17 +122,16 @@ class PageKiteLogTracker(PageKiteLogParser):
       # This is info about a specific stream...
       sid = data['id'] 
 
+      if 'proto' in data and 'domain' in data and sid not in self.streams:
+        self.ProcessNewStream(data, data)
+
       if sid in self.streams:
         stream = self.streams[sid]
 
-        if 'read' in data or 'wrote' in data:
-          self.ProcessBandwidthInfo(stream, data)
-
-        if 'eof' in data:
-          self.ProcessEof(stream, data)
-          
-      elif 'proto' in data and 'domain' in data:
-        self.ProcessNewStream(data, data)
+        if 'err' in data: self.ProcessError(stream, data)
+        if 'read' in data: self.ProcessBandwidthRead(stream, data)
+        if 'wrote' in data: self.ProcessBandwidthWrote(stream, data)
+        if 'eof' in data: self.ProcessEof(stream, data)
 
     elif 'started' in data and 'version' in data:
       self.ProcessRestart(data)
@@ -127,9 +147,17 @@ class DebugPKLT(PageKiteLogTracker):
     PageKiteLogTracker.ProcessNewStream(self, stream, data)
     print '[%s] NEW %s' % (stream['id'], data)
 
-  def ProcessBandwidthInfo(self, stream, data):
-    PageKiteLogTracker.ProcessBandwidthInfo(self, stream, data)
-    print '[%s] BW  %s' % (stream['id'], data)
+  def ProcessBandwidthRead(self, stream, data):
+    PageKiteLogTracker.ProcessBandwidthRead(self, stream, data)
+    print '[%s] BWR  %s' % (stream['id'], data)
+
+  def ProcessBandwidthWrote(self, stream, data):
+    PageKiteLogTracker.ProcessBandwidthWrote(self, stream, data)
+    print '[%s] BWW %s' % (stream['id'], data)
+
+  def ProcessError(self, stream, data):
+    PageKiteLogTracker.ProcessError(self, stream, data)
+    print '[%s] ERR %s' % (stream['id'], data)
 
   def ProcessEof(self, stream, data):
     PageKiteLogTracker.ProcessEof(self, stream, data)
@@ -138,5 +166,5 @@ class DebugPKLT(PageKiteLogTracker):
 
 if __name__ == '__main__':
   sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
-  DebugPKLT().ReadSyslog('/var/log/daemon.log', follow=True)
+  DebugPKLT().ReadSyslog(sys.argv[1], pname=sys.argv[2])
 
