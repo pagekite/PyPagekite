@@ -993,6 +993,10 @@ class Selectable(object):
       self.Log([('eof', '1')])
 
   def Cleanup(self):
+    global buffered_bytes
+    buffered_bytes -= len(self.write_blocked)
+    self.write_blocked = []
+
     if not self.dead:
       self.dead = True
       if self.fd: self.fd.close()
@@ -2298,6 +2302,7 @@ class PageKite(object):
     retry = 5
 
     self.looping = True
+    iready, oready, eready = None, None, None
     while self.looping:
       try:
         iready, oready, eready = select.select(conns.Sockets(),
