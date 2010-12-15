@@ -995,7 +995,7 @@ class Selectable(object):
   def Cleanup(self):
     global buffered_bytes
     buffered_bytes -= len(self.write_blocked)
-    self.write_blocked = []
+    self.write_blocked = ''
 
     if not self.dead:
       self.dead = True
