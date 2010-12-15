@@ -970,26 +970,38 @@ class Selectable(object):
     if self.log_id: values.append(('id', self.log_id))
     LogError(error, values)
 
-  def LogTraffic(self):
+  def LogTraffic(self, final=False):
     if self.wrote_bytes or self.read_bytes:
       global gYamon
       gYamon.vadd("bytes_all", self.wrote_bytes
                              + self.read_bytes, wrap=1000000000)
 
-      self.Log([('wrote', '%d' % self.wrote_bytes),
-                ('read', '%d' % self.read_bytes)])
+      if final:
+        self.Log([('wrote', '%d' % self.wrote_bytes),
+                  ('read', '%d' % self.read_bytes),
+                  ('eof', '1')])
+      else:
+        self.Log([('wrote', '%d' % self.wrote_bytes),
+                  ('read', '%d' % self.read_bytes)])
 
       self.all_out += self.wrote_bytes
       self.all_in += self.read_bytes
 
       self.bytes_logged = time.time()
       self.wrote_bytes = self.read_bytes = 0
+    elif final:
+      self.Log([('eof', '1')])
 
   def Cleanup(self):
-    self.dead = True
-    if self.fd: self.fd.close()
-    self.LogTraffic()
-    self.CountAs('selectables_dead')
+    global buffered_bytes
+    buffered_bytes -= len(self.write_blocked)
+    self.write_blocked = ''
+
+    if not self.dead:
+      self.dead = True
+      if self.fd: self.fd.close()
+      self.LogTraffic(final=True)
+      self.CountAs('selectables_dead')
 
   def ProcessData(self, data):
     self.LogError('Selectable::ProcessData: Should be overridden!')
@@ -1047,7 +1059,6 @@ class Selectable(object):
         if zhistory:
           zhistory[0] = len(sdata)
           zhistory[1] = len(zdata)
-        LogDebug('Sending %d bytes as %d' % (len(sdata), len(zdata)))
         return self.Send(['%xZ%x%s\r\n%s' % (len(sdata), len(zdata), rst, zdata)])
       except zlib.error:
         LogDebug('Error compressing, resetting ZChunks.')
@@ -1303,7 +1314,6 @@ class ChunkParser(Selectable):
         if len(cchunk) != self.want_cbytes:
           result = self.ProcessCorruptChunk(self.chunk)
         else:
-          LogDebug('ChunkParser::ProcessData: inflated %d bytes to %d' % (len(self.chunk), self.want_cbytes))
           result = self.ProcessChunk(cchunk)
       else:
         result = self.ProcessChunk(self.chunk)
@@ -1510,7 +1520,6 @@ class Tunnel(ChunkParser):
   def Disconnect(self, conn, sid=None, sendeof=True):
     sid = int(sid or conn.sid)
     if sendeof:
-      LogDebug('Sending EOF for %s' % sid)
       self.SendChunked('SID: %s\nEOF: 1\r\n\r\nBye!' % sid) 
     if sid in self.users:
       if self.users[sid] is not None: self.users[sid].Disconnect()
@@ -1623,11 +1632,11 @@ class UserConn(Selectable):
     if tunnels: self.tunnel = tunnels[0]
 
     if self.tunnel and self.tunnel.SendData(self, ''.join(body), host=host, proto=proto):
-      self.Log([('rhost', self.host), ('rproto', self.proto)])
+      self.Log([('domain', self.host), ('proto', self.proto), ('is', 'FE')])
       self.conns.Add(self)
       return self
     else:
-      self.Log([('err', 'No back-end'), ('proto', self.proto), ('domain', self.host)])
+      self.Log([('err', 'No back-end'), ('proto', self.proto), ('domain', self.host), ('is', 'FE')])
       return None
 
   def _BackEnd(proto, host, sid, tunnel):
@@ -1641,7 +1650,7 @@ class UserConn(Selectable):
 
     backend = self.conns.config.GetBackendServer(proto, host)
     if not backend:
-      self.Log([('err', 'No backend found'), ('proto', proto), ('domain', host)])
+      self.Log([('err', 'No back-end'), ('proto', proto), ('domain', host), ('is', 'BE')])
       return None
 
     try:
@@ -1657,10 +1666,11 @@ class UserConn(Selectable):
       self.fd.setblocking(0)
 
     except socket.error, err:
-      self.Log([('err', '%s' % err), ('proto', proto), ('domain', host)])
+      self.Log([('err', '%s' % err), ('proto', proto), ('domain', host), ('is', 'BE')])
       Selectable.Cleanup(self)
       return None
 
+    self.Log([('proto', proto), ('domain', host), ('is', 'BE')])
     self.conns.Add(self)
     return self
     
@@ -2292,6 +2302,7 @@ class PageKite(object):
     retry = 5
 
     self.looping = True
+    iready, oready, eready = None, None, None
     while self.looping:
       try:
         iready, oready, eready = select.select(conns.Sockets(),
@@ -2354,6 +2365,9 @@ class PageKite(object):
     if self.logfile:
       self.LogTo(self.logfile)
 
+    # Log that we've started up
+    Log([('started', 'pagekite.py'), ('version', APPVER)])
+
     # Set up our listeners if we are a server.
     if self.isfrontend:
       for port in self.server_ports:
@@ -2392,7 +2406,6 @@ class PageKite(object):
     if self.require_all: self.CheckAllTunnels(conns)
 
     # Finally, run our select/epoll loop.
-    Log([('started', 'pagekite.py'), ('version', APPVER)])
     self.Loop()
 
     Log([('stopping', 'pagekite.py')])

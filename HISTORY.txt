@@ -2,12 +2,14 @@ Version history - highlights
 ============================
 
 
-v0.3.5   2010.12.??
+v0.3.5   2010.12.15
 ------
   - Misc. minor bugfixes.
   - Added support for WebDAV and other missing HTTP request methods.
   - Added some real Yamon variables for monitoring
+  - Log-format normalized a bit, created pagekite_logparse.py.
   - Bugfix: minor memory leak when target servers are down (BE unavailable).
+  - Bugfix: bad flow-control bug could freeze the select-loop.
 
 
 v0.3.4   2010.11.09
