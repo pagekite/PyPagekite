@@ -1,6 +1,6 @@
 ## pagekite.py ##
 
-This is the Python implementation of the pageKite remote web front-end
+This is the Python implementation of the *pageKite* remote web front-end
 protocol.  It implements a tunneled reverse proxy, allowing you to run
 an HTTP or HTTPS server on a machine without direct connectivity to the
 Internet.
@@ -8,7 +8,7 @@ Internet.
 Try ./pagekite.py --help for instructions (or read the source).
 
 Front-end service is available at <http://pagekite.net/>, or you can run
-your own.  For a more general discussion of what PageKite is and how it
+your own.  For a more general discussion of what *pageKite* is and how it
 works, check out <http://pagekite.net/docs/>.
 
 
@@ -45,15 +45,15 @@ You can download pagekite.py from <http://pagekite.net/downloads/>.
 <a                                                              name=bes></a>
 ### 3. Running the back-end, using the service ###
 
-The most common use of Pagekite.py, is to make a web server visible to
-the outside world.  Assuming you are using the PageKite.net service and
+The most common use of pagekite.py, is to make a web server visible to
+the outside world.  Assuming you are using the pageKite.net service and
 your web server runs on port 80, a command like this should get you up
 and running:
 
     pagekite.py --defaults \
       --backend=http:YOURNAME:localhost:80:SECRET
 
-Replace YOURNAME with your Pagekite domain name (for example
+Replace YOURNAME with your *pageKite* domain name (for example
 *something.pagekite.me*) and SECRET with the shared secret displayed on
 your account page.
 
@@ -103,7 +103,7 @@ shared secret of your choosing - it has to match on the back-end, or the
 connection will be rejected.
 
 Perceptive readers will have noticed a few problems with this though.
-One, is that you are running Pagekite.py as root, which is generally
+One, is that you are running pagekite.py as root, which is generally
 frowned upon by those concerned with security.  Another, is you've only
 enabled a single back-end, which is a bit limited.
 
