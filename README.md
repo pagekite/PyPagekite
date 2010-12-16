@@ -20,11 +20,13 @@ works, check out <http://pagekite.net/docs/>.
    3.  [Running the back-end, using the service         ](#bes)
    4.  [Running the back-end, using a custom front-end  ](#bec)
    5.  [Running your own front-end                      ](#fe)
-   6.  [Coexisting front-ends and other HTTP servers    ](#co)
-   7.  [Configuring DNS                                 ](#dns)
-   8.  [Unix/Linux systems integration                  ](#unx)
-   9.  [Saving your configuration                       ](#cfg)
-   10. [Credits and licence                             ](#lic)
+   6.  [The HTTP console                                ](#stp)
+   7.  [Coexisting front-ends and other HTTP servers    ](#co)
+   8.  [Configuring DNS                                 ](#dns)
+   9.  [Connecting over Socks or Tor                    ](#tor)
+   10. [Unix/Linux systems integration                  ](#unx)
+   11. [Saving your configuration                       ](#cfg)
+   12. [Credits and licence                             ](#lic)
 
 
 <a                                                              name=req></a>
@@ -41,6 +43,8 @@ If you need to use Socks or Tor to connect to the Internet, you will also
 need a copy of SocksiPy: <http://code.google.com/p/socksipy-branch/>.
 
 You can download pagekite.py from <http://pagekite.net/downloads/>.
+
+[ [up](#toc) ]
 
 
 <a                                                              name=bes></a>
@@ -69,6 +73,8 @@ is available both as HTTP and HTTPS:
       --backend=https:YOURNAME:localhost:443:SECRET \
       --backend=http:OTHERNAME:localhost:8080:SECRET
 
+[ [up](#toc) ]
+
 
 <a                                                              name=bec></a>
 ### 4. Running the back-end, using a custom front-end ###
@@ -86,6 +92,8 @@ is, using the --frontend argument:
 
 Replace HOST with the DNS name or IP address of your front-end, and PORT
 with one of the ports it listens for connections on.
+
+[ [up](#toc) ]
 
 
 <a                                                               name=fe></a>
@@ -135,38 +143,107 @@ as soon as possible, like so:
       --domain=http,https:YOURNAME:YOURSECRET
 
 This assumes the *nobody* user and *nogroup* group exist on your system.
-Replace with other values as necessary.  Other useful flags for proper
-system integration are --pidfile, --logfile and --daemonize, each of which
-does more or less what you would expect, although --logfile=syslog is
-special - instead of logging to a file, it logs to the system log service.
+Replace with other values as necessary.  See the section on [Unix/Linux
+systems integration](#unx) for more useful flags for running a production
+pagekite.py.
 
-Putting it all together, a real production invocation of pagekite.py at
-the front-end might look something like this:
+[ [up](#toc) ]
 
-    frontend$ sudo pagekite.py \
-      --runas=nobody:nogroup \
-      --pidfile=/var/run/pagekite.pid \
-      --logfile=syslog \
-      --daemonize \
-      --isfrontend \
-      --ports=80,443 \
-      --protos=http,https \
-      --domain=http,https:*.YOURDOMAIN.COM:YOURSECRET \
-      --domain=http,https:*.YOUROTHERDOMAIN.NET:YOUROTHERSECRET
 
-That is quite a lot of arguments, so at this point you might want to skip 
-to the end of this manual and learn how to generate a configuration
-file...
+<a                                                              name=stp></a>
+### 6. The HTTP console ###
+
+Scanning the log output from pagekite.py is not exactly a user-friendly
+experience.  A nicer way to see what the program is up to, is to enable
+the HTTP console, using the --httpd=HOST:PORT argument.
+
+This will make pagekite.py run a web server of it's own on the named
+address and port (we recommend 127.0.0.1:2223), which you can visit with
+any web browser to see which tunnels are active, browse and filter the logs
+and other nice things like that. If you want to expose a back-end's console
+to the wider Internet, that is possible too (just add a --backend line for
+it), but in that case it's probably a good idea to use --httppass to set
+a password.
+
+An example:
+
+    backend$ pagekite.py \
+      --defaults \
+      --httpd=127.0.0.1:2223 \
+      --httppass=YOURPASSWORD \
+      --backend=http:CONSOLENAME:localhost:2223:SECRET \
+      --backend=http:YOURNAME:localhost:80:SECRET
+
+This should make the console visible both on http://localhost:2223/ and
+http://CONSOLENAME/.  When it prompts for a username and password, type in
+whatever username you like, and the password given on the command-line.
+
+[ [up](#toc) ]
 
 
 <a                                                               name=co></a>
-### 6. Coexisting front-ends and other HTTP servers ###
+### 7. Coexisting front-ends and other HTTP servers ###
 
-(to be written)
+What to do if you already have a web server running on the machine you want
+to use as a *pageKite* front-end?  Generally only one process can run on a
+given IP:PORT pair, which is why this poses a problem.
+
+The simplest solution, is to get another IP address for the machine, and
+use one for pagekite.py, and the other for your web-server. In that case
+you would add the --host=IP argument to your pagekite.py configuration.
+
+If, however, you have to share a single IP, things get slightly more
+complicated. Either the web-server will have to forward connections to
+pagekite.py, or the other way around.
+
+#### pagekite.py on port 80 ####
+
+Since pagekite.py is designed to run in the role of a front-end proxy, it
+is safest to run it on port 80:
+
+   1. Configure pagekite.py as a front-end [as usual](#fe)
+   2. Move your old web-server to another port (such as 8080)
+   3. Run *another* pagekite.py as a back-end for the server on 8080
+
+This is guaranteed to work, but it does admittedly feel a bit messy to have
+two pagekite.py processes running on the same machine. Future versions of
+pagekite.py will hopefully address this by allowing specification of direct
+back-ends on a front-end pagekite.py.
+
+
+#### Another HTTP server on port 80 ####
+
+The other option, assuming your web-server supports proxying, is to configure
+it to proxy requests for your *pageKite* domains to pagekite.py, and run
+pagekite.py on an alternate port.  How this is done depends on your HTTP
+server software, but Apache and lighttpd at least are both capable of
+forwarding requests to alternate ports.
+
+This is likely to work in many cases for standard HTTP traffic, but very
+unlikely to work for HTTPS.
+
+**Warning:** If you have more than one domain behind *pageKite*, it is
+of critical importance that the HTTP server *not* re-use the same proxy
+connection for multiple requests.  For performance and compatibility
+reasons, pagekite.py does not currently continue parsing the HTTP/1.1
+request stream once it has chosen a back-end: it blindly forwards packets
+back and forth. This means that if the web server proxy code sends a request
+for *a.foo.com* first, and then requests *b.foo.com* over the same
+connection, the second request will be routed to the wrong back-end.
+
+Unfortunately, this means putting pagekite.py behind a high-performance
+load-balancer may cause unpredictable (and quite undesirable) results:
+Varnish at least is known to cause problems in this configuration.
+
+Please send reports of success (or failure) configuring pagekite.py behind
+another HTTP server, proxy or load-balancer to our Google Group:
+<http://groups.google.com/group/pagekite-discuss>.
+
+[ [up](#toc) ]
 
 
 <a                                                              name=dns></a>
-### 7. Configuring DNS ###
+### 8. Configuring DNS ###
 
 In order for your *pageKite* websites to be visible to the wider Internet,
 you will have to make sure DNS records for them are properly configured.
@@ -216,11 +293,11 @@ service, is the name **frontends.b5p.us**:
     frontends.b5p.us has address 178.79.140.143
     ...
 
-When started up with a --frontends argument (note the trailing s), pagekite.py
-will measure the distance of each of these IP addresses and pick the one
-closest. (It will also perform DNS lookups on its own name and connect to any
-old back-ends as well, to guarantee reachability while the old DNS records
-expire.)
+When started up with a --frontends argument (note the trailing s),
+pagekite.py will measure the distance of each of these IP addresses and
+pick the one closest. (It will also perform DNS lookups on its own name
+and connect to any old back-ends as well, to guarantee reachability while
+the old DNS records expire.)
 
 Pagekite.py has built-in support for most of the common dynamic DNS
 providers, which can be accessed via. the --dyndns flag.  Assuming you were
@@ -235,15 +312,71 @@ using dyndns.org, running the back-end like this might work in that case:
 currently not very well tested - if it does not work for you, please
 [get in touch](http://pagekite.net/support/) and let us know.
 
+[ [up](#toc) ]
+
+
+<a                                                              name=tor></a>
+### 9. Connecting over Socks or Tor ###
+
+If you want to run pagekite.py from behind a restrictive firewall which
+does not even allow outgoing connections, you might be able to work around
+the problem by using a Socks proxy.
+
+Alternately, if you are concerned about anonymity and want to hide your
+IP even from the person running the front-end, you might want to connect
+using the [Tor](https://www.torproject.org/) network.
+
+For these situations, you can use the --torify or --socksify arguments,
+like so:
+
+    backend$ pagekite.py \
+      --defaults \
+      --socksify=SOCKSHOST:PORT \
+      --backend=http:YOURNAME:localhost:80:YOURSECRET
+
+In the case of Tor, replace --socksify with --torify and (probably) 
+connect to localhost, on port 9050.
+
+**Note:** This requires SocksiPy: <http://code.google.com/p/socksipy-branch/>
+
+[ [up](#toc) ]
+
 
 <a                                                              name=unx></a>
-### 8. Unix/Linux systems integration ###
+### 10. Unix/Linux systems integration ###
 
-(to be written)
+When deploying pagekite.py as a system component on Unix, there are quite
+a few specialized arguments which can come in handy.
+
+In addtion to --runas and --host (discussed above), pagekite.py understands
+these: --pidfile, --logfile and --daemonize, each of which does more or
+less what you would expect.  A special case worth noting is
+--logfile=syslog, which instead of writing to a file, logs to the system
+log service.
+
+Putting these all together, a real production invocation of pagekite.py at
+the front-end might look something like this:
+
+    frontend$ sudo pagekite.py \
+      --runas=nobody:nogroup \
+      --pidfile=/var/run/pagekite.pid \
+      --logfile=syslog \
+      --daemonize \
+      --isfrontend \
+      --host=1.2.3.4 \
+      --ports=80,443 \
+      --protos=http,https \
+      --domain=http,https:*.YOURDOMAIN.COM:YOURSECRET \
+      --domain=http,https:*.YOUROTHERDOMAIN.NET:YOUROTHERSECRET
+
+That is quite a lot of arguments!  So please read on, and learn how to
+generate a configuration file...
+
+[ [up](#toc) ]
 
 
 <a                                                              name=cfg></a>
-### 9. Saving your configuration ###
+### 11. Saving your configuration ###
  
 Once you have everything up and running properly, you may find it more
 convenient to save the settings to a configuration file.  Pagekite.py can
@@ -272,9 +405,11 @@ are experimenting. To *skip* the configuration file, you can use the
 The --optfile option can be used within configuration files as well, if
 you want to "include" a one configuration into another for some reason.
 
+[ [up](#toc) ]
+
 
 <a                                                              name=lic></a>
-### 10. Credits and licence ###
+### 12. Credits and licence ###
 
 Pagekite.py is (C) Copyright 2010, Bjarni Rúnar Einarsson and The
 Beanstalks Project ehf.
@@ -292,3 +427,4 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+[ [up](#toc) ]
