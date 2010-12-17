@@ -557,6 +557,7 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     for tid in conns.tunnels:
       proto, domain = tid.split(':')
+      if '-' in proto: proto, port = proto.split('-')
       if tid in backends:
         backend = backends[tid][BE_BACKEND]
         if proto.startswith('http'):
@@ -1634,14 +1635,16 @@ class UserConn(Selectable):
     self.proto = proto
     self.host = host
 
-    # Try and find the right tunnel. We prefer port specifications first,
-    # then the detected protocol. If the protocol is WebSocket and no
-    # tunnel is found, look for a plain HTTP tunnel.
-    tunnels = conns.Tunnel((proto == 'probe') and 'http' or my_port, host)
-    if not tunnels:
-      tunnels = conns.Tunnel((proto == 'probe') and 'http' or proto, host)
-    if not tunnels and proto == 'websocket':
-      tunnels = conns.Tunnel('http', host)
+    # Try and find the right tunnel. We prefer proto/port specifications first,
+    # then the just the proto. If the protocol is WebSocket and no tunnel is
+    # found, look for a plain HTTP tunnel.
+    tunnels = None
+    protos = [proto]
+    if proto == 'probe': protos = ['http']
+    if proto == 'websocket': protos.append('http')
+    for p in protos:
+      if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, my_port), host)
+      if not tunnels: tunnels = conns.Tunnel(p, host)
     if tunnels: self.tunnel = tunnels[0]
 
     if self.tunnel and self.tunnel.SendData(self, ''.join(body), host=host, proto=proto, port=my_port):
@@ -1661,11 +1664,16 @@ class UserConn(Selectable):
     self.conns = tunnel.conns
     self.tunnel = tunnel
 
+    # Try and find the right back-end. We prefer proto/port specifications
+    # first, then the just the proto. If the protocol is WebSocket and no
+    # tunnel is found, look for a plain HTTP tunnel.
     backend = None
-    if my_port:
-      backend = self.conns.config.GetBackendServer(my_port, host)
-    if not backend:
-      backend = self.conns.config.GetBackendServer(proto, host)
+    protos = [proto]
+    if proto == 'probe': protos = ['http']
+    if proto == 'websocket': protos.append('http')
+    for p in protos:
+      if not backend: backend = self.conns.config.GetBackendServer('%s-%s' % (p, my_port), host)
+      if not backend: backend = self.conns.config.GetBackendServer(p, host)
 
     if not backend:
       self.Log([('err', 'No back-end'), ('lport', my_port), ('proto', proto), ('domain', host), ('is', 'BE')])
@@ -1740,7 +1748,7 @@ class UnknownConn(MagicProtocolParser):
           proto = 'http'
           upgrade = self.parser.Header('Upgrade')
           if 'websocket' in self.conns.config.server_protos:
-            if upgrade and upgrade.lower() == 'websocket':
+            if upgrade and upgrade[0].lower() == 'websocket':
               proto = 'websocket'
 
         if UserConn.FrontEnd(self, proto, host, self.my_port,
@@ -1821,7 +1829,7 @@ class PageKite(object):
     self.auth_domain = None
     self.server_host = ''
     self.server_ports = [80]
-    self.server_protos = ['http', 'https', 'websocket', 'ports']
+    self.server_protos = ['http', 'https', 'websocket']
 
     self.daemonize = False
     self.pidfile = None
@@ -1983,19 +1991,28 @@ class PageKite(object):
     # User unknown, fall through to local test.
     return -1 
 
-  def GetDomainQuota(self, proto, domain, srand, token, sign, recurse=True):
-    if proto not in self.server_protos:
-      if 'ports' not in self.server_protos: return None
+  def GetDomainQuota(self, protoport, domain, srand, token, sign, recurse=True):
+    if '-' in protoport:
+      proto, port = protoport.split('-')
       try:
-        if int(proto) not in self.server_ports: return None
+        if int(port) not in self.server_ports:
+          LogError('Invalid port request: %s (%s:%s)' % (port, protoport, domain))
+          return None
       except ValueError:
+        LogError('Invalid port request: %s (%s:%s)' % (port, protoport, domain))
         return None
+    else:
+      proto, port = protoport, None
 
-    bid = '%s:%s' % (proto, domain)
-    data = '%s:%s' % (bid, srand)
+    if proto not in self.server_protos:
+      LogError('Invalid proto request: %s (%s:%s)' % (proto, protoport, domain))
+      return None
+
+    data = '%s:%s:%s' % (protoport, domain, srand)
     if not token or token == signToken(token=token, payload=data):
       if self.auth_domain:
         lookup = '.'.join([srand, token, sign, proto, domain, self.auth_domain])
+        LogDebug('Lookup: %s' % lookup)
         try:
           rv = self.LookupDomainQuota(lookup)
           if rv is None or rv >= 0: return rv
@@ -2003,13 +2020,16 @@ class PageKite(object):
           # Lookup failed, fall through to local test.
           pass
 
-      secret = self.GetBackendData(proto, domain, BE_SECRET)
+      secret = self.GetBackendData(protoport, domain, BE_SECRET)
+      if not secret: secret = self.GetBackendData(proto, domain, BE_SECRET)
       if secret:
-        if self.IsSignatureValid(sign, secret, proto, domain, srand, token):
+        if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
           return 1024
         else:
+          LogError('Invalid signature for: %s (%s:%s)' % (proto, protoport, domain))
           return None
 
+    LogError('No authentication found for: %s (%s:%s)' % (proto, protoport, domain))
     return None
 
   def ConfigureFromFile(self, filename=None):
@@ -2110,9 +2130,10 @@ class PageKite(object):
       elif opt == '--backend':
         protos, domain, bhost, bport, secret = arg.split(':')
         for proto in protos.split(','): 
-          if '/' in proto:
-            proto, port = proto.split('/')
-            bid = '%s:%s' % (port, domain.lower())
+          proto = proto.replace('/', '-')
+          if '-' in proto:
+            proto, port = proto.split('-')
+            bid = '%s-%d:%s' % (proto.lower(), int(port), domain.lower())
           else:
             bid = '%s:%s' % (proto.lower(), domain.lower())
 
@@ -2121,6 +2142,7 @@ class PageKite(object):
 
       elif opt == '--domain':
         protos, domain, secret = arg.split(':')
+        if protos in ('*', ''): protos = ','.join(self.server_protos)
         for proto in protos.split(','): 
           bid = '%s:%s' % (proto, domain)
           self.backends[bid] = (proto, domain, None, secret)
