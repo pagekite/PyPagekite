@@ -2011,7 +2011,7 @@ class PageKite(object):
     data = '%s:%s:%s' % (protoport, domain, srand)
     if not token or token == signToken(token=token, payload=data):
       if self.auth_domain:
-        lookup = '.'.join([srand, token, sign, proto, domain, self.auth_domain])
+        lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
         LogDebug('Lookup: %s' % lookup)
         try:
           rv = self.LookupDomainQuota(lookup)
