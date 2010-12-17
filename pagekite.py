@@ -1623,7 +1623,7 @@ class UserConn(Selectable):
     self.conns.Remove(self)
     Selectable.Cleanup(self)
 
-  def _FrontEnd(conn, proto, host, body, conns):
+  def _FrontEnd(conn, proto, host, my_port, body, conns):
     # This is when an external user connects to a server and requests a
     # web-page.  We have to give it to them!
     self = UserConn()
@@ -1633,15 +1633,17 @@ class UserConn(Selectable):
     if ':' in host: host, port = host.split(':')
     self.proto = proto
     self.host = host
-    tunnels = conns.Tunnel((proto == 'probe') and 'http' or proto, host)
+    tunnels = conns.Tunnel((proto == 'probe') and 'http' or my_port, host)
+    if not tunnels:
+      tunnels = conns.Tunnel((proto == 'probe') and 'http' or proto, host)
     if tunnels: self.tunnel = tunnels[0]
 
-    if self.tunnel and self.tunnel.SendData(self, ''.join(body), host=host, proto=proto):
-      self.Log([('domain', self.host), ('proto', self.proto), ('is', 'FE')])
+    if self.tunnel and self.tunnel.SendData(self, ''.join(body), host=host, proto=proto, port=my_port):
+      self.Log([('domain', self.host), ('lport', my_port), ('proto', self.proto), ('is', 'FE')])
       self.conns.Add(self)
       return self
     else:
-      self.Log([('err', 'No back-end'), ('proto', self.proto), ('domain', self.host), ('is', 'FE')])
+      self.Log([('err', 'No back-end'), ('lport', my_port), ('proto', self.proto), ('domain', self.host), ('is', 'FE')])
       return None
 
   def _BackEnd(proto, host, sid, tunnel, my_port=None):
@@ -1660,7 +1662,7 @@ class UserConn(Selectable):
       backend = self.conns.config.GetBackendServer(proto, host)
 
     if not backend:
-      self.Log([('err', 'No back-end'), ('proto', proto), ('domain', host), ('is', 'BE')])
+      self.Log([('err', 'No back-end'), ('lport', my_port), ('proto', proto), ('domain', host), ('is', 'BE')])
       return None
 
     try:
@@ -1676,11 +1678,11 @@ class UserConn(Selectable):
       self.fd.setblocking(0)
 
     except socket.error, err:
-      self.Log([('err', '%s' % err), ('proto', proto), ('domain', host), ('is', 'BE')])
+      self.Log([('err', '%s' % err), ('lport', my_port), ('proto', proto), ('domain', host), ('is', 'BE')])
       Selectable.Cleanup(self)
       return None
 
-    self.Log([('proto', proto), ('domain', host), ('is', 'BE')])
+    self.Log([('proto', proto), ('lport', my_port), ('domain', host), ('is', 'BE')])
     self.conns.Add(self)
     return self
     
@@ -1700,7 +1702,6 @@ class UnknownConn(MagicProtocolParser):
     self.conns = conns
     self.conns.Add(self)
     self.host = None
-    self.port = port
     self.sid = -1
 
   def ProcessLine(self, line, lines):
@@ -1736,7 +1737,7 @@ class UnknownConn(MagicProtocolParser):
             if upgrade and upgrade.lower() == 'websocket':
               proto = 'websocket'
 
-        if UserConn.FrontEnd(self, proto, host,
+        if UserConn.FrontEnd(self, proto, host, self.my_port,
                              self.parser.lines + lines, self.conns) is None:
           if magic_parts:
             self.Send(HTTP_NoFeConnection())
@@ -1758,7 +1759,8 @@ class UnknownConn(MagicProtocolParser):
   def ProcessTls(self, data):
     domains = self.GetSni(data)
     if domains:
-      if UserConn.FrontEnd(self, 'https', domains[0], [data], self.conns) is None:
+      if UserConn.FrontEnd(self, 'https', self.my_port,
+                           domains[0], [data], self.conns) is None:
         return False
 
     # We are done!
@@ -1797,7 +1799,7 @@ class Listener(Selectable):
     try:
       client, address = self.fd.accept()
       if client:
-        uc = self.connclass(client, address, port, self.conns)
+        uc = self.connclass(client, address, self.port, self.conns)
         self.Log([('accept', '%s:%s' % (obfuIp(address[0]), address[1]))])
         return True
     except Exception, e:
@@ -2102,7 +2104,12 @@ class PageKite(object):
       elif opt == '--backend':
         protos, domain, bhost, bport, secret = arg.split(':')
         for proto in protos.split(','): 
-          bid = '%s:%s' % (proto.lower(), domain.lower())
+          if '/' in proto:
+            proto, port = proto.split('/')
+            bid = '%s:%s' % (port, domain.lower())
+          else:
+            bid = '%s:%s' % (proto.lower(), domain.lower())
+
           backend = '%s:%s' % (bhost.lower(), bport)
           self.backends[bid] = (proto.lower(), domain.lower(), backend, secret)
 
