@@ -1633,9 +1633,15 @@ class UserConn(Selectable):
     if ':' in host: host, port = host.split(':')
     self.proto = proto
     self.host = host
+
+    # Try and find the right tunnel. We prefer port specifications first,
+    # then the detected protocol. If the protocol is WebSocket and no
+    # tunnel is found, look for a plain HTTP tunnel.
     tunnels = conns.Tunnel((proto == 'probe') and 'http' or my_port, host)
     if not tunnels:
       tunnels = conns.Tunnel((proto == 'probe') and 'http' or proto, host)
+    if not tunnels and proto == 'websocket':
+      tunnels = conns.Tunnel('http', host)
     if tunnels: self.tunnel = tunnels[0]
 
     if self.tunnel and self.tunnel.SendData(self, ''.join(body), host=host, proto=proto, port=my_port):
