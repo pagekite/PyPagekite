@@ -853,10 +853,11 @@ SELECTABLES = {}
 class Selectable(object):
   """A wrapper around a socket, for use with select."""
 
-  def __init__(self, fd=None, address=None, maxread=32000):
+  def __init__(self, fd=None, address=None, my_port=None, maxread=32000):
     self.SetFD(fd or rawsocket(socket.AF_INET, socket.SOCK_STREAM))
     self.maxread = maxread
     self.address = address
+    self.my_port = my_port
     self.created = self.bytes_logged = time.time()
     self.read_bytes = self.all_in = 0
     self.wrote_bytes = self.all_out = 0
@@ -1143,8 +1144,8 @@ class Connections(object):
 class LineParser(Selectable):
   """A Selectable which parses the input as lines of text."""
 
-  def __init__(self, fd=None, address=None):
-    Selectable.__init__(self, fd, address)
+  def __init__(self, fd=None, address=None, my_port=None):
+    Selectable.__init__(self, fd, address, my_port)
     self.leftovers = ''
 
   def html(self):
@@ -1181,8 +1182,8 @@ TLS_CLIENTHELLO = '%c' % 026
 class MagicProtocolParser(LineParser):
   """A Selectable which recognizes HTTP, TLS or XMPP preambles."""
 
-  def __init__(self, fd=None, address=None):
-    LineParser.__init__(self, fd, address)
+  def __init__(self, fd=None, address=None, my_port=None):
+    LineParser.__init__(self, fd, address, my_port)
     self.leftovers = ''
     self.might_be_tls = True
     self.is_tls = False
@@ -1252,8 +1253,8 @@ class MagicProtocolParser(LineParser):
 class ChunkParser(Selectable):
   """A Selectable which parses the input as chunks."""
 
-  def __init__(self, fd=None, address=None):
-    Selectable.__init__(self, fd, address)
+  def __init__(self, fd=None, address=None, my_port=None):
+    Selectable.__init__(self, fd, address, my_port)
     self.want_cbytes = 0
     self.want_bytes = 0
     self.compressed = False
@@ -1506,16 +1507,19 @@ class Tunnel(ChunkParser):
   FrontEnd = staticmethod(_FrontEnd)
   BackEnd = staticmethod(_BackEnd)
 
-  def SendData(self, conn, data, sid=None, host=None, proto=None):
+  def SendData(self, conn, data, sid=None, host=None, proto=None, port=None):
     sid = int(sid or conn.sid)
     if conn: self.users[sid] = conn
     if not sid in self.zhistory: self.zhistory[sid] = [0, 0]
-    if host and proto:
-      return self.SendChunked(['SID: %s\nProto: %s\nHost: %s\r\n\r\n' % (sid, proto, host), data],
-                              zhistory=self.zhistory[sid]) 
-    else:
-      return self.SendChunked(['SID: %s\r\n\r\n' % sid, data],
-                              zhistory=self.zhistory[sid]) 
+
+    sending = ['SID: %s\r\n' % sid]
+    if proto: sending.append('Proto: %s\r\n' % proto)
+    if host: sending.append('Host: %s\r\n' % host)
+    if port: sending.append('Port: %s\r\n' % port)
+    sending.append('\r\n')
+    sending.append(data)
+
+    return self.SendChunked(sending, zhistory=self.zhistory[sid])
 
   def Disconnect(self, conn, sid=None, sendeof=True):
     sid = int(sid or conn.sid)
@@ -1571,6 +1575,7 @@ class Tunnel(ChunkParser):
         conn = self.users[sid]
       else:
         proto = (parse.Header('Proto') or [''])[0].lower()
+        port = (parse.Header('Port') or [''])[0].lower()
         host = (parse.Header('Host') or [''])[0].lower()
         if proto and host:
           if proto == 'probe':
@@ -1581,8 +1586,8 @@ class Tunnel(ChunkParser):
               self.SendChunked('SID: %s\r\n\r\n%s' % (
                                  sid, HTTP_NoBeConnection() )) 
           else:
-            conn = UserConn.BackEnd(proto, host, sid, self)
-            if proto == 'http' and not conn:
+            conn = UserConn.BackEnd(proto, host, sid, self, my_port=port)
+            if proto in ('http', 'websocket') and not conn:
               self.SendChunked('SID: %s\r\n\r\n%s' % (
                                  sid, HTTP_Unavailable('be', proto, host) )) 
           if conn:
@@ -1639,7 +1644,7 @@ class UserConn(Selectable):
       self.Log([('err', 'No back-end'), ('proto', self.proto), ('domain', self.host), ('is', 'FE')])
       return None
 
-  def _BackEnd(proto, host, sid, tunnel):
+  def _BackEnd(proto, host, sid, tunnel, my_port=None):
     # This is when we open a backend connection, because a user asked for it.
     self = UserConn()
     self.sid = sid
@@ -1648,7 +1653,12 @@ class UserConn(Selectable):
     self.conns = tunnel.conns
     self.tunnel = tunnel
 
-    backend = self.conns.config.GetBackendServer(proto, host)
+    backend = None
+    if my_port:
+      backend = self.conns.config.GetBackendServer(my_port, host)
+    if not backend:
+      backend = self.conns.config.GetBackendServer(proto, host)
+
     if not backend:
       self.Log([('err', 'No back-end'), ('proto', proto), ('domain', host), ('is', 'BE')])
       return None
@@ -1684,12 +1694,13 @@ class UserConn(Selectable):
 class UnknownConn(MagicProtocolParser):
   """This class is a connection which we're not sure what is yet."""
 
-  def __init__(self, fd, address, conns):
-    MagicProtocolParser.__init__(self, fd, address)
+  def __init__(self, fd, address, my_port, conns):
+    MagicProtocolParser.__init__(self, fd, address, my_port)
     self.parser = HttpParser()
     self.conns = conns
     self.conns.Add(self)
     self.host = None
+    self.port = port
     self.sid = -1
 
   def ProcessLine(self, line, lines):
@@ -1720,6 +1731,10 @@ class UnknownConn(MagicProtocolParser):
           host = hosts[0].lower()
           magic_parts = None
           proto = 'http'
+          upgrade = self.parser.Header('Upgrade')
+          if 'websocket' in self.conns.config.server_protos:
+            if upgrade and upgrade.lower() == 'websocket':
+              proto = 'websocket'
 
         if UserConn.FrontEnd(self, proto, host,
                              self.parser.lines + lines, self.conns) is None:
@@ -1782,7 +1797,7 @@ class Listener(Selectable):
     try:
       client, address = self.fd.accept()
       if client:
-        uc = self.connclass(client, address, self.conns)
+        uc = self.connclass(client, address, port, self.conns)
         self.Log([('accept', '%s:%s' % (obfuIp(address[0]), address[1]))])
         return True
     except Exception, e:
@@ -1798,7 +1813,7 @@ class PageKite(object):
     self.auth_domain = None
     self.server_host = ''
     self.server_ports = [80]
-    self.server_protos = ['http', 'https']
+    self.server_protos = ['http', 'https', 'websocket', 'ports']
 
     self.daemonize = False
     self.pidfile = None
@@ -1876,8 +1891,9 @@ class PageKite(object):
         print 'backend=%s:%s:%s' % (bid, be[BE_BACKEND], be[BE_SECRET])
         bprinted += 1
     if bprinted == 0:
-      print '#backend=http:YOU.pagekite.me:localhost:80:SECRET'  
-      print '#backend=https:YOU.pagekite.me:localhost:443:SECRET'  
+      print '#backend=http:YOU.pagekite.me:localhost:80:SECRET'
+      print '#backend=https:YOU.pagekite.me:localhost:443:SECRET'
+      print '#backend=websocket:YOU.pagekite.me:localhost:8080:SECRET'
     print (self.servers_new_only and 'new' or '#new')
     print (self.require_all and 'all' or '#all')
     print
@@ -1899,8 +1915,8 @@ class PageKite(object):
       be = self.backends[bid]
       if not be[BE_BACKEND]:
         print 'domain=%s:%s:%s' % (bid, be[BE_SECRET])
-    print '#domain=http:*.pagekite.me:SECRET1'  
-    print '#domain=http,https:THEM.pagekite.me:SECRET2'  
+    print '#domain=http:*.pagekite.me:SECRET1'
+    print '#domain=http,https,websocket:THEM.pagekite.me:SECRET2'
 
     print
     print '# Systems administration settings:'
@@ -1960,7 +1976,12 @@ class PageKite(object):
     return -1 
 
   def GetDomainQuota(self, proto, domain, srand, token, sign, recurse=True):
-    if proto not in self.server_protos: return None
+    if proto not in self.server_protos:
+      if 'ports' not in self.server_protos: return None
+      try:
+        if int(proto) not in self.server_ports: return None
+      except ValueError:
+        return None
 
     bid = '%s:%s' % (proto, domain)
     data = '%s:%s' % (bid, srand)
