@@ -95,10 +95,11 @@ pagekite.py is Copyright 2010, the Beanstalks Project ehf.
 This the reference implementation of the PageKite tunneling protocol,
 both the front- and back-end. This following protocols are supported:
 
-  HTTP    - HTTP 1.1 only, requires a valid HTTP Host: header
-  HTTPS   - Recent versions of TLS only, requires the SNI extension.
-  XMPP    - ...unfinished... (FIXME)
-  SMTP    - ...unfinished... (FIXME)
+  HTTP      - HTTP 1.1 only, requires a valid HTTP Host: header
+  HTTPS     - Recent versions of TLS only, requires the SNI extension.
+  WEBSOCKET - Using the proposed Upgrade: WebSocket method.
+  XMPP      - ...unfinished... (FIXME)
+  SMTP      - ...unfinished... (FIXME)
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the GNU Affero General Public License. For the full text of the
@@ -132,6 +133,7 @@ Front-end Options:
  --authdomain=X -A X    Use X as a remote authentication domain.
  --host=H       -h H    Listen on H (hostname).
  --ports=A,B,C  -p A,B  Listen on ports A, B, C, ...
+ --portalias=A:B        Report port A as port B to backends.
  --protos=A,B,C         Accept the listed protocols for tunneling.
 
  --domain=proto,proto2,pN:domain:secret
@@ -203,7 +205,7 @@ OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
             'authdomain=', 'register=', 'host=', 'ports=', 'protos=',
             'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks',
-            'buffers=']
+            'buffers=', 'portalias=']
 
 AUTH_ERRORS           = '128.'
 AUTH_ERR_USER_UNKNOWN = '128.0.0.0'
@@ -1516,7 +1518,12 @@ class Tunnel(ChunkParser):
     sending = ['SID: %s\r\n' % sid]
     if proto: sending.append('Proto: %s\r\n' % proto)
     if host: sending.append('Host: %s\r\n' % host)
-    if port: sending.append('Port: %s\r\n' % port)
+    if port:
+      porti = int(port)
+      if porti in self.conns.config.server_portalias:
+        sending.append('Port: %s\r\n' % conn.config.server_portalias[porti])
+      else:
+        sending.append('Port: %s\r\n' % port)
     sending.append('\r\n')
     sending.append(data)
 
@@ -1634,6 +1641,10 @@ class UserConn(Selectable):
     if ':' in host: host, port = host.split(':')
     self.proto = proto
     self.host = host
+
+    # If the listening port is an alias for another...
+    if int(my_port) in conns.config.server_portalias:
+      my_port = conns.config.server_portalias[int(my_port)]
 
     # Try and find the right tunnel. We prefer proto/port specifications first,
     # then the just the proto. If the protocol is WebSocket and no tunnel is
@@ -1829,6 +1840,8 @@ class PageKite(object):
     self.auth_domain = None
     self.server_host = ''
     self.server_ports = [80]
+    self.server_portalias = {}
+    self.server_aliasport = {}
     self.server_protos = ['http', 'https', 'websocket']
 
     self.daemonize = False
@@ -1925,6 +1938,8 @@ class PageKite(object):
     print (self.server_host and '%shost=%s' % (comment, self.server_host) or '#host=machine.domain.com')
     print '%sports=%s' % (comment, ','.join(['%s' % x for x in self.server_ports] or []))
     print '%sprotos=%s' % (comment, ','.join(['%s' % x for x in self.server_protos] or []))
+    for pa in self.server_portalias:
+      print 'portalias=%s:%s' % (int(pa), int(self.server_portalias[pa]))
     # FIXME: --register ?
     print (self.auth_domain and '%sauthdomain=%s' % (comment, self.auth_domain) or '#authdomain=foo.com')
     for bid in self.backends:
@@ -1995,8 +2010,10 @@ class PageKite(object):
     if '-' in protoport:
       proto, port = protoport.split('-')
       try:
-        if int(port) not in self.server_ports:
-          LogError('Invalid port request: %s (%s:%s)' % (port, protoport, domain))
+        porti = int(port)
+        if porti in self.server_aliasport: porti = self.server_aliasport[porti]
+        if porti not in self.server_ports:
+          LogError('Unsupported port request: %s (%s:%s)' % (porti, protoport, domain))
           return None
       except ValueError:
         LogError('Invalid port request: %s (%s:%s)' % (port, protoport, domain))
@@ -2099,6 +2116,10 @@ class PageKite(object):
           self.dyndns = (arg, {'user': '', 'pass': ''})
 
       elif opt in ('-p', '--ports'): self.server_ports = [int(x) for x in arg.split(',')]
+      elif opt == '--portalias':
+        port, alias = arg.split(':')
+        self.server_portalias[int(port)] = int(alias)
+        self.server_aliasport[int(alias)] = int(port)
       elif opt == '--protos': self.server_protos = [x.lower() for x in arg.split(',')]
       elif opt in ('-h', '--host'): self.server_host = arg
       elif opt in ('-A', '--authdomain'): self.auth_domain = arg
