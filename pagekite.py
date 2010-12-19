@@ -1521,7 +1521,7 @@ class Tunnel(ChunkParser):
     if port:
       porti = int(port)
       if porti in self.conns.config.server_portalias:
-        sending.append('Port: %s\r\n' % conn.config.server_portalias[porti])
+        sending.append('Port: %s\r\n' % self.conns.config.server_portalias[porti])
       else:
         sending.append('Port: %s\r\n' % port)
     sending.append('\r\n')
@@ -1784,8 +1784,8 @@ class UnknownConn(MagicProtocolParser):
   def ProcessTls(self, data):
     domains = self.GetSni(data)
     if domains:
-      if UserConn.FrontEnd(self, 'https', self.my_port,
-                           domains[0], [data], self.conns) is None:
+      if UserConn.FrontEnd(self, 'https', domains[0], self.my_port,
+                           [data], self.conns) is None:
         return False
 
     # We are done!
@@ -1945,7 +1945,7 @@ class PageKite(object):
     for bid in self.backends:
       be = self.backends[bid]
       if not be[BE_BACKEND]:
-        print 'domain=%s:%s:%s' % (bid, be[BE_SECRET])
+        print 'domain=%s:%s' % (bid, be[BE_SECRET])
     print '#domain=http:*.pagekite.me:SECRET1'
     print '#domain=http,https,websocket:THEM.pagekite.me:SECRET2'
 
