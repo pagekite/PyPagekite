@@ -421,6 +421,37 @@ you want to "include" a one configuration into another for some reason.
 [ [up](#toc) ]
 
 
+<a                                                              name=sec></a>
+### 12. A word about security and logs ###
+
+When exposing services to the wider Internet, as pagekite.py is designed to
+do, it is always important to keep some basic security principles in mind.
+
+Pagekite.py itself should be quite secure - it never invokes any external
+processes and the only modifications it makes to the file-system are the
+log-files it writes.
+
+The main security concern is your HTTP server, which you are exposing to
+the wider Internet. Covering general web server security is out of scope for
+this brief manual, but there is one important difference between running a
+web server on a public host and running one through *pageKite*.
+
+The most important difference has to do with access control and logs.
+
+As with any front-end proxy service, *pageKite* will make your logs "look
+funny" and may break certain forms of naive access control.  This is because
+from the point of view of your web server, all connections that travel over
+*pageKite* will appear to originate from **localhost**, with the IP address
+127.0.0.1. **This will break any authentication done based on IP addresses.**
+
+For logging purposes, the HTTP and WebSocket protocols, the "standard"
+X-Forwarded-For header is added to initial requests (if HTTP 1.1 persistent
+connections are used subsequent requests may be lacking the header), in all
+cases pagekite.py will report the actual remote IP in the log.
+
+[ [up](#toc) ]
+
+
 <a                                                              name=lic></a>
 ### 12. Credits and licence ###
 
