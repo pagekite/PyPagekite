@@ -2063,7 +2063,6 @@ class PageKite(object):
     if not token or token == signToken(token=token, payload=data):
       if self.auth_domain:
         lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
-        LogDebug('Lookup: %s' % lookup)
         try:
           rv = self.LookupDomainQuota(lookup)
           if rv is None or rv >= 0: return rv
