@@ -1704,7 +1704,7 @@ class UserConn(Selectable):
       ('is', 'BE')
     ]
     if remote_ip: logInfo.append(('remote_ip', remote_ip))
-    if remote_port: logInfo.append(('remote_port', remote_port))
+    #Boring: if remote_port: logInfo.append(('remote_port', remote_port))
 
     if not backend:
       logInfo.append(('err', 'No back-end'))
@@ -1784,7 +1784,13 @@ class UnknownConn(MagicProtocolParser):
             if upgrade and upgrade[0].lower() == 'websocket':
               proto = 'websocket'
 
-        if UserConn.FrontEnd(self, self.address,
+        address = self.address
+        if int(self.on_port) in self.conns.config.server_portalias:
+          xfwdf = self.parser.Header('X-Forwarded-For')
+          if xfwdf and address[0] == '127.0.0.1':
+            address = (xfwdf[0], address[1])
+
+        if UserConn.FrontEnd(self, address,
                              proto, host, self.on_port,
                              self.parser.lines + lines, self.conns) is None:
           if magic_parts:
