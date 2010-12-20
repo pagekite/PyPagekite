@@ -85,7 +85,7 @@
 #
 #
 PROTOVER = '0.8'
-APPVER = '0.3.5'
+APPVER = '0.3.6'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 DOC = """\
@@ -95,10 +95,11 @@ pagekite.py is Copyright 2010, the Beanstalks Project ehf.
 This the reference implementation of the PageKite tunneling protocol,
 both the front- and back-end. This following protocols are supported:
 
-  HTTP    - HTTP 1.1 only, requires a valid HTTP Host: header
-  HTTPS   - Recent versions of TLS only, requires the SNI extension.
-  XMPP    - ...unfinished... (FIXME)
-  SMTP    - ...unfinished... (FIXME)
+  HTTP      - HTTP 1.1 only, requires a valid HTTP Host: header
+  HTTPS     - Recent versions of TLS only, requires the SNI extension.
+  WEBSOCKET - Using the proposed Upgrade: WebSocket method.
+  XMPP      - ...unfinished... (FIXME)
+  SMTP      - ...unfinished... (FIXME)
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the GNU Affero General Public License. For the full text of the
@@ -132,6 +133,7 @@ Front-end Options:
  --authdomain=X -A X    Use X as a remote authentication domain.
  --host=H       -h H    Listen on H (hostname).
  --ports=A,B,C  -p A,B  Listen on ports A, B, C, ...
+ --portalias=A:B        Report port A as port B to backends.
  --protos=A,B,C         Accept the listed protocols for tunneling.
 
  --domain=proto,proto2,pN:domain:secret
@@ -203,7 +205,7 @@ OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
             'authdomain=', 'register=', 'host=', 'ports=', 'protos=',
             'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks',
-            'buffers=']
+            'buffers=', 'portalias=']
 
 AUTH_ERRORS           = '128.'
 AUTH_ERR_USER_UNKNOWN = '128.0.0.0'
@@ -557,6 +559,7 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     for tid in conns.tunnels:
       proto, domain = tid.split(':')
+      if '-' in proto: proto, port = proto.split('-')
       if tid in backends:
         backend = backends[tid][BE_BACKEND]
         if proto.startswith('http'):
@@ -853,10 +856,11 @@ SELECTABLES = {}
 class Selectable(object):
   """A wrapper around a socket, for use with select."""
 
-  def __init__(self, fd=None, address=None, maxread=32000):
+  def __init__(self, fd=None, address=None, on_port=None, maxread=32000):
     self.SetFD(fd or rawsocket(socket.AF_INET, socket.SOCK_STREAM))
     self.maxread = maxread
     self.address = address
+    self.on_port = on_port
     self.created = self.bytes_logged = time.time()
     self.read_bytes = self.all_in = 0
     self.wrote_bytes = self.all_out = 0
@@ -1143,8 +1147,8 @@ class Connections(object):
 class LineParser(Selectable):
   """A Selectable which parses the input as lines of text."""
 
-  def __init__(self, fd=None, address=None):
-    Selectable.__init__(self, fd, address)
+  def __init__(self, fd=None, address=None, on_port=None):
+    Selectable.__init__(self, fd, address, on_port)
     self.leftovers = ''
 
   def html(self):
@@ -1181,8 +1185,8 @@ TLS_CLIENTHELLO = '%c' % 026
 class MagicProtocolParser(LineParser):
   """A Selectable which recognizes HTTP, TLS or XMPP preambles."""
 
-  def __init__(self, fd=None, address=None):
-    LineParser.__init__(self, fd, address)
+  def __init__(self, fd=None, address=None, on_port=None):
+    LineParser.__init__(self, fd, address, on_port)
     self.leftovers = ''
     self.might_be_tls = True
     self.is_tls = False
@@ -1252,8 +1256,8 @@ class MagicProtocolParser(LineParser):
 class ChunkParser(Selectable):
   """A Selectable which parses the input as chunks."""
 
-  def __init__(self, fd=None, address=None):
-    Selectable.__init__(self, fd, address)
+  def __init__(self, fd=None, address=None, on_port=None):
+    Selectable.__init__(self, fd, address, on_port)
     self.want_cbytes = 0
     self.want_bytes = 0
     self.compressed = False
@@ -1506,16 +1510,27 @@ class Tunnel(ChunkParser):
   FrontEnd = staticmethod(_FrontEnd)
   BackEnd = staticmethod(_BackEnd)
 
-  def SendData(self, conn, data, sid=None, host=None, proto=None):
+  def SendData(self, conn, data, sid=None, host=None, proto=None, port=None,
+                                 chunk_headers=None):
     sid = int(sid or conn.sid)
     if conn: self.users[sid] = conn
     if not sid in self.zhistory: self.zhistory[sid] = [0, 0]
-    if host and proto:
-      return self.SendChunked(['SID: %s\nProto: %s\nHost: %s\r\n\r\n' % (sid, proto, host), data],
-                              zhistory=self.zhistory[sid]) 
-    else:
-      return self.SendChunked(['SID: %s\r\n\r\n' % sid, data],
-                              zhistory=self.zhistory[sid]) 
+
+    sending = ['SID: %s\r\n' % sid]
+    if proto: sending.append('Proto: %s\r\n' % proto)
+    if host: sending.append('Host: %s\r\n' % host)
+    if port:
+      porti = int(port)
+      if porti in self.conns.config.server_portalias:
+        sending.append('Port: %s\r\n' % self.conns.config.server_portalias[porti])
+      else:
+        sending.append('Port: %s\r\n' % port)
+    if chunk_headers:
+      for ch in chunk_headers: sending.append('%s: %s\r\n' % ch)
+    sending.append('\r\n')
+    sending.append(data)
+
+    return self.SendChunked(sending, zhistory=self.zhistory[sid])
 
   def Disconnect(self, conn, sid=None, sendeof=True):
     sid = int(sid or conn.sid)
@@ -1571,7 +1586,10 @@ class Tunnel(ChunkParser):
         conn = self.users[sid]
       else:
         proto = (parse.Header('Proto') or [''])[0].lower()
+        port = (parse.Header('Port') or [''])[0].lower()
         host = (parse.Header('Host') or [''])[0].lower()
+        rIp = (parse.Header('RIP') or [''])[0].lower()
+        rPort = (parse.Header('RPort') or [''])[0].lower()
         if proto and host:
           if proto == 'probe':
             if self.Probe(host):
@@ -1581,17 +1599,22 @@ class Tunnel(ChunkParser):
               self.SendChunked('SID: %s\r\n\r\n%s' % (
                                  sid, HTTP_NoBeConnection() )) 
           else:
-            conn = UserConn.BackEnd(proto, host, sid, self)
-            if proto == 'http' and not conn:
-              self.SendChunked('SID: %s\r\n\r\n%s' % (
-                                 sid, HTTP_Unavailable('be', proto, host) )) 
+            conn = UserConn.BackEnd(proto, host, sid, self, port,
+                                    remote_ip=rIp, remote_port=rPort)
+            if proto in ('http', 'websocket'):
+              if rIp:
+                req, rest = re.sub(r'(?mi)^x-forwarded-for', 'X-Old-Forwarded-For', data
+                                   ).split('\n', 1) 
+                data = ''.join([req, '\nX-Forwarded-For: %s\r\n' % rIp, rest])
+              if not conn:
+                self.SendChunked('SID: %s\r\n\r\n%s' % (
+                                   sid, HTTP_Unavailable('be', proto, host) )) 
           if conn:
             self.users[sid] = conn
 
       if not conn:
         self.Disconnect(None, sid=sid)
       else:
-        # FIXME: We should probably be adding X-Forwarded-For headers
         conn.Send(data)
 
     return True
@@ -1600,8 +1623,8 @@ class Tunnel(ChunkParser):
 class UserConn(Selectable):
   """A Selectable representing a user's connection."""
   
-  def __init__(self):
-    Selectable.__init__(self)
+  def __init__(self, address):
+    Selectable.__init__(self, address=address)
     self.tunnel = None
 
   def html(self):
@@ -1618,39 +1641,78 @@ class UserConn(Selectable):
     self.conns.Remove(self)
     Selectable.Cleanup(self)
 
-  def _FrontEnd(conn, proto, host, body, conns):
+  def _FrontEnd(conn, address, proto, host, on_port, body, conns):
     # This is when an external user connects to a server and requests a
     # web-page.  We have to give it to them!
-    self = UserConn()
+    self = UserConn(address)
     self.conns = conns
     self.SetConn(conn)
 
     if ':' in host: host, port = host.split(':')
     self.proto = proto
     self.host = host
-    tunnels = conns.Tunnel((proto == 'probe') and 'http' or proto, host)
+
+    # If the listening port is an alias for another...
+    if int(on_port) in conns.config.server_portalias:
+      on_port = conns.config.server_portalias[int(on_port)]
+
+    # Try and find the right tunnel. We prefer proto/port specifications first,
+    # then the just the proto. If the protocol is WebSocket and no tunnel is
+    # found, look for a plain HTTP tunnel.
+    tunnels = None
+    protos = [proto]
+    if proto == 'probe': protos = ['http']
+    if proto == 'websocket': protos.append('http')
+    for p in protos:
+      if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, on_port), host)
+      if not tunnels: tunnels = conns.Tunnel(p, host)
     if tunnels: self.tunnel = tunnels[0]
 
-    if self.tunnel and self.tunnel.SendData(self, ''.join(body), host=host, proto=proto):
-      self.Log([('domain', self.host), ('proto', self.proto), ('is', 'FE')])
+    if self.address:
+      chunk_headers = [('RIP', self.address[0]), ('RPort', self.address[1])]
+
+    if self.tunnel and self.tunnel.SendData(self, ''.join(body),
+                                            host=host, proto=proto, port=on_port,
+                                            chunk_headers=chunk_headers):
+      self.Log([('domain', self.host), ('on_port', on_port), ('proto', self.proto), ('is', 'FE')])
       self.conns.Add(self)
       return self
     else:
-      self.Log([('err', 'No back-end'), ('proto', self.proto), ('domain', self.host), ('is', 'FE')])
+      self.Log([('err', 'No back-end'), ('on_port', on_port), ('proto', self.proto), ('domain', self.host), ('is', 'FE')])
       return None
 
-  def _BackEnd(proto, host, sid, tunnel):
+  def _BackEnd(proto, host, sid, tunnel, on_port, remote_ip=None, remote_port=None):
     # This is when we open a backend connection, because a user asked for it.
-    self = UserConn()
+    self = UserConn(None)
     self.sid = sid
     self.proto = proto
     self.host = host 
     self.conns = tunnel.conns
     self.tunnel = tunnel
 
-    backend = self.conns.config.GetBackendServer(proto, host)
+    # Try and find the right back-end. We prefer proto/port specifications
+    # first, then the just the proto. If the protocol is WebSocket and no
+    # tunnel is found, look for a plain HTTP tunnel.
+    backend = None
+    protos = [proto]
+    if proto == 'probe': protos = ['http']
+    if proto == 'websocket': protos.append('http')
+    for p in protos:
+      if not backend: backend = self.conns.config.GetBackendServer('%s-%s' % (p, on_port), host)
+      if not backend: backend = self.conns.config.GetBackendServer(p, host)
+
+    logInfo = [
+      ('on_port', on_port),
+      ('proto', proto),
+      ('domain', host),
+      ('is', 'BE')
+    ]
+    if remote_ip: logInfo.append(('remote_ip', remote_ip))
+    #Boring: if remote_port: logInfo.append(('remote_port', remote_port))
+
     if not backend:
-      self.Log([('err', 'No back-end'), ('proto', proto), ('domain', host), ('is', 'BE')])
+      logInfo.append(('err', 'No back-end'))
+      self.Log(logInfo)
       return None
 
     try:
@@ -1666,11 +1728,12 @@ class UserConn(Selectable):
       self.fd.setblocking(0)
 
     except socket.error, err:
-      self.Log([('err', '%s' % err), ('proto', proto), ('domain', host), ('is', 'BE')])
+      logInfo.append(('err', '%s' % err))
+      self.Log(logInfo)
       Selectable.Cleanup(self)
       return None
 
-    self.Log([('proto', proto), ('domain', host), ('is', 'BE')])
+    self.Log(logInfo)
     self.conns.Add(self)
     return self
     
@@ -1684,8 +1747,8 @@ class UserConn(Selectable):
 class UnknownConn(MagicProtocolParser):
   """This class is a connection which we're not sure what is yet."""
 
-  def __init__(self, fd, address, conns):
-    MagicProtocolParser.__init__(self, fd, address)
+  def __init__(self, fd, address, on_port, conns):
+    MagicProtocolParser.__init__(self, fd, address, on_port)
     self.parser = HttpParser()
     self.conns = conns
     self.conns.Add(self)
@@ -1720,8 +1783,19 @@ class UnknownConn(MagicProtocolParser):
           host = hosts[0].lower()
           magic_parts = None
           proto = 'http'
+          upgrade = self.parser.Header('Upgrade')
+          if 'websocket' in self.conns.config.server_protos:
+            if upgrade and upgrade[0].lower() == 'websocket':
+              proto = 'websocket'
 
-        if UserConn.FrontEnd(self, proto, host,
+        address = self.address
+        if int(self.on_port) in self.conns.config.server_portalias:
+          xfwdf = self.parser.Header('X-Forwarded-For')
+          if xfwdf and address[0] == '127.0.0.1':
+            address = (xfwdf[0], address[1])
+
+        if UserConn.FrontEnd(self, address,
+                             proto, host, self.on_port,
                              self.parser.lines + lines, self.conns) is None:
           if magic_parts:
             self.Send(HTTP_NoFeConnection())
@@ -1743,7 +1817,9 @@ class UnknownConn(MagicProtocolParser):
   def ProcessTls(self, data):
     domains = self.GetSni(data)
     if domains:
-      if UserConn.FrontEnd(self, 'https', domains[0], [data], self.conns) is None:
+      if UserConn.FrontEnd(self, self.address,
+                           'https', domains[0], self.on_port,
+                           [data], self.conns) is None:
         return False
 
     # We are done!
@@ -1782,7 +1858,7 @@ class Listener(Selectable):
     try:
       client, address = self.fd.accept()
       if client:
-        uc = self.connclass(client, address, self.conns)
+        uc = self.connclass(client, address, self.port, self.conns)
         self.Log([('accept', '%s:%s' % (obfuIp(address[0]), address[1]))])
         return True
     except Exception, e:
@@ -1798,7 +1874,9 @@ class PageKite(object):
     self.auth_domain = None
     self.server_host = ''
     self.server_ports = [80]
-    self.server_protos = ['http', 'https']
+    self.server_portalias = {}
+    self.server_aliasport = {}
+    self.server_protos = ['http', 'https', 'websocket']
 
     self.daemonize = False
     self.pidfile = None
@@ -1876,8 +1954,9 @@ class PageKite(object):
         print 'backend=%s:%s:%s' % (bid, be[BE_BACKEND], be[BE_SECRET])
         bprinted += 1
     if bprinted == 0:
-      print '#backend=http:YOU.pagekite.me:localhost:80:SECRET'  
-      print '#backend=https:YOU.pagekite.me:localhost:443:SECRET'  
+      print '#backend=http:YOU.pagekite.me:localhost:80:SECRET'
+      print '#backend=https:YOU.pagekite.me:localhost:443:SECRET'
+      print '#backend=websocket:YOU.pagekite.me:localhost:8080:SECRET'
     print (self.servers_new_only and 'new' or '#new')
     print (self.require_all and 'all' or '#all')
     print
@@ -1893,14 +1972,16 @@ class PageKite(object):
     print (self.server_host and '%shost=%s' % (comment, self.server_host) or '#host=machine.domain.com')
     print '%sports=%s' % (comment, ','.join(['%s' % x for x in self.server_ports] or []))
     print '%sprotos=%s' % (comment, ','.join(['%s' % x for x in self.server_protos] or []))
+    for pa in self.server_portalias:
+      print 'portalias=%s:%s' % (int(pa), int(self.server_portalias[pa]))
     # FIXME: --register ?
     print (self.auth_domain and '%sauthdomain=%s' % (comment, self.auth_domain) or '#authdomain=foo.com')
     for bid in self.backends:
       be = self.backends[bid]
       if not be[BE_BACKEND]:
-        print 'domain=%s:%s:%s' % (bid, be[BE_SECRET])
-    print '#domain=http:*.pagekite.me:SECRET1'  
-    print '#domain=http,https:THEM.pagekite.me:SECRET2'  
+        print 'domain=%s:%s' % (bid, be[BE_SECRET])
+    print '#domain=http:*.pagekite.me:SECRET1'
+    print '#domain=http,https,websocket:THEM.pagekite.me:SECRET2'
 
     print
     print '# Systems administration settings:'
@@ -1959,14 +2040,30 @@ class PageKite(object):
     # User unknown, fall through to local test.
     return -1 
 
-  def GetDomainQuota(self, proto, domain, srand, token, sign, recurse=True):
-    if proto not in self.server_protos: return None
+  def GetDomainQuota(self, protoport, domain, srand, token, sign, recurse=True):
+    if '-' in protoport:
+      proto, port = protoport.split('-')
+      try:
+        porti = int(port)
+        if porti in self.server_aliasport: porti = self.server_aliasport[porti]
+        if porti not in self.server_ports:
+          LogError('Unsupported port request: %s (%s:%s)' % (porti, protoport, domain))
+          return None
+      except ValueError:
+        LogError('Invalid port request: %s (%s:%s)' % (port, protoport, domain))
+        return None
+    else:
+      proto, port = protoport, None
 
-    bid = '%s:%s' % (proto, domain)
-    data = '%s:%s' % (bid, srand)
+    if proto not in self.server_protos:
+      LogError('Invalid proto request: %s (%s:%s)' % (proto, protoport, domain))
+      return None
+
+    data = '%s:%s:%s' % (protoport, domain, srand)
     if not token or token == signToken(token=token, payload=data):
       if self.auth_domain:
-        lookup = '.'.join([srand, token, sign, proto, domain, self.auth_domain])
+        lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
+        LogDebug('Lookup: %s' % lookup)
         try:
           rv = self.LookupDomainQuota(lookup)
           if rv is None or rv >= 0: return rv
@@ -1974,13 +2071,16 @@ class PageKite(object):
           # Lookup failed, fall through to local test.
           pass
 
-      secret = self.GetBackendData(proto, domain, BE_SECRET)
+      secret = self.GetBackendData(protoport, domain, BE_SECRET)
+      if not secret: secret = self.GetBackendData(proto, domain, BE_SECRET)
       if secret:
-        if self.IsSignatureValid(sign, secret, proto, domain, srand, token):
+        if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
           return 1024
         else:
+          LogError('Invalid signature for: %s (%s:%s)' % (proto, protoport, domain))
           return None
 
+    LogError('No authentication found for: %s (%s:%s)' % (proto, protoport, domain))
     return None
 
   def ConfigureFromFile(self, filename=None):
@@ -2050,6 +2150,10 @@ class PageKite(object):
           self.dyndns = (arg, {'user': '', 'pass': ''})
 
       elif opt in ('-p', '--ports'): self.server_ports = [int(x) for x in arg.split(',')]
+      elif opt == '--portalias':
+        port, alias = arg.split(':')
+        self.server_portalias[int(port)] = int(alias)
+        self.server_aliasport[int(alias)] = int(port)
       elif opt == '--protos': self.server_protos = [x.lower() for x in arg.split(',')]
       elif opt in ('-h', '--host'): self.server_host = arg
       elif opt in ('-A', '--authdomain'): self.auth_domain = arg
@@ -2081,12 +2185,19 @@ class PageKite(object):
       elif opt == '--backend':
         protos, domain, bhost, bport, secret = arg.split(':')
         for proto in protos.split(','): 
-          bid = '%s:%s' % (proto.lower(), domain.lower())
+          proto = proto.replace('/', '-')
+          if '-' in proto:
+            proto, port = proto.split('-')
+            bid = '%s-%d:%s' % (proto.lower(), int(port), domain.lower())
+          else:
+            bid = '%s:%s' % (proto.lower(), domain.lower())
+
           backend = '%s:%s' % (bhost.lower(), bport)
           self.backends[bid] = (proto.lower(), domain.lower(), backend, secret)
 
       elif opt == '--domain':
         protos, domain, secret = arg.split(':')
+        if protos in ('*', ''): protos = ','.join(self.server_protos)
         for proto in protos.split(','): 
           bid = '%s:%s' % (proto, domain)
           self.backends[bid] = (proto, domain, None, secret)

@@ -2,6 +2,14 @@ Version history - highlights
 ============================
 
 
+v0.3.6   2010.12.??
+------
+  - Added support for the websocket protocols (Upgrade: WebSocket header)
+  - Added support for binding to, and routing by ports as well as protocols
+  - Made the IP address of visiters get reported to back-end and logged.
+  - Made X-Forwarded-For behave correctly for HTTP and WEBSOCKET
+
+
 v0.3.5   2010.12.15
 ------
   - Misc. minor bugfixes.

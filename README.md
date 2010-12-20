@@ -65,13 +65,26 @@ your account page.
 
 You can add multiple backend specifications, one for each name and protocol
 you wish to expose.  Here is an example running two websites, one of which
-is available both as HTTP and HTTPS:
+is available using three protocols: HTTP, HTTPS and WebSocket.
 
     backend$ pagekite.py \
       --defaults \
       --backend=http:YOURNAME:localhost:80:SECRET \
       --backend=https:YOURNAME:localhost:443:SECRET \
+      --backend=websocket:YOURNAME:localhost:8080:SECRET \
       --backend=http:OTHERNAME:localhost:8080:SECRET
+
+Alternately, if you want to run different HTTP back-ends on different ports
+for the same domain name, you can include port numbers in your backend specs:
+
+    backend$ pagekite.py \
+      --defaults \
+      --backend=http/80:YOURNAME:localhost:80:SECRET \
+      --backend=http/8080:YOURNAME:localhost:8080:SECRET
+
+Note that this really only works for HTTP.  Also, which ports are actually
+available depends on the front-end, and the protocol must still be one
+supported by *pageKite* (HTTP, HTTPS or WebSocket).
 
 [ [up](#toc) ]
 
@@ -104,12 +117,12 @@ server with a publicly visible IP address, and you will need to configure
 DNS correctly, [as discussed below](#dns).
 
 Assuming you are not already running a web server on that machine, the
-optimal configuration is to run pagekite.py so it listens on both ports
-80 and 443, like so:
+optimal configuration is to run pagekite.py so it listens on a few ports
+(80 and 443 at least), like so:
 
     frontend$ sudo pagekite.py \
       --isfrontend \
-      --ports=80,443 --protos=http,https \
+      --ports=80,443 --protos=http,https,websocket \
       --domain=http,https:YOURNAME:YOURSECRET
 
 In this case, YOURNAME must be a DNS name which points to the IP of the
@@ -128,9 +141,9 @@ as you like. So something like this might make sense:
 
     frontend$ sudo pagekite.py \
       --isfrontend \
-      --ports=80,443 --protos=http,https \
-      --domain=http,https:*.YOURDOMAIN.COM:YOURSECRET \
-      --domain=http,https:*.YOUROTHERDOMAIN.NET:YOUROTHERSECRET
+      --ports=80,443,8080 --protos=http,https,websocket \
+      --domain=http,https,websocket:*.YOURDOMAIN.COM:YOURSECRET \
+      --domain=http,https,websocket:*.YOUROTHERDOMAIN.NET:YOUROTHERSECRET
 
 Unfortunately, root permissions are required in order to bind ports 80
 and 443, but it is possible to instruct pagekite.py to drop all privileges
@@ -139,8 +152,8 @@ as soon as possible, like so:
     frontend$ sudo pagekite.py \
       --isfrontend \
       --runas=nobody:nogroup \
-      --ports=80,443 --protos=http,https \
-      --domain=http,https:YOURNAME:YOURSECRET
+      --ports=80,443,8080 --protos=http,https,websocket \
+      --domain=http,https,websocket:YOURNAME:YOURSECRET
 
 This assumes the *nobody* user and *nogroup* group exist on your system.
 Replace with other values as necessary.  See the section on [Unix/Linux
@@ -365,9 +378,9 @@ the front-end might look something like this:
       --isfrontend \
       --host=1.2.3.4 \
       --ports=80,443 \
-      --protos=http,https \
-      --domain=http,https:*.YOURDOMAIN.COM:YOURSECRET \
-      --domain=http,https:*.YOUROTHERDOMAIN.NET:YOUROTHERSECRET
+      --protos=http,https,websocket \
+      --domain=http,https,websocket:*.YOURDOMAIN.COM:YOURSECRET \
+      --domain=http,https,websocket:*.YOUROTHERDOMAIN.NET:YOUROTHERSECRET
 
 That is quite a lot of arguments!  So please read on, and learn how to
 generate a configuration file...
@@ -404,6 +417,37 @@ are experimenting. To *skip* the configuration file, you can use the
 
 The --optfile option can be used within configuration files as well, if
 you want to "include" a one configuration into another for some reason.
+
+[ [up](#toc) ]
+
+
+<a                                                              name=sec></a>
+### 12. A word about security and logs ###
+
+When exposing services to the wider Internet, as pagekite.py is designed to
+do, it is always important to keep some basic security principles in mind.
+
+Pagekite.py itself should be quite secure - it never invokes any external
+processes and the only modifications it makes to the file-system are the
+log-files it writes.
+
+The main security concern is your HTTP server, which you are exposing to
+the wider Internet. Covering general web server security is out of scope for
+this brief manual, but there is one important difference between running a
+web server on a public host and running one through *pageKite*.
+
+The most important difference has to do with access control and logs.
+
+As with any front-end proxy service, *pageKite* will make your logs "look
+funny" and may break certain forms of naive access control.  This is because
+from the point of view of your web server, all connections that travel over
+*pageKite* will appear to originate from **localhost**, with the IP address
+127.0.0.1. **This will break any authentication done based on IP addresses.**
+
+For logging purposes, the HTTP and WebSocket protocols, the "standard"
+X-Forwarded-For header is added to initial requests (if HTTP 1.1 persistent
+connections are used subsequent requests may be lacking the header), in all
+cases pagekite.py will report the actual remote IP in the log.
 
 [ [up](#toc) ]
 
