@@ -3,22 +3,6 @@
 # pagekite.py, Copyright 2010, the Beanstalks Project ehf.
 #                                  and Bjarni Runar Einarsson
 #
-# FIXME: Implement epoll() support.
-# FIXME: Stress test this thing: when do we need a C rewrite?
-# FIXME: Make multi-process, use the FD-over-socket trick? Threads=>GIL=>bleh
-# FIXME: Add XMPP and incoming SMTP support.
-# FIXME: Add a basic HTTP and HTTPS server for configuring, monitoring and
-#        proof of concept. 
-# FIXME: Add throttling, bandwidth shaping and auto-slowdown for freebies?
-# FIXME: Add support for dedicated ports (PageKitePNP, ha ha).
-# FIXME: Add direct (un-tunneled) proxying as well.
-# FIXME: Create a derivative BaseHTTPServer which doesn't actually listen()
-#        on a real socket, but instead communicates with the tunnel directly.
-# FIXME: Add a scheduler for deferred/periodic processing.
-# FIXME: Move DynDNS updates to a separate thread, blocking on them is dumb.
-# FIXME: Security: Add same-origin cookie enforcement to front-end. Or is
-#        that pointless due to Javascript side-channels?
-#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
 # published by the Free Software Foundation, either version 3 of the
@@ -33,7 +17,38 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 #
-##[ Hacking guide! ]############################################################
+##[ Maybe TODO: ]##############################################################
+#
+# Optimization:
+#  - Implement epoll() support.
+#  - Stress test this thing: when do we need a C rewrite?
+#  - Make multi-process, use the FD-over-socket trick? Threads=>GIL=>bleh
+#  - Add QoS and bandwidth shaping
+#  - Add a scheduler for deferred/periodic processing.
+#  - Move DynDNS updates to a separate thread, blocking on them is dumb.
+#  - Create a derivative BaseHTTPServer which doesn't actually listen()
+#    on a real socket, but instead communicates with the tunnel directly.
+#
+# Protocols:
+#  - Add XMPP and incoming SMTP support.
+#  - Add support for dedicated ports (PageKitePNP, ha ha).
+#  - Add direct (un-tunneled) proxying as well.
+#  - Tor entry point support? Is current SSL enough?
+#
+# User interface:
+#  - Enable (re)configuration from within HTTP UI.
+#  - More human readable console output?
+#
+#  Security:
+#  - Add same-origin cookie enforcement to front-end. Or is that pointless
+#    due to Javascript side-channels?
+#
+# Bugs?
+#  - Odd select behavior on Windows suspend/resume
+#  - Keepalive isn't quite good enough, reconnect logic is poor
+#
+#
+##[ Hacking guide! ]###########################################################
 #
 # Hello! Welcome to my source code.
 #
@@ -55,7 +70,7 @@
 #    figure out which back-end should handle a given request, and then forward
 #    the bytes unmodified over that channel. As a result, the current HTTP
 #    proxy code is not HTTP 1.1 compliant - but if you put it behind Varnish
-#    or some other decent reverse-proxy, then *the combination* is.
+#    or some other decent reverse-proxy, then *the combination* could be!
 #
 #  * The UserConn object represents connections on behalf of users. It can
 #    be created as a FrontEnd, which will find the right tunnel and send
@@ -83,6 +98,7 @@
 #          GIL makes snooping across the thread-boundary relatively safe, even
 #          without explicit locking. Beware!
 #
+###############################################################################
 #
 PROTOVER = '0.8'
 APPVER = '0.3.6'
