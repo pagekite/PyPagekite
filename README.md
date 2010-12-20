@@ -26,7 +26,8 @@ works, check out <http://pagekite.net/docs/>.
    9.  [Connecting over Socks or Tor                    ](#tor)
    10. [Unix/Linux systems integration                  ](#unx)
    11. [Saving your configuration                       ](#cfg)
-   12. [Credits and licence                             ](#lic)
+   12. [A word about security and logs                  ](#sec)
+   13. [Credits and licence                             ](#lic)
 
 
 <a                                                              name=req></a>
@@ -453,7 +454,7 @@ cases pagekite.py will report the actual remote IP in the log.
 
 
 <a                                                              name=lic></a>
-### 12. Credits and licence ###
+### 13. Credits and licence ###
 
 Pagekite.py is (C) Copyright 2010, Bjarni Rúnar Einarsson and The
 Beanstalks Project ehf.
