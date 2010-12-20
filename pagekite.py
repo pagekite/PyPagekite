@@ -856,11 +856,11 @@ SELECTABLES = {}
 class Selectable(object):
   """A wrapper around a socket, for use with select."""
 
-  def __init__(self, fd=None, address=None, my_port=None, maxread=32000):
+  def __init__(self, fd=None, address=None, on_port=None, maxread=32000):
     self.SetFD(fd or rawsocket(socket.AF_INET, socket.SOCK_STREAM))
     self.maxread = maxread
     self.address = address
-    self.my_port = my_port
+    self.on_port = on_port
     self.created = self.bytes_logged = time.time()
     self.read_bytes = self.all_in = 0
     self.wrote_bytes = self.all_out = 0
@@ -1147,8 +1147,8 @@ class Connections(object):
 class LineParser(Selectable):
   """A Selectable which parses the input as lines of text."""
 
-  def __init__(self, fd=None, address=None, my_port=None):
-    Selectable.__init__(self, fd, address, my_port)
+  def __init__(self, fd=None, address=None, on_port=None):
+    Selectable.__init__(self, fd, address, on_port)
     self.leftovers = ''
 
   def html(self):
@@ -1185,8 +1185,8 @@ TLS_CLIENTHELLO = '%c' % 026
 class MagicProtocolParser(LineParser):
   """A Selectable which recognizes HTTP, TLS or XMPP preambles."""
 
-  def __init__(self, fd=None, address=None, my_port=None):
-    LineParser.__init__(self, fd, address, my_port)
+  def __init__(self, fd=None, address=None, on_port=None):
+    LineParser.__init__(self, fd, address, on_port)
     self.leftovers = ''
     self.might_be_tls = True
     self.is_tls = False
@@ -1256,8 +1256,8 @@ class MagicProtocolParser(LineParser):
 class ChunkParser(Selectable):
   """A Selectable which parses the input as chunks."""
 
-  def __init__(self, fd=None, address=None, my_port=None):
-    Selectable.__init__(self, fd, address, my_port)
+  def __init__(self, fd=None, address=None, on_port=None):
+    Selectable.__init__(self, fd, address, on_port)
     self.want_cbytes = 0
     self.want_bytes = 0
     self.compressed = False
@@ -1510,7 +1510,8 @@ class Tunnel(ChunkParser):
   FrontEnd = staticmethod(_FrontEnd)
   BackEnd = staticmethod(_BackEnd)
 
-  def SendData(self, conn, data, sid=None, host=None, proto=None, port=None):
+  def SendData(self, conn, data, sid=None, host=None, proto=None, port=None,
+                                 chunk_headers=None):
     sid = int(sid or conn.sid)
     if conn: self.users[sid] = conn
     if not sid in self.zhistory: self.zhistory[sid] = [0, 0]
@@ -1524,6 +1525,8 @@ class Tunnel(ChunkParser):
         sending.append('Port: %s\r\n' % self.conns.config.server_portalias[porti])
       else:
         sending.append('Port: %s\r\n' % port)
+    if chunk_headers:
+      for ch in chunk_headers: sending.append('%s: %s\r\n' % ch)
     sending.append('\r\n')
     sending.append(data)
 
@@ -1585,6 +1588,8 @@ class Tunnel(ChunkParser):
         proto = (parse.Header('Proto') or [''])[0].lower()
         port = (parse.Header('Port') or [''])[0].lower()
         host = (parse.Header('Host') or [''])[0].lower()
+        rIp = (parse.Header('RIP') or [''])[0].lower()
+        rPort = (parse.Header('RPort') or [''])[0].lower()
         if proto and host:
           if proto == 'probe':
             if self.Probe(host):
@@ -1594,7 +1599,8 @@ class Tunnel(ChunkParser):
               self.SendChunked('SID: %s\r\n\r\n%s' % (
                                  sid, HTTP_NoBeConnection() )) 
           else:
-            conn = UserConn.BackEnd(proto, host, sid, self, my_port=port)
+            conn = UserConn.BackEnd(proto, host, sid, self, port,
+                                    remote_ip=rIp, remote_port=rPort)
             if proto in ('http', 'websocket') and not conn:
               self.SendChunked('SID: %s\r\n\r\n%s' % (
                                  sid, HTTP_Unavailable('be', proto, host) )) 
@@ -1631,7 +1637,7 @@ class UserConn(Selectable):
     self.conns.Remove(self)
     Selectable.Cleanup(self)
 
-  def _FrontEnd(conn, proto, host, my_port, body, conns):
+  def _FrontEnd(conn, proto, host, on_port, body, conns):
     # This is when an external user connects to a server and requests a
     # web-page.  We have to give it to them!
     self = UserConn()
@@ -1643,8 +1649,8 @@ class UserConn(Selectable):
     self.host = host
 
     # If the listening port is an alias for another...
-    if int(my_port) in conns.config.server_portalias:
-      my_port = conns.config.server_portalias[int(my_port)]
+    if int(on_port) in conns.config.server_portalias:
+      on_port = conns.config.server_portalias[int(on_port)]
 
     # Try and find the right tunnel. We prefer proto/port specifications first,
     # then the just the proto. If the protocol is WebSocket and no tunnel is
@@ -1654,19 +1660,24 @@ class UserConn(Selectable):
     if proto == 'probe': protos = ['http']
     if proto == 'websocket': protos.append('http')
     for p in protos:
-      if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, my_port), host)
+      if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, on_port), host)
       if not tunnels: tunnels = conns.Tunnel(p, host)
     if tunnels: self.tunnel = tunnels[0]
 
-    if self.tunnel and self.tunnel.SendData(self, ''.join(body), host=host, proto=proto, port=my_port):
-      self.Log([('domain', self.host), ('lport', my_port), ('proto', self.proto), ('is', 'FE')])
+    addr = self.address or ('x.x.x.x', 'x')
+    chunk_headers = [('RIP', addr[0]), ('RPort', addr[1])]
+
+    if self.tunnel and self.tunnel.SendData(self, ''.join(body),
+                                            host=host, proto=proto, port=on_port,
+                                            chunk_headers=chunk_headers):
+      self.Log([('domain', self.host), ('on_port', on_port), ('proto', self.proto), ('is', 'FE')])
       self.conns.Add(self)
       return self
     else:
-      self.Log([('err', 'No back-end'), ('lport', my_port), ('proto', self.proto), ('domain', self.host), ('is', 'FE')])
+      self.Log([('err', 'No back-end'), ('on_port', on_port), ('proto', self.proto), ('domain', self.host), ('is', 'FE')])
       return None
 
-  def _BackEnd(proto, host, sid, tunnel, my_port=None):
+  def _BackEnd(proto, host, sid, tunnel, on_port, remote_ip=None, remote_port=None):
     # This is when we open a backend connection, because a user asked for it.
     self = UserConn()
     self.sid = sid
@@ -1683,11 +1694,21 @@ class UserConn(Selectable):
     if proto == 'probe': protos = ['http']
     if proto == 'websocket': protos.append('http')
     for p in protos:
-      if not backend: backend = self.conns.config.GetBackendServer('%s-%s' % (p, my_port), host)
+      if not backend: backend = self.conns.config.GetBackendServer('%s-%s' % (p, on_port), host)
       if not backend: backend = self.conns.config.GetBackendServer(p, host)
 
+    logInfo = [
+      ('on_port', on_port),
+      ('proto', proto),
+      ('domain', host),
+      ('is', 'BE')
+    ]
+    if remote_ip: logInfo.append(('remote_ip', remote_ip))
+    if remote_port: logInfo.append(('remote_port', remote_port))
+
     if not backend:
-      self.Log([('err', 'No back-end'), ('lport', my_port), ('proto', proto), ('domain', host), ('is', 'BE')])
+      logInfo.append(('err', 'No back-end'))
+      self.Log(logInfo)
       return None
 
     try:
@@ -1703,11 +1724,12 @@ class UserConn(Selectable):
       self.fd.setblocking(0)
 
     except socket.error, err:
-      self.Log([('err', '%s' % err), ('lport', my_port), ('proto', proto), ('domain', host), ('is', 'BE')])
+      logInfo.append(('err', '%s' % err))
+      self.Log(logInfo)
       Selectable.Cleanup(self)
       return None
 
-    self.Log([('proto', proto), ('lport', my_port), ('domain', host), ('is', 'BE')])
+    self.Log(logInfo)
     self.conns.Add(self)
     return self
     
@@ -1721,8 +1743,8 @@ class UserConn(Selectable):
 class UnknownConn(MagicProtocolParser):
   """This class is a connection which we're not sure what is yet."""
 
-  def __init__(self, fd, address, my_port, conns):
-    MagicProtocolParser.__init__(self, fd, address, my_port)
+  def __init__(self, fd, address, on_port, conns):
+    MagicProtocolParser.__init__(self, fd, address, on_port)
     self.parser = HttpParser()
     self.conns = conns
     self.conns.Add(self)
@@ -1762,7 +1784,7 @@ class UnknownConn(MagicProtocolParser):
             if upgrade and upgrade[0].lower() == 'websocket':
               proto = 'websocket'
 
-        if UserConn.FrontEnd(self, proto, host, self.my_port,
+        if UserConn.FrontEnd(self, proto, host, self.on_port,
                              self.parser.lines + lines, self.conns) is None:
           if magic_parts:
             self.Send(HTTP_NoFeConnection())
@@ -1784,7 +1806,7 @@ class UnknownConn(MagicProtocolParser):
   def ProcessTls(self, data):
     domains = self.GetSni(data)
     if domains:
-      if UserConn.FrontEnd(self, 'https', domains[0], self.my_port,
+      if UserConn.FrontEnd(self, 'https', domains[0], self.on_port,
                            [data], self.conns) is None:
         return False
 
