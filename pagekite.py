@@ -1602,13 +1602,13 @@ class Tunnel(ChunkParser):
             conn = UserConn.BackEnd(proto, host, sid, self, port,
                                     remote_ip=rIp, remote_port=rPort)
             if proto in ('http', 'websocket'):
-              if rIp:
-                req, rest = re.sub(r'(?mi)^x-forwarded-for', 'X-Old-Forwarded-For', data
-                                   ).split('\n', 1) 
-                data = ''.join([req, '\nX-Forwarded-For: %s\r\n' % rIp, rest])
               if not conn:
                 self.SendChunked('SID: %s\r\n\r\n%s' % (
                                    sid, HTTP_Unavailable('be', proto, host) )) 
+              elif rIp:
+                req, rest = re.sub(r'(?mi)^x-forwarded-for', 'X-Old-Forwarded-For', data
+                                   ).split('\n', 1) 
+                data = ''.join([req, '\nX-Forwarded-For: %s\r\n' % rIp, rest])
           if conn:
             self.users[sid] = conn
 
