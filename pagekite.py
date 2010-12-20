@@ -1619,8 +1619,8 @@ class Tunnel(ChunkParser):
 class UserConn(Selectable):
   """A Selectable representing a user's connection."""
   
-  def __init__(self):
-    Selectable.__init__(self)
+  def __init__(self, address):
+    Selectable.__init__(self, address=address)
     self.tunnel = None
 
   def html(self):
@@ -1637,10 +1637,10 @@ class UserConn(Selectable):
     self.conns.Remove(self)
     Selectable.Cleanup(self)
 
-  def _FrontEnd(conn, proto, host, on_port, body, conns):
+  def _FrontEnd(conn, address, proto, host, on_port, body, conns):
     # This is when an external user connects to a server and requests a
     # web-page.  We have to give it to them!
-    self = UserConn()
+    self = UserConn(address)
     self.conns = conns
     self.SetConn(conn)
 
@@ -1664,8 +1664,8 @@ class UserConn(Selectable):
       if not tunnels: tunnels = conns.Tunnel(p, host)
     if tunnels: self.tunnel = tunnels[0]
 
-    addr = self.address or ('x.x.x.x', 'x')
-    chunk_headers = [('RIP', addr[0]), ('RPort', addr[1])]
+    if self.address:
+      chunk_headers = [('RIP', self.address[0]), ('RPort', self.address[1])]
 
     if self.tunnel and self.tunnel.SendData(self, ''.join(body),
                                             host=host, proto=proto, port=on_port,
@@ -1679,7 +1679,7 @@ class UserConn(Selectable):
 
   def _BackEnd(proto, host, sid, tunnel, on_port, remote_ip=None, remote_port=None):
     # This is when we open a backend connection, because a user asked for it.
-    self = UserConn()
+    self = UserConn(None)
     self.sid = sid
     self.proto = proto
     self.host = host 
@@ -1784,7 +1784,8 @@ class UnknownConn(MagicProtocolParser):
             if upgrade and upgrade[0].lower() == 'websocket':
               proto = 'websocket'
 
-        if UserConn.FrontEnd(self, proto, host, self.on_port,
+        if UserConn.FrontEnd(self, self.address,
+                             proto, host, self.on_port,
                              self.parser.lines + lines, self.conns) is None:
           if magic_parts:
             self.Send(HTTP_NoFeConnection())
@@ -1806,7 +1807,8 @@ class UnknownConn(MagicProtocolParser):
   def ProcessTls(self, data):
     domains = self.GetSni(data)
     if domains:
-      if UserConn.FrontEnd(self, 'https', domains[0], self.on_port,
+      if UserConn.FrontEnd(self, self.address,
+                           'https', domains[0], self.on_port,
                            [data], self.conns) is None:
         return False
 
