@@ -445,8 +445,8 @@ from the point of view of your web server, all connections that travel over
 
 For logging purposes, the HTTP and WebSocket protocols, the "standard"
 X-Forwarded-For header is added to initial requests (if HTTP 1.1 persistent
-connections are used subsequent requests may be lacking the header), in all
-cases pagekite.py will report the actual remote IP in the log.
+connections are used, subsequent requests may be lacking the header), in all
+cases pagekite.py will report the actual remote IP in its own log.
 
 [ [up](#toc) ]
 
