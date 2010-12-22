@@ -32,7 +32,6 @@
 # Protocols:
 #  - Add XMPP and incoming SMTP support.
 #  - Add support for dedicated ports (PageKitePNP, ha ha).
-#  - Add direct (un-tunneled) proxying as well.
 #  - Tor entry point support? Is current SSL enough?
 #
 # User interface:
@@ -1688,22 +1687,21 @@ class LoopbackTunnel(Tunnel):
           self.conns.Tunnel(proto, domain, self)
           self.Log([('FE', self.server_name), ('proto', proto), ('domain', domain)])
 
-  def Link(self, other):
-    self.other_end = other
-
   def Cleanup(self):
     self.other_end = None
 
-  def Send(self, data):
-    return self.other_end.ProcessData(''.join(data))
+  def Linkup(self, other):
+    self.other_end = other
+    other.other_end = self
 
   def _Loop(conns, backends):
-    fe = LoopbackTunnel(conns, 'FE', backends)
-    be = LoopbackTunnel(conns, 'BE', backends)
-    fe.Link(be)
-    be.Link(fe)
+    LoopbackTunnel(conns, 'FE', backends
+                   ).Linkup(LoopbackTunnel(conns, 'BE', backends))
 
   Loop = staticmethod(_Loop)
+
+  def Send(self, data):
+    return self.other_end.ProcessData(''.join(data))
 
 
 class UserConn(Selectable):
