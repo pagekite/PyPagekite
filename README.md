@@ -382,6 +382,9 @@ like so:
 In the case of Tor, replace --socksify with --torify and (probably) 
 connect to localhost, on port 9050.
 
+With --torify, some behavior is modified slightly in order to avoid leaking
+information about which domains you are hosting through DNS side channels.
+
 **Note:** This requires SocksiPy: <http://code.google.com/p/socksipy-branch/>
 
 [ [up](#toc) ]
