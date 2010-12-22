@@ -1992,6 +1992,7 @@ class PageKite(object):
     self.backends = {}  # These are the backends we want tunnels for.
     self.conns = None
     self.looping = False
+    self.main_loop = True
 
     self.crash_report_url = '%scgi-bin/crashes.pl' % WWWHOME
     self.rcfile_recursion = 0
@@ -2209,6 +2210,7 @@ class PageKite(object):
                                       grp.getgrnam(parts[1])[2])
         else:
           self.setuid = pwd.getpwnam(parts[0])[2]
+        self.main_loop = False
 
       elif opt in ('-X', '--httppass'): self.ui_password = arg
       elif opt in ('-P', '--pemfile'): self.ui_pemfile = arg
@@ -2295,7 +2297,7 @@ class PageKite(object):
       elif opt == '--buffers': self.buffer_max = int(arg)
       elif opt == '--nocrashreport': self.crash_report_url = None
       elif opt == '--clean': pass
-      elif opt == '--noloop': pass
+      elif opt == '--noloop': self.main_loop = False
 
       elif opt == '--defaults':
         self.ui_sspec = ('127.0.0.1', 9999) 
@@ -2619,19 +2621,14 @@ class PageKite(object):
 
 ##[ Main ]#####################################################################
 
-if __name__ == '__main__':
-
-  noexit = ('--noloop' not in sys.argv)
+def Main(pagekite, configure):
   crashes = 1
 
   while True:
-    pk = PageKite()
+    pk = pagekite()
     try:
       try:
-        if '--clean' not in sys.argv:
-          if os.path.exists(pk.rcfile): pk.ConfigureFromFile()
-        pk.Configure(sys.argv[1:])
-        pk.CheckConfig()
+        configure(pk)
         pk.Start()
 
       except (ValueError, ConfigError, getopt.GetoptError), msg:
@@ -2655,7 +2652,7 @@ if __name__ == '__main__':
           pass
 
       traceback.print_exc(file=sys.stderr)
-      pk.FallDown(msg, help=False, noexit=noexit)
+      pk.FallDown(msg, help=False, noexit=pk.main_loop)
 
       # If we get this far, then we're looping. Clean up.
       for fd in pk.conns.Sockets(): fd.close()
@@ -2665,5 +2662,14 @@ if __name__ == '__main__':
       time.sleep(2 ** crashes)
       crashes += 1
       if crashes > 9: crashes = 9
+
+def Configure(pk):
+  if '--clean' not in sys.argv:
+    if os.path.exists(pk.rcfile): pk.ConfigureFromFile()
+  pk.Configure(sys.argv[1:])
+  pk.CheckConfig()
+
+if __name__ == '__main__':
+  Main(PageKite, Configure)
 
 # vi:ts=2 expandtab
