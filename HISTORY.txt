@@ -8,6 +8,9 @@ v0.3.6   2010.12.??
   - Added support for binding to, and routing by ports as well as protocols
   - Made the IP address of visiters get reported to back-end and logged.
   - Made X-Forwarded-For behave correctly for HTTP and WEBSOCKET
+  - Built-in httpd now based on SimpleXMLRPCServer
+  - Enbled --pemfile, for SSL encrypted admin consoles
+  - Front-ends can now have local (non-tunneled) back-ends
 
 
 v0.3.5   2010.12.15
