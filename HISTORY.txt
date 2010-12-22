@@ -11,6 +11,7 @@ v0.3.6   2010.12.??
   - Built-in httpd now based on SimpleXMLRPCServer
   - Enbled --pemfile, for SSL encrypted admin consoles
   - Front-ends can now have local (non-tunneled) back-ends
+  - Implemented time-based routing of non-SNI SSL connections.
 
 
 v0.3.5   2010.12.15

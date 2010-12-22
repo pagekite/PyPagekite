@@ -1147,9 +1147,9 @@ class Connections(object):
     self.conns.append(conn)
 
   def TrackIP(self, ip, domain):
-    tick = '%d' % time.time()
+    tick = '%d' % (time.time()/12)
     if tick not in self.ip_tracker:
-      deadline = int(tick)-5
+      deadline = int(tick)-10
       for ot in self.ip_tracker.keys():
         if int(ot) < deadline: del self.ip_tracker[ot]
       self.ip_tracker[tick] = {}
@@ -1931,7 +1931,9 @@ class UnknownConn(MagicProtocolParser):
 
   def ProcessTls(self, data):
     domains = self.GetSni(data)
-    if domains:
+    if not domains:
+      domains = [self.conns.LastIpDomain(self.address[0])]
+    if domains and domains[0] is not None:
       if UserConn.FrontEnd(self, self.address,
                            'https', domains[0], self.on_port,
                            [data], self.conns) is None:
