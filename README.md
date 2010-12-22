@@ -176,7 +176,7 @@ address and port (we recommend 127.0.0.1:2223), which you can visit with
 any web browser to see which tunnels are active, browse and filter the logs
 and other nice things like that. If you want to expose a back-end's console
 to the wider Internet, that is possible too (just add a --backend line for
-it), but in that case it's probably a good idea to use --httppass to set
+it), but in that case it is probably a good idea to use --httppass to set
 a password.
 
 An example:
@@ -191,6 +191,29 @@ An example:
 This should make the console visible both on http://localhost:2223/ and
 http://CONSOLENAME/.  When it prompts for a username and password, type in
 whatever username you like, and the password given on the command-line.
+
+
+#### Enabling SSL on the HTTP console ####
+
+If you have the Python OpenSSL module installed, you can increase the
+security of your HTTP console even further by creating a self-signed
+SSL certificate and enabling it using the --pemfile option:
+
+    backend$ pagekite.py \
+      --defaults \
+      --httpd=127.0.0.1:2223 \
+      --httppass=YOURPASSWORD \
+      --pemfile=cert.pem \
+      ...
+
+To generate a self-signed certificate:
+
+    openssl req -new -x509 \
+      -keyout cert.pem -out cert.pem \
+      -days 365 -nodes
+
+Note that your browser will complain when you first visit the console
+and you will have to add a security exception in order to access the page.
 
 [ [up](#toc) ]
 
@@ -210,19 +233,27 @@ If, however, you have to share a single IP, things get slightly more
 complicated. Either the web-server will have to forward connections to
 pagekite.py, or the other way around.
 
-#### pagekite.py on port 80 ####
+#### pagekite.py on port 80 (recommended) ####
 
-Since pagekite.py is designed to run in the role of a front-end proxy, it
-is safest to run it on port 80:
+As of pagekite.py 0.3.6, it is possible for front-ends to have direct local
+back-ends, so just letting pagekite.py have port 80 (and 443) is the simplest
+way to get the two to coexist:
 
-   1. Configure pagekite.py as a front-end [as usual](#fe)
-   2. Move your old web-server to another port (such as 8080)
-   3. Run *another* pagekite.py as a back-end for the server on 8080
+   1. Move your old web-server to another port (such as 8080)
+   2. Configure pagekite.py [as a front-end](#fe) on port 80
+   3. Add --backend specifications for your old web-server.
 
-This is guaranteed to work, but it does admittedly feel a bit messy to have
-two pagekite.py processes running on the same machine. Future versions of
-pagekite.py will hopefully address this by allowing specification of direct
-back-ends on a front-end pagekite.py.
+For example:
+
+    frontend$ sudo pagekite.py \
+      --isfrontend \
+      --runas=nobody:nogroup \
+      --ports=80,443 --protos=http,https,websocket \
+      --domain=http,https,websocket:YOURNAME:YOURSECRET \
+      --backend=http,websocket:OLDNAME:localhost:8080: \
+      --backend=https:OLDNAME:localhost:8443: 
+
+Note that no password is required for configuring local back-ends.
 
 
 #### Another HTTP server on port 80 ####
