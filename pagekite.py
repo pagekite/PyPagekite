@@ -756,6 +756,10 @@ class UiHttpServer(SimpleXMLRPCServer):
     self.pkite = pkite
     self.conns = conns
 
+    # FIXME: There should be access control on these
+    self.register_introspection_functions()
+    self.register_instance(conns)
+
     if ssl_pem_filename:
       from OpenSSL import SSL
       ctx = SSL.Context(SSL.SSLv23_METHOD)
@@ -1130,6 +1134,7 @@ class Connections(object):
   
   def __init__(self, config):
     self.config = config
+    self.ip_tracker = {}
     self.conns = []
     self.tunnels = {}
     self.auth = None
@@ -1140,6 +1145,30 @@ class Connections(object):
 
   def Add(self, conn):
     self.conns.append(conn)
+
+  def TrackIP(self, ip, domain):
+    tick = '%d' % time.time()
+    if tick not in self.ip_tracker:
+      deadline = int(tick)-5
+      for ot in self.ip_tracker.keys():
+        if int(ot) < deadline: del self.ip_tracker[ot]
+      self.ip_tracker[tick] = {}
+
+    if ip not in self.ip_tracker[tick]:
+      self.ip_tracker[tick][ip] = [1, domain]
+    else:
+      self.ip_tracker[tick][ip][0] += 1
+      self.ip_tracker[tick][ip][1] = domain
+
+  def LastIpDomain(self, ip):
+    domain = None
+    for tick in sorted(self.ip_tracker.keys()):
+      if ip in self.ip_tracker[tick]: domain = self.ip_tracker[tick][ip][1]
+    return domain
+
+  def IpTracking(self):
+    print '%s' % self.ip_tracker
+    return self.ip_tracker
 
   def Remove(self, conn):
     if conn in self.conns:
@@ -1760,6 +1789,8 @@ class UserConn(Selectable):
                                             chunk_headers=chunk_headers):
       self.Log([('domain', self.host), ('on_port', on_port), ('proto', self.proto), ('is', 'FE')])
       self.conns.Add(self)
+      self.conns.TrackIP(address[0], host)
+      # FIXME: Use the tracked data to detect & mitigate abuse?
       return self
     else:
       self.Log([('err', 'No back-end'), ('on_port', on_port), ('proto', self.proto), ('domain', self.host), ('is', 'FE')])
