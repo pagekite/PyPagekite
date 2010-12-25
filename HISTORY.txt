@@ -1,8 +1,8 @@
 Version history - highlights
 ============================
 
-
-v0.3.6   2010.12.??
+v0.3.7   2010.12.??
+v0.3.6
 ------
   - Added support for the websocket protocols (Upgrade: WebSocket header)
   - Added support for binding to, and routing by ports as well as protocols

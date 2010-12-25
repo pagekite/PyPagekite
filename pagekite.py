@@ -33,6 +33,7 @@
 #  - Add XMPP and incoming SMTP support.
 #  - Add support for dedicated ports (PageKitePNP, ha ha).
 #  - Tor entry point support? Is current SSL enough?
+#  - Replace current tunnel auth scheme with SSL certificates.
 #
 # User interface:
 #  - Enable (re)configuration from within HTTP UI.
@@ -69,7 +70,7 @@
 #    figure out which back-end should handle a given request, and then forward
 #    the bytes unmodified over that channel. As a result, the current HTTP
 #    proxy code is not HTTP 1.1 compliant - but if you put it behind Varnish
-#    or some other decent reverse-proxy, then *the combination* could be!
+#    or some other decent reverse-proxy, then *the combination* should be!
 #
 #  * The UserConn object represents connections on behalf of users. It can
 #    be created as a FrontEnd, which will find the right tunnel and send
@@ -100,7 +101,7 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.3.6'
+APPVER = '0.3.7'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 DOC = """\
@@ -2333,7 +2334,6 @@ class PageKite(object):
       elif opt == '--noloop': self.main_loop = False
 
       elif opt == '--defaults':
-        self.ui_sspec = ('127.0.0.1', 9999) 
         self.dyndns = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
         self.servers_auto = (1, 'frontends.b5p.us', 2222)
 
