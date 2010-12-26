@@ -760,8 +760,8 @@ class UiHttpServer(SimpleXMLRPCServer):
     self.conns = conns
 
     # FIXME: There should be access control on these
-    self.register_introspection_functions()
-    self.register_instance(conns)
+    #self.register_introspection_functions()
+    #self.register_instance(conns)
 
     if ssl_pem_filename:
       from OpenSSL import SSL
