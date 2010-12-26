@@ -397,7 +397,8 @@ information about which domains you are hosting through DNS side channels.
 
 Pagekite.py version 0.3.7 adds the "raw" protocol, which allows you to bind
 a back-end to a raw port.  This may be useful for all sorts of things,
-but was primarily designed as a hack for tunneling SSH connections.
+but was primarily designed as a "good enough" hack for tunneling SSH
+connections.
 
 As the pagekite.py front-end, and all the ports it listens on, are assumed to
 be shared by multiple back-ends, raw ports do not work like normal ports:
@@ -415,9 +416,10 @@ back-end command for this use-case would look like this:
       --backend=http:YOURNAME:localhost:80:SECRET
 
 Note that doing things the other way around (SSH first, HTTP second) will
-generally **not** work.
+generally **not** work. Also note that which ports are actually available
+depends on the configuration of the front-end.
 
-Also, if the client IP address is shared or you are simply accessing many
+WARNING: If the client IP address is shared or you are simply accessing many
 different resources behind the same pagekite.py front-end, results may be
 unpredictable - raw ports are *only* available for the domain most recently
 visited by your IP.
@@ -435,6 +437,13 @@ Within the context of SSH, this implies a few guidelines:
 Note that this is all a bit of a hack: a more reliable way to tunnel SSH
 would be to use the ProxyCommand directive and embed SSH in an SSL tunnel
 (see ssh_config(5)).
+
+For tunneling other things over raw ports, generally you will want to be
+sure there is some sort of handshake built into the protocol, so it will not
+go undetected when pagekite.py guesses wrong and routes the connection to
+the wrong back-end.  If that kind of routing mistake sounds scary to you, 
+then you probably do not want to use raw ports at all...
+
 
 [ [up](#toc) ]
 
@@ -535,7 +544,7 @@ cases pagekite.py will report the actual remote IP in its own log.
 
 
 <a                                                              name=lim></a>
-### 15. Limitations and caveats ###
+### 14. Limitations and caveats ###
 
 There are certain limitations to what can be accomplished using Pagekite, due
 to the nature of the underlying protocls. Here is a brief discussion of the
@@ -570,7 +579,7 @@ Raw ports are unreliable, as discussed in [the raw port section](#ipr).
 
 
 <a                                                              name=lic></a>
-### 16. Credits and licence ###
+### 15. Credits and licence ###
 
 Pagekite.py is (C) Copyright 2010, Bjarni Rúnar Einarsson and The
 Beanstalks Project ehf.
