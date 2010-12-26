@@ -24,10 +24,12 @@ works, check out <http://pagekite.net/docs/>.
    7.  [Coexisting front-ends and other HTTP servers    ](#co)
    8.  [Configuring DNS                                 ](#dns)
    9.  [Connecting over Socks or Tor                    ](#tor)
-   10. [Unix/Linux systems integration                  ](#unx)
-   11. [Saving your configuration                       ](#cfg)
-   12. [A word about security and logs                  ](#sec)
-   13. [Credits and licence                             ](#lic)
+   10. [Time/IP-based raw ports (SSH-after-HTTP)        ](#ipr)
+   11. [Unix/Linux systems integration                  ](#unx)
+   12. [Saving your configuration                       ](#cfg)
+   13. [A word about security and logs                  ](#sec)
+   14. [Limitations and caveats                         ](#lim)
+   15. [Credits and licence                             ](#lic)
 
 
 <a                                                              name=req></a>
@@ -328,7 +330,7 @@ First of all, the back-end will need a way to receive the list of available
 front-ends. Secondly, the back-end will need to be able to dynamically update
 the DNS records for the sites it is connecting.
 
-The list of front-ends should be provided to Pagekite.py as a DNS name
+The list of front-ends should be provided to pagekite.py as a DNS name
 with multiple A records.  As an example, the default for the *pageKite*
 service, is the name **frontends.b5p.us**:
 
@@ -390,8 +392,55 @@ information about which domains you are hosting through DNS side channels.
 [ [up](#toc) ]
 
 
+<a                                                              name=ipr></a>
+### 10. Time/IP-based raw ports (SSH-after-HTTP) ###
+
+Pagekite.py version 0.3.7 adds the "raw" protocol, which allows you to bind
+a back-end to a raw port.  This may be useful for all sorts of things,
+but was primarily designed as a hack for tunneling SSH connections.
+
+As the pagekite.py front-end, and all the ports it listens on, are assumed to
+be shared by multiple back-ends, raw ports do not work like normal ports:
+they become temporarily available depending on which non-raw back-end the
+client last connected to.
+
+So assuming the host *some.pagekite.me* registers both HTTP and RAW/22
+back-ends, it should be possible to connect via. SSH to *some.pagekite.me* -
+but **only** if you visit *http://some.pagekite.me/* first.  The pagekite.py
+back-end command for this use-case would look like this:
+
+    backend$ pagekite.py \
+      --defaults \
+      --backend=raw/22:YOURNAME:localhost:22:SECRET \
+      --backend=http:YOURNAME:localhost:80:SECRET
+
+Note that doing things the other way around (SSH first, HTTP second) will
+generally **not** work.
+
+Also, if the client IP address is shared or you are simply accessing many
+different resources behind the same pagekite.py front-end, results may be
+unpredictable - raw ports are *only* available for the domain most recently
+visited by your IP.
+
+Within the context of SSH, this implies a few guidelines:
+
+   1. The directive "CheckHostIP no" should be added to your .ssh/config file
+      for the hosts behind *pageKite*.
+   2. Password-based auth should be avoided, as you may end up connecting
+      to *the wrong site* now and then ("PasswordAuthentication no").
+   3. If ssh complains about a man-in-the-middle attack: DO NOT CONTINUE!
+   4. Make sure your user accounts have strong enough passwords for your
+      host to withstand incoming SSH brute force attacks!
+
+Note that this is all a bit of a hack: a more reliable way to tunnel SSH
+would be to use the ProxyCommand directive and embed SSH in an SSL tunnel
+(see ssh_config(5)).
+
+[ [up](#toc) ]
+
+
 <a                                                              name=unx></a>
-### 10. Unix/Linux systems integration ###
+### 11. Unix/Linux systems integration ###
 
 When deploying pagekite.py as a system component on Unix, there are quite
 a few specialized arguments which can come in handy.
@@ -424,7 +473,7 @@ generate a configuration file...
 
 
 <a                                                              name=cfg></a>
-### 11. Saving your configuration ###
+### 12. Saving your configuration ###
  
 Once you have everything up and running properly, you may find it more
 convenient to save the settings to a configuration file.  Pagekite.py can
@@ -457,7 +506,7 @@ you want to "include" a one configuration into another for some reason.
 
 
 <a                                                              name=sec></a>
-### 12. A word about security and logs ###
+### 13. A word about security and logs ###
 
 When exposing services to the wider Internet, as pagekite.py is designed to
 do, it is always important to keep some basic security principles in mind.
@@ -485,8 +534,43 @@ cases pagekite.py will report the actual remote IP in its own log.
 [ [up](#toc) ]
 
 
+<a                                                              name=lim></a>
+### 15. Limitations and caveats ###
+
+There are certain limitations to what can be accomplished using Pagekite, due
+to the nature of the underlying protocls. Here is a brief discussion of the
+most important ones.
+
+
+#### HTTPS routing and Windows XP ###
+
+Windows XP (and older) ships with an implementation of the HTTPS (TLS)
+protocol which does not support the SNI extension.  As a result, pagekite.py
+can not reliably detect which back-end should serve an incoming request.
+
+Pagekite attempts to work around this by tracking which IP addresses have
+recently visited which domains (using the HTTP or other unencrypted 
+protocols), and *guessing* that the unidentifiable HTTPS connection was
+destined for the same site.
+
+This means the common pattern of a clear-text HTTP website "upgrading" to
+HTTPS on certain pages is likely to work even for older browsers. But it is
+*not* guaranteed.
+
+A more reliable work-around is to upgrade your Windows XP browser to a recent
+version of Chrome, which includes proper SNI support.
+
+
+#### Raw ports ###
+
+Raw ports are unreliable, as discussed in [the raw port section](#ipr).
+
+
+[ [up](#toc) ]
+
+
 <a                                                              name=lic></a>
-### 13. Credits and licence ###
+### 16. Credits and licence ###
 
 Pagekite.py is (C) Copyright 2010, Bjarni Rúnar Einarsson and The
 Beanstalks Project ehf.

@@ -151,6 +151,7 @@ Front-end Options:
  --ports=A,B,C  -p A,B  Listen on ports A, B, C, ...
  --portalias=A:B        Report port A as port B to backends.
  --protos=A,B,C         Accept the listed protocols for tunneling.
+ --rawports=A,B,C       Listen on ports A, B, C, ... (raw/timed connections)
 
  --domain=proto,proto2,pN:domain:secret
                   Accept tunneling requests for the named protocols and
@@ -218,10 +219,11 @@ OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
             'optfile=', 'httpd=', 'pemfile=', 'httppass=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
-            'authdomain=', 'register=', 'host=', 'ports=', 'protos=',
+            'authdomain=', 'register=', 'host=',
+            'ports=', 'protos=', 'portalias=', 'rawports=',
             'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks',
-            'buffers=', 'portalias=']
+            'buffers=']
 
 AUTH_ERRORS           = '128.'
 AUTH_ERR_USER_UNKNOWN = '128.0.0.0'
@@ -1950,6 +1952,20 @@ class UnknownConn(MagicProtocolParser):
     return True
 
 
+class RawConn(Selectable):
+  """This class is a raw/timed connection."""
+
+  def __init__(self, fd, address, on_port, conns):
+    Selectable.__init__(self, fd, address, on_port)
+    domain = conns.LastIpDomain(address[0])
+    if domain and UserConn.FrontEnd(self, address, 'raw', domain, on_port,
+                                    [], conns):
+      pass
+    else:
+      fd.close()
+
+
+
 class Listener(Selectable):
   """This class listens for incoming connections and accepts them."""
 
@@ -1992,9 +2008,10 @@ class PageKite(object):
     self.auth_domain = None
     self.server_host = ''
     self.server_ports = [80]
+    self.server_raw_ports = []
     self.server_portalias = {}
     self.server_aliasport = {}
-    self.server_protos = ['http', 'https', 'websocket']
+    self.server_protos = ['http', 'https', 'websocket', 'raw']
 
     self.daemonize = False
     self.pidfile = None
@@ -2095,6 +2112,7 @@ class PageKite(object):
     print '%sprotos=%s' % (comment, ','.join(['%s' % x for x in self.server_protos] or []))
     for pa in self.server_portalias:
       print 'portalias=%s:%s' % (int(pa), int(self.server_portalias[pa]))
+    print '%srawports=%s' % (comment, ','.join(['%s' % x for x in self.server_raw_ports] or []))
     # FIXME: --register ?
     print (self.auth_domain and '%sauthdomain=%s' % (comment, self.auth_domain) or '#authdomain=foo.com')
     for bid in self.backends:
@@ -2165,11 +2183,17 @@ class PageKite(object):
     if '-' in protoport:
       proto, port = protoport.split('-')
       try:
+        if proto == 'raw':
+          port_list = self.server_raw_ports
+        else:
+          port_list = self.server_ports
+
         porti = int(port)
         if porti in self.server_aliasport: porti = self.server_aliasport[porti]
-        if porti not in self.server_ports:
+        if porti not in port_list:
           LogError('Unsupported port request: %s (%s:%s)' % (porti, protoport, domain))
           return None
+
       except ValueError:
         LogError('Invalid port request: %s (%s:%s)' % (port, protoport, domain))
         return None
@@ -2277,6 +2301,7 @@ class PageKite(object):
         self.server_portalias[int(port)] = int(alias)
         self.server_aliasport[int(alias)] = int(port)
       elif opt == '--protos': self.server_protos = [x.lower() for x in arg.split(',')]
+      elif opt == '--rawports': self.server_raw_ports = [int(x) for x in arg.split(',')]
       elif opt in ('-h', '--host'): self.server_host = arg
       elif opt in ('-A', '--authdomain'): self.auth_domain = arg
       elif opt in ('-f', '--isfrontend'): self.isfrontend = True
@@ -2611,6 +2636,8 @@ class PageKite(object):
     if self.isfrontend:
       for port in self.server_ports:
         Listener(self.server_host, port, conns)
+      for port in self.server_raw_ports:
+        Listener(self.server_host, port, conns, connclass=RawConn)
 
     # Start the UI thread
     if self.ui_sspec:

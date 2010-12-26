@@ -6,12 +6,13 @@ v0.3.6
 ------
   - Added support for the websocket protocols (Upgrade: WebSocket header)
   - Added support for binding to, and routing by ports as well as protocols
-  - Made the IP address of visiters get reported to back-end and logged.
-  - Made X-Forwarded-For behave correctly for HTTP and WEBSOCKET
+  - Added time-based routing of non-SNI SSL connections.
+  - Added time-based routing of raw ports (for ssh-after-HTTP).
+  - Added X-Forwarded-For header to for HTTP and WEBSOCKET
+  - The IP address of visiters now gets reported to back-end and logged.
   - Built-in httpd now based on SimpleXMLRPCServer
   - Enbled --pemfile, for SSL encrypted admin consoles
   - Front-ends can now have local (non-tunneled) back-ends
-  - Implemented time-based routing of non-SNI SSL connections.
 
 
 v0.3.5   2010.12.15
