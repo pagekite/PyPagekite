@@ -32,8 +32,8 @@
 # Protocols:
 #  - Add XMPP and incoming SMTP support.
 #  - Add support for dedicated ports (PageKitePNP, ha ha).
-#  - Add direct (un-tunneled) proxying as well.
 #  - Tor entry point support? Is current SSL enough?
+#  - Replace current tunnel auth scheme with SSL certificates.
 #
 # User interface:
 #  - Enable (re)configuration from within HTTP UI.
@@ -70,7 +70,7 @@
 #    figure out which back-end should handle a given request, and then forward
 #    the bytes unmodified over that channel. As a result, the current HTTP
 #    proxy code is not HTTP 1.1 compliant - but if you put it behind Varnish
-#    or some other decent reverse-proxy, then *the combination* could be!
+#    or some other decent reverse-proxy, then *the combination* should be!
 #
 #  * The UserConn object represents connections on behalf of users. It can
 #    be created as a FrontEnd, which will find the right tunnel and send
@@ -101,7 +101,7 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.3.6'
+APPVER = '0.3.7'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 DOC = """\
@@ -151,6 +151,7 @@ Front-end Options:
  --ports=A,B,C  -p A,B  Listen on ports A, B, C, ...
  --portalias=A:B        Report port A as port B to backends.
  --protos=A,B,C         Accept the listed protocols for tunneling.
+ --rawports=A,B,C       Listen on ports A, B, C, ... (raw/timed connections)
 
  --domain=proto,proto2,pN:domain:secret
                   Accept tunneling requests for the named protocols and
@@ -218,14 +219,20 @@ OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
             'optfile=', 'httpd=', 'pemfile=', 'httppass=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
-            'authdomain=', 'register=', 'host=', 'ports=', 'protos=',
+            'authdomain=', 'register=', 'host=',
+            'ports=', 'protos=', 'portalias=', 'rawports=',
             'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks',
-            'buffers=', 'portalias=']
+            'buffers=']
 
 AUTH_ERRORS           = '128.'
 AUTH_ERR_USER_UNKNOWN = '128.0.0.0'
 AUTH_ERR_INVALID      = '128.0.0.1'
+
+LOOPBACK_HN = 'loopback'
+LOOPBACK_FE = LOOPBACK_HN + ':1'
+LOOPBACK_BE = LOOPBACK_HN + ':2'
+LOOPBACK = {'FE': LOOPBACK_FE, 'BE': LOOPBACK_BE}
 
 BE_PROTO = 0
 BE_DOMAIN = 1
@@ -268,7 +275,7 @@ try:
 except Exception:
   pass
  
-import BaseHTTPServer
+from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 try:
   from urlparse import parse_qs, urlparse
 except Exception, e:
@@ -350,13 +357,14 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
          
   tokens = tokens or {}
   for d in backends.keys():
-    token = d in tokens and tokens[d] or ''
-    data = '%s:%s:%s' % (d, signToken(token=globalSecret(),
-                                      payload=globalSecret(),
-                                      secret=server),
-                         token)
-    sign = signToken(secret=backends[d][BE_SECRET], payload=data, token=testtoken)
-    req.append('X-PageKite: %s:%s\r\n' % (data, sign))
+    if backends[d][BE_BACKEND]:
+      token = d in tokens and tokens[d] or ''
+      data = '%s:%s:%s' % (d, signToken(token=globalSecret(),
+                                        payload=globalSecret(),
+                                        secret=server),
+                           token)
+      sign = signToken(secret=backends[d][BE_SECRET], payload=data, token=testtoken)
+      req.append('X-PageKite: %s:%s\r\n' % (data, sign))
 
   req.append('\r\nOK\r\n')
   return ''.join(req)
@@ -542,7 +550,10 @@ def fmt_size(count):
   return '%dB' % count
 
 
-class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+class UiRequestHandler(SimpleXMLRPCRequestHandler):
+
+  # Make all paths/endpoints legal, we interpret them below.
+  rpc_paths = ( )
 
   TEMPLATE_TEXT = ('%(body)s')
   TEMPLATE_HTML = ('<html><head>\n'
@@ -558,6 +569,14 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 ' <a href="' + WWWHOME + '"><i>pageKite.net</i></a>.<br>'
                 'Local time is %(now)s.</i></div>\n'
               '</body></html>\n')
+ 
+  def setup(self):
+    if self.server.enable_ssl:
+      self.connection = self.request
+      self.rfile = socket._fileobject(self.request, "rb", self.rbufsize)
+      self.wfile = socket._fileobject(self.request, "wb", self.wbufsize)
+    else:
+      SimpleXMLRPCRequestHandler.setup(self)
  
   def log_message(self, format, *args):
     Log([('uireq', format % args)])
@@ -732,15 +751,35 @@ class UiRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         
     self.wfile.write(template % data)
 
-class UiHttpServer(BaseHTTPServer.HTTPServer):
-  def __init__(self, sspec, pkite, conns, handler=UiRequestHandler):
-    BaseHTTPServer.HTTPServer.__init__(self, sspec, handler)
+class UiHttpServer(SimpleXMLRPCServer):
+  def __init__(self, sspec, pkite, conns,
+               handler=UiRequestHandler,
+               ssl_pem_filename=None):
+    SimpleXMLRPCServer.__init__(self, sspec, handler)
     self.pkite = pkite
     self.conns = conns
+
+    # FIXME: There should be access control on these
+    self.register_introspection_functions()
+    self.register_instance(conns)
+
+    if ssl_pem_filename:
+      from OpenSSL import SSL
+      ctx = SSL.Context(SSL.SSLv23_METHOD)
+      ctx.use_privatekey_file (ssl_pem_filename)
+      ctx.use_certificate_file(ssl_pem_filename)
+      self.socket = SSL.Connection(ctx, socket.socket(self.address_family,
+                                                      self.socket_type))
+      self.server_bind()
+      self.server_activate()
+      self.enable_ssl = True
+    else:
+      self.enable_ssl = False
 
     global gYamon
     gYamon = YamonD(sspec)
     gYamon.vset('version', APPVER)
+    gYamon.vset('ssl_enabled', self.enable_ssl)
     gYamon.vset('errors', 0)
     gYamon.vset("bytes_all", 0)
 
@@ -748,10 +787,13 @@ class HttpUiThread(threading.Thread):
   """Handle HTTP UI in a separate thread."""
 
   def __init__(self, pkite, conns, 
-               server=UiHttpServer, handler=UiRequestHandler):
+               server=UiHttpServer, handler=UiRequestHandler,
+               ssl_pem_filename=None):
     threading.Thread.__init__(self)
     self.ui_sspec = pkite.ui_sspec
-    self.httpd = server(self.ui_sspec, pkite, conns, handler=handler)
+    self.httpd = server(self.ui_sspec, pkite, conns,
+                        handler=handler,
+                        ssl_pem_filename=ssl_pem_filename)
     self.httpd.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     self.serve = True
 
@@ -1095,6 +1137,7 @@ class Connections(object):
   
   def __init__(self, config):
     self.config = config
+    self.ip_tracker = {}
     self.conns = []
     self.tunnels = {}
     self.auth = None
@@ -1105,6 +1148,30 @@ class Connections(object):
 
   def Add(self, conn):
     self.conns.append(conn)
+
+  def TrackIP(self, ip, domain):
+    tick = '%d' % (time.time()/12)
+    if tick not in self.ip_tracker:
+      deadline = int(tick)-10
+      for ot in self.ip_tracker.keys():
+        if int(ot) < deadline: del self.ip_tracker[ot]
+      self.ip_tracker[tick] = {}
+
+    if ip not in self.ip_tracker[tick]:
+      self.ip_tracker[tick][ip] = [1, domain]
+    else:
+      self.ip_tracker[tick][ip][0] += 1
+      self.ip_tracker[tick][ip][1] = domain
+
+  def LastIpDomain(self, ip):
+    domain = None
+    for tick in sorted(self.ip_tracker.keys()):
+      if ip in self.ip_tracker[tick]: domain = self.ip_tracker[tick][ip][1]
+    return domain
+
+  def IpTracking(self):
+    print '%s' % self.ip_tracker
+    return self.ip_tracker
 
   def Remove(self, conn):
     if conn in self.conns:
@@ -1352,8 +1419,6 @@ class ChunkParser(Selectable):
     return False
 
 
-# FIXME: Add metrics to measure performance of tunnel, so we can prioritize
-#        client DNS records accordingly.
 class Tunnel(ChunkParser):
   """A Selectable representing a PageKite tunnel."""
   
@@ -1452,7 +1517,7 @@ class Tunnel(ChunkParser):
       self.fd.connect((server, 80))
 
     self.Send(HTTP_PageKiteRequest(server, conns.config.backends, tokens,
-                                    nozchunks=conns.config.disable_zchunks)) 
+                                   nozchunks=conns.config.disable_zchunks)) 
     self.Flush()
 
     data = ''
@@ -1636,6 +1701,41 @@ class Tunnel(ChunkParser):
     return True
 
 
+class LoopbackTunnel(Tunnel):
+  """A Tunnel which just loops back to this process."""
+
+  def __init__(self, conns, which, backends):
+    Tunnel.__init__(self, conns)
+
+    self.backends = backends
+    self.require_all = True
+    self.server_name = LOOPBACK[which]
+    self.other_end = None
+
+    if which == 'FE':
+      for d in backends.keys():
+        if backends[d][BE_BACKEND]:
+          proto, domain = d.split(':')
+          self.conns.Tunnel(proto, domain, self)
+          self.Log([('FE', self.server_name), ('proto', proto), ('domain', domain)])
+
+  def Cleanup(self):
+    self.other_end = None
+
+  def Linkup(self, other):
+    self.other_end = other
+    other.other_end = self
+
+  def _Loop(conns, backends):
+    LoopbackTunnel(conns, 'FE', backends
+                   ).Linkup(LoopbackTunnel(conns, 'BE', backends))
+
+  Loop = staticmethod(_Loop)
+
+  def Send(self, data):
+    return self.other_end.ProcessData(''.join(data))
+
+
 class UserConn(Selectable):
   """A Selectable representing a user's connection."""
   
@@ -1692,6 +1792,8 @@ class UserConn(Selectable):
                                             chunk_headers=chunk_headers):
       self.Log([('domain', self.host), ('on_port', on_port), ('proto', self.proto), ('is', 'FE')])
       self.conns.Add(self)
+      self.conns.TrackIP(address[0], host)
+      # FIXME: Use the tracked data to detect & mitigate abuse?
       return self
     else:
       self.Log([('err', 'No back-end'), ('on_port', on_port), ('proto', self.proto), ('domain', self.host), ('is', 'FE')])
@@ -1832,7 +1934,9 @@ class UnknownConn(MagicProtocolParser):
 
   def ProcessTls(self, data):
     domains = self.GetSni(data)
-    if domains:
+    if not domains:
+      domains = [self.conns.LastIpDomain(self.address[0])]
+    if domains and domains[0] is not None:
       if UserConn.FrontEnd(self, self.address,
                            'https', domains[0], self.on_port,
                            [data], self.conns) is None:
@@ -1846,6 +1950,20 @@ class UnknownConn(MagicProtocolParser):
     self.parser = None
     self.conns = None
     return True
+
+
+class RawConn(Selectable):
+  """This class is a raw/timed connection."""
+
+  def __init__(self, fd, address, on_port, conns):
+    Selectable.__init__(self, fd, address, on_port)
+    domain = conns.LastIpDomain(address[0])
+    if domain and UserConn.FrontEnd(self, address, 'raw', domain, on_port,
+                                    [], conns):
+      pass
+    else:
+      fd.close()
+
 
 
 class Listener(Selectable):
@@ -1890,9 +2008,10 @@ class PageKite(object):
     self.auth_domain = None
     self.server_host = ''
     self.server_ports = [80]
+    self.server_raw_ports = []
     self.server_portalias = {}
     self.server_aliasport = {}
-    self.server_protos = ['http', 'https', 'websocket']
+    self.server_protos = ['http', 'https', 'websocket', 'raw']
 
     self.daemonize = False
     self.pidfile = None
@@ -1904,6 +2023,7 @@ class PageKite(object):
     self.ui_sspec = None
     self.ui_httpd = None
     self.ui_password = None
+    self.ui_pemfile = None
     self.disable_zchunks = False
     self.buffer_max = 256
 
@@ -1923,6 +2043,7 @@ class PageKite(object):
     self.backends = {}  # These are the backends we want tunnels for.
     self.conns = None
     self.looping = False
+    self.main_loop = True
 
     self.crash_report_url = '%scgi-bin/crashes.pl' % WWWHOME
     self.rcfile_recursion = 0
@@ -1943,6 +2064,7 @@ class PageKite(object):
     print '# HTTP control-panel settings:'
     print (self.ui_sspec and 'httpd=%s:%d' % self.ui_sspec or '#httpd=host:port')
     print (self.ui_password and 'httppass=%s' % self.ui_password or '#httppass=YOURSECRET')
+    print (self.ui_pemfile and 'pemfile=%s' % self.ui_pemfile or '#pemfile=/path/to/sslcert.pem')
     print
     print '# Back-end Options:'
     print (self.servers_auto and 'frontends=%d:%s:%d' % self.servers_auto or '#frontends=1:frontends.b5p.us:2222')
@@ -1990,6 +2112,7 @@ class PageKite(object):
     print '%sprotos=%s' % (comment, ','.join(['%s' % x for x in self.server_protos] or []))
     for pa in self.server_portalias:
       print 'portalias=%s:%s' % (int(pa), int(self.server_portalias[pa]))
+    print '%srawports=%s' % (comment, ','.join(['%s' % x for x in self.server_raw_ports] or []))
     # FIXME: --register ?
     print (self.auth_domain and '%sauthdomain=%s' % (comment, self.auth_domain) or '#authdomain=foo.com')
     for bid in self.backends:
@@ -2060,11 +2183,17 @@ class PageKite(object):
     if '-' in protoport:
       proto, port = protoport.split('-')
       try:
+        if proto == 'raw':
+          port_list = self.server_raw_ports
+        else:
+          port_list = self.server_ports
+
         porti = int(port)
         if porti in self.server_aliasport: porti = self.server_aliasport[porti]
-        if porti not in self.server_ports:
+        if porti not in port_list:
           LogError('Unsupported port request: %s (%s:%s)' % (porti, protoport, domain))
           return None
+
       except ValueError:
         LogError('Invalid port request: %s (%s:%s)' % (port, protoport, domain))
         return None
@@ -2139,8 +2268,10 @@ class PageKite(object):
                                       grp.getgrnam(parts[1])[2])
         else:
           self.setuid = pwd.getpwnam(parts[0])[2]
+        self.main_loop = False
 
       elif opt in ('-X', '--httppass'): self.ui_password = arg
+      elif opt in ('-P', '--pemfile'): self.ui_pemfile = arg
       elif opt in ('-H', '--httpd'):
         parts = arg.split(':')
         host = parts[0] or 'localhost'
@@ -2170,6 +2301,7 @@ class PageKite(object):
         self.server_portalias[int(port)] = int(alias)
         self.server_aliasport[int(alias)] = int(port)
       elif opt == '--protos': self.server_protos = [x.lower() for x in arg.split(',')]
+      elif opt == '--rawports': self.server_raw_ports = [int(x) for x in arg.split(',')]
       elif opt in ('-h', '--host'): self.server_host = arg
       elif opt in ('-A', '--authdomain'): self.auth_domain = arg
       elif opt in ('-f', '--isfrontend'): self.isfrontend = True
@@ -2224,10 +2356,9 @@ class PageKite(object):
       elif opt == '--buffers': self.buffer_max = int(arg)
       elif opt == '--nocrashreport': self.crash_report_url = None
       elif opt == '--clean': pass
-      elif opt == '--noloop': pass
+      elif opt == '--noloop': self.main_loop = False
 
       elif opt == '--defaults':
-        self.ui_sspec = ('127.0.0.1', 9999) 
         self.dyndns = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
         self.servers_auto = (1, 'frontends.b5p.us', 2222)
 
@@ -2274,6 +2405,9 @@ class PageKite(object):
   def ChooseFrontEnds(self):
     self.servers = []
     self.servers_preferred = []
+
+    # Enable internal loopback
+    if self.isfrontend: self.servers.append(LOOPBACK_FE)
 
     # Convert the hostnames into IP addresses...
     for server in self.servers_manual:
@@ -2330,12 +2464,15 @@ class PageKite(object):
 
     for server in self.servers:
       if server not in live_servers:
-        if Tunnel.BackEnd(server, self.backends, self.require_all, conns):
-          Log([('connect', server)])
-          connections += 1
+        if server == LOOPBACK_FE:
+          LoopbackTunnel.Loop(conns, self.backends)
         else:
-          failures += 1
-          Log([('err', 'Failed to connect'), ('FE', server)])
+          if Tunnel.BackEnd(server, self.backends, self.require_all, conns):
+            Log([('connect', server)])
+            connections += 1
+          else:
+            failures += 1
+            Log([('err', 'Failed to connect'), ('FE', server)])
 
     if self.dyndns:
       updates = {}
@@ -2348,10 +2485,11 @@ class PageKite(object):
           bips = []
           for tunnel in conns.tunnels[bid]:
             ip = tunnel.server_name.split(':')[0]
-            if not self.servers_preferred or ip in self.servers_preferred:
-              ips.append(ip)
-            else:
-              bips.append(ip)
+            if not ip == LOOPBACK_HN:
+              if not self.servers_preferred or ip in self.servers_preferred:
+                ips.append(ip)
+              else:
+                bips.append(ip)
    
           if not ips: ips = bips
 
@@ -2498,13 +2636,15 @@ class PageKite(object):
     if self.isfrontend:
       for port in self.server_ports:
         Listener(self.server_host, port, conns)
+      for port in self.server_raw_ports:
+        Listener(self.server_host, port, conns, connclass=RawConn)
 
     # Start the UI thread
     if self.ui_sspec:
-      # FIXME: ui_password, ui_pemfile
       self.ui_httpd = HttpUiThread(self, conns,
                                    handler=self.ui_request_handler,
-                                   server=self.ui_http_server)
+                                   server=self.ui_http_server,
+                                   ssl_pem_filename = self.ui_pemfile)
 
     # Daemonize!
     if self.daemonize:
@@ -2541,19 +2681,14 @@ class PageKite(object):
 
 ##[ Main ]#####################################################################
 
-if __name__ == '__main__':
-
-  noexit = ('--noloop' not in sys.argv)
+def Main(pagekite, configure):
   crashes = 1
 
   while True:
-    pk = PageKite()
+    pk = pagekite()
     try:
       try:
-        if '--clean' not in sys.argv:
-          if os.path.exists(pk.rcfile): pk.ConfigureFromFile()
-        pk.Configure(sys.argv[1:])
-        pk.CheckConfig()
+        configure(pk)
         pk.Start()
 
       except (ValueError, ConfigError, getopt.GetoptError), msg:
@@ -2577,7 +2712,7 @@ if __name__ == '__main__':
           pass
 
       traceback.print_exc(file=sys.stderr)
-      pk.FallDown(msg, help=False, noexit=noexit)
+      pk.FallDown(msg, help=False, noexit=pk.main_loop)
 
       # If we get this far, then we're looping. Clean up.
       for fd in pk.conns.Sockets(): fd.close()
@@ -2587,5 +2722,14 @@ if __name__ == '__main__':
       time.sleep(2 ** crashes)
       crashes += 1
       if crashes > 9: crashes = 9
+
+def Configure(pk):
+  if '--clean' not in sys.argv:
+    if os.path.exists(pk.rcfile): pk.ConfigureFromFile()
+  pk.Configure(sys.argv[1:])
+  pk.CheckConfig()
+
+if __name__ == '__main__':
+  Main(PageKite, Configure)
 
 # vi:ts=2 expandtab
