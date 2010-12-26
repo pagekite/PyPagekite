@@ -535,7 +535,7 @@ cases pagekite.py will report the actual remote IP in its own log.
 
 
 <a                                                              name=lim></a>
-### 15. Limitations and caveats ###
+### 14. Limitations and caveats ###
 
 There are certain limitations to what can be accomplished using Pagekite, due
 to the nature of the underlying protocls. Here is a brief discussion of the
@@ -570,7 +570,7 @@ Raw ports are unreliable, as discussed in [the raw port section](#ipr).
 
 
 <a                                                              name=lic></a>
-### 16. Credits and licence ###
+### 15. Credits and licence ###
 
 Pagekite.py is (C) Copyright 2010, Bjarni Rúnar Einarsson and The
 Beanstalks Project ehf.
