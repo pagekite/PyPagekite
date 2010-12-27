@@ -101,7 +101,7 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.3.7'
+APPVER = '0.3.8'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 DOC = """\
@@ -139,6 +139,7 @@ Common Options:
  --pidfile=P    -I P    Write PID to the named file.
  --clean                Skip loading the default configuration file.              
  --nocrashreport        Don't send anonymous crash reports to PageKite.net.
+ --tls_endpoint=N:F     Terminate SSL/TLS for name N, using key/cert from F.
  --defaults             Set some reasonable default setings.
  --settings             Dump the current settings to STDOUT, formatted as
                        an options file would be.
@@ -219,7 +220,7 @@ OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
             'optfile=', 'httpd=', 'pemfile=', 'httppass=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
-            'authdomain=', 'register=', 'host=',
+            'authdomain=', 'register=', 'host=', 'tls_endpoint=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
             'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks',
@@ -272,6 +273,11 @@ import zlib
 
 try:
   import syslog
+except Exception:
+  pass
+
+try: 
+  from OpenSSL import SSL
 except Exception:
   pass
  
@@ -764,7 +770,6 @@ class UiHttpServer(SimpleXMLRPCServer):
     #self.register_instance(conns)
 
     if ssl_pem_filename:
-      from OpenSSL import SSL
       ctx = SSL.Context(SSL.SSLv23_METHOD)
       ctx.use_privatekey_file (ssl_pem_filename)
       ctx.use_certificate_file(ssl_pem_filename)
@@ -923,7 +928,10 @@ class Selectable(object):
     self.read_bytes = self.all_in = 0
     self.wrote_bytes = self.all_out = 0
     self.write_blocked = ''
+
     self.dead = False
+    self.peeking = False
+    self.peeked = 0
 
     # FIXME: This should go away after testing!
     self.lastio = ['', '']
@@ -1069,19 +1077,38 @@ class Selectable(object):
     self.LogError('Selectable::ProcessData: Should be overridden!')
     return False
 
+  def EatPeeked(self):
+    if not self.peeking: return
+    discard = ''
+    while len(discard) < self.peeked:
+      try:
+        discard += self.fd.recv(self.peeked - len(discard))
+      except socket.error, err:
+        LogDebug('Error reading socket: %s' % err)
+
+    self.peeking = False
+    return
+
   def ReadData(self):
     try:
-      data = self.fd.recv(self.maxread)
+      if self.peeking:
+        data = self.fd.recv(self.maxread, socket.MSG_PEEK)
+        self.peeked = len(data)
+      else:
+        data = self.fd.recv(self.maxread)
     except socket.error, err:
       LogDebug('Error reading socket: %s' % err)
       return False
+    except SSL.WantReadError:
+      return True
 
     if data is None or data == '':
       return False
     else:
       self.lastio[0] = data
-      self.read_bytes += len(data)
-      if self.read_bytes > 102400: self.LogTraffic()
+      if not self.peeking:
+        self.read_bytes += len(data)
+        if self.read_bytes > 102400: self.LogTraffic()
       return self.ProcessData(data)
 
   def Send(self, data):
@@ -1245,13 +1272,12 @@ class LineParser(Selectable):
     self.leftovers = ''
 
     while lines:
-      line = lines[0]
-      lines = lines[1:]
+      line = lines.pop(0)
       if line.endswith('\n'):
         if self.ProcessLine(line, lines) is False:
           return False
       else:
-        self.leftovers += line
+        if not self.peeking: self.leftovers += line
 
     return True
 
@@ -1355,6 +1381,12 @@ class ChunkParser(Selectable):
     Selectable.Cleanup(self)
 
   def ProcessData(self, data):
+    if self.peeking:
+      self.want_cbytes = 0
+      self.want_bytes = 0
+      self.header = ''
+      self.chunk = ''
+
     if self.want_bytes == 0:
       self.header += data
       if self.header.find('\r\n') < 0: return 1
@@ -1867,6 +1899,7 @@ class UnknownConn(MagicProtocolParser):
 
   def __init__(self, fd, address, on_port, conns):
     MagicProtocolParser.__init__(self, fd, address, on_port)
+    self.peeking = True
     self.parser = HttpParser()
     self.conns = conns
     self.conns.Add(self)
@@ -1890,6 +1923,7 @@ class UnknownConn(MagicProtocolParser):
         return False
 
       if self.parser.method == 'POST' and self.parser.path in MAGIC_PATHS:
+        self.EatPeeked()
         if Tunnel.FrontEnd(self, lines, self.conns) is None: 
           return False
       else:
@@ -1912,6 +1946,7 @@ class UnknownConn(MagicProtocolParser):
           if xfwdf and address[0] == '127.0.0.1':
             address = (xfwdf[0], address[1])
 
+        self.EatPeeked()
         if UserConn.FrontEnd(self, address,
                              proto, host, self.on_port,
                              self.parser.lines + lines, self.conns) is None:
@@ -1934,9 +1969,20 @@ class UnknownConn(MagicProtocolParser):
 
   def ProcessTls(self, data):
     domains = self.GetSni(data)
-    if not domains:
+    if domains:
+      if domains[0] in self.conns.config.tls_endpoints:
+        print 'Should terminate SSL/TLS for %s' % domains[0]
+        ctx = self.conns.config.tls_endpoints[domains[0]][1]
+        self.fd = SSL.Connection(ctx, self.fd)
+        self.fd.set_accept_state()
+        self.is_tls = False
+        self.peeking = False
+        return True
+    else:
       domains = [self.conns.LastIpDomain(self.address[0])]
+
     if domains and domains[0] is not None:
+      self.EatPeeked()
       if UserConn.FrontEnd(self, self.address,
                            'https', domains[0], self.on_port,
                            [data], self.conns) is None:
@@ -2013,6 +2059,8 @@ class PageKite(object):
     self.server_aliasport = {}
     self.server_protos = ['http', 'https', 'websocket', 'raw']
 
+    self.tls_endpoints = {}
+
     self.daemonize = False
     self.pidfile = None
     self.logfile = None
@@ -2085,7 +2133,7 @@ class PageKite(object):
       print '#dyndns=pagekite.net OR' 
       print '#dyndns=user:pass@dyndns.org OR' 
       print '#dyndns=user:pass@no-ip.com' 
-    bprinted=0
+    bprinted = 0
     for bid in self.backends:
       be = self.backends[bid]
       if be[BE_BACKEND]:
@@ -2097,6 +2145,14 @@ class PageKite(object):
       print '#backend=websocket:YOU.pagekite.me:localhost:8080:SECRET'
     print (self.servers_new_only and 'new' or '#new')
     print (self.require_all and 'all' or '#all')
+    print
+    eprinted = 0
+    print '# Domains we terminate SSL/TLS for natively, with key/cert-files'
+    for ep in self.tls_endpoints:
+      print 'tls_endpoint=%s:%s' % (ep, tls_endpoints[ep][0])
+      eprinted += 1
+    if eprinted == 0:
+      print '#tls_endp=DOMAIN:PEM_FILE'
     print
     print
     print '### The following stuff can usually be ignored. ###'
@@ -2279,6 +2335,13 @@ class PageKite(object):
           self.ui_sspec = (host, int(parts[1]))
         else:
           self.ui_sspec = (host, 80)
+
+      elif opt == '--tls_endpoint':
+        name, pemfile = arg.split(':', 1)
+        ctx = SSL.Context(SSL.SSLv23_METHOD)
+        ctx.use_privatekey_file(pemfile)
+        ctx.use_certificate_file(pemfile)
+        self.tls_endpoints[name] = (pemfile, ctx)
 
       elif opt in ('-D', '--dyndns'):
         if arg.startswith('http'):
@@ -2715,7 +2778,8 @@ def Main(pagekite, configure):
       pk.FallDown(msg, help=False, noexit=pk.main_loop)
 
       # If we get this far, then we're looping. Clean up.
-      for fd in pk.conns.Sockets(): fd.close()
+      sockets = pk.conns and pk.conns.Sockets() or []
+      for fd in sockets: fd.close()
 
       # Exponential fall-back.
       LogDebug('Restarting in %d seconds...' % (2 ** crashes))
