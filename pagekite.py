@@ -1298,6 +1298,7 @@ class LineParser(Selectable):
 
 
 TLS_CLIENTHELLO = '%c' % 026
+SSL_CLIENTHELLO = '\x80'
 
 # FIXME: Add "port hints" and an ip<->backend cache, for making clever guesses
 #        as to which HTTPS backend to use if SNI is missing.
@@ -1319,7 +1320,7 @@ class MagicProtocolParser(LineParser):
   def ProcessData(self, data):
     if self.might_be_tls:
       self.might_be_tls = False
-      if not data.startswith(TLS_CLIENTHELLO):
+      if not data.startswith(TLS_CLIENTHELLO) and not data.startswith(SSL_CLIENTHELLO):
         return LineParser.ProcessData(self, data)
       self.is_tls = True
 
