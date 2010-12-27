@@ -772,7 +772,7 @@ class UiHttpServer(SimpleXMLRPCServer):
     if ssl_pem_filename:
       ctx = SSL.Context(SSL.SSLv23_METHOD)
       ctx.use_privatekey_file (ssl_pem_filename)
-      ctx.use_certificate_file(ssl_pem_filename)
+      ctx.use_certificate_chain_file(ssl_pem_filename)
       self.socket = SSL.Connection(ctx, socket.socket(self.address_family,
                                                       self.socket_type))
       self.server_bind()
@@ -1099,7 +1099,11 @@ class Selectable(object):
     except socket.error, err:
       LogDebug('Error reading socket: %s' % err)
       return False
-    except SSL.WantReadError:
+    except (SSL.ZeroReturnError, SSL.SysCallError), err:
+      LogDebug('Error reading socket (SSL): %s' % err)
+      return False
+    except SSL.Error, err:
+      LogDebug('Problem reading socket (SSL): %s' % err)
       return True
 
     if data is None or data == '':
@@ -1124,9 +1128,12 @@ class Selectable(object):
         self.wrote_bytes += sent_bytes
 #       print '> %s' % sending[0:sent_bytes]
       except socket.error, err:
-        LogDebug('Error sending: %s' % err)
-      except SSL.WantWriteError, err:
-        LogDebug('Error sending: %s' % err)
+        LogDebug('Problem sending: %s' % err)
+      except (SSL.ZeroReturnError, SSL.SysCallError), err:
+        LogDebug('Error sending (SSL): %s' % err)
+        return False
+      except SSL.Error, err:
+        LogDebug('Problem sending (SSL): %s' % err)
 
     self.write_blocked = sending[sent_bytes:]
     buffered_bytes += len(self.write_blocked)
@@ -2360,7 +2367,7 @@ class PageKite(object):
         name, pemfile = arg.split(':', 1)
         ctx = SSL.Context(SSL.SSLv23_METHOD)
         ctx.use_privatekey_file(pemfile)
-        ctx.use_certificate_file(pemfile)
+        ctx.use_certificate_chain_file(pemfile)
         self.tls_endpoints[name] = (pemfile, ctx)
 
       elif opt in ('-D', '--dyndns'):
