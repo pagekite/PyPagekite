@@ -13,8 +13,8 @@ httpd=localhost:9999
 
 # Auto-choose and connect to the 2 closest front-ends!
 frontends=2:frontends.b5p.us:2222
-dyndns=beanstalks.net
+dyndns=pagekite.net
 
 # Set up one tunnel, for now.
-backend=http:YOU.test.beanstalks.me:localhost:9999:SECRET
+#backend=http:YOU.test.beanstalks.me:localhost:9999:SECRET
 
