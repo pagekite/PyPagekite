@@ -1,0 +1,15 @@
+Source: pagekite
+Section: unknown
+Priority: extra
+Maintainer: Hrafnkell Eiriksson <he@klaki.net>
+Build-Depends: debhelper (>= 7)
+Standards-Version: 3.8.3
+Homepage: http://pagekite.net/
+
+Package: pagekite
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, python (>> 2.2)
+Description: personal, private, mobile websites
+ PageKite is a system for running web servers on machines without a direct 
+ connection to the Internet, such as mobile devices or computers behind 
+ restrictive firewalls.
