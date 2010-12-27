@@ -1704,6 +1704,11 @@ class Tunnel(ChunkParser):
         rIp = (parse.Header('RIP') or [''])[0].lower()
         rPort = (parse.Header('RPort') or [''])[0].lower()
         if proto and host:
+# FIXME: 
+#         if proto == 'https':
+#           if host in self.conns.config.tls_endpoints:
+#             print 'Should unwrap SSL from %s' % host
+
           if proto == 'probe':
             if self.Probe(host):
               self.SendChunked('SID: %s\r\n\r\n%s' % (
@@ -1969,17 +1974,19 @@ class UnknownConn(MagicProtocolParser):
 
   def ProcessTls(self, data):
     domains = self.GetSni(data)
-    if domains:
-      if domains[0] in self.conns.config.tls_endpoints:
-        print 'Should terminate SSL/TLS for %s' % domains[0]
-        ctx = self.conns.config.tls_endpoints[domains[0]][1]
+    if not domains:
+      domains = [self.conns.LastIpDomain(self.address[0])]
+
+    if domains and domains[0] is not None:
+      # If we know how to terminate the TLS/SSL, do so!
+      # FIXME: Authentication?
+      ctx = self.conns.config.GetTlsEndpointCtx(domains[0])
+      if ctx:
         self.fd = SSL.Connection(ctx, self.fd)
         self.fd.set_accept_state()
-        self.is_tls = False
         self.peeking = False
+        self.is_tls = False
         return True
-    else:
-      domains = [self.conns.LastIpDomain(self.address[0])]
 
     if domains and domains[0] is not None:
       self.EatPeeked()
@@ -2199,6 +2206,17 @@ class PageKite(object):
       print '*****'
     if message: print 'Error: %s' % message
     if not noexit: sys.exit(1)
+
+  def GetTlsEndpointCtx(self, domain):
+    if domain in self.tls_endpoints: return self.tls_endpoints[domain][1]
+    parts = domain.split('.')
+    # Check for wildcards ...
+    while len(parts) > 2:
+      parts[0] = '*'
+      domain = '.'.join(parts)
+      if domain in self.tls_endpoints: return self.tls_endpoints[domain][1]
+      parts.pop(0)
+    return None
 
   def GetBackendData(self, proto, domain, field, recurse=True):
     backend = '%s:%s' % (proto.lower(), domain.lower())
