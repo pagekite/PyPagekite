@@ -1128,9 +1128,14 @@ class Selectable(object):
       try:
         sent_bytes = self.fd.send(sending)
         self.wrote_bytes += sent_bytes
-#       print '> %s' % sending[0:sent_bytes]
       except socket.error, err:
-        LogDebug('Problem sending: %s' % err)
+        problem = '%s' % err
+        # [Errno 11] Resource temporarily unavailable
+        if problem.find('emporar') < 0:
+          LogError('Sending: %s' % problem)
+          return False
+        else:
+          LogDebug('Sending: %s' % problem)
       except (SSL.ZeroReturnError, SSL.SysCallError), err:
         LogDebug('Error sending (SSL): %s' % err)
         return False
@@ -1167,7 +1172,7 @@ class Selectable(object):
     return self.Send(['%x%s\r\n%s' % (len(sdata), rst, sdata)])
 
   def Flush(self):
-    while self.write_blocked: self.Send([])
+    while self.write_blocked and self.Send([]): pass
 
 
 class Connections(object):
@@ -1804,6 +1809,7 @@ class UserConn(Selectable):
 
   def Disconnect(self):
     self.conns.Remove(self)
+    self.Flush()
     Selectable.Cleanup(self)
 
   def _FrontEnd(conn, address, proto, host, on_port, body, conns):
