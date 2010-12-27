@@ -139,6 +139,7 @@ Common Options:
  --pidfile=P    -I P    Write PID to the named file.
  --clean                Skip loading the default configuration file.              
  --nocrashreport        Don't send anonymous crash reports to PageKite.net.
+ --tls_default=N        Default name to use for SSL, if SNI and tracking fail.
  --tls_endpoint=N:F     Terminate SSL/TLS for name N, using key/cert from F.
  --defaults             Set some reasonable default setings.
  --settings             Dump the current settings to STDOUT, formatted as
@@ -220,8 +221,9 @@ OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
             'optfile=', 'httpd=', 'pemfile=', 'httppass=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
-            'authdomain=', 'register=', 'host=', 'tls_endpoint=',
+            'authdomain=', 'register=', 'host=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
+            'tls_default=', 'tls_endpoint=',
             'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks',
             'buffers=']
@@ -1984,15 +1986,21 @@ class UnknownConn(MagicProtocolParser):
   def ProcessTls(self, data):
     domains = self.GetSni(data)
     if not domains:
-      domains = [self.conns.LastIpDomain(self.address[0])]
+      domains = [self.conns.LastIpDomain(self.address[0]) or self.conns.config.tls_default]
+      LogDebug('No SNI, trying: %s' % domains[0])
+      if not domains[0]: domains = None
 
-    if domains and domains[0] is not None:
+    if domains:
       # If we know how to terminate the TLS/SSL, do so!
       # FIXME: Authentication?
       ctx = self.conns.config.GetTlsEndpointCtx(domains[0])
       if ctx:
         self.fd = SSL.Connection(ctx, self.fd)
-        self.fd.set_accept_state()
+        try:
+          self.fd.set_accept_state()
+          self.fd.do_handshake()
+        except SSL.Error:
+          pass
         self.peeking = False
         self.is_tls = False
         return True
@@ -2075,6 +2083,7 @@ class PageKite(object):
     self.server_aliasport = {}
     self.server_protos = ['http', 'https', 'websocket', 'raw']
 
+    self.tls_default = None
     self.tls_endpoints = {}
 
     self.daemonize = False
@@ -2169,6 +2178,7 @@ class PageKite(object):
       eprinted += 1
     if eprinted == 0:
       print '#tls_endp=DOMAIN:PEM_FILE'
+    print (self.tls_default and 'tls_default=%s' % self.tls_default or '#tls_default=DOMAIN')
     print
     print
     print '### The following stuff can usually be ignored. ###'
@@ -2363,6 +2373,7 @@ class PageKite(object):
         else:
           self.ui_sspec = (host, 80)
 
+      elif opt == '--tls_default': self.tls_default = arg
       elif opt == '--tls_endpoint':
         name, pemfile = arg.split(':', 1)
         ctx = SSL.Context(SSL.SSLv23_METHOD)
