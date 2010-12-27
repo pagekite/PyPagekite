@@ -1125,7 +1125,7 @@ class Selectable(object):
 #       print '> %s' % sending[0:sent_bytes]
       except socket.error, err:
         LogDebug('Error sending: %s' % err)
-      except SSL.WantReadError, err:
+      except SSL.WantWriteError, err:
         LogDebug('Error sending: %s' % err)
 
     self.write_blocked = sending[sent_bytes:]
