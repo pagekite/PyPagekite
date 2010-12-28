@@ -1131,6 +1131,7 @@ class Selectable(object):
       except socket.error, err:
         problem = '%s' % err
         # [Errno 11] Resource temporarily unavailable
+        # FIXME: This is probably not portable.
         if problem.find('emporar') < 0:
           LogError('Sending: %s' % problem)
           return False
