@@ -1,6 +1,12 @@
 Version history - highlights
 ============================
 
+v0.3.8   2010.12.??
+------
+  - Can now terminate/unwrap TLS/SSL at the front-end.
+  - Many TLS/SSL fixes, including support for the old lame SSLv2.
+
+
 v0.3.7   2010.12.26
 v0.3.6
 ------
