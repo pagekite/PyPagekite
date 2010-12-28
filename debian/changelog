@@ -1,8 +1,17 @@
+pagekite (0.3.7-1) unstable; urgency=low
+
+  * Merged in 0.3.7 version from git repo upstream.
+  * Added docs 
+  * new init.d script that should have lsb support 
+  * moved log into /var/log/pagekite/ from /tmp/ 
+
+ -- Hrafnkell Eiriksson <he@klaki.net>  Tue, 28 Dec 2010 00:36:06 +0000
+
 pagekite (0.3.5-2) unstable; urgency=low
 
   * Fixed init.d script to work
 
- -- Hrafnkell Eiriksson <he@klaki.net>  Sun, 27 Dec 2010 00:32:00 +0000
+ -- Hrafnkell Eiriksson <he@klaki.net>  Mon, 27 Dec 2010 00:32:00 +0000
 pagekite (0.3.5-1) unstable; urgency=low
 
   * Initial release 

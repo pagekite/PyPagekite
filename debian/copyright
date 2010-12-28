@@ -31,7 +31,7 @@ The Debian packaging is:
 
     Copyright (C) 2010 Hrafnkell Eiriksson <he@klaki.net>
 
-and is licensed under the AGPL
+and is licensed under the Affero GPL
 
-# Please also look if there are files or directories which have a
-# different copyright/license attached and list them here.
+The Affero GPL can be found under
+/usr/share/doc/pagekite/agpl-3.0.txt
