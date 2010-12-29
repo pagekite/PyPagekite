@@ -1,5 +1,5 @@
 Source: pagekite
-Section: unknown
+Section: net
 Priority: extra
 Maintainer: Hrafnkell Eiriksson <he@klaki.net>
 Build-Depends: debhelper (>= 7), python-support
@@ -7,9 +7,21 @@ Standards-Version: 3.8.3
 Homepage: http://pagekite.net/
 
 Package: pagekite
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, ${python:Depends}
-Description: personal, private, mobile websites
- PageKite is a system for running web servers on machines without a direct 
- connection to the Internet, such as mobile devices or computers behind 
- restrictive firewalls.
+Architecture: all
+Depends: ${shlibs:Depends}, ${misc:Depends}, python (>=2.2), python (<<3.0)
+Recommends: python-openssl
+Description: Run public servers without reconfiguring firewalls.
+ PageKite removes the need to reconfigure firewalls or routers in order to run 
+ a public server from home or your mobile devices. It can even handle dynamic DNS
+ for you.
+ .
+ This package implements both ends of the proxy tunnel, optional front-end 
+ service.
+ .
+ pagekite.py is the Python implementation of the *PageKite* remote web 
+ front-end protocol.  It implements a tunneled reverse proxy, allowing 
+ you to run a public HTTP or HTTPS server on a machine without direct 
+ connectivity to the Internet, including mobile devices like laptops 
+ or smart-phones. 
+ .
+ Detailed documentation can be found at http://pagekite.net/. 

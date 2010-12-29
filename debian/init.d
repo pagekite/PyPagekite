@@ -20,7 +20,7 @@ DESC="PageKite backend"
 NAME=pagekite.py
 DAEMON=/usr/sbin/$NAME
 PIDFILE=/var/run/$NAME.pid
-DAEMON_ARGS="--pidfile=$PIDFILE -o /etc/pagekite.rc --daemonize --logfile=/var/log/pagekite/pagekite.log"
+DAEMON_ARGS="--pidfile=$PIDFILE --clean --optfile=/etc/pagekite.rc --daemonize --logfile=/var/log/pagekite/pagekite.log"
 SCRIPTNAME=/etc/init.d/$NAME
 
 # Exit if the package is not installed
