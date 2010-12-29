@@ -35,7 +35,7 @@ works, check out <http://pagekite.net/docs/>.
 <a                                                              name=req></a>
 ### 2. Requirements ###
 
-Pagekite.py requires Python 2.2 or later.
+Pagekite.py requires Python 2.x, version 2.2 or later.
 
 Pagekite.py does not at the moment include a useful web server, so in
 order to do anything interesting with it, you you will need an HTTP
