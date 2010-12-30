@@ -481,12 +481,39 @@ scope of this document.
 #### Encrypted tunnels ####
 
 As of pagekite.py version 0.3.8, it is possible to connect to the front-end
-using a TLS-encrypted tunnel. This is much more secure and is highly
-recommended.
+using a TLS-encrypted tunnel.
 
-This requires additional flags both on the front-end, and on the back.
+This is much more secure and is highly recommended: not only does this
+prevent people from sniffing the traffic between your web server and the
+front-end, it also protects you against any man-in-the-middle attacks where
+someone impersonates your front-end of choice.
 
-On the front-end, you need to define a TLS endpoint for the domain.
+This requires additional configuration both on the front-end and on the back.
+
+On the front-end, you need to define a TLS endpoint (and certificate) for
+the domain of the SSL certificate (it does not actually have to match the
+domain name of the front-end, but the front- and back-ends have to agree
+what the certificate name is).
+
+    frontend$ sudo pagekite.py \
+      ...
+      --tls_endpoint=frontend.domain.com:/path/to/key-and-cert-chain.pem \
+      ...
+
+On the back-end, you need to tell pagekite.py which certificate to
+accept, and possibly give it the path to a list of certificate authority
+certificates (the default works on Linux).
+
+    frontend$ sudo pagekite.py \
+      --frontend=frontend.domain.com:443 \
+      --secure_fe=frontend.domain.com \
+      --ca_certs=/path/to/ca-certificates.pem \
+      ...
+
+Note that if you are running your own front-end, you do not need to purchase
+a commecial certificate for this to work - you can generate your own
+self-signed certificate and use that on both ends, and this will actually be
+*more* secure than using a 3rd party certificate.
 
 
 #### Encrypting unencrypted back-ends ####
