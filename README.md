@@ -43,6 +43,10 @@ order to do anything interesting with it, you you will need an HTTP
 and/or HTTPS server as well. Which web-server you prefer is up to you
 and depends on your goals, but any server should work.
 
+In order for pagekite.py to terminate SSL connections or encrypt your HTTP
+Console, you will need openssl and either python 2.6+ or the pyOpenSSL
+module. These are NOT required if you just want to route HTTPS requests.
+
 If you need to use Socks or Tor to connect to the Internet, you will also
 need a copy of SocksiPy: <http://code.google.com/p/socksipy-branch/>.
 
@@ -198,7 +202,7 @@ whatever username you like, and the password given on the command-line.
 
 #### Enabling SSL on the HTTP console ####
 
-If you have the Python OpenSSL module installed, you can increase the
+If you have the OpenSSL (pyOpenSSL or python 2.6+), you can increase the
 security of your HTTP console even further by creating a self-signed
 SSL certificate and enabling it using the --pemfile option:
 
@@ -513,6 +517,9 @@ without an explicit https back-end being defined or configured.
 
 **Note:** Currently SSL endpoints are only available at the front-end, but
 will be available on the back-end as well in a future release.
+
+**Note:** This requires either pyOpenSSL or python 2.6+ and openssl support
+at the OS level.
 
 
 #### Limitations ####

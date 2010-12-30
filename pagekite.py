@@ -31,7 +31,6 @@
 #
 # Protocols:
 #  - Add XMPP and incoming SMTP support.
-#  - Add support for dedicated ports (PageKitePNP, ha ha).
 #  - Tor entry point support? Is current SSL enough?
 #  - Replace current tunnel auth scheme with SSL certificates.
 #
@@ -287,9 +286,10 @@ try:
 except ImportError:
   pass
 
-# OpenSSL strategy: prefer pyOpenSSL, as it comes with built-in Context
+# SSL/TLS strategy: prefer pyOpenSSL, as it comes with built-in Context
 # objects. If that fails, look for Python 2.6+ native ssl support and 
-# create a compatible wrapper.
+# create a compatibility wrapper. If both fail, bomb with a ConfigError
+# when the user tries to enable anything SSL-related.
 try: 
   from OpenSSL import SSL
   def SSL_Connect(ctx, sock, server_side=False, accepted=False):

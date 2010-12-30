@@ -3,72 +3,74 @@ Version history - highlights
 
 v0.3.8   2010.12.??
 ------
-  - Can now terminate/unwrap TLS/SSL at the front-end.
-  - Many TLS/SSL fixes, including support for the old lame SSLv2.
+   - Many TLS/SSL fixes:
+      - Can now terminate/unwrap TLS/SSL at the front-end.
+      - Routing support for the old lame SSLv2.
+      - Built-in TLS/SSL works with pyOpenSSL or python 2.6+ ssl. 
 
 
 v0.3.7   2010.12.26
 v0.3.6
 ------
-  - Added support for the websocket protocols (Upgrade: WebSocket header)
-  - Added support for binding to, and routing by ports as well as protocols
-  - Added time-based routing of non-SNI SSL connections.
-  - Added time-based routing of raw ports (for ssh-after-HTTP).
-  - Added X-Forwarded-For header to for HTTP and WEBSOCKET
-  - The IP address of visiters now gets reported to back-end and logged.
-  - Built-in httpd now based on SimpleXMLRPCServer
-  - Enbled --pemfile, for SSL encrypted admin consoles
-  - Front-ends can now have local (non-tunneled) back-ends
+   - Added support for the websocket protocols (Upgrade: WebSocket header)
+   - Added support for binding to, and routing by ports as well as protocols
+   - Added time-based routing of non-SNI SSL connections.
+   - Added time-based routing of raw ports (for ssh-after-HTTP).
+   - Added X-Forwarded-For header to for HTTP and WEBSOCKET
+   - The IP address of visiters now gets reported to back-end and logged.
+   - Built-in httpd now based on SimpleXMLRPCServer
+   - Enbled --pemfile, for SSL encrypted admin consoles
+   - Front-ends can now have local (non-tunneled) back-ends
 
 
 v0.3.5   2010.12.15
 ------
-  - Misc. minor bugfixes.
-  - Added support for WebDAV and other missing HTTP request methods.
-  - Added some real Yamon variables for monitoring
-  - Log-format normalized a bit, created pagekite_logparse.py.
-  - Bugfix: minor memory leak when target servers are down (BE unavailable).
-  - Bugfix: bad flow-control bug could freeze the select-loop.
+   - Misc. minor bugfixes.
+   - Added support for WebDAV and other missing HTTP request methods.
+   - Added some real Yamon variables for monitoring
+   - Log-format normalized a bit, created pagekite_logparse.py.
+   - Bugfix: minor memory leak when target servers are down (BE unavailable).
+   - Bugfix: bad flow-control bug could freeze the select-loop.
 
 
 v0.3.4   2010.11.09
 ------
-  - Added basic flow-control to avoid excessive memory use on large file
-    transfers with fast backends and slow upstream pipes.
+   - Added basic flow-control to avoid excessive memory use on large file
+     transfers with fast backends and slow upstream pipes.
 
 
 v0.3.3   2010.11.03
 ------
-  - Fixed crash report misbehavior on some Python versions.
+   - Fixed crash report misbehavior on some Python versions.
 
 
 v0.3.2   2010.10.25
 ------
-  - HTTP UI now has logs & connection details, and --httppass works.
-  - Anonymized IP addresses in HTTP UI and all logs.
-  - Protocol tweaks: front-end is backwards compatible, back-end is not.
-  - Added support for probe requests, showing status in the UI.
+   - HTTP UI now has logs & connection details, and --httppass works.
+   - Anonymized IP addresses in HTTP UI and all logs.
+   - Protocol tweaks: front-end is backwards compatible, back-end is not.
+   - Added support for probe requests, showing status in the UI.
 
 
 v0.3.1   2010.10.14
 v0.3.0
 ------
-  * BUG: ValueErrors in invalid configs generated crash report spam.
-  * BUG: Fixed chunking alignment problem. 
-  * BUG: Fixed HTTP header parsing problem
-  - Added support for tunneling through tor, or other socks5 proxies.
-  - Added support for zlib compressed tunnels
-  - Added basic unit-tests!
-  - Added crash report feature and auto-restart on crash.
-
+   * BUG: ValueErrors in invalid configs generated crash report spam.
+   * BUG: Fixed chunking alignment problem. 
+   * BUG: Fixed HTTP header parsing problem
+   - Added support for tunneling through tor, or other socks5 proxies.
+   - Added support for zlib compressed tunnels
+   - Added basic unit-tests!
+   - Added crash report feature and auto-restart on crash.
+ 
 
 v0.2.1   2010.10.12
 ------
-  - Added support for --defaults and --settings
-  - Renamed from beanstalks_net.py to pagekite.py
+   - Added support for --defaults and --settings
+   - Renamed from beanstalks_net.py to pagekite.py
 
 
 v0.2.0   2010.09.22 
 ------
-  - First alpha-testing release.
+   - First alpha-testing release.
 
