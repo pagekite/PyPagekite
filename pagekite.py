@@ -171,6 +171,7 @@ Back-end Options:
  --new          -N      Don't attempt to connect to the domain's old front-end.           
  --socksify=S:P         Connect via SOCKS server S, port P (requires socks.py)
  --torify=S:P           Same as socksify, but more paranoid.
+ --secure_fe=N          Connect using SSL, accepting valid certs for domain N.
 
  --backend=proto:domain:host:port:secret
                   Configure a back-end service on host:port, using
@@ -205,7 +206,7 @@ firefox http://localhost:8888/
 # Fly a PageKite on pagekite.net for somedomain.com, and register the new
 # front-ends with the No-IP Dynamic DNS provider.
 pagekite.py \\
-       --frontends=1:frontends.b5p.us:2222 \\
+       --frontends=1:frontends.b5p.us:443 \\
        --dyndns=user:pass@no-ip.com \\
        --backend=http:somedomain.com:localhost:80:mygreatsecret
 
@@ -222,7 +223,7 @@ OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'register=', 'host=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
-            'tls_default=', 'tls_endpoint=',
+            'tls_default=', 'tls_endpoint=', 'secure_fe=',
             'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks',
             'buffers=']
@@ -292,16 +293,21 @@ except ImportError:
 # when the user tries to enable anything SSL-related.
 try: 
   from OpenSSL import SSL
-  def SSL_Connect(ctx, sock, server_side=False, accepted=False):
+  def SSL_Connect(ctx, sock,
+                  server_side=False, accepted=False, connected=False):
     nsock = SSL.Connection(ctx, sock)
     if accepted: nsock.set_accept_state()
+    if connected: nsock.set_connect_state()
     return nsock
+  def SSL_CommonName(fd):
+    return fd.get_peer_certificate().get_subject().commonName
 
 except ImportError:
   try:
     import ssl
     class SSL(object):
       SSLv23_METHOD = ssl.PROTOCOL_SSLv23
+      TLSv1_METHOD = ssl.PROTOCOL_TLSv1
       Error = ssl.SSLError
       class ZeroReturnError(Exception): pass
       class SysCallError(Exception): pass
@@ -313,15 +319,26 @@ except ImportError:
         def use_privatekey_file(self, fn): self.privatekey_file = fn
         def use_certificate_chain_file(self, fn): self.certchain_file = fn
 
-    def SSL_Connect(ctx, sock, server_side=False, accepted=False):
+    def SSL_CommonName(fd):
+      cert = fd.getpeercert()
+      if not cert: return None
+      for field in cert['subject']:
+        if field[0][0] == 'commonName': return field[0][1]
+      return None
+
+    def SSL_Connect(ctx, sock,
+                    server_side=False, accepted=False, connected=False):
       return ssl.wrap_socket(sock, keyfile=ctx.privatekey_file, 
+                                   cert_reqs=ssl.CERT_OPTIONAL,
+                                   ca_certs='/etc/ssl/certs/ca-certificates.crt',
                                    certfile=ctx.certchain_file,
-                                   do_handshake_on_connect=(not accepted),
+                                   do_handshake_on_connect=False,
                                    ssl_version=ctx.method,
                                    server_side=server_side)
   except ImportError:
     class SSL(object):
       SSLv23_METHOD = 0
+      TLSv1_METHOD = 0
       class Context(object):
         def __init__(self, method):
           raise ConfigError('Neither pyOpenSSL nor python 2.6+ ssl modules found!')
@@ -531,6 +548,7 @@ def LogError(msg, parms=None):
   emsg = [('err', msg)]
   if parms: emsg.extend(parms)
   Log(emsg)
+  #time.sleep(0.1)
 
   global gYamon
   gYamon.vadd('errors', 1, wrap=1000000)
@@ -539,6 +557,7 @@ def LogDebug(msg, parms=None):
   emsg = [('debug', msg)]
   if parms: emsg.extend(parms)
   Log(emsg)
+  #time.sleep(0.1)
 
 
 # FIXME: This could easily be a pool of threads to let us handle more
@@ -1133,16 +1152,18 @@ class Selectable(object):
     self.LogError('Selectable::ProcessData: Should be overridden!')
     return False
 
-  def EatPeeked(self):
+  def EatPeeked(self, eat_bytes=None, keep_peeking=False):
     if not self.peeking: return
+    if eat_bytes is None: eat_bytes = self.peeked
     discard = ''
-    while len(discard) < self.peeked:
+    while len(discard) < eat_bytes:
       try:
-        discard += self.fd.recv(self.peeked - len(discard))
+        discard += self.fd.recv(eat_bytes - len(discard))
       except socket.error, err:
         LogDebug('Error reading socket: %s' % err)
 
-    self.peeking = False
+    self.peeked -= eat_bytes
+    self.peeking = keep_peeking
     return
 
   def ReadData(self):
@@ -1378,6 +1399,23 @@ class MagicProtocolParser(LineParser):
                      LineParser.html(self))
 
   def ProcessData(self, data):
+    if data.startswith(MAGIC_PREFIX):
+      prefix, words, data = data.split('\r\n', 2)
+      args = {}
+      for arg in words.split('; '):
+        key, val = arg.split('=', 1)
+        args[key] = val
+
+      self.EatPeeked(eat_bytes=len(prefix)+2+len(words)+2)
+
+      proto = 'proto' in args and args['proto'] or None
+      if proto in ('http', 'websocket'):
+        return LineParser.ProcessData(self, data)
+
+      domain = 'domain' in args and args['domain'] or None
+      if proto == 'https': return self.ProcessTls(data, domain)
+      if proto == 'raw' and domain: return self.ProcessRaw(data, domain)
+
     if self.might_be_tls:
       self.might_be_tls = False
       if not data.startswith(TLS_CLIENTHELLO) and not data.startswith(SSL_CLIENTHELLO):
@@ -1429,8 +1467,12 @@ class MagicProtocolParser(LineParser):
         sni.extend(self.GetSniNames(self.GetClientHelloExtensions(msg)))
     return sni
 
-  def ProcessTls(self, data):
+  def ProcessTls(self, data, domain=None):
     self.LogError('TlsOrLineParser::ProcessTls: Should be overridden!')
+    return False
+
+  def ProcessRaw(self, data, domain):
+    self.LogError('TlsOrLineParser::ProcessRaw: Should be overridden!')
     return False
 
 
@@ -1606,6 +1648,7 @@ class Tunnel(ChunkParser):
 
   def _Connect(self, server, conns, tokens=None):
     if self.fd: self.fd.close()
+
     if conns.config.socks_server:
       import socks
       sock = socks.socksocket()
@@ -1618,7 +1661,24 @@ class Tunnel(ChunkParser):
     if len(sspec) > 1:
       self.fd.connect((sspec[0], int(sspec[1])))
     else:
-      self.fd.connect((server, 80))
+      self.fd.connect((server, 443))
+
+    if self.conns.config.secure_fe:
+      # This is a bit of an ugly hack, while we can't set the SNI directly
+      # from Python. So we prepend our own... but it might be useful for other
+      # things down the line.
+      self.Send(['%s\r\nproto=https; domain=%s\r\n' % (MAGIC_PREFIX, self.conns.config.secure_fe[0])])
+      self.Flush()
+      try:
+        raw_fd = self.fd
+        ctx = SSL.Context(SSL.TLSv1_METHOD)
+        self.fd = SSL_Connect(ctx, self.fd, connected=True, server_side=False)
+        self.fd.do_handshake()
+        LogDebug('TLS connection to %s established, cert: %s' % (server, SSL_CommonName(self.fd)))
+      except SSL.Error, e:
+        self.fd = raw_fd
+        LogError('SSL handshake failed, aborting: %s' % e)
+        return None, None
 
     self.Send(HTTP_PageKiteRequest(server, conns.config.backends, tokens,
                                    nozchunks=conns.config.disable_zchunks)) 
@@ -2047,12 +2107,15 @@ class UnknownConn(MagicProtocolParser):
 
     return True
 
-  def ProcessTls(self, data):
-    domains = self.GetSni(data)
-    if not domains:
-      domains = [self.conns.LastIpDomain(self.address[0]) or self.conns.config.tls_default]
-      LogDebug('No SNI, trying: %s' % domains[0])
-      if not domains[0]: domains = None
+  def ProcessTls(self, data, domain=None):
+    if domain:
+      domains = [domain]
+    else:
+      domains = self.GetSni(data)
+      if not domains:
+        domains = [self.conns.LastIpDomain(self.address[0]) or self.conns.config.tls_default]
+        LogDebug('No SNI - trying: %s' % domains[0])
+        if not domains[0]: domains = None
 
     if domains:
       # If we know how to terminate the TLS/SSL, do so!
@@ -2060,10 +2123,6 @@ class UnknownConn(MagicProtocolParser):
       ctx = self.conns.config.GetTlsEndpointCtx(domains[0])
       if ctx:
         self.fd = SSL_Connect(ctx, self.fd, accepted=True, server_side=True)
-        try:
-          self.fd.do_handshake()
-        except SSL.Error:
-          pass
         self.peeking = False
         self.is_tls = False
         return True
@@ -2074,6 +2133,21 @@ class UnknownConn(MagicProtocolParser):
                            'https', domains[0], self.on_port,
                            [data], self.conns) is None:
         return False
+
+    # We are done!
+    self.dead = True
+    self.conns.Remove(self)
+
+    # Break any circular references we might have
+    self.parser = None
+    self.conns = None
+    return True
+
+  def ProcessRaw(self, data, domain):
+    if UserConn.FrontEnd(self, self.address,
+                         'raw', domain, self.on_port,
+                         [data], self.conns) is None:
+      return False
 
     # We are done!
     self.dead = True
@@ -2148,6 +2222,7 @@ class PageKite(object):
 
     self.tls_default = None
     self.tls_endpoints = {}
+    self.secure_fe = []
 
     self.daemonize = False
     self.pidfile = None
@@ -2203,7 +2278,11 @@ class PageKite(object):
     print (self.ui_pemfile and 'pemfile=%s' % self.ui_pemfile or '#pemfile=/path/to/sslcert.pem')
     print
     print '# Back-end Options:'
-    print (self.servers_auto and 'frontends=%d:%s:%d' % self.servers_auto or '#frontends=1:frontends.b5p.us:2222')
+    print (self.servers_auto and 'frontends=%d:%s:%d' % self.servers_auto or '#frontends=1:frontends.b5p.us:443')
+    for server in self.servers_manual:
+      print 'frontend=%s' % server
+    for server in self.secure_fe:
+      print 'secure_fe=%s' % server
     if self.dyndns:
       provider, args = self.dyndns
       for prov in DYNDNS:
@@ -2240,7 +2319,7 @@ class PageKite(object):
       print 'tls_endpoint=%s:%s' % (ep, tls_endpoints[ep][0])
       eprinted += 1
     if eprinted == 0:
-      print '#tls_endp=DOMAIN:PEM_FILE'
+      print '#tls_endpoint=DOMAIN:PEM_FILE'
     print (self.tls_default and 'tls_default=%s' % self.tls_default or '#tls_default=DOMAIN')
     print
     print
@@ -2488,6 +2567,7 @@ class PageKite(object):
           self.crash_report_url = None  # Disable crash reports
           socks.wrapmodule(urllib)      # Make DynDNS updates go via tor
 
+      elif opt == '--secure_fe': self.secure_fe.append(arg)
       elif opt == '--frontend': self.servers_manual.append(arg)
       elif opt == '--frontends':
         count, domain, port = arg.split(':')
@@ -2524,7 +2604,8 @@ class PageKite(object):
 
       elif opt == '--defaults':
         self.dyndns = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
-        self.servers_auto = (1, 'frontends.b5p.us', 2222)
+        self.servers_auto = (1, 'frontends.b5p.us', 443)
+        self.secure_fe = ['frontends.b5p.us', 'b5p.us']
 
       elif opt == '--settings':
         self.PrintSettings()
