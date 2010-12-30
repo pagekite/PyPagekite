@@ -172,6 +172,7 @@ Back-end Options:
  --socksify=S:P         Connect via SOCKS server S, port P (requires socks.py)
  --torify=S:P           Same as socksify, but more paranoid.
  --secure_fe=N          Connect using SSL, accepting valid certs for domain N.
+ --ca_certs=PATH        Path to your trusted root SSL certificates file.
 
  --backend=proto:domain:host:port:secret
                   Configure a back-end service on host:port, using
@@ -223,7 +224,7 @@ OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'register=', 'host=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
-            'tls_default=', 'tls_endpoint=', 'secure_fe=',
+            'tls_default=', 'tls_endpoint=', 'secure_fe=', 'ca_certs=',
             'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks',
             'buffers=']
@@ -294,13 +295,25 @@ except ImportError:
 try: 
   from OpenSSL import SSL
   def SSL_Connect(ctx, sock,
-                  server_side=False, accepted=False, connected=False):
+                  server_side=False, accepted=False, connected=False,
+                  verify_names=None):
+    if verify_names:
+      def vcb(conn, x509, errno, depth, rc):
+        # FIXME: No ALT names, no wildcards ...
+        if errno != 0: return False
+        if depth != 0: return True
+        return (x509.get_subject().commonName.lower() in verify_names)
+      ctx.set_verify(SSL.VERIFY_PEER | SSL.VERIFY_FAIL_IF_NO_PEER_CERT, vcb)
+    else:
+      def vcb(conn, x509, errno, depth, rc): return (errno == 0)
+      ctx.set_verify(SSL.VERIFY_NONE, vcb)
+
     nsock = SSL.Connection(ctx, sock)
     if accepted: nsock.set_accept_state()
     if connected: nsock.set_connect_state()
+    if verify_names: nsock.do_handshake()
+
     return nsock
-  def SSL_CommonName(fd):
-    return fd.get_peer_certificate().get_subject().commonName
 
 except ImportError:
   try:
@@ -308,33 +321,52 @@ except ImportError:
     class SSL(object):
       SSLv23_METHOD = ssl.PROTOCOL_SSLv23
       TLSv1_METHOD = ssl.PROTOCOL_TLSv1
-      Error = ssl.SSLError
       class ZeroReturnError(Exception): pass
       class SysCallError(Exception): pass
+      Error = ssl.SSLError
       class Context(object):
         def __init__(self, method):
           self.method = method 
           self.privatekey_file = None
           self.certchain_file = None
+          self.ca_certs = None
         def use_privatekey_file(self, fn): self.privatekey_file = fn
         def use_certificate_chain_file(self, fn): self.certchain_file = fn
+        def load_verify_locations(self, pemfile, capath): self.ca_certs = pemfile
 
-    def SSL_CommonName(fd):
+    def SSL_CheckPeerName(fd, names):
       cert = fd.getpeercert()
       if not cert: return None
       for field in cert['subject']:
-        if field[0][0] == 'commonName': return field[0][1]
+        if field[0][0].lower() == 'commonname':
+          name = field[0][1].lower()
+          if name in names: return name
+
+      if 'subjectAltName' in cert:
+        for field in cert['subjectAltName']:
+          if field[0].lower() == 'dns':
+            name = field[1].lower()
+            if name in names: return name
+
       return None
 
     def SSL_Connect(ctx, sock,
-                    server_side=False, accepted=False, connected=False):
-      return ssl.wrap_socket(sock, keyfile=ctx.privatekey_file, 
-                                   cert_reqs=ssl.CERT_OPTIONAL,
-                                   ca_certs='/etc/ssl/certs/ca-certificates.crt',
-                                   certfile=ctx.certchain_file,
-                                   do_handshake_on_connect=False,
-                                   ssl_version=ctx.method,
-                                   server_side=server_side)
+                    server_side=False, accepted=False, connected=False,
+                    verify_names=None):
+      reqs = (verify_names and ssl.CERT_REQUIRED or ssl.CERT_NONE)
+      fd = ssl.wrap_socket(sock, keyfile=ctx.privatekey_file, 
+                                 certfile=ctx.certchain_file,
+                                 cert_reqs=reqs,
+                                 ca_certs=ctx.ca_certs,
+                                 do_handshake_on_connect=False,
+                                 ssl_version=ctx.method,
+                                 server_side=server_side)
+      if verify_names:
+        fd.do_handshake()
+        if not SSL_CheckPeerName(fd, verify_names):
+          raise SSL.Error('Cert not in %s (%s)' % (verify_names, reqs)) 
+      return fd
+
   except ImportError:
     class SSL(object):
       SSLv23_METHOD = 0
@@ -1672,9 +1704,10 @@ class Tunnel(ChunkParser):
       try:
         raw_fd = self.fd
         ctx = SSL.Context(SSL.TLSv1_METHOD)
-        self.fd = SSL_Connect(ctx, self.fd, connected=True, server_side=False)
-        self.fd.do_handshake()
-        LogDebug('TLS connection to %s established, cert: %s' % (server, SSL_CommonName(self.fd)))
+        ctx.load_verify_locations(self.conns.config.ca_certs, None)
+        self.fd = SSL_Connect(ctx, self.fd, connected=True, server_side=False,
+                              verify_names=self.conns.config.secure_fe)
+        LogDebug('TLS connection to %s OK' % server)
       except SSL.Error, e:
         self.fd = raw_fd
         LogError('SSL handshake failed, aborting: %s' % e)
@@ -2223,6 +2256,8 @@ class PageKite(object):
     self.tls_default = None
     self.tls_endpoints = {}
     self.secure_fe = []
+    self.ca_certs_default = '/etc/ssl/certs/ca-certificates.crt'
+    self.ca_certs = self.ca_certs_default
 
     self.daemonize = False
     self.pidfile = None
@@ -2283,6 +2318,10 @@ class PageKite(object):
       print 'frontend=%s' % server
     for server in self.secure_fe:
       print 'secure_fe=%s' % server
+    if self.ca_certs != self.ca_certs_default:
+      print 'ca_certs=%s' % self.ca_certs
+    else:
+      print '#ca_certs=%s' % self.ca_certs
     if self.dyndns:
       provider, args = self.dyndns
       for prov in DYNDNS:
@@ -2567,7 +2606,7 @@ class PageKite(object):
           self.crash_report_url = None  # Disable crash reports
           socks.wrapmodule(urllib)      # Make DynDNS updates go via tor
 
-      elif opt == '--secure_fe': self.secure_fe.append(arg)
+      elif opt == '--secure_fe': self.secure_fe.append(arg.lower())
       elif opt == '--frontend': self.servers_manual.append(arg)
       elif opt == '--frontends':
         count, domain, port = arg.split(':')

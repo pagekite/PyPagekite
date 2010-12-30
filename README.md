@@ -112,7 +112,8 @@ is, using the --frontend argument:
       --backend=http:YOURNAME:localhost:80:YOURSECRET
 
 Replace HOST with the DNS name or IP address of your front-end, and PORT
-with one of the ports it listens for connections on.
+with one of the ports it listens for connections on.  If your front-end
+supports TLS-encrypted tunnels, add the --secure_fe=HOST argument as well.
 
 [ [up](#toc) ]
 
@@ -475,6 +476,17 @@ secure as it gets!
 
 How to obtain certificates and configure your back-ends is outside the
 scope of this document.
+
+
+#### Encrypted tunnels ####
+
+As of pagekite.py version 0.3.8, it is possible to connect to the front-end
+using a TLS-encrypted tunnel. This is much more secure and is highly
+recommended.
+
+This requires additional flags both on the front-end, and on the back.
+
+On the front-end, you need to define a TLS endpoint for the domain.
 
 
 #### Encrypting unencrypted back-ends ####
