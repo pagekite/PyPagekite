@@ -255,6 +255,9 @@ DYNDNS = {
                 '&hostname=%(domain)s&myip=%(ip)s'),
 }
 
+
+##[ Standard imports ]########################################################
+
 import base64
 from cgi import escape as escape_html
 import getopt
@@ -273,35 +276,78 @@ import traceback
 import urllib
 import zlib
 
+from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
+
+
+##[ Conditional imports & compatibility magic! ]###############################
+
+# System logging on Unix
 try:
   import syslog
-except Exception:
+except ImportError:
   pass
 
+# OpenSSL strategy: prefer pyOpenSSL, as it comes with built-in Context
+# objects. If that fails, look for Python 2.6+ native ssl support and 
+# create a compatible wrapper.
 try: 
   from OpenSSL import SSL
-except Exception:
-  pass
+  def SSL_Connect(ctx, sock, server_side=False, accepted=False):
+    nsock = SSL.Connection(ctx, sock)
+    if accepted: nsock.set_accept_state()
+    return nsock
+
+except ImportError:
+  try:
+    import ssl
+    class SSL(object):
+      SSLv23_METHOD = ssl.PROTOCOL_SSLv23
+      Error = ssl.SSLError
+      class ZeroReturnError(Exception): pass
+      class SysCallError(Exception): pass
+      class Context(object):
+        def __init__(self, method):
+          self.method = method 
+          self.privatekey_file = None
+          self.certchain_file = None
+        def use_privatekey_file(self, fn): self.privatekey_file = fn
+        def use_certificate_chain_file(self, fn): self.certchain_file = fn
+
+    def SSL_Connect(ctx, sock, server_side=False, accepted=False):
+      return ssl.wrap_socket(sock, keyfile=ctx.privatekey_file, 
+                                   certfile=ctx.certchain_file,
+                                   do_handshake_on_connect=(not accepted),
+                                   ssl_version=ctx.method,
+                                   server_side=server_side)
+  except ImportError:
+    class SSL(object):
+      SSLv23_METHOD = 0
+      class Context(object):
+        def __init__(self, method):
+          raise ConfigError('Neither pyOpenSSL nor python 2.6+ ssl modules found!')
+
  
-from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
+# Different Python 2.x versions complain about deprecation depending on
+# where we pull these from.
 try:
   from urlparse import parse_qs, urlparse
-except Exception, e:
+except ImportError, e:
   from cgi import parse_qs
   from urlparse import urlparse
-
 try:
   import hashlib
   def sha1hex(data):
     hl = hashlib.sha1()
     hl.update(data)
     return hl.hexdigest()
-except Exception:
+except ImportError:
   import sha
   def sha1hex(data):
     return sha.new(data).hexdigest() 
 
 
+# YamonD is a part of PageKite.net's internal monitoring systems. It's not
+# required, so if you don't have it, the mock makes things Just Work.
 class MockYamonD(object):
   def __init__(self, sspec, server=None, handler=None): pass
   def vmax(self, var, value): pass
@@ -315,15 +361,17 @@ class MockYamonD(object):
   def render_vars_text(self): return ''
   def quit(self): pass
   def run(self): pass
- 
+
+gYamon = MockYamonD(())
+
 try:
   import yamond
   YamonD=yamond.YamonD
 except Exception:
   YamonD=MockYamonD
 
-gYamon = MockYamonD(())
 
+##[ PageKite.py code starts here! ]############################################
 
 gSecret = None
 def globalSecret():
@@ -775,8 +823,9 @@ class UiHttpServer(SimpleXMLRPCServer):
       ctx = SSL.Context(SSL.SSLv23_METHOD)
       ctx.use_privatekey_file (ssl_pem_filename)
       ctx.use_certificate_chain_file(ssl_pem_filename)
-      self.socket = SSL.Connection(ctx, socket.socket(self.address_family,
-                                                      self.socket_type))
+      self.socket = SSL_Connect(ctx, socket.socket(self.address_family,
+                                                   self.socket_type),
+                                server_side=True)
       self.server_bind()
       self.server_activate()
       self.enable_ssl = True
@@ -812,7 +861,12 @@ class HttpUiThread(threading.Thread):
 
   def run(self):
     while self.serve:
-      self.httpd.handle_request()
+      try:
+        self.httpd.handle_request()
+      except KeyboardInterrupt:
+        self.serve = False
+      except Exception, e:
+        LogDebug('HTTP UI caught exception: %s' % e)
     LogDebug('HttpUiThread: done')
     self.httpd.socket.close()
 
@@ -1098,15 +1152,15 @@ class Selectable(object):
         self.peeked = len(data)
       else:
         data = self.fd.recv(self.maxread)
-    except socket.error, err:
-      LogDebug('Error reading socket: %s' % err)
-      return False
     except (SSL.ZeroReturnError, SSL.SysCallError), err:
       LogDebug('Error reading socket (SSL): %s' % err)
       return False
     except SSL.Error, err:
       LogDebug('Problem reading socket (SSL): %s' % err)
       return True
+    except socket.error, err:
+      LogDebug('Error reading socket: %s' % err)
+      return False
 
     if data is None or data == '':
       return False
@@ -2005,9 +2059,8 @@ class UnknownConn(MagicProtocolParser):
       # FIXME: Authentication?
       ctx = self.conns.config.GetTlsEndpointCtx(domains[0])
       if ctx:
-        self.fd = SSL.Connection(ctx, self.fd)
+        self.fd = SSL_Connect(ctx, self.fd, accepted=True, server_side=True)
         try:
-          self.fd.set_accept_state()
           self.fd.do_handshake()
         except SSL.Error:
           pass
