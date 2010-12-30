@@ -1729,9 +1729,11 @@ class Tunnel(ChunkParser):
 
           if proto == 'probe':
             if self.Probe(host):
+              LogDebug('Responding to probe for %s: good' % host)
               self.SendChunked('SID: %s\r\n\r\n%s' % (
                                  sid, HTTP_GoodBeConnection() )) 
             else:
+              LogDebug('Responding to probe for %s: back-end down' % host)
               self.SendChunked('SID: %s\r\n\r\n%s' % (
                                  sid, HTTP_NoBeConnection() )) 
           else:
