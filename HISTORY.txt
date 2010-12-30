@@ -7,6 +7,7 @@ v0.3.8   2010.12.??
       - Can now terminate/unwrap TLS/SSL at the front-end.
       - Routing support for the old lame SSLv2.
       - Built-in TLS/SSL works with pyOpenSSL or python 2.6+ ssl. 
+      - Encrypted tunnels now work! See --ca_certs and --secure_fe.
 
 
 v0.3.7   2010.12.26
