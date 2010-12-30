@@ -25,22 +25,27 @@ works, check out <http://pagekite.net/docs/>.
    8.  [Configuring DNS                                 ](#dns)
    9.  [Connecting over Socks or Tor                    ](#tor)
    10. [Time/IP-based raw ports (SSH-after-HTTP)        ](#ipr)
-   11. [Unix/Linux systems integration                  ](#unx)
-   12. [Saving your configuration                       ](#cfg)
-   13. [A word about security and logs                  ](#sec)
-   14. [Limitations and caveats                         ](#lim)
-   15. [Credits and licence                             ](#lic)
+   11. [SSL/TLS back-ends, endpoints and SNI            ](#tls)
+   12. [Unix/Linux systems integration                  ](#unx)
+   13. [Saving your configuration                       ](#cfg)
+   14. [A word about security and logs                  ](#sec)
+   15. [Limitations and caveats                         ](#lim)
+   16. [Credits and licence                             ](#lic)
 
 
 <a                                                              name=req></a>
 ### 2. Requirements ###
 
-Pagekite.py requires Python 2.2 or later.
+Pagekite.py requires Python 2.x, version 2.2 or later.
 
 Pagekite.py does not at the moment include a useful web server, so in
 order to do anything interesting with it, you you will need an HTTP
 and/or HTTPS server as well. Which web-server you prefer is up to you
 and depends on your goals, but any server should work.
+
+In order for pagekite.py to terminate SSL connections or encrypt your HTTP
+Console, you will need openssl and either python 2.6+ or the pyOpenSSL
+module. These are NOT required if you just want to route HTTPS requests.
 
 If you need to use Socks or Tor to connect to the Internet, you will also
 need a copy of SocksiPy: <http://code.google.com/p/socksipy-branch/>.
@@ -107,7 +112,8 @@ is, using the --frontend argument:
       --backend=http:YOURNAME:localhost:80:YOURSECRET
 
 Replace HOST with the DNS name or IP address of your front-end, and PORT
-with one of the ports it listens for connections on.
+with one of the ports it listens for connections on.  If your front-end
+supports TLS-encrypted tunnels, add the --secure_fe=HOST argument as well.
 
 [ [up](#toc) ]
 
@@ -197,7 +203,7 @@ whatever username you like, and the password given on the command-line.
 
 #### Enabling SSL on the HTTP console ####
 
-If you have the Python OpenSSL module installed, you can increase the
+If you have the OpenSSL (pyOpenSSL or python 2.6+), you can increase the
 security of your HTTP console even further by creating a self-signed
 SSL certificate and enabling it using the --pemfile option:
 
@@ -448,8 +454,155 @@ then you probably do not want to use raw ports at all...
 [ [up](#toc) ]
 
 
+<a                                                              name=tls></a>
+### 11. SSL/TLS back-ends, endpoints and SNI ###
+
+Pagekite.py includes powerful support for name-based virtual hosting of
+multiple encrypted (HTTPS) web-sites behind a single IP address, something
+which until recently was practically largely impossible.
+
+This is done based on the new TLS/SNI extension, along with some work-arounds
+for older clients (see Limitations below).
+
+
+#### Encrypted back-ends (end-to-end) ####
+
+The most secure use of TLS involves encrypted back-ends, registered with a
+--backend=https:NAME:... argument.
+
+These back-ends themselves take care of the encryption and decryption, so
+all pagekite.py sees is an incomprehensible stream of binary - this is as
+secure as it gets!
+
+How to obtain certificates and configure your back-ends is outside the
+scope of this document.
+
+
+#### Encrypted tunnels ####
+
+As of pagekite.py version 0.3.8, it is possible to connect to the front-end
+using a TLS-encrypted tunnel.
+
+This is much more secure and is highly recommended: not only does this
+prevent people from sniffing the traffic between your web server and the
+front-end, it also protects you against any man-in-the-middle attacks where
+someone impersonates your front-end of choice.
+
+This requires additional configuration both on the front-end and on the back.
+
+On the front-end, you need to define a TLS endpoint (and certificate) for
+the domain of the SSL certificate (it does not actually have to match the
+domain name of the front-end, but the front- and back-ends have to agree
+what the certificate name is).
+
+    frontend$ sudo pagekite.py \
+      ...
+      --tls_endpoint=frontend.domain.com:/path/to/key-and-cert-chain.pem \
+      ...
+
+On the back-end, you need to tell pagekite.py which certificate to
+accept, and possibly give it the path to a list of certificate authority
+certificates (the default works on Linux).
+
+    frontend$ sudo pagekite.py \
+      --frontend=frontend.domain.com:443 \
+      --secure_fe=frontend.domain.com \
+      --ca_certs=/path/to/ca-certificates.pem \
+      ...
+
+Note that if you are running your own front-end, you do not need to purchase
+a commecial certificate for this to work - you can generate your own
+self-signed certificate and use that on both ends, and this will actually be
+*more* secure than using a 3rd party certificate.
+
+
+#### Encrypting unencrypted back-ends ####
+
+If you want to enable encryption for back-ends which do not themselves
+support HTTPS, you can use the --tls_endpoint flag to ask pagekite.py
+itself to handle TLS for a given domain.
+
+In this configuration, clients will communicate securely with the
+pagekite.py front-end, which will in turn forward decrypted requests to its
+backends, encrypting any replies as they are sent to the client.
+
+As the tunnel between pagekite front- and back-ends itself is generally
+encapsulated in a secure TLS connection, this provides almost the same level
+of security as end-to-end encryption above, with the exception that the
+pagekite.py front-end has access to unecrypted data. So back-ends have to
+trust the person running their front-end!
+
+Although not perfect, for those concerned with casual snooping on shared
+public WiFi, school or corporate networks, this is a significant security
+benefit.
+
+The expected use-case for this feature, is to deploy a wild-card certificate
+at the front-end, allowing multiple back-ends to encrypt their communication
+without the administrative overhead of generating, distributing and
+maintaining keys and certificates on every single one.  An example:
+
+    frontend$ sudo pagekite.py \
+      --isfrontend \
+      --ports=80,443 --protos=http,websocket,https \
+      --tls_endpoint=*.domain.com:/path/to/key-and-cert-chain.pem \
+      --domain=http:*.domain.com:SECRET
+
+    backend$ sudo pagekite.py \
+      --frontend=frontend.domain.com:443 \
+      --backend=http:foo.domain.com:localhost:80:SECRET
+
+This would enable both https://foo.domain.com/ and http://foo.domain.com/,
+without an explicit https back-end being defined or configured.
+
+**Note:** Currently SSL endpoints are only available at the front-end, but
+will be available on the back-end as well in a future release.
+
+**Note:** This requires either pyOpenSSL or python 2.6+ and openssl support
+at the OS level.
+
+
+#### Limitations ####
+
+Windows XP (and older) ships with an implementation of the HTTPS (TLS)
+protocol which does not support the SNI extension.  The same is true for
+certain older browsers under Linux (such as lynx), Android 1.6, and
+generally any old or poorly maintained HTTPS clients.
+
+Without SNI, pagekite.py can not reliably detect which domain is being
+requested.  In its absence, pagekite.py employs the following fall-back
+strategies to facilitate access:
+
+   1. Obey the TLS/SNI extension, if present.
+   2. Check if any known back-end was recently visited by the client IP,
+      if one is found, try to use that for the domain.
+   3. Fall back to a default domain specified by the --tls_default flag.
+
+This means the common pattern of a clear-text HTTP website "upgrading" to
+HTTPS on certain pages is quite likely to work even for older browsers. But
+it is *not* guaranteed if the guest IP address is shared by multiple users,
+or if the browser is idle for too long (so the SSL connection times out and
+the IP expires from the tracking map maintained by pagekite.py).
+
+When the above measures all fail and the wrong domain is chosen for routing
+the TLS request, browsers should detect a certificate mismatch and abort the
+request. So although inconvenient and not very user-friendly, this failure
+mode should not pose a significant security risk.
+
+The best solution is of course to upgrade all browsers accessing your site to
+a recent version of Chrome, which includes proper SNI support.
+
+As this may not be realistic, it might be wise want to provide an unencrypted
+(HTTP) version of your website for older clients, upgrading to HTTPS only when
+it has been verified to work; this can be done by fetching a javascript 
+upgrade script from the HTTPS version of your site. Using javascript to ensure
+occasional (1/min) updates of content may also avoid the expiration problem.
+
+
+[ [up](#toc) ]
+
+
 <a                                                              name=unx></a>
-### 11. Unix/Linux systems integration ###
+### 12. Unix/Linux systems integration ###
 
 When deploying pagekite.py as a system component on Unix, there are quite
 a few specialized arguments which can come in handy.
@@ -482,7 +635,7 @@ generate a configuration file...
 
 
 <a                                                              name=cfg></a>
-### 12. Saving your configuration ###
+### 13. Saving your configuration ###
  
 Once you have everything up and running properly, you may find it more
 convenient to save the settings to a configuration file.  Pagekite.py can
@@ -515,7 +668,7 @@ you want to "include" a one configuration into another for some reason.
 
 
 <a                                                              name=sec></a>
-### 13. A word about security and logs ###
+### 14. A word about security and logs ###
 
 When exposing services to the wider Internet, as pagekite.py is designed to
 do, it is always important to keep some basic security principles in mind.
@@ -544,7 +697,7 @@ cases pagekite.py will report the actual remote IP in its own log.
 
 
 <a                                                              name=lim></a>
-### 14. Limitations and caveats ###
+### 15. Limitations and caveats ###
 
 There are certain limitations to what can be accomplished using Pagekite, due
 to the nature of the underlying protocls. Here is a brief discussion of the
@@ -553,26 +706,20 @@ most important ones.
 
 #### HTTPS routing and Windows XP ###
 
-Windows XP (and older) ships with an implementation of the HTTPS (TLS)
-protocol which does not support the SNI extension.  As a result, pagekite.py
-can not reliably detect which back-end should serve an incoming request.
+HTTPS support depends on recent additions to the TLS protocol, which are
+unsupported by older browsers and operating systems - most importantly
+including the still common Windows XP.
 
-Pagekite attempts to work around this by tracking which IP addresses have
-recently visited which domains (using the HTTP or other unencrypted 
-protocols), and *guessing* that the unidentifiable HTTPS connection was
-destined for the same site.
-
-This means the common pattern of a clear-text HTTP website "upgrading" to
-HTTPS on certain pages is likely to work even for older browsers. But it is
-*not* guaranteed.
-
-A more reliable work-around is to upgrade your Windows XP browser to a recent
-version of Chrome, which includes proper SNI support.
+The mechanisms employed by pagekite.py to work around these problems are
+discussed in [the TLS/SSL section](#tls).
 
 
 #### Raw ports ###
 
-Raw ports are unreliable, as discussed in [the raw port section](#ipr).
+Raw ports are unreliable for clients sharing IP addresses with others or
+accessing multiple resources behind the same front-end at the same time.
+
+See the discussed in [the raw port section](#ipr) for details.
 
 
 [ [up](#toc) ]
