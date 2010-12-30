@@ -504,7 +504,7 @@ On the back-end, you need to tell pagekite.py which certificate to
 accept, and possibly give it the path to a list of certificate authority
 certificates (the default works on Linux).
 
-    frontend$ sudo pagekite.py \
+    backend$ pagekite.py \
       --frontend=frontend.domain.com:443 \
       --secure_fe=frontend.domain.com \
       --ca_certs=/path/to/ca-certificates.pem \
