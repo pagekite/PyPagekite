@@ -1997,6 +1997,7 @@ class UserConn(Selectable):
     if proto == 'probe':
       protos = ['http', 'https', 'websocket', 'raw']
       ports = conns.config.server_ports[:]
+      ports.extend(conns.config.server_aliasport.keys())
       ports.extend(conns.config.server_raw_ports)
     else:
       protos = [proto]
@@ -2004,6 +2005,7 @@ class UserConn(Selectable):
       if proto == 'websocket': protos.append('http')
 
     tunnels = None
+    LogDebug('Probe for %s, testing %s/%s' % (host, protos, ports))
     for p in protos:
       for prt in ports:
         if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, prt), host)
