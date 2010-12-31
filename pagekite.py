@@ -453,11 +453,13 @@ class ConnectError(Exception):
 
 
 def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
-                          testtoken=None):
+                         testtoken=None):
   req = ['POST %s HTTP/1.1\r\n' % MAGIC_PATH,
          'Host: %s\r\n' % server,
          'Content-Type: application/octet-stream\r\n',
-         'Transfer-Encoding: chunked\r\n']
+         # We announce a really long content-length, to try and force any
+         # nasty proxies to just switch to streaming mode or abort.
+         'Content-Length: 2147483647\r\n']
 
   if not nozchunks:
     req.append('X-PageKite-Features: ZChunks\r\n')
@@ -795,7 +797,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     sid = int(path[len('/conn/'):])
     if sid in SELECTABLES:
       html = ['<h2>%s</h2>' % escape_html('%s' % SELECTABLES[sid]),
-              SELECTABLES[sid].html()]
+              SELECTABLES[sid].__html__()]
     else:
       html = ['<h2>Connection %s not found. Expired?</h2>' % sid]
     return {
@@ -1085,7 +1087,7 @@ class Selectable(object):
   def __str__(self):
     return '%s: %s' % (self.log_id, self.__class__)
 
-  def html(self):
+  def __html__(self):
     try:
       peer = self.fd.getpeername()
       sock = self.fd.getsockname()
@@ -1388,8 +1390,8 @@ class LineParser(Selectable):
     Selectable.__init__(self, fd, address, on_port)
     self.leftovers = ''
 
-  def html(self):
-    return Selectable.html(self)
+  def __html__(self):
+    return Selectable.__html__(self)
 
   def Cleanup(self):
     Selectable.Cleanup(self)
@@ -1416,8 +1418,6 @@ class LineParser(Selectable):
 TLS_CLIENTHELLO = '%c' % 026
 SSL_CLIENTHELLO = '\x80'
 
-# FIXME: Add "port hints" and an ip<->backend cache, for making clever guesses
-#        as to which HTTPS backend to use if SNI is missing.
 # FIXME: XMPP support
 class MagicProtocolParser(LineParser):
   """A Selectable which recognizes HTTP, TLS or XMPP preambles."""
@@ -1428,10 +1428,10 @@ class MagicProtocolParser(LineParser):
     self.might_be_tls = True
     self.is_tls = False
 
-  def html(self):
+  def __html__(self):
     return ('<b>Detected TLS</b>: %s<br>'
             '%s') % (self.is_tls,
-                     LineParser.html(self))
+                     LineParser.__html__(self))
 
   def ProcessData(self, data):
     if data.startswith(MAGIC_PREFIX):
@@ -1533,8 +1533,8 @@ class ChunkParser(Selectable):
     self.chunk = ''
     self.zr = zlib.decompressobj()
 
-  def html(self):
-    return Selectable.html(self)
+  def __html__(self):
+    return Selectable.__html__(self)
 
   def Cleanup(self):
     Selectable.Cleanup(self)
@@ -1628,9 +1628,9 @@ class Tunnel(ChunkParser):
     self.backends = {}
     self.rtt = 100000
 
-  def html(self):
+  def __html__(self):
     return ('<b>Server name</b>: %s<br>'
-            '%s') % (self.server_name, ChunkParser.html(self))
+            '%s') % (self.server_name, ChunkParser.__html__(self))
 
   def Cleanup(self):
     # FIXME: Send good-byes to everyone?
@@ -1961,11 +1961,11 @@ class UserConn(Selectable):
     Selectable.__init__(self, address=address)
     self.tunnel = None
 
-  def html(self):
+  def __html__(self):
     return ('<b>Tunnel</b>: <a href="/conn/%s">%s</a><br>'
             '%s') % (self.tunnel and self.tunnel.sid or '',
                      escape_html('%s' % (self.tunnel or '')),
-                     Selectable.html(self))
+                     Selectable.__html__(self))
  
   def Cleanup(self):
     self.tunnel.Disconnect(self)
@@ -1994,24 +1994,25 @@ class UserConn(Selectable):
     # Try and find the right tunnel. We prefer proto/port specifications first,
     # then the just the proto. If the protocol is WebSocket and no tunnel is
     # found, look for a plain HTTP tunnel.
-    tunnels = None
-    protos = [proto]
     if proto == 'probe':
       protos = ['http', 'https', 'websocket', 'raw']
       ports = conns.config.server_ports[:]
       ports.extend(conns.config.server_raw_ports)
     else:
+      protos = [proto]
       ports = [on_port]
-    if proto == 'websocket': protos.append('http')
+      if proto == 'websocket': protos.append('http')
+
+    tunnels = None
     for p in protos:
-      for port in ports:
-        if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, port), host)
+      for prt in ports:
+        if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, prt), host)
       if not tunnels: tunnels = conns.Tunnel(p, host)
-    if tunnels: self.tunnel = tunnels[0]
 
     if self.address:
       chunk_headers = [('RIP', self.address[0]), ('RPort', self.address[1])]
 
+    if tunnels: self.tunnel = tunnels[0]
     if self.tunnel and self.tunnel.SendData(self, ''.join(body),
                                             host=host, proto=proto, port=on_port,
                                             chunk_headers=chunk_headers):
@@ -2245,15 +2246,15 @@ class Listener(Selectable):
   def __str__(self):
     return '%s port=%s' % (Selectable.__str__(self), self.port)
 
-  def html(self):
+  def __html__(self):
     return '<p>Listening on port %s</p>' % self.port
  
   def ReadData(self):
     try:
       client, address = self.fd.accept()
       if client:
-        uc = self.connclass(client, address, self.port, self.conns)
         self.Log([('accept', '%s:%s' % (obfuIp(address[0]), address[1]))])
+        uc = self.connclass(client, address, self.port, self.conns)
         return True
     except Exception, e:
       LogDebug('Listener::ReadData: %s' % e)
