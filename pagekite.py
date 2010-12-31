@@ -1992,10 +1992,16 @@ class UserConn(Selectable):
     # found, look for a plain HTTP tunnel.
     tunnels = None
     protos = [proto]
-    if proto == 'probe': protos = ['http', 'https', 'websocket', 'raw']
+    if proto == 'probe':
+      protos = ['http', 'https', 'websocket', 'raw']
+      ports = conns.config.server_ports[:]
+      ports.extend(conns.config.server_raw_ports)
+    else:
+      ports = [on_port]
     if proto == 'websocket': protos.append('http')
     for p in protos:
-      if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, on_port), host)
+      for port in ports:
+        if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, port), host)
       if not tunnels: tunnels = conns.Tunnel(p, host)
     if tunnels: self.tunnel = tunnels[0]
 
