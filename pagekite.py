@@ -171,6 +171,7 @@ Back-end Options:
  --new          -N      Don't attempt to connect to the domain's old front-end.           
  --socksify=S:P         Connect via SOCKS server S, port P (requires socks.py)
  --torify=S:P           Same as socksify, but more paranoid.
+ --noprobes             Reject all probes for back-end liveness.
  --fe_certname=N        Connect using SSL, accepting valid certs for domain N.
  --ca_certs=PATH        Path to your trusted root SSL certificates file.
 
@@ -227,7 +228,7 @@ OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
             'tls_default=', 'tls_endpoint=', 'fe_certname=', 'ca_certs=',
             'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks',
-            'buffers=']
+            'buffers=', 'noprobes']
 
 AUTH_ERRORS           = '128.'
 AUTH_ERR_USER_UNKNOWN = '128.0.0.0'
@@ -1885,7 +1886,11 @@ class Tunnel(ChunkParser):
 #             print 'Should unwrap SSL from %s' % host
 
           if proto == 'probe':
-            if self.Probe(host):
+            if self.conns.config.no_probes:
+              LogDebug('Responding to probe for %s: rejected' % host)
+              self.SendChunked('SID: %s\r\n\r\n%s' % (
+                                 sid, HTTP_NoFeConnection() )) 
+            elif self.Probe(host):
               LogDebug('Responding to probe for %s: good' % host)
               self.SendChunked('SID: %s\r\n\r\n%s' % (
                                  sid, HTTP_GoodBeConnection() )) 
@@ -2001,7 +2006,6 @@ class UserConn(Selectable):
       if proto == 'websocket': protos.append('http')
 
     tunnels = None
-    LogDebug('Probe for %s, testing %s/%s' % (host, protos, ports))
     for p in protos:
       for prt in ports:
         if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, prt), host)
@@ -2296,6 +2300,7 @@ class PageKite(object):
 
     self.socks_server = None
     self.require_all = False
+    self.no_probes = False
     self.servers = []
     self.servers_manual = []
     self.servers_auto = None
@@ -2370,6 +2375,7 @@ class PageKite(object):
       print '#backend=websocket:YOU.pagekite.me:localhost:8080:SECRET'
     print (self.servers_new_only and 'new' or '#new')
     print (self.require_all and 'all' or '#all')
+    print (self.no_probes and 'noprobes' or '#noprobes')
     print
     eprinted = 0
     print '# Domains we terminate SSL/TLS for natively, with key/cert-files'
@@ -2651,6 +2657,7 @@ class PageKite(object):
           bid = '%s:%s' % (proto, domain)
           self.backends[bid] = (proto, domain, None, secret)
 
+      elif opt == '--noprobes': self.no_probes = True
       elif opt == '--nofrontend': self.isfrontend = False
       elif opt == '--nodaemonize': self.daemonize = False
       elif opt == '--noall': self.require_all = False
