@@ -1,11 +1,11 @@
-pagekite (0.3.8-1he1) lucid; urgency=low
+pagekite (0.3.8-1) lucid; urgency=low
 
   * postrm now purges logs
   * Better dependencies for python (we don't support python3)
   * Recommend python-openssl
   * Builds as architecture independent deb 
 
- -- Hrafnkell <he@myther-main>  Wed, 29 Dec 2010 22:30:23 +0000
+ -- Hrafnkell <he@klaki.net>  Wed, 30 Dec 2010 22:20:23 +0000
 
 pagekite (0.3.7-1) unstable; urgency=low
 
@@ -15,7 +15,7 @@ pagekite (0.3.7-1) unstable; urgency=low
   * new init.d script that should have lsb support 
   * moved log into /var/log/pagekite/ from /tmp/ 
 
- -- Hrafnkell <he@myther-main>  Tue, 28 Dec 2010 00:47:29 +0000
+ -- Hrafnkell <he@klaki.net>  Tue, 28 Dec 2010 00:47:29 +0000
 
 pagekite (0.3.5-2) unstable; urgency=low
 
