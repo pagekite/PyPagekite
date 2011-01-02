@@ -2322,10 +2322,6 @@ class PageKite(object):
       print 'frontend=%s' % server
     for server in self.fe_certname:
       print 'fe_certname=%s' % server
-    if self.ca_certs != self.ca_certs_default:
-      print 'ca_certs=%s' % self.ca_certs
-    else:
-      print '#ca_certs=%s' % self.ca_certs
     if self.dyndns:
       provider, args = self.dyndns
       for prov in DYNDNS:
@@ -2400,6 +2396,10 @@ class PageKite(object):
     else:
       print '#runas=uid:gid'
     print (self.pidfile and 'pidfile=%s' % self.pidfile or '#pidfile=/path/file')
+    if self.ca_certs != self.ca_certs_default:
+      print 'ca_certs=%s' % self.ca_certs
+    else:
+      print '#ca_certs=%s' % self.ca_certs
     print
 
   def FallDown(self, message, help=True, noexit=False):
