@@ -157,12 +157,9 @@ class TestInternals(unittest.TestCase):
                      '1234567843b16458418175599012be884a18963f10be4670')
 
   def test_PageKiteRequest(self):
-    request = ['POST /~:PageKite:~/v0.8 HTTP/1.1\r\n',
-               'Host: x\r\n',
-               'Content-Type: application/octet-stream\r\n',
-               'Transfer-Encoding: chunked\r\n'] 
+    request = ['CONNECT PageKite:1 HTTP/1.0\r\n'] 
     zlibreq = 'X-PageKite-Features: ZChunks\r\n'
-    reqbody = '\r\nOK\r\n'
+    reqbody = '\r\n'
 
     # Basic request, no servers.
     req = request[:]

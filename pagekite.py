@@ -128,7 +128,7 @@ Common Options:
 
  --optfile=X    -o X    Read options from file X. Default is ~/.pagekiterc.
  --httpd=X:P    -H X:P  Enable the HTTP user interface on hostname X, port P.
- --pemfile=X    -P X    Use X as a PEM key for the HTTPS UI. (FIXME)
+ --pemfile=X    -P X    Use X as a PEM key for the HTTPS UI.
  --httppass=X   -X X    Require password X to access the UI.
  --nozchunks            Disable zlib tunnel compression.
  --buffers       N      Buffer at most N kB of back-end data before blocking.
@@ -171,7 +171,8 @@ Back-end Options:
  --new          -N      Don't attempt to connect to the domain's old front-end.           
  --socksify=S:P         Connect via SOCKS server S, port P (requires socks.py)
  --torify=S:P           Same as socksify, but more paranoid.
- --secure_fe=N          Connect using SSL, accepting valid certs for domain N.
+ --noprobes             Reject all probes for back-end liveness.
+ --fe_certname=N        Connect using SSL, accepting valid certs for domain N.
  --ca_certs=PATH        Path to your trusted root SSL certificates file.
 
  --backend=proto:domain:host:port:secret
@@ -224,10 +225,10 @@ OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'register=', 'host=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
-            'tls_default=', 'tls_endpoint=', 'secure_fe=', 'ca_certs=',
+            'tls_default=', 'tls_endpoint=', 'fe_certname=', 'ca_certs=',
             'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks',
-            'buffers=']
+            'buffers=', 'noprobes']
 
 AUTH_ERRORS           = '128.'
 AUTH_ERR_USER_UNKNOWN = '128.0.0.0'
@@ -321,9 +322,11 @@ except ImportError:
     class SSL(object):
       SSLv23_METHOD = ssl.PROTOCOL_SSLv23
       TLSv1_METHOD = ssl.PROTOCOL_TLSv1
-      class ZeroReturnError(Exception): pass
+      WantReadError = ssl.SSLError
+      class Error(Exception): pass
       class SysCallError(Exception): pass
-      Error = ssl.SSLError
+      class WantWriteError(Exception): pass
+      class ZeroReturnError(Exception): pass
       class Context(object):
         def __init__(self, method):
           self.method = method 
@@ -371,6 +374,11 @@ except ImportError:
     class SSL(object):
       SSLv23_METHOD = 0
       TLSv1_METHOD = 0
+      class Error(Exception): pass
+      class SysCallError(Exception): pass
+      class WantReadError(Exception): pass
+      class WantWriteError(Exception): pass
+      class ZeroReturnError(Exception): pass
       class Context(object):
         def __init__(self, method):
           raise ConfigError('Neither pyOpenSSL nor python 2.6+ ssl modules found!')
@@ -451,14 +459,11 @@ class ConnectError(Exception):
 
 
 def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
-                          testtoken=None):
-  req = ['POST %s HTTP/1.1\r\n' % MAGIC_PATH,
-         'Host: %s\r\n' % server,
-         'Content-Type: application/octet-stream\r\n',
-         'Transfer-Encoding: chunked\r\n']
+                         tls=False, testtoken=None):
+  req = ['CONNECT PageKite:1 HTTP/1.0\r\n']
 
-  if not nozchunks:
-    req.append('X-PageKite-Features: ZChunks\r\n')
+  if not nozchunks: req.append('X-PageKite-Features: ZChunks\r\n')
+  if tls: req.append('X-PageKite-Features: TLS\r\n')
          
   tokens = tokens or {}
   for d in backends.keys():
@@ -471,7 +476,7 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
       sign = signToken(secret=backends[d][BE_SECRET], payload=data, token=testtoken)
       req.append('X-PageKite: %s:%s\r\n' % (data, sign))
 
-  req.append('\r\nOK\r\n')
+  req.append('\r\n')
   return ''.join(req)
 
 def HTTP_ResponseHeader(code, title, mimetype='text/html'):
@@ -485,13 +490,18 @@ def HTTP_Header(name, value):
 def HTTP_StartBody():
   return '\r\n'
 
+def HTTP_ConnectOK():
+  return 'HTTP/1.0 200 Connection Established\r\n\r\n'
+
+def HTTP_ConnectBad():
+  return 'HTTP/1.0 503 Sorry\r\n\r\n'
+
 def HTTP_Response(code, title, body, mimetype='text/html', headers=None):
   data = [HTTP_ResponseHeader(code, title, mimetype)]
   if headers: data.extend(headers)
   data.extend([HTTP_StartBody(), ''.join(body)])
   return ''.join(data)
 
-# FIXME: Replace all these GIF images with little json snippets for better UI.
 def HTTP_NoFeConnection():
   return HTTP_Response(200, 'OK', base64.decodestring(
     'R0lGODlhCgAKAMQCAN4hIf/+/v///+EzM+AuLvGkpORISPW+vudgYOhiYvKpqeZY'
@@ -502,7 +512,6 @@ def HTTP_NoFeConnection():
       mimetype='image/gif')
 
 def HTTP_NoBeConnection():
-  # FIXME: Make this different...
   return HTTP_Response(200, 'OK', base64.decodestring(
     'R0lGODlhCgAKAPcAAI9hE6t2Fv/GAf/NH//RMf/hd7u6uv/mj/ntq8XExMbFxc7N'
     'zc/Ozv/xwfj31+jn5+vq6v///////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
@@ -793,7 +802,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     sid = int(path[len('/conn/'):])
     if sid in SELECTABLES:
       html = ['<h2>%s</h2>' % escape_html('%s' % SELECTABLES[sid]),
-              SELECTABLES[sid].html()]
+              SELECTABLES[sid].__html__()]
     else:
       html = ['<h2>Connection %s not found. Expired?</h2>' % sid]
     return {
@@ -1083,7 +1092,7 @@ class Selectable(object):
   def __str__(self):
     return '%s: %s' % (self.log_id, self.__class__)
 
-  def html(self):
+  def __html__(self):
     try:
       peer = self.fd.getpeername()
       sock = self.fd.getsockname()
@@ -1129,7 +1138,6 @@ class Selectable(object):
       self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPCNT, 10)
       self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPINTVL, 1)
     except Exception:
-      # FIXME: Should we complain that this isn't supported by this OS?
       pass
 
   def SetConn(self, conn):
@@ -1192,7 +1200,8 @@ class Selectable(object):
       try:
         discard += self.fd.recv(eat_bytes - len(discard))
       except socket.error, err:
-        LogDebug('Error reading socket: %s' % err)
+        LogDebug('Error reading (%d/%d) socket: %s' % (eat_bytes, self.peeked, err))
+        time.sleep(0.1)
 
     self.peeked -= eat_bytes
     self.peeking = keep_peeking
@@ -1205,12 +1214,11 @@ class Selectable(object):
         self.peeked = len(data)
       else:
         data = self.fd.recv(self.maxread)
-    except (SSL.ZeroReturnError, SSL.SysCallError), err:
+    except (SSL.WantReadError, SSL.WantWriteError), err:
+      return True
+    except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
       LogDebug('Error reading socket (SSL): %s' % err)
       return False
-    except SSL.Error, err:
-      LogDebug('Problem reading socket (SSL): %s' % err)
-      return True
     except socket.error, err:
       LogDebug('Error reading socket: %s' % err)
       return False
@@ -1225,6 +1233,7 @@ class Selectable(object):
       return self.ProcessData(data)
 
   def Send(self, data):
+
     global buffered_bytes
     buffered_bytes -= len(self.write_blocked)
 
@@ -1244,11 +1253,11 @@ class Selectable(object):
           return False
         else:
           LogDebug('Sending: %s' % problem)
-      except (SSL.ZeroReturnError, SSL.SysCallError), err:
+      except (SSL.WantWriteError, SSL.WantReadError), err:
+        pass
+      except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
         LogDebug('Error sending (SSL): %s' % err)
         return False
-      except SSL.Error, err:
-        LogDebug('Problem sending (SSL): %s' % err)
 
     self.write_blocked = sending[sent_bytes:]
     buffered_bytes += len(self.write_blocked)
@@ -1344,10 +1353,11 @@ class Connections(object):
     evil = []
     for s in self.conns:
       try:
-        if s.fd.closed(): evil.append(s)
+        i, o, e = select.select([s.fd], [s.fd], [s.fd], 0)
       except Exception:
         evil.append(s)
     for s in evil:
+      LogDebug('Removing broken Selectable: %s' % s)
       self.conns.remove(s) 
 
   def Connection(self, fd):
@@ -1385,8 +1395,8 @@ class LineParser(Selectable):
     Selectable.__init__(self, fd, address, on_port)
     self.leftovers = ''
 
-  def html(self):
-    return Selectable.html(self)
+  def __html__(self):
+    return Selectable.__html__(self)
 
   def Cleanup(self):
     Selectable.Cleanup(self)
@@ -1413,8 +1423,6 @@ class LineParser(Selectable):
 TLS_CLIENTHELLO = '%c' % 026
 SSL_CLIENTHELLO = '\x80'
 
-# FIXME: Add "port hints" and an ip<->backend cache, for making clever guesses
-#        as to which HTTPS backend to use if SNI is missing.
 # FIXME: XMPP support
 class MagicProtocolParser(LineParser):
   """A Selectable which recognizes HTTP, TLS or XMPP preambles."""
@@ -1425,38 +1433,53 @@ class MagicProtocolParser(LineParser):
     self.might_be_tls = True
     self.is_tls = False
 
-  def html(self):
+  def __html__(self):
     return ('<b>Detected TLS</b>: %s<br>'
             '%s') % (self.is_tls,
-                     LineParser.html(self))
+                     LineParser.__html__(self))
 
-  def ProcessData(self, data):
-    if data.startswith(MAGIC_PREFIX):
+  # FIXME: DEPRECATE: Make this all go away, switch to CONNECT.
+  def ProcessMagic(self, data):
+    args = {}
+    try:
       prefix, words, data = data.split('\r\n', 2)
-      args = {}
       for arg in words.split('; '):
         key, val = arg.split('=', 1)
         args[key] = val
 
       self.EatPeeked(eat_bytes=len(prefix)+2+len(words)+2)
+    except ValueError, e:
+      return True 
 
-      proto = 'proto' in args and args['proto'] or None
-      if proto in ('http', 'websocket'):
-        return LineParser.ProcessData(self, data)
+    try:
+      port = 'port' in args and args['port'] or None
+      if port: self.on_port = int(port)
+    except ValueError, e:
+      return False
 
-      domain = 'domain' in args and args['domain'] or None
-      if proto == 'https': return self.ProcessTls(data, domain)
-      if proto == 'raw' and domain: return self.ProcessRaw(data, domain)
+    proto = 'proto' in args and args['proto'] or None
+    if proto in ('http', 'websocket'):
+      return LineParser.ProcessData(self, data)
+
+    domain = 'domain' in args and args['domain'] or None
+    if proto == 'https': return self.ProcessTls(data, domain)
+    if proto == 'raw' and domain: return self.ProcessRaw(data, domain)
+    return False
+
+  def ProcessData(self, data):
+    if data.startswith(MAGIC_PREFIX): return self.ProcessMagic(data)
 
     if self.might_be_tls:
       self.might_be_tls = False
       if not data.startswith(TLS_CLIENTHELLO) and not data.startswith(SSL_CLIENTHELLO):
+        self.EatPeeked()
         return LineParser.ProcessData(self, data)
       self.is_tls = True
 
     if self.is_tls:
       return self.ProcessTls(data)
     else:
+      self.EatPeeked()
       return LineParser.ProcessData(self, data)
 
   def GetMsg(self, data):
@@ -1520,8 +1543,8 @@ class ChunkParser(Selectable):
     self.chunk = ''
     self.zr = zlib.decompressobj()
 
-  def html(self):
-    return Selectable.html(self)
+  def __html__(self):
+    return Selectable.__html__(self)
 
   def Cleanup(self):
     Selectable.Cleanup(self)
@@ -1615,9 +1638,9 @@ class Tunnel(ChunkParser):
     self.backends = {}
     self.rtt = 100000
 
-  def html(self):
+  def __html__(self):
     return ('<b>Server name</b>: %s<br>'
-            '%s') % (self.server_name, ChunkParser.html(self))
+            '%s') % (self.server_name, ChunkParser.__html__(self))
 
   def Cleanup(self):
     # FIXME: Send good-byes to everyone?
@@ -1678,6 +1701,18 @@ class Tunnel(ChunkParser):
       self.Cleanup()
       return None
 
+  def _RecvHttpHeaders(self):
+    data = ''
+    while not data.endswith('\r\n\r\n') and not data.endswith('\n\n'):
+      buf = self.fd.recv(4096)
+      if buf is None or buf == '':
+        LogDebug('Remote end closed connection.')
+        return None
+      data += buf
+      self.read_bytes += len(buf)
+      self.lastio[0] = data
+    return data
+
   def _Connect(self, server, conns, tokens=None):
     if self.fd: self.fd.close()
 
@@ -1695,37 +1730,35 @@ class Tunnel(ChunkParser):
     else:
       self.fd.connect((server, 443))
 
-    if self.conns.config.secure_fe:
-      # This is a bit of an ugly hack, while we can't set the SNI directly
-      # from Python. So we prepend our own... but it might be useful for other
-      # things down the line.
-      self.Send(['%s\r\nproto=https; domain=%s\r\n' % (MAGIC_PREFIX, self.conns.config.secure_fe[0])])
+    if self.conns.config.fe_certname:
+      # We can't set the SNI directly from Python, so we use CONNECT instead.
+      self.Send(['CONNECT %s:443 HTTP/1.0\r\n\r\n' % self.conns.config.fe_certname[0]])
       self.Flush()
+      data = self._RecvHttpHeaders()
+      if data is None or not data.startswith(HTTP_ConnectOK().strip()):
+        LogError('CONNECT failed, could not initiate TLS.')
+        self.fd.close()
+        return None, None
+
       try:
         raw_fd = self.fd
         ctx = SSL.Context(SSL.TLSv1_METHOD)
         ctx.load_verify_locations(self.conns.config.ca_certs, None)
         self.fd = SSL_Connect(ctx, self.fd, connected=True, server_side=False,
-                              verify_names=self.conns.config.secure_fe)
+                              verify_names=self.conns.config.fe_certname)
         LogDebug('TLS connection to %s OK' % server)
       except SSL.Error, e:
         self.fd = raw_fd
-        LogError('SSL handshake failed, aborting: %s' % e)
+        self.fd.close()
+        LogError('SSL handshake failed: probably a bad cert (%s)' % e)
         return None, None
 
     self.Send(HTTP_PageKiteRequest(server, conns.config.backends, tokens,
                                    nozchunks=conns.config.disable_zchunks)) 
     self.Flush()
-
-    data = ''
-    while not data.endswith('\r\n\r\n'):
-      buf = self.fd.recv(4096)
-      if buf is None or buf == '':
-        LogDebug('Remote end closed connection.')
-        return None, None
-      data += buf
-      self.read_bytes += len(buf)
-      self.lastio[0] = data
+    
+    data = self._RecvHttpHeaders()
+    if data is None: return None, None
 
     self.fd.setblocking(0)
     parse = HttpParser(lines=data.splitlines(), state=HttpParser.IN_RESPONSE)
@@ -1821,7 +1854,7 @@ class Tunnel(ChunkParser):
       del self.zhistory[sid]
 
   def ResetRemoteZChunks(self):
-    self.SendChunked('NOOP: 1\nZRST: 1\r\n\r\n!' % sid, compress=False) 
+    self.SendChunked('NOOP: 1\nZRST: 1\r\n\r\n!', compress=False)
 
   def ProcessCorruptChunk(self, data):
     self.ResetRemoteZChunks()
@@ -1875,7 +1908,11 @@ class Tunnel(ChunkParser):
 #             print 'Should unwrap SSL from %s' % host
 
           if proto == 'probe':
-            if self.Probe(host):
+            if self.conns.config.no_probes:
+              LogDebug('Responding to probe for %s: rejected' % host)
+              self.SendChunked('SID: %s\r\n\r\n%s' % (
+                                 sid, HTTP_NoFeConnection() )) 
+            elif self.Probe(host):
               LogDebug('Responding to probe for %s: good' % host)
               self.SendChunked('SID: %s\r\n\r\n%s' % (
                                  sid, HTTP_GoodBeConnection() )) 
@@ -1947,11 +1984,11 @@ class UserConn(Selectable):
     Selectable.__init__(self, address=address)
     self.tunnel = None
 
-  def html(self):
+  def __html__(self):
     return ('<b>Tunnel</b>: <a href="/conn/%s">%s</a><br>'
             '%s') % (self.tunnel and self.tunnel.sid or '',
                      escape_html('%s' % (self.tunnel or '')),
-                     Selectable.html(self))
+                     Selectable.__html__(self))
  
   def Cleanup(self):
     self.tunnel.Disconnect(self)
@@ -1980,18 +2017,26 @@ class UserConn(Selectable):
     # Try and find the right tunnel. We prefer proto/port specifications first,
     # then the just the proto. If the protocol is WebSocket and no tunnel is
     # found, look for a plain HTTP tunnel.
+    if proto == 'probe':
+      protos = ['http', 'https', 'websocket', 'raw']
+      ports = conns.config.server_ports[:]
+      ports.extend(conns.config.server_aliasport.keys())
+      ports.extend(conns.config.server_raw_ports)
+    else:
+      protos = [proto]
+      ports = [on_port]
+      if proto == 'websocket': protos.append('http')
+
     tunnels = None
-    protos = [proto]
-    if proto == 'probe': protos = ['http']
-    if proto == 'websocket': protos.append('http')
     for p in protos:
-      if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, on_port), host)
+      for prt in ports:
+        if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, prt), host)
       if not tunnels: tunnels = conns.Tunnel(p, host)
-    if tunnels: self.tunnel = tunnels[0]
 
     if self.address:
       chunk_headers = [('RIP', self.address[0]), ('RPort', self.address[1])]
 
+    if tunnels: self.tunnel = tunnels[0]
     if self.tunnel and self.tunnel.SendData(self, ''.join(body),
                                             host=host, proto=proto, port=on_port,
                                             chunk_headers=chunk_headers):
@@ -2076,67 +2121,109 @@ class UnknownConn(MagicProtocolParser):
     self.parser = HttpParser()
     self.conns = conns
     self.conns.Add(self)
-    self.host = None
     self.sid = -1
 
+    self.host = None
+    self.proto = None
+
+  def __str__(self):
+    return '%s (%s/%s:%s)' % (MagicProtocolParser.__str__(self),
+                              (self.proto or '?'),
+                              (self.on_port or '?'),
+                              (self.host or '?'))
+
   def ProcessLine(self, line, lines):
-    if not self.parser:
-      return True
+    if not self.parser: return True
+    if self.parser.Parse(line) is False: return False
+    if self.parser.state != self.parser.IN_BODY: return True
 
-    if self.parser.Parse(line) is False:
-      return False
+    done = False
 
-    if (self.parser.state == self.parser.IN_BODY):
-      hosts = self.parser.Header('Host')
-      if not hosts:
-        self.Send(HTTP_Response(400, 'Bad request', 
-                  ['<html><body><h1>400 Bad request</h1>',
-                   '<p>Invalid request, no Host: found.</p>',
-                   '</body></html>']))
+    if self.parser.method == 'CONNECT' and not self.parser.Header('Host'):
+      if self.parser.path.lower().startswith('pagekite:'):
+        if Tunnel.FrontEnd(self, lines, self.conns) is None: return False
+        done = True
+
+      else:
+        try:
+          connect_parser = self.parser
+          chost, cport = connect_parser.path.split(':', 1)
+          self.on_port = int(cport)
+          self.host = chost
+
+          self.parser = HttpParser()
+
+          if self.on_port == 443:
+            self.Send(HTTP_ConnectOK())
+            return self.ProcessTls(''.join(lines), chost)
+
+          elif self.on_port in self.conns.config.server_raw_ports:
+            self.Send(HTTP_ConnectOK())
+            return self.ProcessRaw(''.join(lines), self.host)
+
+          else:
+            self.Send(HTTP_ConnectBad())
+            LogDebug('FIXME: Ignored CONNECT %s' % self.parser.path)
+            return False
+
+        except ValueError:
+          pass
+
+    if not done and self.parser.method == 'POST' and self.parser.path in MAGIC_PATHS:
+      # FIXME: DEPRECATE: Make this go away!
+      if Tunnel.FrontEnd(self, lines, self.conns) is None: return False
+      done = True
+
+    if not done:
+      if not self.host:
+        hosts = self.parser.Header('Host')
+        if hosts:
+          self.host = hosts[0].lower()
+        else:
+          self.Send(HTTP_Response(400, 'Bad request', 
+                    ['<html><body><h1>400 Bad request</h1>',
+                     '<p>Invalid request, no Host: found.</p>',
+                     '</body></html>']))
+          return False
+
+      if self.parser.path.startswith(MAGIC_PREFIX):
+        try:
+          self.host = self.parser.path.split('/')[2]
+          self.proto = 'probe'
+        except ValueError:
+          pass
+
+      if self.proto is None:
+        self.proto = 'http'
+        upgrade = self.parser.Header('Upgrade')
+        if 'websocket' in self.conns.config.server_protos:
+          if upgrade and upgrade[0].lower() == 'websocket':
+            self.proto = 'websocket'
+
+      address = self.address
+      if int(self.on_port) in self.conns.config.server_portalias:
+        xfwdf = self.parser.Header('X-Forwarded-For')
+        if xfwdf and address[0] == '127.0.0.1':
+          address = (xfwdf[0], address[1])
+
+      done = True
+      if UserConn.FrontEnd(self, address,
+                           self.proto, self.host, self.on_port,
+                           self.parser.lines + lines, self.conns) is None:
+        if self.proto == 'probe':
+          self.Send(HTTP_NoFeConnection())
+        else:
+          self.Send(HTTP_Unavailable('fe', self.proto, self.host))
+
         return False
 
-      if self.parser.method == 'POST' and self.parser.path in MAGIC_PATHS:
-        self.EatPeeked()
-        if Tunnel.FrontEnd(self, lines, self.conns) is None: 
-          return False
-      else:
-        if self.parser.path.startswith(MAGIC_PREFIX):
-          magic_parts = self.parser.path.split('/')
-          host = magic_parts[2]
-          proto = 'probe'
-        else:
-          host = hosts[0].lower()
-          magic_parts = None
-          proto = 'http'
-          upgrade = self.parser.Header('Upgrade')
-          if 'websocket' in self.conns.config.server_protos:
-            if upgrade and upgrade[0].lower() == 'websocket':
-              proto = 'websocket'
+    # We are done!
+    self.dead = True
+    self.conns.Remove(self)
 
-        address = self.address
-        if int(self.on_port) in self.conns.config.server_portalias:
-          xfwdf = self.parser.Header('X-Forwarded-For')
-          if xfwdf and address[0] == '127.0.0.1':
-            address = (xfwdf[0], address[1])
-
-        self.EatPeeked()
-        if UserConn.FrontEnd(self, address,
-                             proto, host, self.on_port,
-                             self.parser.lines + lines, self.conns) is None:
-          if magic_parts:
-            self.Send(HTTP_NoFeConnection())
-          else:
-            self.Send(HTTP_Unavailable('fe', proto, host))
-
-          return False
-
-      # We are done!
-      self.dead = True
-      self.conns.Remove(self)
-
-      # Break any circular references we might have
-      self.parser = None
-      self.conns = None
+    # Break any circular references we might have
+    self.parser = None
+    self.conns = None
 
     return True
 
@@ -2152,7 +2239,6 @@ class UnknownConn(MagicProtocolParser):
 
     if domains:
       # If we know how to terminate the TLS/SSL, do so!
-      # FIXME: Authentication?
       ctx = self.conns.config.GetTlsEndpointCtx(domains[0])
       if ctx:
         self.fd = SSL_Connect(ctx, self.fd, accepted=True, server_side=True)
@@ -2225,15 +2311,15 @@ class Listener(Selectable):
   def __str__(self):
     return '%s port=%s' % (Selectable.__str__(self), self.port)
 
-  def html(self):
+  def __html__(self):
     return '<p>Listening on port %s</p>' % self.port
  
   def ReadData(self):
     try:
       client, address = self.fd.accept()
       if client:
-        uc = self.connclass(client, address, self.port, self.conns)
         self.Log([('accept', '%s:%s' % (obfuIp(address[0]), address[1]))])
+        uc = self.connclass(client, address, self.port, self.conns)
         return True
     except Exception, e:
       LogDebug('Listener::ReadData: %s' % e)
@@ -2255,7 +2341,7 @@ class PageKite(object):
 
     self.tls_default = None
     self.tls_endpoints = {}
-    self.secure_fe = []
+    self.fe_certname = []
     self.ca_certs_default = '/etc/ssl/certs/ca-certificates.crt'
     self.ca_certs = self.ca_certs_default
 
@@ -2277,6 +2363,7 @@ class PageKite(object):
 
     self.socks_server = None
     self.require_all = False
+    self.no_probes = False
     self.servers = []
     self.servers_manual = []
     self.servers_auto = None
@@ -2316,12 +2403,8 @@ class PageKite(object):
     print (self.servers_auto and 'frontends=%d:%s:%d' % self.servers_auto or '#frontends=1:frontends.b5p.us:443')
     for server in self.servers_manual:
       print 'frontend=%s' % server
-    for server in self.secure_fe:
-      print 'secure_fe=%s' % server
-    if self.ca_certs != self.ca_certs_default:
-      print 'ca_certs=%s' % self.ca_certs
-    else:
-      print '#ca_certs=%s' % self.ca_certs
+    for server in self.fe_certname:
+      print 'fe_certname=%s' % server
     if self.dyndns:
       provider, args = self.dyndns
       for prov in DYNDNS:
@@ -2351,6 +2434,7 @@ class PageKite(object):
       print '#backend=websocket:YOU.pagekite.me:localhost:8080:SECRET'
     print (self.servers_new_only and 'new' or '#new')
     print (self.require_all and 'all' or '#all')
+    print (self.no_probes and 'noprobes' or '#noprobes')
     print
     eprinted = 0
     print '# Domains we terminate SSL/TLS for natively, with key/cert-files'
@@ -2376,7 +2460,6 @@ class PageKite(object):
     for pa in self.server_portalias:
       print 'portalias=%s:%s' % (int(pa), int(self.server_portalias[pa]))
     print '%srawports=%s' % (comment, ','.join(['%s' % x for x in self.server_raw_ports] or []))
-    # FIXME: --register ?
     print (self.auth_domain and '%sauthdomain=%s' % (comment, self.auth_domain) or '#authdomain=foo.com')
     for bid in self.backends:
       be = self.backends[bid]
@@ -2396,6 +2479,10 @@ class PageKite(object):
     else:
       print '#runas=uid:gid'
     print (self.pidfile and 'pidfile=%s' % self.pidfile or '#pidfile=/path/file')
+    if self.ca_certs != self.ca_certs_default:
+      print 'ca_certs=%s' % self.ca_certs
+    else:
+      print '#ca_certs=%s' % self.ca_certs
     print
 
   def FallDown(self, message, help=True, noexit=False):
@@ -2606,7 +2693,8 @@ class PageKite(object):
           self.crash_report_url = None  # Disable crash reports
           socks.wrapmodule(urllib)      # Make DynDNS updates go via tor
 
-      elif opt == '--secure_fe': self.secure_fe.append(arg.lower())
+      elif opt == '--ca_certs': self.ca_certs = arg
+      elif opt == '--fe_certname': self.fe_certname.append(arg.lower())
       elif opt == '--frontend': self.servers_manual.append(arg)
       elif opt == '--frontends':
         count, domain, port = arg.split(':')
@@ -2632,6 +2720,7 @@ class PageKite(object):
           bid = '%s:%s' % (proto, domain)
           self.backends[bid] = (proto, domain, None, secret)
 
+      elif opt == '--noprobes': self.no_probes = True
       elif opt == '--nofrontend': self.isfrontend = False
       elif opt == '--nodaemonize': self.daemonize = False
       elif opt == '--noall': self.require_all = False
@@ -2644,7 +2733,7 @@ class PageKite(object):
       elif opt == '--defaults':
         self.dyndns = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
         self.servers_auto = (1, 'frontends.b5p.us', 443)
-        self.secure_fe = ['frontends.b5p.us', 'b5p.us']
+        #self.fe_certname = ['frontends.b5p.us', 'b5p.us']
 
       elif opt == '--settings':
         self.PrintSettings()
@@ -2858,13 +2947,15 @@ class PageKite(object):
       except KeyboardInterrupt, e:
         raise KeyboardInterrupt()
       except Exception, e:
-        LogError('Select error: %s' % e)
+        LogError('Error in select: %s' % e)
         conns.CleanFds()
+        last_loop -= 1
         
       now = time.time()
       if not iready and not oready:
         if now < last_loop + 1:
-          LogError('Spinning')
+          LogError('Spinning, pausing ...')
+          time.sleep(0.1)
 
         if now > last_tick + retry:
           last_tick = now
@@ -2876,19 +2967,21 @@ class PageKite(object):
           else:
             retry = 5
 
-      for socket in oready:
-        conn = conns.Connection(socket)
-        if conn: conn.Send([])
+      if oready:
+        for socket in oready:
+          conn = conns.Connection(socket)
+          if conn: conn.Send([])
 
-      for socket in iready:
-        conn = conns.Connection(socket)
-        if buffered_bytes < 1024 * self.buffer_max:
-          if conn and conn.ReadData() is False:
-            conn.Cleanup()
-            conns.Remove(conn)
-        else:
-          # Pause to let buffers clear...
-          time.sleep(0.1)
+      if iready:
+        for socket in iready:
+          conn = conns.Connection(socket)
+          if buffered_bytes < 1024 * self.buffer_max:
+            if conn and conn.ReadData() is False:
+              conn.Cleanup()
+              conns.Remove(conn)
+          else:
+            # Pause to let buffers clear...
+            time.sleep(0.1)
 
       last_loop = now
 
