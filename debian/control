@@ -25,3 +25,6 @@ Description: Run public servers without reconfiguring firewalls.
  or smart-phones. 
  .
  Detailed documentation can be found at http://pagekite.net/. 
+ .
+ This package is distributed under the terms of the Afero General 
+ Public License.
