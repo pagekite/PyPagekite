@@ -531,8 +531,8 @@ what the certificate name is).
       ...
 
 On the back-end, you need to tell pagekite.py which certificate to
-accept, and possibly give it the path to a list of certificate authority
-certificates (the default works on Linux).
+accept, and possibly give it the path to [a list of certificate authority
+certificates](http://curl.haxx.se/ca/cacert.pem) (the default works on Linux).
 
     backend$ pagekite.py \
       --frontend=frontend.domain.com:443 \
