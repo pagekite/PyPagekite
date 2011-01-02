@@ -1,13 +1,17 @@
 Version history - highlights
 ============================
 
-v0.3.8   2010.12.??
+v0.3.8   2011.01.??
 ------
    - Many TLS/SSL fixes:
+      - Works with pyOpenSSL or the default Python 2.6 ssl module.
       - Can now terminate/unwrap TLS/SSL at the front-end.
       - Routing support for the old lame SSLv2.
       - Built-in TLS/SSL works with pyOpenSSL or python 2.6+ ssl. 
-      - Encrypted tunnels now work! See --ca_certs and --secure_fe.
+      - TLS tunnels: encryption and FE auth. See --ca_certs and --fe_certname.
+   - Protocol fixes: switching from "magic" request paths to HTTP CONNECT.
+   - Added --noprobes and probe logging at the back-end.
+   - Misc. minor bugfixes.
 
 
 v0.3.7   2010.12.26
