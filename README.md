@@ -461,16 +461,16 @@ want to use raw ports at all...
 
 #### HTTP CONNECT and raw ports ####
 
-Pagekite.py v0.3.8 front-ends natively supports the standard HTTP CONNECT
+Pagekite.py v0.3.8 front-ends natively supports the standard HTTP 1.0 CONNECT
 method for accessing raw back-ends.
 
 This means you can place more or less any server behind PageKite, as long as
-the client can be configured to use a HTTP Proxy to connect: simply configure
+the client can be configured to use an HTTP Proxy to connect: simply configure
 the client to use the PageKite front-end (and a normal port, not a raw port)
 as an HTTP Proxy.
 
-As an example, the following lines in .ssh/config provide reliable direct
-access to a SSH server exposed via. pagekite.py and the PageKite.net service:
+As an example, the following lines in **.ssh/config** provide reliable direct
+access to an SSH server exposed via. pagekite.py and the PageKite.net service:
 
     Host HOME.pagekite.me
     ProxyCommand /bin/nc -X connect -x HOME.pagekite.me:443 %h %p
@@ -531,8 +531,8 @@ what the certificate name is).
       ...
 
 On the back-end, you need to tell pagekite.py which certificate to
-accept, and possibly give it the path to a list of certificate authority
-certificates (the default works on Linux).
+accept, and possibly give it the path to [a list of certificate authority
+certificates](http://curl.haxx.se/ca/cacert.pem) (the default works on Linux).
 
     backend$ pagekite.py \
       --frontend=frontend.domain.com:443 \
@@ -559,7 +559,7 @@ backends, encrypting any replies as they are sent to the client.
 As the tunnel between pagekite front- and back-ends itself is generally
 encapsulated in a secure TLS connection, this provides almost the same level
 of security as end-to-end encryption above, with the exception that the
-pagekite.py front-end has access to unecrypted data. So back-ends have to
+pagekite.py front-end has access to unencrypted data. So back-ends have to
 trust the person running their front-end!
 
 Although not perfect, for those concerned with casual snooping on shared
@@ -574,15 +574,19 @@ maintaining keys and certificates on every single one.  An example:
     frontend$ sudo pagekite.py \
       --isfrontend \
       --ports=80,443 --protos=http,websocket,https \
+      --tls_endpoint=frontend.domain.com:/tunnel/key-and-cert-chain.pem \
       --tls_endpoint=*.domain.com:/path/to/key-and-cert-chain.pem \
       --domain=http:*.domain.com:SECRET
 
     backend$ sudo pagekite.py \
       --frontend=frontend.domain.com:443 \
+      --fe_certname=frontend.domain.com \
       --backend=http:foo.domain.com:localhost:80:SECRET
 
 This would enable both https://foo.domain.com/ and http://foo.domain.com/,
-without an explicit https back-end being defined or configured.
+without an explicit https back-end being defined or configured - but the
+tunnel between the back- and front-ends will be encrypted using TLS and
+the *frontend.domain.com* certificate.
 
 **Note:** Currently SSL endpoints are only available at the front-end, but
 will be available on the back-end as well in a future release.
@@ -749,7 +753,9 @@ discussed in [the TLS/SSL section](#tls).
 Raw ports are unreliable for clients sharing IP addresses with others or
 accessing multiple resources behind the same front-end at the same time.
 
-See the discussed in [the raw port section](#ipr) for details.
+See the discussed in [the raw port section](#ipr) for details and instructions
+on how to reliably configure clients to use the HTTP CONNECT method to work
+around this limitation.
 
 
 [ [up](#toc) ]
