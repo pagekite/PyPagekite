@@ -2904,7 +2904,7 @@ class PageKite(object):
 
     return failures
 
-  def LogTo(self, filename):
+  def LogTo(self, filename, close_all=True):
     if filename == 'syslog':
       global Log
       Log = LogSyslog
@@ -2912,15 +2912,21 @@ class PageKite(object):
       syslog.openlog((sys.argv[0] or 'pagekite.py').split('/')[-1],
                      syslog.LOG_PID, syslog.LOG_DAEMON)
 
-    for fd in range(0, 1024): # Not MAXFD, but should be enough.
-      try:
-        os.close(fd)
-      except Exception: # ERROR, fd wasn't open to begin with (ignored)
-        pass  
+    if close_all:
+      for fd in range(0, 1024): # Not MAXFD, but should be enough.
+        try:
+          os.close(fd)
+        except Exception: # ERROR, fd wasn't open to begin with (ignored)
+          pass  
 
-    os.open(filename, os.O_RDWR | os.O_APPEND | os.O_CREAT)
-    os.dup2(0, 1)
-    os.dup2(0, 2)
+      os.open(filename, os.O_RDWR | os.O_APPEND | os.O_CREAT)
+      os.dup2(0, 1)
+      os.dup2(0, 2)
+    else:
+      fd = os.open(filename, os.O_RDWR | os.O_APPEND | os.O_CREAT)
+      os.dup2(fd, 0)
+      os.dup2(fd, 1)
+      os.dup2(fd, 2)
 
   def Daemonize(self):
     # Fork once...
@@ -3005,6 +3011,14 @@ class PageKite(object):
     # Create log-file
     if self.logfile:
       self.LogTo(self.logfile)
+      try:
+        import signal
+        def reopen(x,y):
+          self.LogTo(self.logfile, close_all=False)
+          LogDebug('SIGHUP received, reopening: %s' % self.logfile)
+        signal.signal(signal.SIGHUP, reopen)
+      except ImportError:
+        LogError('Warning: importing signal failed, logrotate will not work.')
 
     # Log that we've started up
     Log([('started', 'pagekite.py'), ('version', APPVER)])
