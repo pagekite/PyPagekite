@@ -1849,7 +1849,7 @@ class Tunnel(ChunkParser):
       del self.zhistory[sid]
 
   def ResetRemoteZChunks(self):
-    self.SendChunked('NOOP: 1\nZRST: 1\r\n\r\n!' % sid, compress=False) 
+    self.SendChunked('NOOP: 1\nZRST: 1\r\n\r\n!', compress=False)
 
   def ProcessCorruptChunk(self, data):
     self.ResetRemoteZChunks()
