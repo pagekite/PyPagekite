@@ -574,15 +574,19 @@ maintaining keys and certificates on every single one.  An example:
     frontend$ sudo pagekite.py \
       --isfrontend \
       --ports=80,443 --protos=http,websocket,https \
+      --tls_endpoint=frontend.domain.com:/tunnel/key-and-cert-chain.pem \
       --tls_endpoint=*.domain.com:/path/to/key-and-cert-chain.pem \
       --domain=http:*.domain.com:SECRET
 
     backend$ sudo pagekite.py \
       --frontend=frontend.domain.com:443 \
+      --fe_certname=frontend.domain.com \
       --backend=http:foo.domain.com:localhost:80:SECRET
 
 This would enable both https://foo.domain.com/ and http://foo.domain.com/,
-without an explicit https back-end being defined or configured.
+without an explicit https back-end being defined or configured - but the
+tunnel between the back- and front-ends will be encrypted using TLS and
+the *frontend.domain.com* certificate.
 
 **Note:** Currently SSL endpoints are only available at the front-end, but
 will be available on the back-end as well in a future release.
