@@ -113,7 +113,7 @@ is, using the --frontend argument:
 
 Replace HOST with the DNS name or IP address of your front-end, and PORT
 with one of the ports it listens for connections on.  If your front-end
-supports TLS-encrypted tunnels, add the --secure_fe=HOST argument as well.
+supports TLS-encrypted tunnels, add the --fe_certname=HOST argument as well.
 
 [ [up](#toc) ]
 
@@ -506,7 +506,7 @@ certificates (the default works on Linux).
 
     backend$ pagekite.py \
       --frontend=frontend.domain.com:443 \
-      --secure_fe=frontend.domain.com \
+      --fe_certname=frontend.domain.com \
       --ca_certs=/path/to/ca-certificates.pem \
       ...
 
