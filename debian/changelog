@@ -1,11 +1,12 @@
 pagekite (0.3.8-1) lucid; urgency=low
 
+  [ Hrafnkell ]
   * postrm now purges logs
   * Better dependencies for python (we don't support python3)
   * Recommend python-openssl
   * Builds as architecture independent deb 
 
- -- Hrafnkell <he@klaki.net>  Wed, 30 Dec 2010 22:20:23 +0000
+ -- Hrafnkell Eiriksson <he@klaki.net>  Sun, 02 Jan 2011 18:44:32 +0000
 
 pagekite (0.3.7-1) unstable; urgency=low
 
