@@ -1039,6 +1039,7 @@ class Selectable(object):
     self.dead = False
     self.peeking = False
     self.peeked = 0
+    self.sockerrors = 0
 
     # FIXME: This should go away after testing!
     self.lastio = ['', '']
@@ -1199,12 +1200,15 @@ class Selectable(object):
     return
 
   def ReadData(self):
+    if self.sockerrors > 50: return False
     try:
+      self.sockerrors += 1
       if self.peeking:
         data = self.fd.recv(self.maxread, socket.MSG_PEEK)
         self.peeked = len(data)
       else:
         data = self.fd.recv(self.maxread)
+      self.sockerrors = 0
     except (SSL.ZeroReturnError, SSL.SysCallError), err:
       LogDebug('Error reading socket (SSL): %s' % err)
       return False
@@ -1225,6 +1229,8 @@ class Selectable(object):
       return self.ProcessData(data)
 
   def Send(self, data):
+    if self.sockerrors > 50: return False
+
     global buffered_bytes
     buffered_bytes -= len(self.write_blocked)
 
@@ -1233,8 +1239,10 @@ class Selectable(object):
     sent_bytes = 0
     if sending:
       try:
+        self.sockerrors += 1
         sent_bytes = self.fd.send(sending)
         self.wrote_bytes += sent_bytes
+        self.sockerrors = 0
       except socket.error, err:
         problem = '%s' % err
         # [Errno 11] Resource temporarily unavailable
@@ -1244,6 +1252,7 @@ class Selectable(object):
           return False
         else:
           LogDebug('Sending: %s' % problem)
+          self.sockerrors = 0
       except (SSL.ZeroReturnError, SSL.SysCallError), err:
         LogDebug('Error sending (SSL): %s' % err)
         return False
