@@ -406,6 +406,13 @@ a back-end to a raw port.  This may be useful for all sorts of things,
 but was primarily designed as a "good enough" hack for tunneling SSH
 connections.
 
+As of version 0.3.8, there are two ways to access a raw port.  One is the
+default, unreliable IP-tracking behavior described below, the other an
+explicit HTTP CONNECT which requires support from the client application.
+
+
+#### IP-tracking based raw ports ####
+
 As the pagekite.py front-end, and all the ports it listens on, are assumed to
 be shared by multiple back-ends, raw ports do not work like normal ports:
 they become temporarily available depending on which non-raw back-end the
@@ -441,14 +448,35 @@ Within the context of SSH, this implies a few guidelines:
       host to withstand incoming SSH brute force attacks!
 
 Note that this is all a bit of a hack: a more reliable way to tunnel SSH
-would be to use the ProxyCommand directive and embed SSH in an SSL tunnel
-(see ssh_config(5)).
+would be to use the ProxyCommand directive (see ssh_config(5)) and use netcat
+and the HTTP CONNECT method described below.
 
 For tunneling other things over raw ports, generally you will want to be
-sure there is some sort of handshake built into the protocol, so it will not
-go undetected when pagekite.py guesses wrong and routes the connection to
-the wrong back-end.  If that kind of routing mistake sounds scary to you, 
-then you probably do not want to use raw ports at all...
+sure you either use HTTP CONNECT (see below), or that there is some sort of
+handshake built into the protocol, so it will not go undetected when
+pagekite.py guesses wrong and routes the connection to the wrong back-end.
+If that kind of routing mistake sounds scary to you, then you probably do not
+want to use raw ports at all...
+
+
+#### HTTP CONNECT and raw ports ####
+
+Pagekite.py v0.3.8 front-ends natively supports the standard HTTP CONNECT
+method for accessing raw back-ends.
+
+This means you can place more or less any server behind PageKite, as long as
+the client can be configured to use a HTTP Proxy to connect: simply configure
+the client to use the PageKite front-end (and a normal port, not a raw port)
+as an HTTP Proxy.
+
+As an example, the following lines in .ssh/config provide reliable direct
+access to a SSH server exposed via. pagekite.py and the PageKite.net service:
+
+    Host HOME.pagekite.me
+    ProxyCommand /bin/nc -X connect -x HOME.pagekite.me:443 %h %p
+
+This method requires client-side support, but removes all the uncertainty of
+the IP-tracking methods described above.
 
 
 [ [up](#toc) ]
