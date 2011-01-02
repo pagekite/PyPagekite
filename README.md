@@ -753,7 +753,9 @@ discussed in [the TLS/SSL section](#tls).
 Raw ports are unreliable for clients sharing IP addresses with others or
 accessing multiple resources behind the same front-end at the same time.
 
-See the discussed in [the raw port section](#ipr) for details.
+See the discussed in [the raw port section](#ipr) for details and instructions
+on how to reliably configure clients to use the HTTP CONNECT method to work
+around this limitation.
 
 
 [ [up](#toc) ]
