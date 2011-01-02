@@ -2728,7 +2728,7 @@ class PageKite(object):
       elif opt == '--defaults':
         self.dyndns = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
         self.servers_auto = (1, 'frontends.b5p.us', 443)
-        self.fe_certname = ['frontends.b5p.us', 'b5p.us']
+        #self.fe_certname = ['frontends.b5p.us', 'b5p.us']
 
       elif opt == '--settings':
         self.PrintSettings()
