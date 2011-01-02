@@ -1,7 +1,7 @@
 Version history - highlights
 ============================
 
-v0.3.8   2011.01.??
+v0.3.8   2011.01.02
 ------
    - Many TLS/SSL fixes:
       - Works with pyOpenSSL or the default Python 2.6 ssl module.
