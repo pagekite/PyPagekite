@@ -726,7 +726,7 @@ See the discussed in [the raw port section](#ipr) for details.
 
 
 <a                                                              name=lic></a>
-### 15. Credits and licence ###
+### 16. Credits and licence ###
 
 Pagekite.py is (C) Copyright 2010, Bjarni Rúnar Einarsson and The
 Beanstalks Project ehf.
