@@ -322,9 +322,11 @@ except ImportError:
     class SSL(object):
       SSLv23_METHOD = ssl.PROTOCOL_SSLv23
       TLSv1_METHOD = ssl.PROTOCOL_TLSv1
-      class ZeroReturnError(Exception): pass
+      WantReadError = ssl.SSLError
+      class Error(Exception): pass
       class SysCallError(Exception): pass
-      Error = ssl.SSLError
+      class WantWriteError(Exception): pass
+      class ZeroReturnError(Exception): pass
       class Context(object):
         def __init__(self, method):
           self.method = method 
@@ -1208,12 +1210,11 @@ class Selectable(object):
         self.peeked = len(data)
       else:
         data = self.fd.recv(self.maxread)
-    except (SSL.ZeroReturnError, SSL.SysCallError), err:
+    except (SSL.WantReadError, SSL.WantWriteError), err:
+      return True
+    except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
       LogDebug('Error reading socket (SSL): %s' % err)
       return False
-    except SSL.Error, err:
-      LogDebug('Problem reading socket (SSL): %s' % err)
-      return True
     except socket.error, err:
       LogDebug('Error reading socket: %s' % err)
       return False
@@ -1228,6 +1229,7 @@ class Selectable(object):
       return self.ProcessData(data)
 
   def Send(self, data):
+
     global buffered_bytes
     buffered_bytes -= len(self.write_blocked)
 
@@ -1247,11 +1249,11 @@ class Selectable(object):
           return False
         else:
           LogDebug('Sending: %s' % problem)
-      except (SSL.ZeroReturnError, SSL.SysCallError), err:
+      except (SSL.WantWriteError, SSL.WantReadError), err:
+        pass
+      except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
         LogDebug('Error sending (SSL): %s' % err)
         return False
-      except SSL.Error, err:
-        LogDebug('Problem sending (SSL): %s' % err)
 
     self.write_blocked = sending[sent_bytes:]
     buffered_bytes += len(self.write_blocked)
@@ -1347,10 +1349,11 @@ class Connections(object):
     evil = []
     for s in self.conns:
       try:
-        if s.fd.closed(): evil.append(s)
+        i, o, e = select.select([s.fd], [s.fd], [s.fd], 0)
       except Exception:
         evil.append(s)
     for s in evil:
+      LogDebug('Removing broken Selectable: %s' % s)
       self.conns.remove(s) 
 
   def Connection(self, fd):
@@ -1721,7 +1724,8 @@ class Tunnel(ChunkParser):
         LogDebug('TLS connection to %s OK' % server)
       except SSL.Error, e:
         self.fd = raw_fd
-        LogError('SSL handshake failed, aborting: %s' % e)
+        self.fd.close()
+        LogError('SSL handshake failed: probably a bad cert (%s)' % e)
         return None, None
 
     self.Send(HTTP_PageKiteRequest(server, conns.config.backends, tokens,
@@ -2342,10 +2346,6 @@ class PageKite(object):
       print 'frontend=%s' % server
     for server in self.fe_certname:
       print 'fe_certname=%s' % server
-    if self.ca_certs != self.ca_certs_default:
-      print 'ca_certs=%s' % self.ca_certs
-    else:
-      print '#ca_certs=%s' % self.ca_certs
     if self.dyndns:
       provider, args = self.dyndns
       for prov in DYNDNS:
@@ -2421,6 +2421,10 @@ class PageKite(object):
     else:
       print '#runas=uid:gid'
     print (self.pidfile and 'pidfile=%s' % self.pidfile or '#pidfile=/path/file')
+    if self.ca_certs != self.ca_certs_default:
+      print 'ca_certs=%s' % self.ca_certs
+    else:
+      print '#ca_certs=%s' % self.ca_certs
     print
 
   def FallDown(self, message, help=True, noexit=False):
@@ -2631,6 +2635,7 @@ class PageKite(object):
           self.crash_report_url = None  # Disable crash reports
           socks.wrapmodule(urllib)      # Make DynDNS updates go via tor
 
+      elif opt == '--ca_certs': self.ca_certs = arg
       elif opt == '--fe_certname': self.fe_certname.append(arg.lower())
       elif opt == '--frontend': self.servers_manual.append(arg)
       elif opt == '--frontends':
@@ -2884,13 +2889,15 @@ class PageKite(object):
       except KeyboardInterrupt, e:
         raise KeyboardInterrupt()
       except Exception, e:
-        LogError('Select error: %s' % e)
+        LogError('Error in select: %s' % e)
         conns.CleanFds()
+        last_loop -= 1
         
       now = time.time()
       if not iready and not oready:
         if now < last_loop + 1:
-          LogError('Spinning')
+          LogError('Spinning, pausing ...')
+          time.sleep(0.1)
 
         if now > last_tick + retry:
           last_tick = now
@@ -2902,19 +2909,21 @@ class PageKite(object):
           else:
             retry = 5
 
-      for socket in oready:
-        conn = conns.Connection(socket)
-        if conn: conn.Send([])
+      if oready:
+        for socket in oready:
+          conn = conns.Connection(socket)
+          if conn: conn.Send([])
 
-      for socket in iready:
-        conn = conns.Connection(socket)
-        if buffered_bytes < 1024 * self.buffer_max:
-          if conn and conn.ReadData() is False:
-            conn.Cleanup()
-            conns.Remove(conn)
-        else:
-          # Pause to let buffers clear...
-          time.sleep(0.1)
+      if iready:
+        for socket in iready:
+          conn = conns.Connection(socket)
+          if buffered_bytes < 1024 * self.buffer_max:
+            if conn and conn.ReadData() is False:
+              conn.Cleanup()
+              conns.Remove(conn)
+          else:
+            # Pause to let buffers clear...
+            time.sleep(0.1)
 
       last_loop = now
 
