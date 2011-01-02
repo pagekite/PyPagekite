@@ -171,7 +171,7 @@ Back-end Options:
  --new          -N      Don't attempt to connect to the domain's old front-end.           
  --socksify=S:P         Connect via SOCKS server S, port P (requires socks.py)
  --torify=S:P           Same as socksify, but more paranoid.
- --secure_fe=N          Connect using SSL, accepting valid certs for domain N.
+ --fe_certname=N        Connect using SSL, accepting valid certs for domain N.
  --ca_certs=PATH        Path to your trusted root SSL certificates file.
 
  --backend=proto:domain:host:port:secret
@@ -224,7 +224,7 @@ OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'register=', 'host=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
-            'tls_default=', 'tls_endpoint=', 'secure_fe=', 'ca_certs=',
+            'tls_default=', 'tls_endpoint=', 'fe_certname=', 'ca_certs=',
             'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks',
             'buffers=']
@@ -1704,18 +1704,18 @@ class Tunnel(ChunkParser):
     else:
       self.fd.connect((server, 443))
 
-    if self.conns.config.secure_fe:
+    if self.conns.config.fe_certname:
       # This is a bit of an ugly hack, while we can't set the SNI directly
       # from Python. So we prepend our own... but it might be useful for other
       # things down the line.
-      self.Send(['%s\r\nproto=https; domain=%s\r\n' % (MAGIC_PREFIX, self.conns.config.secure_fe[0])])
+      self.Send(['%s\r\nproto=https; domain=%s\r\n' % (MAGIC_PREFIX, self.conns.config.fe_certname[0])])
       self.Flush()
       try:
         raw_fd = self.fd
         ctx = SSL.Context(SSL.TLSv1_METHOD)
         ctx.load_verify_locations(self.conns.config.ca_certs, None)
         self.fd = SSL_Connect(ctx, self.fd, connected=True, server_side=False,
-                              verify_names=self.conns.config.secure_fe)
+                              verify_names=self.conns.config.fe_certname)
         LogDebug('TLS connection to %s OK' % server)
       except SSL.Error, e:
         self.fd = raw_fd
@@ -2264,7 +2264,7 @@ class PageKite(object):
 
     self.tls_default = None
     self.tls_endpoints = {}
-    self.secure_fe = []
+    self.fe_certname = []
     self.ca_certs_default = '/etc/ssl/certs/ca-certificates.crt'
     self.ca_certs = self.ca_certs_default
 
@@ -2325,8 +2325,8 @@ class PageKite(object):
     print (self.servers_auto and 'frontends=%d:%s:%d' % self.servers_auto or '#frontends=1:frontends.b5p.us:443')
     for server in self.servers_manual:
       print 'frontend=%s' % server
-    for server in self.secure_fe:
-      print 'secure_fe=%s' % server
+    for server in self.fe_certname:
+      print 'fe_certname=%s' % server
     if self.ca_certs != self.ca_certs_default:
       print 'ca_certs=%s' % self.ca_certs
     else:
@@ -2615,7 +2615,7 @@ class PageKite(object):
           self.crash_report_url = None  # Disable crash reports
           socks.wrapmodule(urllib)      # Make DynDNS updates go via tor
 
-      elif opt == '--secure_fe': self.secure_fe.append(arg.lower())
+      elif opt == '--fe_certname': self.fe_certname.append(arg.lower())
       elif opt == '--frontend': self.servers_manual.append(arg)
       elif opt == '--frontends':
         count, domain, port = arg.split(':')
@@ -2653,7 +2653,7 @@ class PageKite(object):
       elif opt == '--defaults':
         self.dyndns = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
         self.servers_auto = (1, 'frontends.b5p.us', 443)
-        self.secure_fe = ['frontends.b5p.us', 'b5p.us']
+        self.fe_certname = ['frontends.b5p.us', 'b5p.us']
 
       elif opt == '--settings':
         self.PrintSettings()
