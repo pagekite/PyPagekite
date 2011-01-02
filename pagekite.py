@@ -2927,6 +2927,7 @@ class PageKite(object):
       os.dup2(fd, 0)
       os.dup2(fd, 1)
       os.dup2(fd, 2)
+      os.close(fd)
 
   def Daemonize(self):
     # Fork once...
