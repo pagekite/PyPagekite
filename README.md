@@ -24,7 +24,7 @@ works, check out <http://pagekite.net/docs/>.
    7.  [Coexisting front-ends and other HTTP servers    ](#co)
    8.  [Configuring DNS                                 ](#dns)
    9.  [Connecting over Socks or Tor                    ](#tor)
-   10. [Time/IP-based raw ports (SSH-after-HTTP)        ](#ipr)
+   10. [Raw backends (SSH-after-HTTP and HTTP CONNECT)  ](#ipr)
    11. [SSL/TLS back-ends, endpoints and SNI            ](#tls)
    12. [Unix/Linux systems integration                  ](#unx)
    13. [Saving your configuration                       ](#cfg)
@@ -399,7 +399,7 @@ information about which domains you are hosting through DNS side channels.
 
 
 <a                                                              name=ipr></a>
-### 10. Time/IP-based raw ports (SSH-after-HTTP) ###
+### 10. Raw backends (SSH-after-HTTP and HTTP CONNECT)
 
 Pagekite.py version 0.3.7 adds the "raw" protocol, which allows you to bind
 a back-end to a raw port.  This may be useful for all sorts of things,
@@ -474,6 +474,8 @@ access to a SSH server exposed via. pagekite.py and the PageKite.net service:
 
     Host HOME.pagekite.me
     ProxyCommand /bin/nc -X connect -x HOME.pagekite.me:443 %h %p
+
+(See above for a sample pagekite.py command-line.)
 
 This method requires client-side support, but removes all the uncertainty of
 the IP-tracking methods described above.
