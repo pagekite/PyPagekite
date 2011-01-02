@@ -1435,13 +1435,22 @@ class MagicProtocolParser(LineParser):
 
   def ProcessData(self, data):
     if data.startswith(MAGIC_PREFIX):
-      prefix, words, data = data.split('\r\n', 2)
       args = {}
-      for arg in words.split('; '):
-        key, val = arg.split('=', 1)
-        args[key] = val
+      try:
+        prefix, words, data = data.split('\r\n', 2)
+        for arg in words.split('; '):
+          key, val = arg.split('=', 1)
+          args[key] = val
 
-      self.EatPeeked(eat_bytes=len(prefix)+2+len(words)+2)
+        self.EatPeeked(eat_bytes=len(prefix)+2+len(words)+2)
+      except ValueError, e:
+        return True 
+
+      try:
+        port = 'port' in args and args['port'] or None
+        if port: self.on_port = int(port)
+      except ValueError, e:
+        return False
 
       proto = 'proto' in args and args['proto'] or None
       if proto in ('http', 'websocket'):
@@ -1450,6 +1459,7 @@ class MagicProtocolParser(LineParser):
       domain = 'domain' in args and args['domain'] or None
       if proto == 'https': return self.ProcessTls(data, domain)
       if proto == 'raw' and domain: return self.ProcessRaw(data, domain)
+      return False
 
     if self.might_be_tls:
       self.might_be_tls = False
@@ -1986,7 +1996,7 @@ class UserConn(Selectable):
     # found, look for a plain HTTP tunnel.
     tunnels = None
     protos = [proto]
-    if proto == 'probe': protos = ['http']
+    if proto == 'probe': protos = ['http', 'https', 'websocket', 'raw']
     if proto == 'websocket': protos.append('http')
     for p in protos:
       if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, on_port), host)
