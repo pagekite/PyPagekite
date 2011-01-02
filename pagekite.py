@@ -128,7 +128,7 @@ Common Options:
 
  --optfile=X    -o X    Read options from file X. Default is ~/.pagekiterc.
  --httpd=X:P    -H X:P  Enable the HTTP user interface on hostname X, port P.
- --pemfile=X    -P X    Use X as a PEM key for the HTTPS UI. (FIXME)
+ --pemfile=X    -P X    Use X as a PEM key for the HTTPS UI.
  --httppass=X   -X X    Require password X to access the UI.
  --nozchunks            Disable zlib tunnel compression.
  --buffers       N      Buffer at most N kB of back-end data before blocking.
@@ -454,16 +454,11 @@ class ConnectError(Exception):
 
 
 def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
-                         testtoken=None):
-  req = ['POST %s HTTP/1.1\r\n' % MAGIC_PATH,
-         'Host: %s\r\n' % server,
-         'Content-Type: application/octet-stream\r\n',
-         # We announce a really long content-length, to try and force any
-         # nasty proxies to just switch to streaming mode or abort.
-         'Content-Length: 2147483647\r\n']
+                         tls=False, testtoken=None):
+  req = ['CONNECT PageKite:1 HTTP/1.0\r\n']
 
-  if not nozchunks:
-    req.append('X-PageKite-Features: ZChunks\r\n')
+  if not nozchunks: req.append('X-PageKite-Features: ZChunks\r\n')
+  if tls: req.append('X-PageKite-Features: TLS\r\n')
          
   tokens = tokens or {}
   for d in backends.keys():
@@ -476,7 +471,7 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
       sign = signToken(secret=backends[d][BE_SECRET], payload=data, token=testtoken)
       req.append('X-PageKite: %s:%s\r\n' % (data, sign))
 
-  req.append('\r\nOK\r\n')
+  req.append('\r\n')
   return ''.join(req)
 
 def HTTP_ResponseHeader(code, title, mimetype='text/html'):
@@ -490,13 +485,18 @@ def HTTP_Header(name, value):
 def HTTP_StartBody():
   return '\r\n'
 
+def HTTP_ConnectOK():
+  return 'HTTP/1.0 200 Connection Established\r\n\r\n'
+
+def HTTP_ConnectBad():
+  return 'HTTP/1.0 503 Sorry\r\n\r\n'
+
 def HTTP_Response(code, title, body, mimetype='text/html', headers=None):
   data = [HTTP_ResponseHeader(code, title, mimetype)]
   if headers: data.extend(headers)
   data.extend([HTTP_StartBody(), ''.join(body)])
   return ''.join(data)
 
-# FIXME: Replace all these GIF images with little json snippets for better UI.
 def HTTP_NoFeConnection():
   return HTTP_Response(200, 'OK', base64.decodestring(
     'R0lGODlhCgAKAMQCAN4hIf/+/v///+EzM+AuLvGkpORISPW+vudgYOhiYvKpqeZY'
@@ -507,7 +507,6 @@ def HTTP_NoFeConnection():
       mimetype='image/gif')
 
 def HTTP_NoBeConnection():
-  # FIXME: Make this different...
   return HTTP_Response(200, 'OK', base64.decodestring(
     'R0lGODlhCgAKAPcAAI9hE6t2Fv/GAf/NH//RMf/hd7u6uv/mj/ntq8XExMbFxc7N'
     'zc/Ozv/xwfj31+jn5+vq6v///////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
@@ -1134,7 +1133,6 @@ class Selectable(object):
       self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPCNT, 10)
       self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPINTVL, 1)
     except Exception:
-      # FIXME: Should we complain that this isn't supported by this OS?
       pass
 
   def SetConn(self, conn):
@@ -1197,7 +1195,8 @@ class Selectable(object):
       try:
         discard += self.fd.recv(eat_bytes - len(discard))
       except socket.error, err:
-        LogDebug('Error reading socket: %s' % err)
+        LogDebug('Error reading (%d/%d) socket: %s' % (eat_bytes, self.peeked, err))
+        time.sleep(0.1)
 
     self.peeked -= eat_bytes
     self.peeking = keep_peeking
@@ -1434,43 +1433,48 @@ class MagicProtocolParser(LineParser):
             '%s') % (self.is_tls,
                      LineParser.__html__(self))
 
-  def ProcessData(self, data):
-    if data.startswith(MAGIC_PREFIX):
-      args = {}
-      try:
-        prefix, words, data = data.split('\r\n', 2)
-        for arg in words.split('; '):
-          key, val = arg.split('=', 1)
-          args[key] = val
+  # FIXME: DEPRECATE: Make this all go away, switch to CONNECT.
+  def ProcessMagic(self, data):
+    args = {}
+    try:
+      prefix, words, data = data.split('\r\n', 2)
+      for arg in words.split('; '):
+        key, val = arg.split('=', 1)
+        args[key] = val
 
-        self.EatPeeked(eat_bytes=len(prefix)+2+len(words)+2)
-      except ValueError, e:
-        return True 
+      self.EatPeeked(eat_bytes=len(prefix)+2+len(words)+2)
+    except ValueError, e:
+      return True 
 
-      try:
-        port = 'port' in args and args['port'] or None
-        if port: self.on_port = int(port)
-      except ValueError, e:
-        return False
-
-      proto = 'proto' in args and args['proto'] or None
-      if proto in ('http', 'websocket'):
-        return LineParser.ProcessData(self, data)
-
-      domain = 'domain' in args and args['domain'] or None
-      if proto == 'https': return self.ProcessTls(data, domain)
-      if proto == 'raw' and domain: return self.ProcessRaw(data, domain)
+    try:
+      port = 'port' in args and args['port'] or None
+      if port: self.on_port = int(port)
+    except ValueError, e:
       return False
+
+    proto = 'proto' in args and args['proto'] or None
+    if proto in ('http', 'websocket'):
+      return LineParser.ProcessData(self, data)
+
+    domain = 'domain' in args and args['domain'] or None
+    if proto == 'https': return self.ProcessTls(data, domain)
+    if proto == 'raw' and domain: return self.ProcessRaw(data, domain)
+    return False
+
+  def ProcessData(self, data):
+    if data.startswith(MAGIC_PREFIX): return self.ProcessMagic(data)
 
     if self.might_be_tls:
       self.might_be_tls = False
       if not data.startswith(TLS_CLIENTHELLO) and not data.startswith(SSL_CLIENTHELLO):
+        self.EatPeeked()
         return LineParser.ProcessData(self, data)
       self.is_tls = True
 
     if self.is_tls:
       return self.ProcessTls(data)
     else:
+      self.EatPeeked()
       return LineParser.ProcessData(self, data)
 
   def GetMsg(self, data):
@@ -1692,6 +1696,18 @@ class Tunnel(ChunkParser):
       self.Cleanup()
       return None
 
+  def _RecvHttpHeaders(self):
+    data = ''
+    while not data.endswith('\r\n\r\n') and not data.endswith('\n\n'):
+      buf = self.fd.recv(4096)
+      if buf is None or buf == '':
+        LogDebug('Remote end closed connection.')
+        return None
+      data += buf
+      self.read_bytes += len(buf)
+      self.lastio[0] = data
+    return data
+
   def _Connect(self, server, conns, tokens=None):
     if self.fd: self.fd.close()
 
@@ -1710,11 +1726,15 @@ class Tunnel(ChunkParser):
       self.fd.connect((server, 443))
 
     if self.conns.config.fe_certname:
-      # This is a bit of an ugly hack, while we can't set the SNI directly
-      # from Python. So we prepend our own... but it might be useful for other
-      # things down the line.
-      self.Send(['%s\r\nproto=https; domain=%s\r\n' % (MAGIC_PREFIX, self.conns.config.fe_certname[0])])
+      # We can't set the SNI directly from Python, so we use CONNECT instead.
+      self.Send(['CONNECT %s:443 HTTP/1.0\r\n\r\n' % self.conns.config.fe_certname[0]])
       self.Flush()
+      data = self._RecvHttpHeaders()
+      if data is None or not data.startswith(HTTP_ConnectOK().strip()):
+        LogError('CONNECT failed, could not initiate TLS.')
+        self.fd.close()
+        return None, None
+
       try:
         raw_fd = self.fd
         ctx = SSL.Context(SSL.TLSv1_METHOD)
@@ -1731,16 +1751,9 @@ class Tunnel(ChunkParser):
     self.Send(HTTP_PageKiteRequest(server, conns.config.backends, tokens,
                                    nozchunks=conns.config.disable_zchunks)) 
     self.Flush()
-
-    data = ''
-    while not data.endswith('\r\n\r\n'):
-      buf = self.fd.recv(4096)
-      if buf is None or buf == '':
-        LogDebug('Remote end closed connection.')
-        return None, None
-      data += buf
-      self.read_bytes += len(buf)
-      self.lastio[0] = data
+    
+    data = self._RecvHttpHeaders()
+    if data is None: return None, None
 
     self.fd.setblocking(0)
     parse = HttpParser(lines=data.splitlines(), state=HttpParser.IN_RESPONSE)
@@ -2103,67 +2116,109 @@ class UnknownConn(MagicProtocolParser):
     self.parser = HttpParser()
     self.conns = conns
     self.conns.Add(self)
-    self.host = None
     self.sid = -1
 
+    self.host = None
+    self.proto = None
+
+  def __str__(self):
+    return '% (%s-%s:%s)' % (MagicProtocolParser.__str__(self),
+                             self.proto or '?',
+                             self.on_port or '?',
+                             self.host or '?')
+
   def ProcessLine(self, line, lines):
-    if not self.parser:
-      return True
+    if not self.parser: return True
+    if self.parser.Parse(line) is False: return False
+    if self.parser.state != self.parser.IN_BODY: return True
 
-    if self.parser.Parse(line) is False:
-      return False
+    done = False
 
-    if (self.parser.state == self.parser.IN_BODY):
-      hosts = self.parser.Header('Host')
-      if not hosts:
-        self.Send(HTTP_Response(400, 'Bad request', 
-                  ['<html><body><h1>400 Bad request</h1>',
-                   '<p>Invalid request, no Host: found.</p>',
-                   '</body></html>']))
+    if self.parser.method == 'CONNECT' and not self.parser.Header('Host'):
+      if self.parser.path.lower().startswith('pagekite:'):
+        if Tunnel.FrontEnd(self, lines, self.conns) is None: return False
+        done = True
+
+      else:
+        try:
+          connect_parser = self.parser
+          chost, cport = connect_parser.path.split(':', 1)
+          self.on_port = int(cport)
+          self.host = chost
+
+          self.parser = HttpParser()
+
+          if self.on_port == 443:
+            self.Send(HTTP_ConnectOK())
+            return self.ProcessTls(''.join(lines), chost)
+
+          elif self.on_port in self.conns.config.server_raw_ports:
+            self.Send(HTTP_ConnectOK())
+            return self.ProcessRaw(''.join(lines), self.host)
+
+          else:
+            self.Send(HTTP_ConnectBad())
+            LogDebug('FIXME: Ignored CONNECT %s' % self.parser.path)
+            return False
+
+        except ValueError:
+          pass
+
+    if not done and self.parser.method == 'POST' and self.parser.path in MAGIC_PATHS:
+      # FIXME: DEPRECATE: Make this go away!
+      if Tunnel.FrontEnd(self, lines, self.conns) is None: return False
+      done = True
+
+    if not done:
+      if not self.host:
+        hosts = self.parser.Header('Host')
+        if hosts:
+          self.host = hosts[0].lower()
+        else:
+          self.Send(HTTP_Response(400, 'Bad request', 
+                    ['<html><body><h1>400 Bad request</h1>',
+                     '<p>Invalid request, no Host: found.</p>',
+                     '</body></html>']))
+          return False
+
+      if self.parser.path.startswith(MAGIC_PREFIX):
+        try:
+          self.host = self.parser.path.split('/')[2]
+          self.proto = 'probe'
+        except ValueError:
+          pass
+
+      if self.proto is None:
+        self.proto = 'http'
+        upgrade = self.parser.Header('Upgrade')
+        if 'websocket' in self.conns.config.server_protos:
+          if upgrade and upgrade[0].lower() == 'websocket':
+            self.proto = 'websocket'
+
+      address = self.address
+      if int(self.on_port) in self.conns.config.server_portalias:
+        xfwdf = self.parser.Header('X-Forwarded-For')
+        if xfwdf and address[0] == '127.0.0.1':
+          address = (xfwdf[0], address[1])
+
+      done = True
+      if UserConn.FrontEnd(self, address,
+                           self.proto, self.host, self.on_port,
+                           self.parser.lines + lines, self.conns) is None:
+        if self.proto == 'probe':
+          self.Send(HTTP_NoFeConnection())
+        else:
+          self.Send(HTTP_Unavailable('fe', self.proto, self.host))
+
         return False
 
-      if self.parser.method == 'POST' and self.parser.path in MAGIC_PATHS:
-        self.EatPeeked()
-        if Tunnel.FrontEnd(self, lines, self.conns) is None: 
-          return False
-      else:
-        if self.parser.path.startswith(MAGIC_PREFIX):
-          magic_parts = self.parser.path.split('/')
-          host = magic_parts[2]
-          proto = 'probe'
-        else:
-          host = hosts[0].lower()
-          magic_parts = None
-          proto = 'http'
-          upgrade = self.parser.Header('Upgrade')
-          if 'websocket' in self.conns.config.server_protos:
-            if upgrade and upgrade[0].lower() == 'websocket':
-              proto = 'websocket'
+    # We are done!
+    self.dead = True
+    self.conns.Remove(self)
 
-        address = self.address
-        if int(self.on_port) in self.conns.config.server_portalias:
-          xfwdf = self.parser.Header('X-Forwarded-For')
-          if xfwdf and address[0] == '127.0.0.1':
-            address = (xfwdf[0], address[1])
-
-        self.EatPeeked()
-        if UserConn.FrontEnd(self, address,
-                             proto, host, self.on_port,
-                             self.parser.lines + lines, self.conns) is None:
-          if magic_parts:
-            self.Send(HTTP_NoFeConnection())
-          else:
-            self.Send(HTTP_Unavailable('fe', proto, host))
-
-          return False
-
-      # We are done!
-      self.dead = True
-      self.conns.Remove(self)
-
-      # Break any circular references we might have
-      self.parser = None
-      self.conns = None
+    # Break any circular references we might have
+    self.parser = None
+    self.conns = None
 
     return True
 
@@ -2179,7 +2234,6 @@ class UnknownConn(MagicProtocolParser):
 
     if domains:
       # If we know how to terminate the TLS/SSL, do so!
-      # FIXME: Authentication?
       ctx = self.conns.config.GetTlsEndpointCtx(domains[0])
       if ctx:
         self.fd = SSL_Connect(ctx, self.fd, accepted=True, server_side=True)
@@ -2401,7 +2455,6 @@ class PageKite(object):
     for pa in self.server_portalias:
       print 'portalias=%s:%s' % (int(pa), int(self.server_portalias[pa]))
     print '%srawports=%s' % (comment, ','.join(['%s' % x for x in self.server_raw_ports] or []))
-    # FIXME: --register ?
     print (self.auth_domain and '%sauthdomain=%s' % (comment, self.auth_domain) or '#authdomain=foo.com')
     for bid in self.backends:
       be = self.backends[bid]
