@@ -559,7 +559,7 @@ backends, encrypting any replies as they are sent to the client.
 As the tunnel between pagekite front- and back-ends itself is generally
 encapsulated in a secure TLS connection, this provides almost the same level
 of security as end-to-end encryption above, with the exception that the
-pagekite.py front-end has access to unecrypted data. So back-ends have to
+pagekite.py front-end has access to unencrypted data. So back-ends have to
 trust the person running their front-end!
 
 Although not perfect, for those concerned with casual snooping on shared
