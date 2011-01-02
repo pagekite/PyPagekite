@@ -24,7 +24,7 @@ works, check out <http://pagekite.net/docs/>.
    7.  [Coexisting front-ends and other HTTP servers    ](#co)
    8.  [Configuring DNS                                 ](#dns)
    9.  [Connecting over Socks or Tor                    ](#tor)
-   10. [Time/IP-based raw ports (SSH-after-HTTP)        ](#ipr)
+   10. [Raw backends (SSH-after-HTTP and HTTP CONNECT)  ](#ipr)
    11. [SSL/TLS back-ends, endpoints and SNI            ](#tls)
    12. [Unix/Linux systems integration                  ](#unx)
    13. [Saving your configuration                       ](#cfg)
@@ -399,12 +399,19 @@ information about which domains you are hosting through DNS side channels.
 
 
 <a                                                              name=ipr></a>
-### 10. Time/IP-based raw ports (SSH-after-HTTP) ###
+### 10. Raw backends (SSH-after-HTTP and HTTP CONNECT)
 
 Pagekite.py version 0.3.7 adds the "raw" protocol, which allows you to bind
 a back-end to a raw port.  This may be useful for all sorts of things,
 but was primarily designed as a "good enough" hack for tunneling SSH
 connections.
+
+As of version 0.3.8, there are two ways to access a raw port.  One is the
+default, unreliable IP-tracking behavior described below, the other an
+explicit HTTP CONNECT which requires support from the client application.
+
+
+#### IP-tracking based raw ports ####
 
 As the pagekite.py front-end, and all the ports it listens on, are assumed to
 be shared by multiple back-ends, raw ports do not work like normal ports:
@@ -441,14 +448,37 @@ Within the context of SSH, this implies a few guidelines:
       host to withstand incoming SSH brute force attacks!
 
 Note that this is all a bit of a hack: a more reliable way to tunnel SSH
-would be to use the ProxyCommand directive and embed SSH in an SSL tunnel
-(see ssh_config(5)).
+would be to use the ProxyCommand directive (see ssh_config(5)) and use netcat
+and the HTTP CONNECT method described below.
 
 For tunneling other things over raw ports, generally you will want to be
-sure there is some sort of handshake built into the protocol, so it will not
-go undetected when pagekite.py guesses wrong and routes the connection to
-the wrong back-end.  If that kind of routing mistake sounds scary to you, 
-then you probably do not want to use raw ports at all...
+sure you either use HTTP CONNECT (see below), or that there is some sort of
+handshake built into the protocol, so it will not go undetected when
+pagekite.py guesses wrong and routes the connection to the wrong back-end.
+If that kind of routing mistake sounds scary to you, then you probably do not
+want to use raw ports at all...
+
+
+#### HTTP CONNECT and raw ports ####
+
+Pagekite.py v0.3.8 front-ends natively supports the standard HTTP 1.0 CONNECT
+method for accessing raw back-ends.
+
+This means you can place more or less any server behind PageKite, as long as
+the client can be configured to use an HTTP Proxy to connect: simply configure
+the client to use the PageKite front-end (and a normal port, not a raw port)
+as an HTTP Proxy.
+
+As an example, the following lines in **.ssh/config** provide reliable direct
+access to an SSH server exposed via. pagekite.py and the PageKite.net service:
+
+    Host HOME.pagekite.me
+    ProxyCommand /bin/nc -X connect -x HOME.pagekite.me:443 %h %p
+
+(See above for a sample pagekite.py command-line.)
+
+This method requires client-side support, but removes all the uncertainty of
+the IP-tracking methods described above.
 
 
 [ [up](#toc) ]
@@ -501,8 +531,8 @@ what the certificate name is).
       ...
 
 On the back-end, you need to tell pagekite.py which certificate to
-accept, and possibly give it the path to a list of certificate authority
-certificates (the default works on Linux).
+accept, and possibly give it the path to [a list of certificate authority
+certificates](http://curl.haxx.se/ca/cacert.pem) (the default works on Linux).
 
     backend$ pagekite.py \
       --frontend=frontend.domain.com:443 \
@@ -529,7 +559,7 @@ backends, encrypting any replies as they are sent to the client.
 As the tunnel between pagekite front- and back-ends itself is generally
 encapsulated in a secure TLS connection, this provides almost the same level
 of security as end-to-end encryption above, with the exception that the
-pagekite.py front-end has access to unecrypted data. So back-ends have to
+pagekite.py front-end has access to unencrypted data. So back-ends have to
 trust the person running their front-end!
 
 Although not perfect, for those concerned with casual snooping on shared
@@ -544,15 +574,19 @@ maintaining keys and certificates on every single one.  An example:
     frontend$ sudo pagekite.py \
       --isfrontend \
       --ports=80,443 --protos=http,websocket,https \
+      --tls_endpoint=frontend.domain.com:/tunnel/key-and-cert-chain.pem \
       --tls_endpoint=*.domain.com:/path/to/key-and-cert-chain.pem \
       --domain=http:*.domain.com:SECRET
 
     backend$ sudo pagekite.py \
       --frontend=frontend.domain.com:443 \
+      --fe_certname=frontend.domain.com \
       --backend=http:foo.domain.com:localhost:80:SECRET
 
 This would enable both https://foo.domain.com/ and http://foo.domain.com/,
-without an explicit https back-end being defined or configured.
+without an explicit https back-end being defined or configured - but the
+tunnel between the back- and front-ends will be encrypted using TLS and
+the *frontend.domain.com* certificate.
 
 **Note:** Currently SSL endpoints are only available at the front-end, but
 will be available on the back-end as well in a future release.
@@ -719,7 +753,9 @@ discussed in [the TLS/SSL section](#tls).
 Raw ports are unreliable for clients sharing IP addresses with others or
 accessing multiple resources behind the same front-end at the same time.
 
-See the discussed in [the raw port section](#ipr) for details.
+See the discussed in [the raw port section](#ipr) for details and instructions
+on how to reliably configure clients to use the HTTP CONNECT method to work
+around this limitation.
 
 
 [ [up](#toc) ]
