@@ -2122,10 +2122,10 @@ class UnknownConn(MagicProtocolParser):
     self.proto = None
 
   def __str__(self):
-    return '% (%s-%s:%s)' % (MagicProtocolParser.__str__(self),
-                             self.proto or '?',
-                             self.on_port or '?',
-                             self.host or '?')
+    return '%s (%s/%s:%s)' % (MagicProtocolParser.__str__(self),
+                              (self.proto or '?'),
+                              (self.on_port or '?'),
+                              (self.host or '?'))
 
   def ProcessLine(self, line, lines):
     if not self.parser: return True
