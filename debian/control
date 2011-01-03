@@ -8,7 +8,7 @@ Homepage: http://pagekite.net/
 
 Package: pagekite
 Architecture: all
-Depends: ${shlibs:Depends}, ${misc:Depends}, python (>=2.2), python (<<3.0), python-openssl
+Depends: ${shlibs:Depends}, ${misc:Depends}, python (>=2.2), python (<<3.0), python-openssl, ca-certificates
 Description: Run public servers without reconfiguring firewalls.
  PageKite removes the need to reconfigure firewalls or routers in
  order to run a public server from home or your mobile devices.
