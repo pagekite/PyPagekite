@@ -1,3 +1,10 @@
+pagekite (20110102-1) lucid; urgency=low
+
+  * Testing post 0.3.8 updates:
+  * SIGHUP support for logrotate 
+
+ -- Hrafnkell Eiriksson <he@klaki.net>  Sun, 02 Jan 2011 23:03:49 +0000
+
 pagekite (0.3.8-2) lucid; urgency=low
 
   * The first real 0.3.8 release. -1 was really older.
