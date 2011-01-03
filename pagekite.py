@@ -2159,7 +2159,9 @@ class UnknownConn(MagicProtocolParser):
           # If no match is found, we fall through to default HTTP processing.
 
           if cport == 443:
-            if (('https'+sid1) in tunnels) or (('https'+sid2) in tunnels):
+            if (('https'+sid1) in tunnels) or (
+                ('https'+sid2) in tunnels) or (
+                chost in self.conns.config.tls_endpoints):
               (self.on_port, self.host) = (cport, chost)
               self.parser = HttpParser()
               self.Send(HTTP_ConnectOK())
