@@ -2139,7 +2139,7 @@ class UnknownConn(MagicProtocolParser):
 
     done = False
 
-    if self.parser.method == 'CONNECT' and not self.parser.Header('Host'):
+    if self.parser.method == 'CONNECT':
       if self.parser.path.lower().startswith('pagekite:'):
         if Tunnel.FrontEnd(self, lines, self.conns) is None: return False
         done = True
@@ -2148,23 +2148,29 @@ class UnknownConn(MagicProtocolParser):
         try:
           connect_parser = self.parser
           chost, cport = connect_parser.path.split(':', 1)
-          self.on_port = int(cport)
-          self.host = chost
 
-          self.parser = HttpParser()
+          cport = int(cport)
+          chost = chost.lower()
+          sid1 = ':%s' % chost
+          sid2 = '-%s:%s' % (cport, chost)
+          tunnels = self.conns.tunnels
 
-          if self.on_port == 443:
-            self.Send(HTTP_ConnectOK())
-            return self.ProcessTls(''.join(lines), chost)
+          # These allow explicit CONNECTs to direct https or raw backends.
+          # If no match is found, we fall through to default HTTP processing.
 
-          elif self.on_port in self.conns.config.server_raw_ports:
-            self.Send(HTTP_ConnectOK())
-            return self.ProcessRaw(''.join(lines), self.host)
+          if cport == 443:
+            if (('https'+sid1) in tunnels) or (('https'+sid2) in tunnels):
+              (self.on_port, self.host) = (cport, chost)
+              self.parser = HttpParser()
+              self.Send(HTTP_ConnectOK())
+              return self.ProcessTls(''.join(lines), chost)
 
-          else:
-            self.Send(HTTP_ConnectBad())
-            LogDebug('FIXME: Ignored CONNECT %s' % self.parser.path)
-            return False
+          if cport in self.conns.config.server_raw_ports:
+            if (('raw'+sid1) in tunnels) or (('raw'+sid2) in tunnels):
+              (self.on_port, self.host) = (cport, chost)
+              self.parser = HttpParser()
+              self.Send(HTTP_ConnectOK())
+              return self.ProcessRaw(''.join(lines), self.host)
 
         except ValueError:
           pass
