@@ -1890,7 +1890,6 @@ class Tunnel(ChunkParser):
       return False
 
     if eof:
-      LogDebug('Got EOF for %s' % sid)
       self.Disconnect(None, sid=sid, sendeof=False)
     else:
       if sid in self.users:
@@ -2607,6 +2606,7 @@ class PageKite(object):
     for line in optfile:
       line = line.strip()
       if line and not line.startswith('#'):
+        if line.startswith('END'): break
         if not line.startswith('-'): line = '--%s' % line
         args.append(line)
 
