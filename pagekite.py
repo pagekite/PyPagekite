@@ -335,7 +335,7 @@ except ImportError:
           self.ca_certs = None
         def use_privatekey_file(self, fn): self.privatekey_file = fn
         def use_certificate_chain_file(self, fn): self.certchain_file = fn
-        def load_verify_locations(self, pemfile, capath): self.ca_certs = pemfile
+        def load_verify_locations(self, pemfile, capath=None): self.ca_certs = pemfile
 
     def SSL_CheckPeerName(fd, names):
       cert = fd.getpeercert()
@@ -1743,7 +1743,7 @@ class Tunnel(ChunkParser):
       try:
         raw_fd = self.fd
         ctx = SSL.Context(SSL.TLSv1_METHOD)
-        ctx.load_verify_locations(self.conns.config.ca_certs, None)
+        ctx.load_verify_locations(self.conns.config.ca_certs)
         self.fd = SSL_Connect(ctx, self.fd, connected=True, server_side=False,
                               verify_names=self.conns.config.fe_certname)
         LogDebug('TLS connection to %s OK' % server)
