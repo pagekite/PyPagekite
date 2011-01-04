@@ -116,6 +116,8 @@ both the front- and back-end. This following protocols are supported:
   XMPP      - ...unfinished... (FIXME)
   SMTP      - ...unfinished... (FIXME)
 
+Other protocols may be proxied by using "raw" back-ends and HTTP CONNECT.
+
 This program is free software: you can redistribute it and/or modify it under
 the terms of the GNU Affero General Public License. For the full text of the
 license, see: http://www.gnu.org/licenses/agpl-3.0.html
