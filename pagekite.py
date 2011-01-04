@@ -2354,8 +2354,6 @@ class PageKite(object):
     self.tls_default = None
     self.tls_endpoints = {}
     self.fe_certname = []
-    self.ca_certs_default = '/etc/ssl/certs/ca-certificates.crt'
-    self.ca_certs = self.ca_certs_default
 
     self.daemonize = False
     self.pidfile = None
@@ -2392,6 +2390,10 @@ class PageKite(object):
 
     self.crash_report_url = '%scgi-bin/crashes.pl' % WWWHOME
     self.rcfile_recursion = 0
+
+    # Searching for our configuration file!  We prefer the documented
+    # 'standard' locations, but if nothing is found there and something local
+    # exists, use that instead.
     try:
       if os.getenv('USERPROFILE'):
         # Windows
@@ -2399,9 +2401,25 @@ class PageKite(object):
       else:
         # Everything else
         self.rcfile = os.path.join(os.getenv('HOME'), '.pagekite.rc')
+
     except Exception, e:
       # The above stuff may fail in some cases, e.g. on Android in SL4A.
       self.rcfile = 'pagekite.cfg'
+
+    if not os.path.exists(self.rcfile):
+      # FIXME: Should we warn the user about this?
+      if os.path.exists('pagekite.rc'): 
+        self.rcfile = 'pagekite.rc'
+      elif os.path.exists('pagekite.cfg'): 
+        self.rcfile = 'pagekite.rc'
+
+    # Look for CA Certificates. If we don't find them in the host OS,
+    # we assume there might be something good in the config file.
+    self.ca_certs_default = '/etc/ssl/certs/ca-certificates.crt'
+    if not os.path.exists(self.ca_certs_default):
+      self.ca_certs_default = self.rcfile
+    self.ca_certs = self.ca_certs_default
+
 
   def PrintSettings(self):
     print '### Current settings for PageKite v%s. ###' % APPVER    
