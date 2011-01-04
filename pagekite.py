@@ -141,6 +141,7 @@ Common Options:
  --tls_default=N        Default name to use for SSL, if SNI and tracking fail.
  --tls_endpoint=N:F     Terminate SSL/TLS for name N, using key/cert from F.
  --defaults             Set some reasonable default setings.
+ --errorurl=U  -E U    URL to redirect to when back-ends are not found.
  --settings             Dump the current settings to STDOUT, formatted as
                        an options file would be.
 
@@ -218,9 +219,9 @@ MAGIC_PREFIX = '/~:PageKite:~/'
 MAGIC_PATH = '%sv%s' % (MAGIC_PREFIX, PROTOVER)
 MAGIC_PATHS = (MAGIC_PATH, '/Beanstalk~Magic~Beans/0.2')
 
-OPT_FLAGS = 'o:H:P:X:L:ZI:fA:R:h:p:aD:U:N'
+OPT_FLAGS = 'o:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
-            'optfile=', 'httpd=', 'pemfile=', 'httppass=',
+            'optfile=', 'httpd=', 'pemfile=', 'httppass=', 'errorurl=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'register=', 'host=',
@@ -547,14 +548,21 @@ def HTTP_GoodBeConnection():
       headers=[HTTP_Header('X-PageKite-Status', 'OK')],
       mimetype='image/gif')
  
-def HTTP_Unavailable(where, proto, domain, comment=''):
-  return HTTP_Response(200, 'OK', 
+def HTTP_Unavailable(where, proto, domain, comment='', redir_url=None):
+  if redir_url:
+    code, status = 302, 'Moved tmporarily'
+    headers = [HTTP_Header('Location',
+                           '%s?where=%s&proto=%s&domain=%s' % (redir_url, where, proto, domain))]
+  else:
+    code, status, headers = 200, 'OK', []
+  return HTTP_Response(code, status,
                        ['<html><body><h1>Sorry! (', where, ')</h1>',
                         '<p>The ', proto.upper(),' <a href="', WWWHOME, '">',
                         '<i>pageKite</i></a> for <b>', domain, 
                         '</b> is unavailable at the moment.</p>',
                         '<p>Please try again later.</p>',
-                        '</body><!-- ', comment, ' --></html>'])
+                        '</body><!-- ', comment, ' --></html>'],
+                       headers=headers)
 
 LOG = []
 
@@ -1929,8 +1937,8 @@ class Tunnel(ChunkParser):
                                     remote_ip=rIp, remote_port=rPort)
             if proto in ('http', 'websocket'):
               if not conn:
-                self.SendChunked('SID: %s\r\n\r\n%s' % (
-                                   sid, HTTP_Unavailable('be', proto, host) )) 
+                self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
+                                   HTTP_Unavailable('be', proto, host, redir_url=self.conns.config.error_url) )) 
               elif rIp:
                 req, rest = re.sub(r'(?mi)^x-forwarded-for', 'X-Old-Forwarded-For', data
                                    ).split('\n', 1) 
@@ -2225,7 +2233,8 @@ class UnknownConn(MagicProtocolParser):
         if self.proto == 'probe':
           self.Send(HTTP_NoFeConnection())
         else:
-          self.Send(HTTP_Unavailable('fe', self.proto, self.host))
+          self.Send(HTTP_Unavailable('fe', self.proto, self.host,
+                                     redir_url=self.conns.config.error_url))
 
         return False
 
@@ -2368,6 +2377,7 @@ class PageKite(object):
     self.ui_pemfile = None
     self.disable_zchunks = False
     self.buffer_max = 256
+    self.error_url = None
 
     self.client_mode = 0
 
@@ -2463,6 +2473,7 @@ class PageKite(object):
       print '#backend=http:YOU.pagekite.me:localhost:80:SECRET'
       print '#backend=https:YOU.pagekite.me:localhost:443:SECRET'
       print '#backend=websocket:YOU.pagekite.me:localhost:8080:SECRET'
+    print (self.error_url and ('errorurl=%s' % self.error_url) or '#errorurl=http://host/page/')
     print (self.servers_new_only and 'new' or '#new')
     print (self.require_all and 'all' or '#all')
     print (self.no_probes and 'noprobes' or '#noprobes')
@@ -2470,7 +2481,7 @@ class PageKite(object):
     eprinted = 0
     print '# Domains we terminate SSL/TLS for natively, with key/cert-files'
     for ep in self.tls_endpoints:
-      print 'tls_endpoint=%s:%s' % (ep, tls_endpoints[ep][0])
+      print 'tls_endpoint=%s:%s' % (ep, self.tls_endpoints[ep][0])
       eprinted += 1
     if eprinted == 0:
       print '#tls_endpoint=DOMAIN:PEM_FILE'
@@ -2733,6 +2744,7 @@ class PageKite(object):
         count, domain, port = arg.split(':')
         self.servers_auto = (int(count), domain, int(port))
 
+      elif opt in ('--errorurl', '-E'): self.error_url = arg
       elif opt == '--backend':
         protos, domain, bhost, bport, secret = arg.split(':')
         for proto in protos.split(','): 
