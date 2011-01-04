@@ -1,7 +1,7 @@
 #!/usr/bin/python -u
 #
-# pagekite.py, Copyright 2010, the Beanstalks Project ehf.
-#                                  and Bjarni Runar Einarsson
+# pagekite.py, Copyright 2010, 2011, the Beanstalks Project ehf.
+#                                    and Bjarni Runar Einarsson
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -104,8 +104,8 @@ APPVER = '0.3.9'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 DOC = """\
-pagekite.py is Copyright 2010, the Beanstalks Project ehf. 
-     v%s                         http://pagekite.net/
+pagekite.py is Copyright 2010, 2011, the Beanstalks Project ehf. 
+     v%s                               http://pagekite.net/
 
 This the reference implementation of the PageKite tunneling protocol,
 both the front- and back-end. This following protocols are supported:
