@@ -2390,6 +2390,7 @@ class PageKite(object):
 
     self.crash_report_url = '%scgi-bin/crashes.pl' % WWWHOME
     self.rcfile_recursion = 0
+    self.rcfiles_loaded = []
 
     # Searching for our configuration file!  We prefer the documented
     # 'standard' locations, but if nothing is found there and something local
@@ -2624,6 +2625,7 @@ class PageKite(object):
     if self.rcfile_recursion > 25: 
       raise ConfigError('Nested too deep: %s' % filename)
 
+    self.rcfiles_loaded.append(filename)
     optfile = open(filename) 
     args = []
     for line in optfile:
@@ -3053,7 +3055,11 @@ class PageKite(object):
         LogError('Warning: importing signal failed, logrotate will not work.')
 
     # Log that we've started up
-    Log([('started', 'pagekite.py'), ('version', APPVER)])
+    config_report = [('started', sys.argv[0]), ('version', APPVER),
+                     ('argv', ' '.join(sys.argv[1:])), 
+                     ('ca_certs', self.ca_certs)]
+    for optf in self.rcfiles_loaded: config_report.append(('optfile', optf))
+    Log(config_report)
 
     # Set up our listeners if we are a server.
     if self.isfrontend:
