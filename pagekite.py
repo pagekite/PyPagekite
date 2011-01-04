@@ -2981,13 +2981,17 @@ class PageKite(object):
     self.looping = True
     iready, oready, eready = None, None, None
     while self.looping:
+      isocks, osocks = conns.Sockets(), conns.Blocked()
       try:
-        iready, oready, eready = select.select(conns.Sockets(),
-                                               conns.Blocked(), [], 5)
+        if isocks or osocks:
+          iready, oready, eready = select.select(isocks, osocks, [], 5)
+        else:
+          # Windoes does not seem to like empty selects, so we do this instead.
+          time.sleep(0.5)
       except KeyboardInterrupt, e:
         raise KeyboardInterrupt()
       except Exception, e:
-        LogError('Error in select: %s' % e)
+        LogError('Error in select: %s (%s/%s)' % (e, isocks, osocks))
         conns.CleanFds()
         last_loop -= 1
         
