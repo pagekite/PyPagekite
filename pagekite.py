@@ -1035,7 +1035,7 @@ SELECTABLES = {}
 class Selectable(object):
   """A wrapper around a socket, for use with select."""
 
-  def __init__(self, fd=None, address=None, on_port=None, maxread=32000):
+  def __init__(self, fd=None, address=None, on_port=None, maxread=16000):
     self.SetFD(fd or rawsocket(socket.AF_INET, socket.SOCK_STREAM))
     self.maxread = maxread
     self.address = address
@@ -1220,8 +1220,8 @@ class Selectable(object):
       LogDebug('Error reading socket (SSL): %s' % err)
       return False
     except socket.error, err:
-      LogDebug('Error reading socket: %s' % err)
-      return False
+      LogDebug('Error reading socket: %s (%s)' % (err, err.errno))
+      if err.errno >= 0: return False
 
     if data is None or data == '':
       return False
@@ -1229,13 +1229,19 @@ class Selectable(object):
       self.lastio[0] = data
       if not self.peeking:
         self.read_bytes += len(data)
-        if self.read_bytes > 102400: self.LogTraffic()
+        if self.read_bytes > 1024000: self.LogTraffic()
       return self.ProcessData(data)
 
-  def Send(self, data):
+  def Send(self, data, try_flush=False):
 
     global buffered_bytes
     buffered_bytes -= len(self.write_blocked)
+
+    # If we're already blocked, just buffer unless explicitly asked to flush.
+    if not try_flush and self.write_blocked:
+      self.write_blocked += ''.join(data)
+      buffered_bytes += len(self.write_blocked)
+      return
 
     sending = self.write_blocked+(''.join(data))
     self.lastio[1] = sending
@@ -1246,13 +1252,12 @@ class Selectable(object):
         self.wrote_bytes += sent_bytes
       except socket.error, err:
         problem = '%s' % err
-        # [Errno 11] Resource temporarily unavailable
-        # FIXME: This is probably not portable.
-        if problem.find('emporar') < 0:
+        if err.errno < 0 or err.errno == 11:
+          # Interrupted system calls or flow control
+          pass
+        else:
           LogError('Sending: %s' % problem)
           return False
-        else:
-          LogDebug('Sending: %s' % problem)
       except (SSL.WantWriteError, SSL.WantReadError), err:
         pass
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
@@ -1262,7 +1267,7 @@ class Selectable(object):
     self.write_blocked = sending[sent_bytes:]
     buffered_bytes += len(self.write_blocked)
 
-    if self.wrote_bytes > 102400: self.LogTraffic()
+    if self.wrote_bytes > 1024000: self.LogTraffic()
     return True
 
   def SendChunked(self, data, compress=True, zhistory=None):
@@ -1289,7 +1294,7 @@ class Selectable(object):
     return self.Send(['%x%s\r\n%s' % (len(sdata), rst, sdata)])
 
   def Flush(self):
-    while self.write_blocked and self.Send([]): pass
+    while self.write_blocked and self.Send([], try_flush=True): pass
 
 
 class Connections(object):
@@ -2985,7 +2990,7 @@ class PageKite(object):
       if oready:
         for socket in oready:
           conn = conns.Connection(socket)
-          if conn: conn.Send([])
+          if conn: conn.Send([], try_flush=True)
 
       if iready:
         for socket in iready:
