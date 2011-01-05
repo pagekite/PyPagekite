@@ -556,7 +556,7 @@ def HTTP_Unavailable(where, proto, domain, comment='', redir_url=None):
     code, status = 302, 'Moved tmporarily'
     if '?' in redir_url:
       headers = [HTTP_Header('Location',
-                             '%s&where=%s&proto=%s&domain=%s' % (redir_url, where, proto, domain))]
+                             '%s&where=%s&proto=%s&domain=%s' % (redir_url, where.upper(), proto, domain))]
     else:
       headers = [HTTP_Header('Location', redir_url)]
   else:
