@@ -1,10 +1,9 @@
-pagekite (20110103-1) lucid; urgency=low
+pagekite (20110102-1) lucid; urgency=low
 
   * Testing post 0.3.8 updates:
   * SIGHUP support for logrotate 
-  * Package depends now on ca-certificates to get ca-certificates for the TSL stuff 
 
- -- Hrafnkell Eiriksson <he@klaki.net>  Mon, 03 Jan 2011 17:06:04 +0000
+ -- Hrafnkell Eiriksson <he@klaki.net>  Sun, 02 Jan 2011 23:03:49 +0000
 
 pagekite (0.3.8-2) lucid; urgency=low
 
