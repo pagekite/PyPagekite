@@ -2441,11 +2441,10 @@ class PageKite(object):
       self.rcfile = 'pagekite.cfg'
 
     if not os.path.exists(self.rcfile):
-      # FIXME: Should we warn the user about this?
-      if os.path.exists('pagekite.rc'): 
-        self.rcfile = 'pagekite.rc'
-      elif os.path.exists('pagekite.cfg'): 
-        self.rcfile = 'pagekite.rc'
+      for rcf in ('pagekite.rc', 'pagekite.cfg'):
+        prog_rcf = os.path.join(os.path.dirname(sys.argv[0]), rcf)
+        if os.path.exists(prog_rcf): self.rcfile = prog_rcf 
+        elif os.path.exists(rcf): self.rcfile = rcf
 
     # Look for CA Certificates. If we don't find them in the host OS,
     # we assume there might be something good in the config file.
