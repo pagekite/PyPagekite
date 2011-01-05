@@ -1234,12 +1234,18 @@ class Selectable(object):
         data = self.fd.recv(self.maxread)
     except (SSL.WantReadError, SSL.WantWriteError), err:
       return True
+    except IOError, err:
+      if err.errno not in self.HARMLESS_ERRNOS:
+        LogDebug('Error reading socket: %s (%s)' % (err, err.errno))
+        return False
+      else:
+        return True
     except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
       LogDebug('Error reading socket (SSL): %s' % err)
       return False
     except socket.error, err:
-      LogDebug('Error reading socket: %s (%s)' % (err, err.errno))
-      if err.errno not in self.HARMLESS_ERRNOS: return FALSE
+      LogError('Error reading socket: %s' % err)
+      return False
 
     if data is None or data == '':
       return False
@@ -1268,15 +1274,17 @@ class Selectable(object):
       try:
         sent_bytes = self.fd.send(sending)
         self.wrote_bytes += sent_bytes
-      except socket.error, err:
-        problem = '%s' % err
+      except IOError, err:
         if err.errno in self.HARMLESS_ERRNOS:
           pass
         else:
-          LogError('Sending: %s' % problem)
+          LogError('Error sending: %s' % '%s' % err)
           return False
       except (SSL.WantWriteError, SSL.WantReadError), err:
         pass
+      except socket.error, err:
+        LogError('Error sending: %s' % '%s' % err)
+        return False
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
         LogDebug('Error sending (SSL): %s' % err)
         return False
