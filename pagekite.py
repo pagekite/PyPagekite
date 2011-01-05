@@ -1235,7 +1235,7 @@ class Selectable(object):
     except (SSL.WantReadError, SSL.WantWriteError), err:
       return True
     except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
-      LogDebug('Error reading socket (SSL): %s (%s)' % (err, err.errno))
+      LogDebug('Error reading socket (SSL): %s' % err)
       return False
     except socket.error, err:
       LogDebug('Error reading socket: %s (%s)' % (err, err.errno))
