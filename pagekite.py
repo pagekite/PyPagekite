@@ -265,6 +265,7 @@ DYNDNS = {
 
 import base64
 from cgi import escape as escape_html
+import errno
 import getopt
 import os
 import random
@@ -1045,6 +1046,10 @@ SELECTABLES = {}
 class Selectable(object):
   """A wrapper around a socket, for use with select."""
 
+  HARMLESS_ERRNOS = (errno.EINTR, errno.EAGAIN, errno.ENOMEM, errno.EBUSY,
+                     errno.EDEADLK, errno.EWOULDBLOCK, errno.ENOBUFS,
+                     errno.EALREADY)
+
   def __init__(self, fd=None, address=None, on_port=None, maxread=16000):
     self.SetFD(fd or rawsocket(socket.AF_INET, socket.SOCK_STREAM))
     self.maxread = maxread
@@ -1231,7 +1236,7 @@ class Selectable(object):
       return False
     except socket.error, err:
       LogDebug('Error reading socket: %s (%s)' % (err, err.errno))
-      if err.errno >= 0: return False
+      if err.errno not in self.HARMLESS_ERRNOS: return FALSE
 
     if data is None or data == '':
       return False
@@ -1262,8 +1267,7 @@ class Selectable(object):
         self.wrote_bytes += sent_bytes
       except socket.error, err:
         problem = '%s' % err
-        if err.errno < 0 or err.errno == 11:
-          # Interrupted system calls or flow control
+        if err.errno in self.HARMLESS_ERRNOS:
           pass
         else:
           LogError('Sending: %s' % problem)
@@ -3078,6 +3082,7 @@ class PageKite(object):
                      ('ca_certs', self.ca_certs)]
     for optf in self.rcfiles_loaded: config_report.append(('optfile', optf))
     Log(config_report)
+    LogDebug('Harmless errnos: %s' % (Selectable.HARMLESS_ERRNOS, ))
 
     # Set up our listeners if we are a server.
     if self.isfrontend:
