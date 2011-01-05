@@ -1659,6 +1659,8 @@ class Tunnel(ChunkParser):
     self.zhistory = {}
     self.backends = {}
     self.rtt = 100000
+    self.last_activity = time.time()
+    self.last_ping = 0
 
   def __html__(self):
     return ('<b>Server name</b>: %s<br>'
@@ -1878,6 +1880,16 @@ class Tunnel(ChunkParser):
   def ResetRemoteZChunks(self):
     self.SendChunked('NOOP: 1\nZRST: 1\r\n\r\n!', compress=False)
 
+  def SendPing(self, compress=False):
+    self.last_ping = int(time.time())
+    self.Log([('ping', self.server_name)])
+    self.SendChunked('NOOP: 1\nPING: 1\r\n\r\n!')
+    return True
+
+  def SendPong(self, compress=False):
+    self.SendChunked('NOOP: 1\r\n\r\n!')
+    return True
+
   def ProcessCorruptChunk(self, data):
     self.ResetRemoteZChunks()
     return True
@@ -1899,6 +1911,8 @@ class Tunnel(ChunkParser):
       LogError('Tunnel::ProcessChunk: Corrupt packet!')
       return False
 
+    self.last_activity = time.time()
+    if parse.Header('PING'): return self.SendPong()
     if parse.Header('ZRST'): self.ResetZChunks() 
     if parse.Header('NOOP'): return True
 
@@ -2880,6 +2894,20 @@ class PageKite(object):
       except Exception, e:
         LogDebug('FIXME: Should narrow this down: %s' % e)
 
+  def PingTunnels(self, conns, now):
+    dead = {}
+    for tid in conns.tunnels:
+      for tunnel in conns.tunnels[tid]:
+        if tunnel.last_activity < now-45:
+          dead['%s' % tunnel] = tunnel
+        elif tunnel.last_activity < now-30 and tunnel.last_ping < now-2:
+          tunnel.SendPing()
+
+    for tunnel in dead.values():
+      Log([('dead', tunnel.server_name)])
+      conns.Remove(tunnel)
+      tunnel.Cleanup()
+
   def CreateTunnels(self, conns):
     live_servers = conns.TunnelServers()
     failures = 0
@@ -3015,22 +3043,25 @@ class PageKite(object):
         LogError('Error in select: %s (%s/%s)' % (e, isocks, osocks))
         conns.CleanFds()
         last_loop -= 1
-        
+
       now = time.time()
       if not iready and not oready:
-        if now < last_loop + 1:
+        if (isocks or osocks) and (now < last_loop + 1):
           LogError('Spinning, pausing ...')
           time.sleep(0.1)
 
-        if now > last_tick + retry:
-          last_tick = now
+      if now > last_tick + retry:
+        last_tick = now
 
-          # Reconnect if necessary, randomized exponential fallback.
-          if self.CreateTunnels(conns) > 0:
-            retry += random.random()*retry
-            if retry > 300: retry = 300
-          else:
-            retry = 5
+        # FIXME: Front-ends should close idle tunnels.
+        if not self.isfrontend: self.PingTunnels(conns, now)
+
+        # Reconnect if necessary, randomized exponential fallback.
+        if self.CreateTunnels(conns) > 0:
+          retry += random.random()*retry
+          if retry > 300: retry = 300
+        else:
+          retry = 5
 
       if oready:
         for socket in oready:
