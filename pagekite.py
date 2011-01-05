@@ -1,7 +1,7 @@
 #!/usr/bin/python -u
 #
-# pagekite.py, Copyright 2010, the Beanstalks Project ehf.
-#                                  and Bjarni Runar Einarsson
+# pagekite.py, Copyright 2010, 2011, the Beanstalks Project ehf.
+#                                    and Bjarni Runar Einarsson
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -100,12 +100,12 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.3.8'
+APPVER = '0.3.9'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 DOC = """\
-pagekite.py is Copyright 2010, the Beanstalks Project ehf. 
-     v%s                         http://pagekite.net/
+pagekite.py is Copyright 2010, 2011, the Beanstalks Project ehf. 
+     v%s                               http://pagekite.net/
 
 This the reference implementation of the PageKite tunneling protocol,
 both the front- and back-end. This following protocols are supported:
@@ -115,6 +115,8 @@ both the front- and back-end. This following protocols are supported:
   WEBSOCKET - Using the proposed Upgrade: WebSocket method.
   XMPP      - ...unfinished... (FIXME)
   SMTP      - ...unfinished... (FIXME)
+
+Other protocols may be proxied by using "raw" back-ends and HTTP CONNECT.
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the GNU Affero General Public License. For the full text of the
@@ -141,6 +143,7 @@ Common Options:
  --tls_default=N        Default name to use for SSL, if SNI and tracking fail.
  --tls_endpoint=N:F     Terminate SSL/TLS for name N, using key/cert from F.
  --defaults             Set some reasonable default setings.
+ --errorurl=U  -E U    URL to redirect to when back-ends are not found.
  --settings             Dump the current settings to STDOUT, formatted as
                        an options file would be.
 
@@ -218,9 +221,9 @@ MAGIC_PREFIX = '/~:PageKite:~/'
 MAGIC_PATH = '%sv%s' % (MAGIC_PREFIX, PROTOVER)
 MAGIC_PATHS = (MAGIC_PATH, '/Beanstalk~Magic~Beans/0.2')
 
-OPT_FLAGS = 'o:H:P:X:L:ZI:fA:R:h:p:aD:U:N'
+OPT_FLAGS = 'o:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
-            'optfile=', 'httpd=', 'pemfile=', 'httppass=',
+            'optfile=', 'httpd=', 'pemfile=', 'httppass=', 'errorurl=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'register=', 'host=',
@@ -262,6 +265,7 @@ DYNDNS = {
 
 import base64
 from cgi import escape as escape_html
+import errno
 import getopt
 import os
 import random
@@ -335,7 +339,7 @@ except ImportError:
           self.ca_certs = None
         def use_privatekey_file(self, fn): self.privatekey_file = fn
         def use_certificate_chain_file(self, fn): self.certchain_file = fn
-        def load_verify_locations(self, pemfile, capath): self.ca_certs = pemfile
+        def load_verify_locations(self, pemfile, capath=None): self.ca_certs = pemfile
 
     def SSL_CheckPeerName(fd, names):
       cert = fd.getpeercert()
@@ -547,14 +551,24 @@ def HTTP_GoodBeConnection():
       headers=[HTTP_Header('X-PageKite-Status', 'OK')],
       mimetype='image/gif')
  
-def HTTP_Unavailable(where, proto, domain, comment=''):
-  return HTTP_Response(200, 'OK', 
+def HTTP_Unavailable(where, proto, domain, comment='', redir_url=None):
+  if redir_url:
+    code, status = 302, 'Moved tmporarily'
+    if '?' in redir_url:
+      headers = [HTTP_Header('Location',
+                             '%s&where=%s&proto=%s&domain=%s' % (redir_url, where.upper(), proto, domain))]
+    else:
+      headers = [HTTP_Header('Location', redir_url)]
+  else:
+    code, status, headers = 200, 'OK', []
+  return HTTP_Response(code, status,
                        ['<html><body><h1>Sorry! (', where, ')</h1>',
                         '<p>The ', proto.upper(),' <a href="', WWWHOME, '">',
                         '<i>pageKite</i></a> for <b>', domain, 
                         '</b> is unavailable at the moment.</p>',
                         '<p>Please try again later.</p>',
-                        '</body><!-- ', comment, ' --></html>'])
+                        '</body><!-- ', comment, ' --></html>'],
+                       headers=headers)
 
 LOG = []
 
@@ -1035,7 +1049,11 @@ SELECTABLES = {}
 class Selectable(object):
   """A wrapper around a socket, for use with select."""
 
-  def __init__(self, fd=None, address=None, on_port=None, maxread=32000):
+  HARMLESS_ERRNOS = (errno.EINTR, errno.EAGAIN, errno.ENOMEM, errno.EBUSY,
+                     errno.EDEADLK, errno.EWOULDBLOCK, errno.ENOBUFS,
+                     errno.EALREADY)
+
+  def __init__(self, fd=None, address=None, on_port=None, maxread=16000):
     self.SetFD(fd or rawsocket(socket.AF_INET, socket.SOCK_STREAM))
     self.maxread = maxread
     self.address = address
@@ -1217,11 +1235,11 @@ class Selectable(object):
     except (SSL.WantReadError, SSL.WantWriteError), err:
       return True
     except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
-      LogDebug('Error reading socket (SSL): %s' % err)
+      LogDebug('Error reading socket (SSL): %s (%s)' % (err, err.errno))
       return False
     except socket.error, err:
-      LogDebug('Error reading socket: %s' % err)
-      return False
+      LogDebug('Error reading socket: %s (%s)' % (err, err.errno))
+      if err.errno not in self.HARMLESS_ERRNOS: return FALSE
 
     if data is None or data == '':
       return False
@@ -1229,13 +1247,19 @@ class Selectable(object):
       self.lastio[0] = data
       if not self.peeking:
         self.read_bytes += len(data)
-        if self.read_bytes > 102400: self.LogTraffic()
+        if self.read_bytes > 1024000: self.LogTraffic()
       return self.ProcessData(data)
 
-  def Send(self, data):
+  def Send(self, data, try_flush=False):
 
     global buffered_bytes
     buffered_bytes -= len(self.write_blocked)
+
+    # If we're already blocked, just buffer unless explicitly asked to flush.
+    if not try_flush and self.write_blocked:
+      self.write_blocked += ''.join(data)
+      buffered_bytes += len(self.write_blocked)
+      return
 
     sending = self.write_blocked+(''.join(data))
     self.lastio[1] = sending
@@ -1246,13 +1270,11 @@ class Selectable(object):
         self.wrote_bytes += sent_bytes
       except socket.error, err:
         problem = '%s' % err
-        # [Errno 11] Resource temporarily unavailable
-        # FIXME: This is probably not portable.
-        if problem.find('emporar') < 0:
+        if err.errno in self.HARMLESS_ERRNOS:
+          pass
+        else:
           LogError('Sending: %s' % problem)
           return False
-        else:
-          LogDebug('Sending: %s' % problem)
       except (SSL.WantWriteError, SSL.WantReadError), err:
         pass
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
@@ -1262,7 +1284,7 @@ class Selectable(object):
     self.write_blocked = sending[sent_bytes:]
     buffered_bytes += len(self.write_blocked)
 
-    if self.wrote_bytes > 102400: self.LogTraffic()
+    if self.wrote_bytes > 1024000: self.LogTraffic()
     return True
 
   def SendChunked(self, data, compress=True, zhistory=None):
@@ -1289,7 +1311,7 @@ class Selectable(object):
     return self.Send(['%x%s\r\n%s' % (len(sdata), rst, sdata)])
 
   def Flush(self):
-    while self.write_blocked and self.Send([]): pass
+    while self.write_blocked and self.Send([], try_flush=True): pass
 
 
 class Connections(object):
@@ -1743,7 +1765,7 @@ class Tunnel(ChunkParser):
       try:
         raw_fd = self.fd
         ctx = SSL.Context(SSL.TLSv1_METHOD)
-        ctx.load_verify_locations(self.conns.config.ca_certs, None)
+        ctx.load_verify_locations(self.conns.config.ca_certs)
         self.fd = SSL_Connect(ctx, self.fd, connected=True, server_side=False,
                               verify_names=self.conns.config.fe_certname)
         LogDebug('TLS connection to %s OK' % server)
@@ -1890,7 +1912,6 @@ class Tunnel(ChunkParser):
       return False
 
     if eof:
-      LogDebug('Got EOF for %s' % sid)
       self.Disconnect(None, sid=sid, sendeof=False)
     else:
       if sid in self.users:
@@ -1925,8 +1946,8 @@ class Tunnel(ChunkParser):
                                     remote_ip=rIp, remote_port=rPort)
             if proto in ('http', 'websocket'):
               if not conn:
-                self.SendChunked('SID: %s\r\n\r\n%s' % (
-                                   sid, HTTP_Unavailable('be', proto, host) )) 
+                self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
+                                   HTTP_Unavailable('be', proto, host, redir_url=self.conns.config.error_url) )) 
               elif rIp:
                 req, rest = re.sub(r'(?mi)^x-forwarded-for', 'X-Old-Forwarded-For', data
                                    ).split('\n', 1) 
@@ -2139,7 +2160,7 @@ class UnknownConn(MagicProtocolParser):
 
     done = False
 
-    if self.parser.method == 'CONNECT' and not self.parser.Header('Host'):
+    if self.parser.method == 'CONNECT':
       if self.parser.path.lower().startswith('pagekite:'):
         if Tunnel.FrontEnd(self, lines, self.conns) is None: return False
         done = True
@@ -2148,23 +2169,31 @@ class UnknownConn(MagicProtocolParser):
         try:
           connect_parser = self.parser
           chost, cport = connect_parser.path.split(':', 1)
-          self.on_port = int(cport)
-          self.host = chost
 
-          self.parser = HttpParser()
+          cport = int(cport)
+          chost = chost.lower()
+          sid1 = ':%s' % chost
+          sid2 = '-%s:%s' % (cport, chost)
+          tunnels = self.conns.tunnels
 
-          if self.on_port == 443:
-            self.Send(HTTP_ConnectOK())
-            return self.ProcessTls(''.join(lines), chost)
+          # These allow explicit CONNECTs to direct https or raw backends.
+          # If no match is found, we fall through to default HTTP processing.
 
-          elif self.on_port in self.conns.config.server_raw_ports:
-            self.Send(HTTP_ConnectOK())
-            return self.ProcessRaw(''.join(lines), self.host)
+          if cport == 443:
+            if (('https'+sid1) in tunnels) or (
+                ('https'+sid2) in tunnels) or (
+                chost in self.conns.config.tls_endpoints):
+              (self.on_port, self.host) = (cport, chost)
+              self.parser = HttpParser()
+              self.Send(HTTP_ConnectOK())
+              return self.ProcessTls(''.join(lines), chost)
 
-          else:
-            self.Send(HTTP_ConnectBad())
-            LogDebug('FIXME: Ignored CONNECT %s' % self.parser.path)
-            return False
+          if cport in self.conns.config.server_raw_ports:
+            if (('raw'+sid1) in tunnels) or (('raw'+sid2) in tunnels):
+              (self.on_port, self.host) = (cport, chost)
+              self.parser = HttpParser()
+              self.Send(HTTP_ConnectOK())
+              return self.ProcessRaw(''.join(lines), self.host)
 
         except ValueError:
           pass
@@ -2213,7 +2242,8 @@ class UnknownConn(MagicProtocolParser):
         if self.proto == 'probe':
           self.Send(HTTP_NoFeConnection())
         else:
-          self.Send(HTTP_Unavailable('fe', self.proto, self.host))
+          self.Send(HTTP_Unavailable('fe', self.proto, self.host,
+                                     redir_url=self.conns.config.error_url))
 
         return False
 
@@ -2342,8 +2372,6 @@ class PageKite(object):
     self.tls_default = None
     self.tls_endpoints = {}
     self.fe_certname = []
-    self.ca_certs_default = '/etc/ssl/certs/ca-certificates.crt'
-    self.ca_certs = self.ca_certs_default
 
     self.daemonize = False
     self.pidfile = None
@@ -2358,6 +2386,7 @@ class PageKite(object):
     self.ui_pemfile = None
     self.disable_zchunks = False
     self.buffer_max = 256
+    self.error_url = None
 
     self.client_mode = 0
 
@@ -2380,6 +2409,11 @@ class PageKite(object):
 
     self.crash_report_url = '%scgi-bin/crashes.pl' % WWWHOME
     self.rcfile_recursion = 0
+    self.rcfiles_loaded = []
+
+    # Searching for our configuration file!  We prefer the documented
+    # 'standard' locations, but if nothing is found there and something local
+    # exists, use that instead.
     try:
       if os.getenv('USERPROFILE'):
         # Windows
@@ -2387,9 +2421,25 @@ class PageKite(object):
       else:
         # Everything else
         self.rcfile = os.path.join(os.getenv('HOME'), '.pagekite.rc')
+
     except Exception, e:
       # The above stuff may fail in some cases, e.g. on Android in SL4A.
       self.rcfile = 'pagekite.cfg'
+
+    if not os.path.exists(self.rcfile):
+      # FIXME: Should we warn the user about this?
+      if os.path.exists('pagekite.rc'): 
+        self.rcfile = 'pagekite.rc'
+      elif os.path.exists('pagekite.cfg'): 
+        self.rcfile = 'pagekite.rc'
+
+    # Look for CA Certificates. If we don't find them in the host OS,
+    # we assume there might be something good in the config file.
+    self.ca_certs_default = '/etc/ssl/certs/ca-certificates.crt'
+    if not os.path.exists(self.ca_certs_default):
+      self.ca_certs_default = self.rcfile
+    self.ca_certs = self.ca_certs_default
+
 
   def PrintSettings(self):
     print '### Current settings for PageKite v%s. ###' % APPVER    
@@ -2432,6 +2482,7 @@ class PageKite(object):
       print '#backend=http:YOU.pagekite.me:localhost:80:SECRET'
       print '#backend=https:YOU.pagekite.me:localhost:443:SECRET'
       print '#backend=websocket:YOU.pagekite.me:localhost:8080:SECRET'
+    print (self.error_url and ('errorurl=%s' % self.error_url) or '#errorurl=http://host/page/')
     print (self.servers_new_only and 'new' or '#new')
     print (self.require_all and 'all' or '#all')
     print (self.no_probes and 'noprobes' or '#noprobes')
@@ -2439,7 +2490,7 @@ class PageKite(object):
     eprinted = 0
     print '# Domains we terminate SSL/TLS for natively, with key/cert-files'
     for ep in self.tls_endpoints:
-      print 'tls_endpoint=%s:%s' % (ep, tls_endpoints[ep][0])
+      print 'tls_endpoint=%s:%s' % (ep, self.tls_endpoints[ep][0])
       eprinted += 1
     if eprinted == 0:
       print '#tls_endpoint=DOMAIN:PEM_FILE'
@@ -2594,11 +2645,13 @@ class PageKite(object):
     if self.rcfile_recursion > 25: 
       raise ConfigError('Nested too deep: %s' % filename)
 
+    self.rcfiles_loaded.append(filename)
     optfile = open(filename) 
     args = []
     for line in optfile:
       line = line.strip()
       if line and not line.startswith('#'):
+        if line.startswith('END'): break
         if not line.startswith('-'): line = '--%s' % line
         args.append(line)
 
@@ -2700,6 +2753,7 @@ class PageKite(object):
         count, domain, port = arg.split(':')
         self.servers_auto = (int(count), domain, int(port))
 
+      elif opt in ('--errorurl', '-E'): self.error_url = arg
       elif opt == '--backend':
         protos, domain, bhost, bport, secret = arg.split(':')
         for proto in protos.split(','): 
@@ -2948,13 +3002,17 @@ class PageKite(object):
     self.looping = True
     iready, oready, eready = None, None, None
     while self.looping:
+      isocks, osocks = conns.Sockets(), conns.Blocked()
       try:
-        iready, oready, eready = select.select(conns.Sockets(),
-                                               conns.Blocked(), [], 5)
+        if isocks or osocks:
+          iready, oready, eready = select.select(isocks, osocks, [], 5)
+        else:
+          # Windoes does not seem to like empty selects, so we do this instead.
+          time.sleep(0.5)
       except KeyboardInterrupt, e:
         raise KeyboardInterrupt()
       except Exception, e:
-        LogError('Error in select: %s' % e)
+        LogError('Error in select: %s (%s/%s)' % (e, isocks, osocks))
         conns.CleanFds()
         last_loop -= 1
         
@@ -2977,7 +3035,7 @@ class PageKite(object):
       if oready:
         for socket in oready:
           conn = conns.Connection(socket)
-          if conn: conn.Send([])
+          if conn: conn.Send([], try_flush=True)
 
       if iready:
         for socket in iready:
@@ -3022,21 +3080,29 @@ class PageKite(object):
         LogError('Warning: importing signal failed, logrotate will not work.')
 
     # Log that we've started up
-    Log([('started', 'pagekite.py'), ('version', APPVER)])
+    config_report = [('started', sys.argv[0]), ('version', APPVER),
+                     ('argv', ' '.join(sys.argv[1:])), 
+                     ('ca_certs', self.ca_certs)]
+    for optf in self.rcfiles_loaded: config_report.append(('optfile', optf))
+    Log(config_report)
+    LogDebug('Harmless errnos: %s' % (Selectable.HARMLESS_ERRNOS, ))
 
-    # Set up our listeners if we are a server.
-    if self.isfrontend:
-      for port in self.server_ports:
-        Listener(self.server_host, port, conns)
-      for port in self.server_raw_ports:
-        Listener(self.server_host, port, conns, connclass=RawConn)
+    try:
+      # Set up our listeners if we are a server.
+      if self.isfrontend:
+        for port in self.server_ports:
+          Listener(self.server_host, port, conns)
+        for port in self.server_raw_ports:
+          Listener(self.server_host, port, conns, connclass=RawConn)
 
-    # Start the UI thread
-    if self.ui_sspec:
-      self.ui_httpd = HttpUiThread(self, conns,
-                                   handler=self.ui_request_handler,
-                                   server=self.ui_http_server,
-                                   ssl_pem_filename = self.ui_pemfile)
+      # Start the UI thread
+      if self.ui_sspec:
+        self.ui_httpd = HttpUiThread(self, conns,
+                                     handler=self.ui_request_handler,
+                                     server=self.ui_http_server,
+                                     ssl_pem_filename = self.ui_pemfile)
+    except Exception, e:
+      raise ConfigError(e)
 
     # Daemonize!
     if self.daemonize:
@@ -3080,7 +3146,10 @@ def Main(pagekite, configure):
     pk = pagekite()
     try:
       try:
-        configure(pk)
+        try:
+          configure(pk)
+        except Exception, e:
+          raise ConfigError(e)
         pk.Start()
 
       except (ValueError, ConfigError, getopt.GetoptError), msg:
