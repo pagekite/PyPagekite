@@ -3084,19 +3084,22 @@ class PageKite(object):
     Log(config_report)
     LogDebug('Harmless errnos: %s' % (Selectable.HARMLESS_ERRNOS, ))
 
-    # Set up our listeners if we are a server.
-    if self.isfrontend:
-      for port in self.server_ports:
-        Listener(self.server_host, port, conns)
-      for port in self.server_raw_ports:
-        Listener(self.server_host, port, conns, connclass=RawConn)
+    try:
+      # Set up our listeners if we are a server.
+      if self.isfrontend:
+        for port in self.server_ports:
+          Listener(self.server_host, port, conns)
+        for port in self.server_raw_ports:
+          Listener(self.server_host, port, conns, connclass=RawConn)
 
-    # Start the UI thread
-    if self.ui_sspec:
-      self.ui_httpd = HttpUiThread(self, conns,
-                                   handler=self.ui_request_handler,
-                                   server=self.ui_http_server,
-                                   ssl_pem_filename = self.ui_pemfile)
+      # Start the UI thread
+      if self.ui_sspec:
+        self.ui_httpd = HttpUiThread(self, conns,
+                                     handler=self.ui_request_handler,
+                                     server=self.ui_http_server,
+                                     ssl_pem_filename = self.ui_pemfile)
+    except Exception, e:
+      raise ConfigError(e)
 
     # Daemonize!
     if self.daemonize:
@@ -3140,7 +3143,10 @@ def Main(pagekite, configure):
     pk = pagekite()
     try:
       try:
-        configure(pk)
+        try:
+          configure(pk)
+        except Exception, e:
+          raise ConfigError(e)
         pk.Start()
 
       except (ValueError, ConfigError, getopt.GetoptError), msg:
