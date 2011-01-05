@@ -3,9 +3,9 @@ Version history - highlights
 
 v0.3.9   2011.01.??
 ------
+   - BUGFIX: 0.3.8 broke Windows connections, this should fix them.
    - Re-opens logs on SIGHUP, for compatibility with logrotate.
    - Tweaked internal CONNECT to work with HTTP/1.1 clients: putty can ssh!
-   - Windows flow-control bugfix (fixing regression from 0.3.8).
    - Look for CA Certificates in the rc-file if not found in the host OS.
    - Added --errorurl for fancier "back-end unavailable" messages.
 
