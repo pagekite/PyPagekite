@@ -1880,14 +1880,14 @@ class Tunnel(ChunkParser):
   def ResetRemoteZChunks(self):
     self.SendChunked('NOOP: 1\nZRST: 1\r\n\r\n!', compress=False)
 
-  def SendPing(self, compress=False):
+  def SendPing(self):
     self.last_ping = int(time.time())
     self.Log([('ping', self.server_name)])
-    self.SendChunked('NOOP: 1\nPING: 1\r\n\r\n!')
+    self.SendChunked('NOOP: 1\nPING: 1\r\n\r\n!', compress=False)
     return True
 
-  def SendPong(self, compress=False):
-    self.SendChunked('NOOP: 1\r\n\r\n!')
+  def SendPong(self):
+    self.SendChunked('NOOP: 1\r\n\r\n!', compress=False)
     return True
 
   def ProcessCorruptChunk(self, data):
