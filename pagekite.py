@@ -554,8 +554,11 @@ def HTTP_GoodBeConnection():
 def HTTP_Unavailable(where, proto, domain, comment='', redir_url=None):
   if redir_url:
     code, status = 302, 'Moved tmporarily'
-    headers = [HTTP_Header('Location',
-                           '%s?where=%s&proto=%s&domain=%s' % (redir_url, where, proto, domain))]
+    if '?' in redir_url:
+      headers = [HTTP_Header('Location',
+                             '%s&where=%s&proto=%s&domain=%s' % (redir_url, where, proto, domain))]
+    else:
+      headers = [HTTP_Header('Location', redir_url)]
   else:
     code, status, headers = 200, 'OK', []
   return HTTP_Response(code, status,
