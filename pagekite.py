@@ -1235,7 +1235,7 @@ class Selectable(object):
     except (SSL.WantReadError, SSL.WantWriteError), err:
       return True
     except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
-      LogDebug('Error reading socket (SSL): %s (%s)' % (err, err.errno))
+      LogDebug('Error reading socket (SSL): %s' % err)
       return False
     except socket.error, err:
       LogDebug('Error reading socket: %s (%s)' % (err, err.errno))
@@ -1659,6 +1659,8 @@ class Tunnel(ChunkParser):
     self.zhistory = {}
     self.backends = {}
     self.rtt = 100000
+    self.last_activity = time.time()
+    self.last_ping = 0
 
   def __html__(self):
     return ('<b>Server name</b>: %s<br>'
@@ -1878,6 +1880,16 @@ class Tunnel(ChunkParser):
   def ResetRemoteZChunks(self):
     self.SendChunked('NOOP: 1\nZRST: 1\r\n\r\n!', compress=False)
 
+  def SendPing(self):
+    self.last_ping = int(time.time())
+    self.Log([('ping', self.server_name)])
+    self.SendChunked('NOOP: 1\nPING: 1\r\n\r\n!', compress=False)
+    return True
+
+  def SendPong(self):
+    self.SendChunked('NOOP: 1\r\n\r\n!', compress=False)
+    return True
+
   def ProcessCorruptChunk(self, data):
     self.ResetRemoteZChunks()
     return True
@@ -1899,6 +1911,8 @@ class Tunnel(ChunkParser):
       LogError('Tunnel::ProcessChunk: Corrupt packet!')
       return False
 
+    self.last_activity = time.time()
+    if parse.Header('PING'): return self.SendPong()
     if parse.Header('ZRST'): self.ResetZChunks() 
     if parse.Header('NOOP'): return True
 
@@ -2427,11 +2441,10 @@ class PageKite(object):
       self.rcfile = 'pagekite.cfg'
 
     if not os.path.exists(self.rcfile):
-      # FIXME: Should we warn the user about this?
-      if os.path.exists('pagekite.rc'): 
-        self.rcfile = 'pagekite.rc'
-      elif os.path.exists('pagekite.cfg'): 
-        self.rcfile = 'pagekite.rc'
+      for rcf in ('pagekite.rc', 'pagekite.cfg'):
+        prog_rcf = os.path.join(os.path.dirname(sys.argv[0]), rcf)
+        if os.path.exists(prog_rcf): self.rcfile = prog_rcf 
+        elif os.path.exists(rcf): self.rcfile = rcf
 
     # Look for CA Certificates. If we don't find them in the host OS,
     # we assume there might be something good in the config file.
@@ -2880,6 +2893,20 @@ class PageKite(object):
       except Exception, e:
         LogDebug('FIXME: Should narrow this down: %s' % e)
 
+  def PingTunnels(self, conns, now):
+    dead = {}
+    for tid in conns.tunnels:
+      for tunnel in conns.tunnels[tid]:
+        if tunnel.last_activity < now-45:
+          dead['%s' % tunnel] = tunnel
+        elif tunnel.last_activity < now-30 and tunnel.last_ping < now-2:
+          tunnel.SendPing()
+
+    for tunnel in dead.values():
+      Log([('dead', tunnel.server_name)])
+      conns.Remove(tunnel)
+      tunnel.Cleanup()
+
   def CreateTunnels(self, conns):
     live_servers = conns.TunnelServers()
     failures = 0
@@ -3015,22 +3042,25 @@ class PageKite(object):
         LogError('Error in select: %s (%s/%s)' % (e, isocks, osocks))
         conns.CleanFds()
         last_loop -= 1
-        
+
       now = time.time()
       if not iready and not oready:
-        if now < last_loop + 1:
+        if (isocks or osocks) and (now < last_loop + 1):
           LogError('Spinning, pausing ...')
           time.sleep(0.1)
 
-        if now > last_tick + retry:
-          last_tick = now
+      if now > last_tick + retry:
+        last_tick = now
 
-          # Reconnect if necessary, randomized exponential fallback.
-          if self.CreateTunnels(conns) > 0:
-            retry += random.random()*retry
-            if retry > 300: retry = 300
-          else:
-            retry = 5
+        # FIXME: Front-ends should close idle tunnels.
+        if not self.isfrontend: self.PingTunnels(conns, now)
+
+        # Reconnect if necessary, randomized exponential fallback.
+        if self.CreateTunnels(conns) > 0:
+          retry += random.random()*retry
+          if retry > 300: retry = 300
+        else:
+          retry = 5
 
       if oready:
         for socket in oready:
