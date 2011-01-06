@@ -1,10 +1,11 @@
-pagekite (20110105-1) lucid; urgency=low
+pagekite (0.3.9-1) lucid; urgency=low
 
-  [ Hrafnkell Eiriksson ]
-  * Testing post 0.3.8 updates:
-  * SIGHUP support for logrotate 
+  [ Hrafnkell ]
+  * logrotate support
+  * Set 600 permissions to /etc/pagekite.rc
 
- -- Hrafnkell <he@myther-main>  Wed, 05 Jan 2011 17:15:49 +0000
+
+ -- Hrafnkell Eiriksson <he@klaki.net>  Thu, 06 Jan 2011 00:52:01 +0000
 
 pagekite (0.3.8-2) lucid; urgency=low
 
