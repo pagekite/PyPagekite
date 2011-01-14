@@ -553,7 +553,7 @@ def HTTP_GoodBeConnection():
  
 def HTTP_Unavailable(where, proto, domain, comment='', redir_url=None):
   if redir_url:
-    code, status = 302, 'Moved tmporarily'
+    code, status = 302, 'Moved temporarily'
     if '?' in redir_url:
       headers = [HTTP_Header('Location',
                              '%s&where=%s&proto=%s&domain=%s' % (redir_url, where.upper(), proto, domain))]
