@@ -1,9 +1,9 @@
 Version history - highlights
 ============================
 
-v0.3.10  2011.01.05
+v0.3.10  2011.01.15
 -------
-   - ...
+   - BUGFIX: More improvements to IO error handling.
 
 
 v0.3.9   2011.01.05
