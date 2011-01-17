@@ -1067,9 +1067,6 @@ class Selectable(object):
     self.peeking = False
     self.peeked = 0
 
-    # FIXME: This should go away after testing!
-    self.lastio = ['', '']
-
     global selectable_id
     selectable_id += 1
     self.sid = selectable_id
@@ -1133,9 +1130,7 @@ class Selectable(object):
                      fmt_size(self.all_out + self.wrote_bytes),
                      time.strftime('%Y-%m-%d %H:%M:%S',
                                    time.localtime(self.created)),
-                     self.dead and 'dead' or 'alive',
-                     escape_html(self.lastio[0]),
-                     escape_html(self.lastio[1]))
+                     self.dead and 'dead' or 'alive')
 
   def ResetZChunks(self):
     if self.zw:
@@ -1250,7 +1245,6 @@ class Selectable(object):
     if data is None or data == '':
       return False
     else:
-      self.lastio[0] = data
       if not self.peeking:
         self.read_bytes += len(data)
         if self.read_bytes > 1024000: self.LogTraffic()
@@ -1268,7 +1262,6 @@ class Selectable(object):
       return
 
     sending = self.write_blocked+(''.join(data))
-    self.lastio[1] = sending
     sent_bytes = 0
     if sending:
       try:
@@ -1742,7 +1735,6 @@ class Tunnel(ChunkParser):
         return None
       data += buf
       self.read_bytes += len(buf)
-      self.lastio[0] = data
     return data
 
   def _Connect(self, server, conns, tokens=None):
