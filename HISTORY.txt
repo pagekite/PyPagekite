@@ -3,7 +3,8 @@ Version history - highlights
 
 v0.3.11  ??
 -------
-   - ...
+   - Removed debugging code to improve privacy and reduce memory usage.
+
 
 v0.3.10  2011.01.15
 -------
