@@ -1121,8 +1121,6 @@ class Selectable(object):
             '<b>Bytes in / out</b>: %s / %s<br>'
             '<b>Created</b>: %s<br>'
             '<b>Status</b>: %s<br>'
-            '<pre><b>Last recv:</b>\n%s</pre>'
-            '<pre><b>Last sent:</b>\n%s</pre>'
             '\n') % (self.zw and ('level %d' % self.zlevel) or 'off',
                      self.dead and '-' or (obfuIp(peer[0]), peer[1]),
                      self.dead and '-' or (obfuIp(sock[0]), sock[1]),
