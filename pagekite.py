@@ -927,6 +927,9 @@ class HttpUiThread(threading.Thread):
     self.httpd.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     self.serve = True
 
+    global SELECTABLES
+    SELECTABLES = {}
+
   def quit(self):
     self.serve = False
     knock = rawsocket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1044,7 +1047,7 @@ def obfuIp(ip):
 
 selectable_id = 0
 buffered_bytes = 0
-SELECTABLES = {}
+SELECTABLES = None
 
 class Selectable(object):
   """A wrapper around a socket, for use with select."""
@@ -1081,13 +1084,10 @@ class Selectable(object):
     self.zlevel = 1
     self.zreset = False
 
-    SELECTABLES[selectable_id] = self
-    old = selectable_id-50
-    ancient = selectable_id-5000
-    if old in SELECTABLES:
-      sel = SELECTABLES[old]
-      if sel.dead or (sel.all_out + sel.wrote_bytes) == 0: del SELECTABLES[old]
-    if ancient in SELECTABLES: del SELECTABLES[ancient]
+    if SELECTABLES is not None:
+      old = selectable_id-150
+      if old in SELECTABLES: del SELECTABLES[old]
+      SELECTABLES[selectable_id] = self
 
     global gYamon
     self.countas = 'selectables_live'
@@ -3171,11 +3171,6 @@ class PageKite(object):
 def Main(pagekite, configure):
   crashes = 1
 
-  from collections import defaultdict
-  import gc
-  gc_before = defaultdict(int)
-  gc_after = defaultdict(int)
-
   while True:
     pk = pagekite()
     try:
@@ -3185,7 +3180,6 @@ def Main(pagekite, configure):
         except Exception, e:
           raise ConfigError(e)
 
-        for i in gc.get_objects(): gc_before[type(i)] += 1
         pk.Start()
 
       except (ValueError, ConfigError, getopt.GetoptError), msg:
@@ -3195,18 +3189,6 @@ def Main(pagekite, configure):
         pk.FallDown(None, help=False)
 
     except SystemExit:
-
-      print 'gc.collect(): %s' % gc.collect()
-      gYamon = None
-      SELECTABLES = None
-
-      time.sleep(2)
-      print 'gc.collect(): %s' % gc.collect()
-      for i in gc.get_objects(): gc_after[type(i)] += 1
-      for k in gc_after:
-        if gc_after[k]-gc_before[k]:
-          print '%d\t%s' % (gc_after[k]-gc_before[k], k) 
-
       sys.exit(1)
 
     except Exception, msg:
