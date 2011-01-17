@@ -2550,6 +2550,7 @@ class PageKite(object):
   def FallDown(self, message, help=True, noexit=False):
     if self.conns and self.conns.auth: self.conns.auth.quit()
     if self.ui_httpd: self.ui_httpd.quit()
+    self.conns.auth = self.ui_httpd = None
     if help:
       print DOC
       print '*****'
@@ -3170,6 +3171,11 @@ class PageKite(object):
 def Main(pagekite, configure):
   crashes = 1
 
+  from collections import defaultdict
+  import gc
+  gc_before = defaultdict(int)
+  gc_after = defaultdict(int)
+
   while True:
     pk = pagekite()
     try:
@@ -3178,6 +3184,8 @@ def Main(pagekite, configure):
           configure(pk)
         except Exception, e:
           raise ConfigError(e)
+
+        for i in gc.get_objects(): gc_before[type(i)] += 1
         pk.Start()
 
       except (ValueError, ConfigError, getopt.GetoptError), msg:
@@ -3187,6 +3195,18 @@ def Main(pagekite, configure):
         pk.FallDown(None, help=False)
 
     except SystemExit:
+
+      print 'gc.collect(): %s' % gc.collect()
+      gYamon = None
+      SELECTABLES = None
+
+      time.sleep(2)
+      print 'gc.collect(): %s' % gc.collect()
+      for i in gc.get_objects(): gc_after[type(i)] += 1
+      for k in gc_after:
+        if gc_after[k]-gc_before[k]:
+          print '%d\t%s' % (gc_after[k]-gc_before[k], k) 
+
       sys.exit(1)
 
     except Exception, msg:
