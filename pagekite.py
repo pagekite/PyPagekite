@@ -255,8 +255,8 @@ DYNDNS = {
   'dyndns.org': ('https://%(user)s:%(pass)s@members.dyndns.org'
                  '/nic/update?wildcard=NOCHG&backmx=NOCHG'
                  '&hostname=%(domain)s&myip=%(ip)s'),
-  'no-ip.com': ('https://%(user)s:%(pass)s@members.dyndns.org'
-                '/nic/update?wildcard=NOCHG&backmx=NOCHG'
+  'no-ip.com': ('https://%(user)s:%(pass)s@dynupdate.no-ip.com'
+                '/nic/update?'
                 '&hostname=%(domain)s&myip=%(ip)s'),
 }
 
@@ -2718,7 +2718,9 @@ class PageKite(object):
         if arg.startswith('http'):
           self.dyndns = (arg, {'user': '', 'pass': ''})
         elif '@' in arg:
-          usrpwd, provider = arg.split('@', 1)
+          splits = arg.split('@')
+          provider = splits.pop()
+          usrpwd = '@'.join(splits)
           if provider in DYNDNS: provider = DYNDNS[provider]
           if ':' in usrpwd:
             usr, pwd = usrpwd.split(':', 1)
