@@ -1,6 +1,11 @@
 Version history - highlights
 ============================
 
+v0.3.12  ??
+-------
+   - ...
+
+
 v0.3.11  2011.01.20
 -------
    - Removed debugging code to improve privacy.

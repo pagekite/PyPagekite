@@ -100,7 +100,7 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.3.11'
+APPVER = '0.3.11+github'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 DOC = """\
@@ -256,8 +256,7 @@ DYNDNS = {
                  '/nic/update?wildcard=NOCHG&backmx=NOCHG'
                  '&hostname=%(domain)s&myip=%(ip)s'),
   'no-ip.com': ('https://%(user)s:%(pass)s@dynupdate.no-ip.com'
-                '/nic/update?'
-                '&hostname=%(domain)s&myip=%(ip)s'),
+                '/nic/update?hostname=%(domain)s&myip=%(ip)s'),
 }
 
 
