@@ -361,9 +361,20 @@ using dyndns.org, running the back-end like this might work in that case:
       --dyndns=USER:PASS@dyndns.org \
       --backend=http:YOURNAME.dyndns.org:localhost:80:YOURSECRET
 
-**Note:** the dynamic DNS support for third parties (non-*pageKite*) is
-currently not very well tested - if it does not work for you, please
-[get in touch](http://pagekite.net/support/) and let us know.
+Instead of dyndns.org above, pagekite.py also has built-in support for
+no-ip.com and of course pagekite.net. Other providers can be used by
+providing a full HTTP or HTTPS URL, with the following python formatting
+tokens in the appropriate places:
+
+    %(ip)s - will be replaced by your new front-end IP address
+    %(domain)s - will be replaced by your domain name
+
+This example argument manually implements no-ip.com support (split between
+lines for readability):
+
+    --dyndns='https://USER:PASS@dynupdate.no-ip.com/nic/update?
+    hostname=%(domain)s&myip=%(ip)s'
+
 
 [ [up](#toc) ]
 
