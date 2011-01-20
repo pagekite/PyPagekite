@@ -1,10 +1,11 @@
 Version history - highlights
 ============================
 
-v0.3.11  ??
+v0.3.11  2011.01.20
 -------
    - Removed debugging code to improve privacy.
    - Reduced memory footprint slightly, especially on the front-end.
+   - Fixed bugs in 3rd party dynamic DNS support, improved docs.
 
 
 v0.3.10  2011.01.15

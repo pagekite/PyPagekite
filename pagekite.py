@@ -100,7 +100,7 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.3.10+github'
+APPVER = '0.3.11'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 DOC = """\
