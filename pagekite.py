@@ -2779,7 +2779,7 @@ class PageKite(object):
 
           backend = '%s:%s' % (bhost.lower(), bport)
           if bid in self.backends:
-            raise ConfigError("Same backend defined twice: %s" % bid)
+            raise ConfigError("Same backend/domain defined twice: %s" % bid)
           self.backends[bid] = (proto.lower(), domain.lower(), backend, secret)
 
       elif opt == '--domain':
@@ -2788,7 +2788,7 @@ class PageKite(object):
         for proto in protos.split(','): 
           bid = '%s:%s' % (proto, domain)
           if bid in self.backends:
-            raise ConfigError("Same backend defined twice: %s" % bid)
+            raise ConfigError("Same backend/domain defined twice: %s" % bid)
           self.backends[bid] = (proto, domain, None, secret)
 
       elif opt == '--noprobes': self.no_probes = True
