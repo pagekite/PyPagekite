@@ -2549,7 +2549,7 @@ class PageKite(object):
   def FallDown(self, message, help=True, noexit=False):
     if self.conns and self.conns.auth: self.conns.auth.quit()
     if self.ui_httpd: self.ui_httpd.quit()
-    self.conns.auth = self.ui_httpd = None
+    self.conns = self.ui_httpd = None
     if help:
       print DOC
       print '*****'
@@ -2778,6 +2778,8 @@ class PageKite(object):
             bid = '%s:%s' % (proto.lower(), domain.lower())
 
           backend = '%s:%s' % (bhost.lower(), bport)
+          if bid in self.backends:
+            raise ConfigError("Same backend defined twice: %s" % bid)
           self.backends[bid] = (proto.lower(), domain.lower(), backend, secret)
 
       elif opt == '--domain':
@@ -2785,6 +2787,8 @@ class PageKite(object):
         if protos in ('*', ''): protos = ','.join(self.server_protos)
         for proto in protos.split(','): 
           bid = '%s:%s' % (proto, domain)
+          if bid in self.backends:
+            raise ConfigError("Same backend defined twice: %s" % bid)
           self.backends[bid] = (proto, domain, None, secret)
 
       elif opt == '--noprobes': self.no_probes = True
