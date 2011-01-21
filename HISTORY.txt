@@ -1,9 +1,10 @@
 Version history - highlights
 ============================
 
-v0.3.12  ??
+v0.3.12  2011.01.21
 -------
    - Report a config error when the same backend is defined twice.
+   - Don't submit crash reports when misconfigured. *sigh*
 
 
 v0.3.11  2011.01.20
