@@ -1209,8 +1209,9 @@ class Selectable(object):
     while len(discard) < eat_bytes:
       try:
         discard += self.fd.recv(eat_bytes - len(discard))
-      except socket.error, err:
-        LogDebug('Error reading (%d/%d) socket: %s' % (eat_bytes, self.peeked, err))
+      except socket.error, (errno, msg):
+        LogDebug('Error reading (%d/%d) socket: %s (errno=%s)' % (
+                   eat_bytes, self.peeked, msg, errno))
         time.sleep(0.1)
 
     self.peeked -= eat_bytes
@@ -1235,12 +1236,11 @@ class Selectable(object):
     except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
       LogDebug('Error reading socket (SSL): %s' % err)
       return False
-    except socket.error, err:
-      if 'errno' not in dir(err) or err.errno in self.HARMLESS_ERRNOS:
-        # THIS IS STUPID!  Why is there no 'errno' in the exception?
-        pass
+    except socket.error, (errno, msg):
+      if errno in self.HARMLESS_ERRNOS:
+        return True
       else:
-        LogError('Error reading socket: %s' % err)
+        LogError('Error sending: %s (errno=%s)' % (msg, errno))
         return False
 
     if data is None or data == '':
@@ -1269,19 +1269,14 @@ class Selectable(object):
         sent_bytes = self.fd.send(sending)
         self.wrote_bytes += sent_bytes
       except IOError, err:
-        if 'errno' not in dir(err) or err.errno in self.HARMLESS_ERRNOS:
-          pass
-        else:
+        if err.errno not in self.HARMLESS_ERRNOS:
           LogError('Error sending: %s' % err)
           return False
       except (SSL.WantWriteError, SSL.WantReadError), err:
         pass
-      except socket.error, err:
-        if 'errno' not in dir(err) or err.errno in self.HARMLESS_ERRNOS:
-          # THIS IS STUPID!  Why is there no 'errno' in the exception?
-          pass
-        else:
-          LogError('Error sending: %s' % err)
+      except socket.error, (errno, msg):
+        if errno not in self.HARMLESS_ERRNOS:
+          LogError('Error sending: %s (errno=%s)' % (msg, errno))
           return False
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
         LogDebug('Error sending (SSL): %s' % err)
@@ -1696,7 +1691,7 @@ class Tunnel(ChunkParser):
       return None
 
     except socket.error, err:
-      self.LogError('Discarding connection: %s')
+      self.LogError('Discarding connection: %s' % err)
       return None
 
     self.CountAs('backends_live')
