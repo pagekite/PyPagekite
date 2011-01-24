@@ -3,7 +3,7 @@ Version history - highlights
 
 v0.3.13  ??
 -------
-   - ...
+   - Fixed yet another flow-control problem (bad error handling)
 
 
 v0.3.12  2011.01.21
