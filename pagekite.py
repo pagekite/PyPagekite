@@ -231,7 +231,7 @@ OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
             'tls_default=', 'tls_endpoint=', 'fe_certname=', 'ca_certs=',
             'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks',
-            'buffers=', 'noprobes']
+            'buffers=', 'noprobes', 'appver']
 
 AUTH_ERRORS           = '128.'
 AUTH_ERR_USER_UNKNOWN = '128.0.0.0'
@@ -2810,6 +2810,10 @@ class PageKite(object):
         self.servers_auto = (1, 'frontends.b5p.us', 443)
         #self.fe_certname = ['frontends.b5p.us', 'b5p.us']
 
+      elif opt == '--appver':
+        print '%s' % APPVER
+        sys.exit(0)
+     
       elif opt == '--settings':
         self.PrintSettings()
         sys.exit(0)
