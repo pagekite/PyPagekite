@@ -1313,6 +1313,7 @@ class Selectable(object):
 
   def Flush(self):
     while len(self.write_blocked) > 0 and self.Send([], try_flush=True): pass
+    self.write_blocked = ''
 
 
 class Connections(object):
