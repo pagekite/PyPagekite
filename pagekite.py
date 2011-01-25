@@ -231,7 +231,7 @@ OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
             'tls_default=', 'tls_endpoint=', 'fe_certname=', 'ca_certs=',
             'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks',
-            'buffers=', 'noprobes', 'appver']
+            'buffers=', 'noprobes']
 
 AUTH_ERRORS           = '128.'
 AUTH_ERR_USER_UNKNOWN = '128.0.0.0'
@@ -2810,10 +2810,6 @@ class PageKite(object):
         self.servers_auto = (1, 'frontends.b5p.us', 443)
         #self.fe_certname = ['frontends.b5p.us', 'b5p.us']
 
-      elif opt == '--appver':
-        print '%s' % APPVER
-        sys.exit(0)
-     
       elif opt == '--settings':
         self.PrintSettings()
         sys.exit(0)
@@ -3230,8 +3226,13 @@ def Main(pagekite, configure):
       if crashes > 9: crashes = 9
 
 def Configure(pk):
+  if '--appver' in sys.argv:
+    print '%s' % APPVER
+    sys.exit(0)
+
   if '--clean' not in sys.argv:
     if os.path.exists(pk.rcfile): pk.ConfigureFromFile()
+
   pk.Configure(sys.argv[1:])
   pk.CheckConfig()
 
