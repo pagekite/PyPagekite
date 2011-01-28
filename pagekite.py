@@ -550,24 +550,24 @@ def HTTP_GoodBeConnection():
       headers=[HTTP_Header('X-PageKite-Status', 'OK')],
       mimetype='image/gif')
  
-def HTTP_Unavailable(where, proto, domain, comment='', redir_url=None):
-  if redir_url:
-    code, status = 302, 'Moved temporarily'
-    if '?' in redir_url:
-      headers = [HTTP_Header('Location',
-                             '%s&where=%s&proto=%s&domain=%s' % (redir_url, where.upper(), proto, domain))]
-    else:
-      headers = [HTTP_Header('Location', redir_url)]
+def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None):
+  code, status = 503, 'Unavailable'
+  message = ''.join(['<h1>Sorry! (', where, ')</h1>',
+                     '<p>The ', proto.upper(),' <a href="', WWWHOME, '">',
+                     '<i>PageKite</i></a> for <b>', domain, 
+                     '</b> is unavailable at the moment.</p>',
+                     '<p>Please try again later.</p><!-- ', comment, ' -->'])
+  if frame_url:
+    if '?' in frame_url:
+      frame_url += '&where=%s&proto=%s&domain=%s' % (where.upper(), proto, domain)
+    return HTTP_Response(code, status,
+                         ['<html><frameset cols="*">',
+                          '<frame target="_top" src="', frame_url, '" />',
+                          '<noframes>', message, '</noframes>',
+                          '</frameset></html>'])
   else:
-    code, status, headers = 200, 'OK', []
-  return HTTP_Response(code, status,
-                       ['<html><body><h1>Sorry! (', where, ')</h1>',
-                        '<p>The ', proto.upper(),' <a href="', WWWHOME, '">',
-                        '<i>pageKite</i></a> for <b>', domain, 
-                        '</b> is unavailable at the moment.</p>',
-                        '<p>Please try again later.</p>',
-                        '</body><!-- ', comment, ' --></html>'],
-                       headers=headers)
+    return HTTP_Response(code, status,
+                         ['<html><body>', message, '</body></html>'])
 
 LOG = []
 
@@ -1962,7 +1962,8 @@ class Tunnel(ChunkParser):
             if proto in ('http', 'websocket'):
               if not conn:
                 self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
-                                   HTTP_Unavailable('be', proto, host, redir_url=self.conns.config.error_url) )) 
+                                   HTTP_Unavailable('be', proto, host,
+                                                    frame_url=self.conns.config.error_url) )) 
               elif rIp:
                 req, rest = re.sub(r'(?mi)^x-forwarded-for', 'X-Old-Forwarded-For', data
                                    ).split('\n', 1) 
@@ -2258,7 +2259,7 @@ class UnknownConn(MagicProtocolParser):
           self.Send(HTTP_NoFeConnection())
         else:
           self.Send(HTTP_Unavailable('fe', self.proto, self.host,
-                                     redir_url=self.conns.config.error_url))
+                                     frame_url=self.conns.config.error_url))
 
         return False
 
