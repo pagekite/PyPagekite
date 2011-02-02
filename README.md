@@ -251,6 +251,10 @@ way to get the two to coexist:
    2. Configure pagekite.py [as a front-end](#fe) on port 80
    3. Add --backend specifications for your old web-server.
 
+As of 0.3.14, you can make pagekite.py use a local back-end as a catch-all
+for any unrecongized domains, by using the special hostname "unknown" in
+the --backend line (remember to specify a protocol).
+
 For example:
 
     frontend$ sudo pagekite.py \
@@ -259,7 +263,8 @@ For example:
       --ports=80,443 --protos=http,https,websocket \
       --domain=http,https,websocket:YOURNAME:YOURSECRET \
       --backend=http,websocket:OLDNAME:localhost:8080: \
-      --backend=https:OLDNAME:localhost:8443: 
+      --backend=https:OLDNAME:localhost:8443: \
+      --backend=https:unknown:localhost:8090:
 
 Note that no password is required for configuring local back-ends.
 

@@ -237,6 +237,7 @@ AUTH_ERRORS           = '128.'
 AUTH_ERR_USER_UNKNOWN = '128.0.0.0'
 AUTH_ERR_INVALID      = '128.0.0.1'
 
+CATCHALL_HN = 'unknown'
 LOOPBACK_HN = 'loopback'
 LOOPBACK_FE = LOOPBACK_HN + ':1'
 LOOPBACK_BE = LOOPBACK_HN + ':2'
@@ -2069,7 +2070,7 @@ class UserConn(Selectable):
       for prt in ports:
         if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, prt), host)
       if not tunnels: tunnels = conns.Tunnel(p, host)
-    if not tunnels: tunnels = conns.Tunnel(protos[0], 'default')
+    if not tunnels: tunnels = conns.Tunnel(protos[0], CATCHALL_HN)
 
     if self.address:
       chunk_headers = [('RIP', self.address[0]), ('RPort', self.address[1])]
@@ -2106,6 +2107,7 @@ class UserConn(Selectable):
     for p in protos:
       if not backend: backend = self.conns.config.GetBackendServer('%s-%s' % (p, on_port), host)
       if not backend: backend = self.conns.config.GetBackendServer(p, host)
+      if not backend: backend = self.conns.config.GetBackendServer(p, CATCHALL_HN)
 
     logInfo = [
       ('on_port', on_port),
