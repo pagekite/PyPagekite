@@ -4,6 +4,7 @@ Version history - highlights
 v0.3.14  ??
 -------
    - Moved fancy error messages to a frame, instead of a redirect.
+   - Added support for catch-all backends (hostname=default).
 
 
 v0.3.13  2011.01.25

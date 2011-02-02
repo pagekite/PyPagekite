@@ -2069,6 +2069,7 @@ class UserConn(Selectable):
       for prt in ports:
         if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, prt), host)
       if not tunnels: tunnels = conns.Tunnel(p, host)
+    if not tunnels: tunnels = conns.Tunnel(protos[0], 'default')
 
     if self.address:
       chunk_headers = [('RIP', self.address[0]), ('RPort', self.address[1])]
