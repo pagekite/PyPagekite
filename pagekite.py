@@ -1748,7 +1748,10 @@ class Tunnel(ChunkParser):
       self.SetFD(sock)
     else:
       self.SetFD(rawsocket(socket.AF_INET, socket.SOCK_STREAM))
-    self.fd.setblocking(1)
+    try:
+      self.fd.settimeout(20.0) # Missing in Python 2.2
+    except Exception:
+      self.fd.setblocking(1)
 
     sspec = server.split(':')
     if len(sspec) > 1:
@@ -1767,6 +1770,7 @@ class Tunnel(ChunkParser):
         return None, None
 
       try:
+        self.fd.setblocking(1)
         raw_fd = self.fd
         ctx = SSL.Context(SSL.TLSv1_METHOD)
         ctx.load_verify_locations(self.conns.config.ca_certs)
@@ -2125,7 +2129,10 @@ class UserConn(Selectable):
 
     try:
       self.SetFD(rawsocket(socket.AF_INET, socket.SOCK_STREAM))
-      self.fd.setblocking(1)
+      try:
+        self.fd.settimeout(2.0) # Missing in Python 2.2
+      except Exception:
+        self.fd.setblocking(1)
 
       sspec = backend.split(':')
       if len(sspec) > 1:
@@ -2375,6 +2382,53 @@ class Listener(Selectable):
     return False
 
 
+class TunnelManager(threading.Thread):
+  """Create new tunnels as necessary or kill idle ones."""
+
+  def __init__(self, pkite, conns):
+    threading.Thread.__init__(self)
+    self.pkite = pkite
+    self.conns = conns
+
+  def PingTunnels(self, now):
+    dead = {}
+    for tid in self.conns.tunnels:
+      for tunnel in self.conns.tunnels[tid]:
+        if tunnel.last_activity < now-45:
+          dead['%s' % tunnel] = tunnel
+        elif tunnel.last_activity < now-30 and tunnel.last_ping < now-2:
+          tunnel.SendPing()
+
+    for tunnel in dead.values():
+      Log([('dead', tunnel.server_name)])
+      self.conns.Remove(tunnel)
+      tunnel.Cleanup()
+
+  def quit(self):
+    self.keep_running = False
+
+  def run(self):
+    check_interval = 5
+    self.keep_running = True
+    while self.keep_running:
+
+      # Reconnect if necessary, randomized exponential fallback.
+      if self.pkite.CreateTunnels(self.conns) > 0:
+        check_interval += int(random.random()*check_interval)
+        if check_interval > 300: check_interval = 300
+      else:
+        check_interval = 5
+
+        # If all connected, make sure tunnels are really alive.
+        if self.pkite.isfrontend:
+          pass # FIXME: Front-ends should close dead back-end tunnels.
+        else:
+          self.PingTunnels(time.time())
+
+      for i in xrange(0, check_interval):
+        if self.keep_running: time.sleep(1)
+
+
 class PageKite(object):
   """Configuration and master select loop."""
 
@@ -2407,6 +2461,7 @@ class PageKite(object):
     self.buffer_max = 256
     self.error_url = None
 
+    self.tunnel_manager = None
     self.client_mode = 0
 
     self.socks_server = None
@@ -2557,7 +2612,8 @@ class PageKite(object):
   def FallDown(self, message, help=True, noexit=False):
     if self.conns and self.conns.auth: self.conns.auth.quit()
     if self.ui_httpd: self.ui_httpd.quit()
-    self.conns = self.ui_httpd = None
+    if self.tunnel_manager: self.tunnel_manager.quit()
+    self.conns = self.ui_httpd = self.tunnel_manager = None
     if help:
       print DOC
       print '*****'
@@ -2871,7 +2927,7 @@ class PageKite(object):
           self.servers.append(server)
           self.servers_preferred.append(ipaddr)
       except Exception, e:
-        LogDebug('FIXME: Should narrow this down: %s' % e)
+        LogDebug('DNS lookup failed for %s' % host)
 
     # Lookup and choose from the auto-list (and our old domain).
     if self.servers_auto:
@@ -2887,37 +2943,25 @@ class PageKite(object):
               server = '%s:%s' % (ip, port)
               if server not in self.servers: self.servers.append(server)
           except Exception, e:
-            LogDebug('FIXME: Self lookup: %s, %s' % (bdom, e))
+            LogDebug('DNS lookup failed for %s' % bdom)
 
       try:
         (hn, al, ips) = socket.gethostbyname_ex(domain)
         times = [self.Ping(ip, port) for ip in ips]
-        while count > 0 and ips:
-          count -= 1
-          mIdx = times.index(min(times)) 
-          server = '%s:%s' % (ips[mIdx], port)
-          if server not in self.servers:
-            self.servers.append(server)
-          if ips[mIdx] not in self.servers_preferred:
-            self.servers_preferred.append(ips[mIdx])
-          del times[mIdx]
-          del ips[mIdx]
       except Exception, e:
-        LogDebug('FIXME: Should narrow this down: %s' % e)
+        LogDebug('Unreachable: %s, %s' % (domain, e))
+        ips = times = []
 
-  def PingTunnels(self, conns, now):
-    dead = {}
-    for tid in conns.tunnels:
-      for tunnel in conns.tunnels[tid]:
-        if tunnel.last_activity < now-45:
-          dead['%s' % tunnel] = tunnel
-        elif tunnel.last_activity < now-30 and tunnel.last_ping < now-2:
-          tunnel.SendPing()
-
-    for tunnel in dead.values():
-      Log([('dead', tunnel.server_name)])
-      conns.Remove(tunnel)
-      tunnel.Cleanup()
+      while count > 0 and ips:
+        count -= 1
+        mIdx = times.index(min(times)) 
+        server = '%s:%s' % (ips[mIdx], port)
+        if server not in self.servers:
+          self.servers.append(server)
+        if ips[mIdx] not in self.servers_preferred:
+          self.servers_preferred.append(ips[mIdx])
+        del times[mIdx]
+        del ips[mIdx]
 
   def CreateTunnels(self, conns):
     live_servers = conns.TunnelServers()
@@ -3034,9 +3078,7 @@ class PageKite(object):
     global buffered_bytes
 
     conns = self.conns
-    last_tick = time.time()
     last_loop = time.time()
-    retry = 5
 
     self.looping = True
     iready, oready, eready = None, None, None
@@ -3044,7 +3086,7 @@ class PageKite(object):
       isocks, osocks = conns.Sockets(), conns.Blocked()
       try:
         if isocks or osocks:
-          iready, oready, eready = select.select(isocks, osocks, [], 5)
+          iready, oready, eready = select.select(isocks, osocks, [], 60)
         else:
           # Windoes does not seem to like empty selects, so we do this instead.
           time.sleep(0.5)
@@ -3060,19 +3102,6 @@ class PageKite(object):
         if (isocks or osocks) and (now < last_loop + 1):
           LogError('Spinning, pausing ...')
           time.sleep(0.1)
-
-      if now > last_tick + retry:
-        last_tick = now
-
-        # FIXME: Front-ends should close idle tunnels.
-        if not self.isfrontend: self.PingTunnels(conns, now)
-
-        # Reconnect if necessary, randomized exponential fallback.
-        if self.CreateTunnels(conns) > 0:
-          retry += random.random()*retry
-          if retry > 300: retry = 300
-        else:
-          retry = 5
 
       if oready:
         for socket in oready:
@@ -3098,6 +3127,7 @@ class PageKite(object):
   def Loop(self):
     self.conns.start()
     if self.ui_httpd: self.ui_httpd.start()
+    if self.tunnel_manager: self.tunnel_manager.start()
 
     try:
       epoll = select.epoll()
@@ -3144,6 +3174,10 @@ class PageKite(object):
                                      handler=self.ui_request_handler,
                                      server=self.ui_http_server,
                                      ssl_pem_filename = self.ui_pemfile)
+
+      # Create the Tunnel Manager
+      self.tunnel_manager = TunnelManager(self, conns)
+
     except Exception, e:
       raise ConfigError(e)
 
@@ -3166,11 +3200,10 @@ class PageKite(object):
     if self.setuid or self.setgid:
       Log([('uid', os.getuid()), ('gid', os.getgid())])
 
-    # Next, create all the tunnels.
-    self.CreateTunnels(conns)
-
     # Make sure we have what we need
-    if self.require_all: self.CheckAllTunnels(conns)
+    if self.require_all:
+      self.CreateTunnels(conns)
+      self.CheckAllTunnels(conns)
 
     # Finally, run our select/epoll loop.
     self.Loop()
@@ -3178,6 +3211,7 @@ class PageKite(object):
     Log([('stopping', 'pagekite.py')])
     if self.conns and self.conns.auth: self.conns.auth.quit()
     if self.ui_httpd: self.ui_httpd.quit()
+    if self.tunnel_manager: self.tunnel_manager.quit()
 
 
 ##[ Main ]#####################################################################

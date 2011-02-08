@@ -5,6 +5,8 @@ v0.3.14  ??
 -------
    - Moved fancy error messages to a frame, instead of a redirect.
    - Added support for catch-all backends (hostname = unknown).
+   - Added timeouts to tunnel and backend connection code to reduce stalling.
+   - Moved tunnel management to separate thread.
 
 
 v0.3.13  2011.01.25
