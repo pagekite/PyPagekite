@@ -2064,7 +2064,7 @@ class UserConn(Selectable):
       protos = ['http', 'https', 'websocket', 'raw']
       ports = conns.config.server_ports[:]
       ports.extend(conns.config.server_aliasport.keys())
-      ports.extend(conns.config.server_raw_ports)
+      ports.extend([x for x in conns.config.server_raw_ports if x != VIRTUAL_PN])
     else:
       protos = [proto]
       ports = [on_port]
