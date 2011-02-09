@@ -7,6 +7,7 @@ v0.3.14  ??
    - Added support for catch-all backends (hostname = unknown).
    - Added timeouts to tunnel and backend connection code to reduce stalling.
    - Moved tunnel management to separate thread.
+   - Added --rawports=virtual for virtual (HTTP CONNECT only) raw ports.
 
 
 v0.3.13  2011.01.25

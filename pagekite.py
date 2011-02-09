@@ -237,6 +237,7 @@ AUTH_ERRORS           = '128.'
 AUTH_ERR_USER_UNKNOWN = '128.0.0.0'
 AUTH_ERR_INVALID      = '128.0.0.1'
 
+VIRTUAL_PN = 'virtual'
 CATCHALL_HN = 'unknown'
 LOOPBACK_HN = 'loopback'
 LOOPBACK_FE = LOOPBACK_HN + ':1'
@@ -2214,7 +2215,7 @@ class UnknownConn(MagicProtocolParser):
               self.Send(HTTP_ConnectOK())
               return self.ProcessTls(''.join(lines), chost)
 
-          if cport in self.conns.config.server_raw_ports:
+          if cport in self.conns.config.server_raw_ports or VIRTUAL_PN in self.conns.config.server_raw_ports:
             if (('raw'+sid1) in tunnels) or (('raw'+sid2) in tunnels):
               (self.on_port, self.host) = (cport, chost)
               self.parser = HttpParser()
@@ -2677,7 +2678,7 @@ class PageKite(object):
 
         porti = int(port)
         if porti in self.server_aliasport: porti = self.server_aliasport[porti]
-        if porti not in port_list:
+        if porti not in port_list and VIRTUAL_PN not in port_list:
           LogError('Unsupported port request: %s (%s:%s)' % (porti, protoport, domain))
           return None
 
@@ -2800,7 +2801,8 @@ class PageKite(object):
         self.server_portalias[int(port)] = int(alias)
         self.server_aliasport[int(alias)] = int(port)
       elif opt == '--protos': self.server_protos = [x.lower() for x in arg.split(',')]
-      elif opt == '--rawports': self.server_raw_ports = [int(x) for x in arg.split(',')]
+      elif opt == '--rawports':
+        self.server_raw_ports = [(x == VIRTUAL_PN and x or int(x)) for x in arg.split(',')]
       elif opt in ('-h', '--host'): self.server_host = arg
       elif opt in ('-A', '--authdomain'): self.auth_domain = arg
       elif opt in ('-f', '--isfrontend'): self.isfrontend = True
@@ -3166,7 +3168,8 @@ class PageKite(object):
         for port in self.server_ports:
           Listener(self.server_host, port, conns)
         for port in self.server_raw_ports:
-          Listener(self.server_host, port, conns, connclass=RawConn)
+          if port != VIRTUAL_PN and port > 0:
+            Listener(self.server_host, port, conns, connclass=RawConn)
 
       # Start the UI thread
       if self.ui_sspec:
