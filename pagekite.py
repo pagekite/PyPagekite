@@ -2900,11 +2900,24 @@ class PageKite(object):
 
     start = time.time() 
     try:
-      rawsocket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
+      fd = rawsocket(socket.AF_INET, socket.SOCK_STREAM)
+      try:
+        fd.settimeout(2.0) # Missing in Python 2.2
+      except Exception:
+        fd.setblocking(1)
+
+      fd.connect((host, port))
+      fd.send('ping\r\n\r\n')
+      fd.recv(1)
+      fd.close()
+
     except Exception, e:
       LogDebug('Ping %s:%s failed: %s' % (host, port, e))
       return 100000 
-    return (time.time() - start)
+
+    elapsed = (time.time() - start)
+    LogDebug('Pinged %s:%s: %f' % (host, port, elapsed))
+    return elapsed
 
   def GetHostIpAddr(self, host):
     return socket.gethostbyname(host)
