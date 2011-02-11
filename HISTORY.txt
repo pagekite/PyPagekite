@@ -1,7 +1,7 @@
 Version history - highlights
 ============================
 
-v0.3.14  ??
+v0.3.14  2011.02.11
 -------
    - Moved fancy error messages to a frame, instead of a redirect.
    - Added support for catch-all backends (hostname = unknown).
