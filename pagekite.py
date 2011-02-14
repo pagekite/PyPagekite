@@ -1286,7 +1286,7 @@ class Selectable(object):
           LogError('Error sending: %s (errno=%s)' % (msg, errno))
           return False
         else:
-          LogDebug('Problem sending: %s' % err)
+          LogDebug('Problem sending: %s (errno=%s)' % (msg, errno))
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
         LogDebug('Error sending (SSL): %s' % err)
         return False
