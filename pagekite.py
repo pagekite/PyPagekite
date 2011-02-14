@@ -1266,6 +1266,8 @@ class Selectable(object):
       return True
 
     sending = self.write_blocked+(''.join(data))
+    self.write_blocked = ''
+
     sent_bytes = 0
     if sending:
       try:
@@ -1276,7 +1278,7 @@ class Selectable(object):
           LogError('Error sending: %s' % err)
           return False
         else:
-          LogDebug('Error sending: %s' % err)
+          LogDebug('Problem sending: %s' % err)
       except (SSL.WantWriteError, SSL.WantReadError), err:
         pass
       except socket.error, (errno, msg):
@@ -1284,7 +1286,7 @@ class Selectable(object):
           LogError('Error sending: %s (errno=%s)' % (msg, errno))
           return False
         else:
-          LogDebug('Error sending: %s' % err)
+          LogDebug('Problem sending: %s' % err)
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
         LogDebug('Error sending (SSL): %s' % err)
         return False
