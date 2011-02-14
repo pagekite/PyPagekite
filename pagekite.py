@@ -1275,12 +1275,16 @@ class Selectable(object):
         if err.errno not in self.HARMLESS_ERRNOS:
           LogError('Error sending: %s' % err)
           return False
+        else:
+          LogDebug('Error sending: %s' % err)
       except (SSL.WantWriteError, SSL.WantReadError), err:
         pass
       except socket.error, (errno, msg):
         if errno not in self.HARMLESS_ERRNOS:
           LogError('Error sending: %s (errno=%s)' % (msg, errno))
           return False
+        else:
+          LogDebug('Error sending: %s' % err)
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
         LogDebug('Error sending (SSL): %s' % err)
         return False
