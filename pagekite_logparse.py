@@ -32,11 +32,14 @@ class PageKiteLogParser(object):
     pass
 
   def ParseLine(self, line, data=None):
-    if data is None: data = {}
-    for word in line.split('; '):
-      key, val = word.split('=', 1);
-      data[key] = val
-    return data
+    try:
+      if data is None: data = {}
+      for word in line.split('; '):
+        key, val = word.split('=', 1);
+        data[key] = val
+      return data
+    except Exception:
+      return {'raw': '%s' % line}
 
   def ProcessData(self, data):
     print '%s' % data
@@ -68,7 +71,7 @@ class PageKiteLogParser(object):
     first = True
     while first or follow:
       for line in fd:
-        self.ProcessLine(line) 
+        self.ProcessLine(line)
 
       if follow: fd = self.Follow(fd, filename)
       first = False
