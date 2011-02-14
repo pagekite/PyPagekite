@@ -1064,8 +1064,11 @@ class Selectable(object):
     self.on_port = on_port
     self.created = self.bytes_logged = time.time()
     self.read_bytes = self.all_in = 0
+
     self.wrote_bytes = self.all_out = 0
     self.write_blocked = ''
+    self.write_speed = 0
+    self.first_write = 0
 
     self.dead = False
     self.peeking = False
@@ -1169,22 +1172,25 @@ class Selectable(object):
 
   def LogTraffic(self, final=False):
     if self.wrote_bytes or self.read_bytes:
+      now = time.time()
+      self.all_out += self.wrote_bytes
+      self.all_in += self.read_bytes
+
       global gYamon
       gYamon.vadd("bytes_all", self.wrote_bytes
                              + self.read_bytes, wrap=1000000000)
 
       if final:
         self.Log([('wrote', '%d' % self.wrote_bytes),
+                  ('wbps', '%d' % self.write_speed),
                   ('read', '%d' % self.read_bytes),
                   ('eof', '1')])
       else:
         self.Log([('wrote', '%d' % self.wrote_bytes),
+                  ('wbps', '%d' % self.write_speed),
                   ('read', '%d' % self.read_bytes)])
 
-      self.all_out += self.wrote_bytes
-      self.all_in += self.read_bytes
-
-      self.bytes_logged = time.time()
+      self.bytes_logged = now
       self.wrote_bytes = self.read_bytes = 0
     elif final:
       self.Log([('eof', '1')])
@@ -1255,7 +1261,6 @@ class Selectable(object):
       return self.ProcessData(data)
 
   def Send(self, data, try_flush=False):
-
     global buffered_bytes
     buffered_bytes -= len(self.write_blocked)
 
@@ -1265,9 +1270,11 @@ class Selectable(object):
       buffered_bytes += len(self.write_blocked)
       return True
 
+    now = time.time()
+    if not self.first_write: self.first_write = now
+
     sending = self.write_blocked+(''.join(data))
     self.write_blocked = ''
-
     sent_bytes = 0
     if sending:
       try:
@@ -1293,8 +1300,9 @@ class Selectable(object):
 
     self.write_blocked = sending[sent_bytes:]
     buffered_bytes += len(self.write_blocked)
+    self.write_speed = ((self.wrote_bytes+self.all_out) / (now - self.first_write))
+    if self.wrote_bytes >= 1024000: self.LogTraffic()
 
-    if self.wrote_bytes > 1024000: self.LogTraffic()
     return True
 
   def SendChunked(self, data, compress=True, zhistory=None):
@@ -3130,23 +3138,20 @@ class PageKite(object):
           conn = conns.Connection(socket)
           if conn: conn.Send([], try_flush=True)
 
+      if buffered_bytes < 1024 * self.buffer_max:
+        throttle = None
+      else:
+        LogDebug("FIXME: Nasty pause to let buffers clear!")
+        time.sleep(0.1)
+        throttle = 100
+
       if iready:
-        delay = None
         for socket in iready:
           conn = conns.Connection(socket)
-          if buffered_bytes < 1024 * self.buffer_max:
-            maxread = None
-          else:
-            delay = maxread = 100
-
-          if conn and conn.ReadData(maxread=maxread) is False:
+          if conn and conn.ReadData(maxread=throttle) is False:
             if len(conn.write_blocked) == 0:
               conn.Cleanup()
               conns.Remove(conn)
-
-        if delay:
-          LogDebug("Pausing to let buffers clear (FIXME)")
-          time.sleep(0.1)
 
       last_loop = now
 
