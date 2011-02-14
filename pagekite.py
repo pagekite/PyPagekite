@@ -1220,13 +1220,14 @@ class Selectable(object):
     self.peeking = keep_peeking
     return
 
-  def ReadData(self):
+  def ReadData(self, maxread=None):
     try:
+      maxread = maxread or self.maxread
       if self.peeking:
-        data = self.fd.recv(self.maxread, socket.MSG_PEEK)
+        data = self.fd.recv(maxread, socket.MSG_PEEK)
         self.peeked = len(data)
       else:
-        data = self.fd.recv(self.maxread)
+        data = self.fd.recv(maxread)
     except (SSL.WantReadError, SSL.WantWriteError), err:
       return True
     except IOError, err:
@@ -2371,7 +2372,7 @@ class Listener(Selectable):
   def __html__(self):
     return '<p>Listening on port %s</p>' % self.port
  
-  def ReadData(self):
+  def ReadData(self, maxread=None):
     try:
       client, address = self.fd.accept()
       if client:
@@ -3127,13 +3128,16 @@ class PageKite(object):
         for socket in iready:
           conn = conns.Connection(socket)
           if buffered_bytes < 1024 * self.buffer_max:
-            if conn and conn.ReadData() is False:
-              if len(conn.write_blocked) == 0:
-                conn.Cleanup()
-                conns.Remove(conn)
+            maxread = None
           else:
-            # FIXME: Pause to let buffers clear...
+            LogDebug("Pausing to let buffers clear (FIXME)")
             time.sleep(0.1)
+            maxread = 1
+
+          if conn and conn.ReadData(maxread=maxread) is False:
+            if len(conn.write_blocked) == 0:
+              conn.Cleanup()
+              conns.Remove(conn)
 
       last_loop = now
 
