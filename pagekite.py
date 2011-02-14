@@ -3125,19 +3125,22 @@ class PageKite(object):
           if conn: conn.Send([], try_flush=True)
 
       if iready:
+        delay = None
         for socket in iready:
           conn = conns.Connection(socket)
           if buffered_bytes < 1024 * self.buffer_max:
             maxread = None
           else:
-            LogDebug("Pausing to let buffers clear (FIXME)")
-            time.sleep(0.1)
-            maxread = 1
+            delay = maxread = 100
 
           if conn and conn.ReadData(maxread=maxread) is False:
             if len(conn.write_blocked) == 0:
               conn.Cleanup()
               conns.Remove(conn)
+
+        if delay:
+          LogDebug("Pausing to let buffers clear (FIXME)")
+          time.sleep(0.1)
 
       last_loop = now
 
