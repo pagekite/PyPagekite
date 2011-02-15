@@ -1065,10 +1065,10 @@ class Selectable(object):
     self.created = self.bytes_logged = time.time()
     self.read_bytes = self.all_in = 0
 
+    self.read_after = 0
     self.wrote_bytes = self.all_out = 0
     self.write_blocked = ''
-    self.write_speed = 0
-    self.first_write = 0
+    self.write_speed = 102400
 
     self.dead = False
     self.peeking = False
@@ -1170,6 +1170,11 @@ class Selectable(object):
     if self.log_id: values.append(('id', self.log_id))
     LogError(error, values)
 
+  def LogDebug(self, message, params=None):
+    values = params or []
+    if self.log_id: values.append(('id', self.log_id))
+    LogDebug(message, values)
+
   def LogTraffic(self, final=False):
     if self.wrote_bytes or self.read_bytes:
       now = time.time()
@@ -1218,8 +1223,8 @@ class Selectable(object):
       try:
         discard += self.fd.recv(eat_bytes - len(discard))
       except socket.error, (errno, msg):
-        LogDebug('Error reading (%d/%d) socket: %s (errno=%s)' % (
-                   eat_bytes, self.peeked, msg, errno))
+        self.LogDebug('Error reading (%d/%d) socket: %s (errno=%s)' % (
+                       eat_bytes, self.peeked, msg, errno))
         time.sleep(0.1)
 
     self.peeked -= eat_bytes
@@ -1238,18 +1243,18 @@ class Selectable(object):
       return True
     except IOError, err:
       if err.errno not in self.HARMLESS_ERRNOS:
-        LogDebug('Error reading socket: %s (%s)' % (err, err.errno))
+        self.LogDebug('Error reading socket: %s (%s)' % (err, err.errno))
         return False
       else:
         return True
     except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
-      LogDebug('Error reading socket (SSL): %s' % err)
+      self.LogDebug('Error reading socket (SSL): %s' % err)
       return False
     except socket.error, (errno, msg):
       if errno in self.HARMLESS_ERRNOS:
         return True
       else:
-        LogError('Error sending: %s (errno=%s)' % (msg, errno))
+        self.LogError('Error sending: %s (errno=%s)' % (msg, errno))
         return False
 
     if data is None or data == '':
@@ -1259,6 +1264,18 @@ class Selectable(object):
         self.read_bytes += len(data)
         if self.read_bytes > 1024000: self.LogTraffic()
       return self.ProcessData(data)
+
+  def Throttle(self, max_speed):
+    if max_speed:
+      flooded = self.read_bytes + self.all_in
+      flooded -= max_speed * (time.time() - self.created)
+      if flooded > max_speed:
+        self.read_after = int(time.time() + flooded/max_speed)
+        self.LogDebug('Postponing reads until %x (flooded=%d, bps=%s)' % (
+                        self.read_after, flooded, max_speed))
+      else:
+        self.LogDebug('Throttle request is a no-op! (flooded=%d, bps=%s)' % (
+                        flooded, max_speed))
 
   def Send(self, data, try_flush=False):
     global buffered_bytes
@@ -1270,9 +1287,6 @@ class Selectable(object):
       buffered_bytes += len(self.write_blocked)
       return True
 
-    now = time.time()
-    if not self.first_write: self.first_write = now
-
     sending = self.write_blocked+(''.join(data))
     self.write_blocked = ''
     sent_bytes = 0
@@ -1282,25 +1296,25 @@ class Selectable(object):
         self.wrote_bytes += sent_bytes
       except IOError, err:
         if err.errno not in self.HARMLESS_ERRNOS:
-          LogError('Error sending: %s' % err)
+          self.LogError('Error sending: %s' % err)
           return False
         else:
-          LogDebug('Problem sending: %s' % err)
+          self.LogDebug('Problem sending: %s' % err)
       except (SSL.WantWriteError, SSL.WantReadError), err:
         pass
       except socket.error, (errno, msg):
         if errno not in self.HARMLESS_ERRNOS:
-          LogError('Error sending: %s (errno=%s)' % (msg, errno))
+          self.LogError('Error sending: %s (errno=%s)' % (msg, errno))
           return False
         else:
-          LogDebug('Problem sending: %s (errno=%s)' % (msg, errno))
+          self.LogDebug('Problem sending: %s (errno=%s)' % (msg, errno))
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
-        LogDebug('Error sending (SSL): %s' % err)
+        self.LogDebug('Error sending (SSL): %s' % err)
         return False
 
     self.write_blocked = sending[sent_bytes:]
     buffered_bytes += len(self.write_blocked)
-    self.write_speed = ((self.wrote_bytes+self.all_out) / (now - self.first_write))
+    self.write_speed = int((self.wrote_bytes + self.all_out) / (0.1 + time.time() - self.created))
     if self.wrote_bytes >= 1024000: self.LogTraffic()
 
     return True
@@ -1384,7 +1398,8 @@ class Connections(object):
 
   def Sockets(self):
     # FIXME: This is O(n)
-    return [s.fd for s in self.conns if s.fd]
+    now = time.time()
+    return [s.fd for s in self.conns if s.fd and s.read_after <= now]
 
   def Blocked(self):
     # FIXME: This is O(n)
@@ -1912,6 +1927,11 @@ class Tunnel(ChunkParser):
     self.SendChunked('NOOP: 1\r\n\r\n!', compress=False)
     return True
 
+  def SendThrottle(self, sid, write_speed):
+    self.SendChunked('NOOP: 1\r\nSID: %s\r\nSPD: %d\r\n\r\n!' % (
+                       sid, write_speed), compress=False)
+    return True
+
   def ProcessCorruptChunk(self, data):
     self.ResetRemoteZChunks()
     return True
@@ -1923,6 +1943,14 @@ class Tunnel(ChunkParser):
         bhost, bport = be[BE_BACKEND].split(':')
         if self.conns.config.Ping(bhost, int(bport)) > 2: return False
     return True
+
+  def Throttle(self, parse):
+    try:
+      sid = int(parse.Header('SID')[0])
+      bps = int(parse.Header('SPD')[0])
+      if sid in self.users: self.users[sid].Throttle(bps)
+    except Exception, e:
+      LogError('Tunnel::ProcessChunk: Invalid throttle request!')
 
   def ProcessChunk(self, data):
     try:
@@ -1936,6 +1964,7 @@ class Tunnel(ChunkParser):
     self.last_activity = time.time()
     if parse.Header('PING'): return self.SendPong()
     if parse.Header('ZRST'): self.ResetZChunks() 
+    if parse.Header('SPD'): self.Throttle(parse)
     if parse.Header('NOOP'): return True
 
     conn = None
@@ -1996,6 +2025,8 @@ class Tunnel(ChunkParser):
         self.Disconnect(None, sid=sid)
       else:
         conn.Send(data)
+        if len(conn.write_blocked) > 2*max(conn.write_speed, 100000):
+          self.SendThrottle(sid, conn.write_speed) 
 
     return True
 
@@ -3116,7 +3147,7 @@ class PageKite(object):
       isocks, osocks = conns.Sockets(), conns.Blocked()
       try:
         if isocks or osocks:
-          iready, oready, eready = select.select(isocks, osocks, [], 60)
+          iready, oready, eready = select.select(isocks, osocks, [], 1.1)
         else:
           # Windoes does not seem to like empty selects, so we do this instead.
           time.sleep(0.5)
