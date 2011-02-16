@@ -1266,14 +1266,18 @@ class Selectable(object):
         if self.read_bytes > 1024000: self.LogTraffic()
       return self.ProcessData(data)
 
-  def Throttle(self, max_speed):
+  def Throttle(self, max_speed=None):
     if max_speed:
       flooded = self.read_bytes + self.all_in
-      flooded -= max_speed * (time.time() - self.created)
-      delay = max(1, flooded/max_speed)
-      self.read_after = int(time.time() + delay)
-      self.LogDebug('Postponing reads until %x (flooded=%d, bps=%s)' % (
-                      self.read_after, flooded, max_speed))
+      flooded -= int(max_speed * (time.time() - self.created))
+      delay = min(15, max(1, flooded/max_speed))
+    else:
+      flooded = '?'
+      delay = 1
+
+    self.read_after = int(time.time() + delay)
+    self.LogDebug('Postponing reads until %x (flooded=%s, bps=%s)' % (
+                    self.read_after, flooded, max_speed))
 
   def Send(self, data, try_flush=False):
     global buffered_bytes
@@ -2203,7 +2207,12 @@ class UserConn(Selectable):
   BackEnd = staticmethod(_BackEnd)
 
   def ProcessData(self, data):
-    return self.tunnel.SendData(self, data)
+    if not self.tunnel.SendData(self, data): return False
+
+    # Back off if tunnel is stuffed.
+    if len(self.tunnel.write_blocked) > 2*102400: self.Throttle()
+
+    return True
 
 
 class UnknownConn(MagicProtocolParser):
