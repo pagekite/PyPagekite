@@ -1269,13 +1269,10 @@ class Selectable(object):
     if max_speed:
       flooded = self.read_bytes + self.all_in
       flooded -= max_speed * (time.time() - self.created)
-      if flooded > max_speed:
-        self.read_after = int(time.time() + flooded/max_speed)
-        self.LogDebug('Postponing reads until %x (flooded=%d, bps=%s)' % (
-                        self.read_after, flooded, max_speed))
-      else:
-        self.LogDebug('Throttle request is a no-op! (flooded=%d, bps=%s)' % (
-                        flooded, max_speed))
+      delay = max(1, flooded/max_speed)
+      self.read_after = int(time.time() + delay)
+      self.LogDebug('Postponing reads until %x (flooded=%d, bps=%s)' % (
+                      self.read_after, flooded, max_speed))
 
   def Send(self, data, try_flush=False):
     global buffered_bytes
