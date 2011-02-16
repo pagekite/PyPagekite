@@ -25,11 +25,12 @@
 #  - Make multi-process, use the FD-over-socket trick? Threads=>GIL=>bleh
 #  - Add QoS and bandwidth shaping
 #  - Add a scheduler for deferred/periodic processing.
-#  - Move DynDNS updates to a separate thread, blocking on them is dumb.
 #  - Create a derivative BaseHTTPServer which doesn't actually listen()
 #    on a real socket, but instead communicates with the tunnel directly.
+#  - Replace string concatenation ops with lists of buffers.
 #
 # Protocols:
+#  - Make tunnel creation more stubborn (try multiple ports etc.)
 #  - Add XMPP and incoming SMTP support.
 #  - Tor entry point support? Is current SSL enough?
 #  - Replace current tunnel auth scheme with SSL certificates.
@@ -38,13 +39,13 @@
 #  - Enable (re)configuration from within HTTP UI.
 #  - More human readable console output?
 #
-#  Security:
+# Security:
 #  - Add same-origin cookie enforcement to front-end. Or is that pointless
 #    due to Javascript side-channels?
 #
 # Bugs?
-#  - Odd select behavior on Windows suspend/resume
-#  - Keepalive isn't quite good enough, reconnect logic is poor
+#  - Front-ends should time-out dead back-ends.
+#  - Gzip-related memory issues.
 #
 #
 ##[ Hacking guide! ]###########################################################
@@ -1284,6 +1285,8 @@ class Selectable(object):
       buffered_bytes += len(self.write_blocked)
       return True
 
+    self.write_speed = int((self.wrote_bytes + self.all_out) / (0.1 + time.time() - self.created))
+
     sending = self.write_blocked+(''.join(data))
     self.write_blocked = ''
     sent_bytes = 0
@@ -1311,7 +1314,6 @@ class Selectable(object):
 
     self.write_blocked = sending[sent_bytes:]
     buffered_bytes += len(self.write_blocked)
-    self.write_speed = int((self.wrote_bytes + self.all_out) / (0.1 + time.time() - self.created))
     if self.wrote_bytes >= 1024000: self.LogTraffic()
 
     return True
@@ -2022,8 +2024,9 @@ class Tunnel(ChunkParser):
         self.Disconnect(None, sid=sid)
       else:
         conn.Send(data)
-        if len(conn.write_blocked) > 2*max(conn.write_speed, 100000):
-          self.SendThrottle(sid, conn.write_speed) 
+        if len(conn.write_blocked) > 2*max(conn.write_speed, 50000):
+          if conn.created < time.time()-3:
+            self.SendThrottle(sid, conn.write_speed)
 
     return True
 
@@ -3302,6 +3305,8 @@ def Main(pagekite, configure):
       sys.exit(1)
 
     except Exception, msg:
+      traceback.print_exc(file=sys.stderr)
+
       if pk.crash_report_url:
         try:
           print 'Submitting crash report to %s' % pk.crash_report_url
@@ -3309,10 +3314,9 @@ def Main(pagekite, configure):
                                           urllib.urlencode({ 
                                             'crash': traceback.format_exc() 
                                           })).readlines()))
-        except Exception:
-          pass
+        except Exception, e:
+          print 'FAILED: %s' % e
 
-      traceback.print_exc(file=sys.stderr)
       pk.FallDown(msg, help=False, noexit=pk.main_loop)
 
       # If we get this far, then we're looping. Clean up.
