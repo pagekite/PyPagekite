@@ -3189,9 +3189,8 @@ class PageKite(object):
         for socket in iready:
           conn = conns.Connection(socket)
           if conn and conn.ReadData(maxread=throttle) is False:
-            if len(conn.write_blocked) == 0:
-              conn.Cleanup()
-              conns.Remove(conn)
+            conn.Cleanup()
+            conns.Remove(conn)
 
       last_loop = now
 
