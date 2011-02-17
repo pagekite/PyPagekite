@@ -1271,6 +1271,7 @@ class Selectable(object):
       flooded = self.read_bytes + self.all_in
       flooded -= int(max_speed * (time.time() - self.created))
       delay = min(15, max(1, flooded/max_speed))
+      if flooded < 0: delay = 15
     else:
       flooded = '?'
       delay = 1
@@ -1279,7 +1280,7 @@ class Selectable(object):
     self.LogDebug('Postponing reads until %x (flooded=%s, bps=%s)' % (
                     self.read_after, flooded, max_speed))
 
-  def Send(self, data, try_flush=False):
+  def Send(self, data, try_flush=False, bail_out=False):
     global buffered_bytes
     buffered_bytes -= len(self.write_blocked)
 
@@ -1345,8 +1346,12 @@ class Selectable(object):
 
     return self.Send(['%x%s\r\n%s' % (len(sdata), rst, sdata)])
 
-  def Flush(self):
-    while len(self.write_blocked) > 0 and self.Send([], try_flush=True): pass
+  def Flush(self, loops=50, wait=False):
+    while loops != 0 and len(self.write_blocked) > 0 and self.Send([],
+                                                           try_flush=True):
+      if wait and len(self.write_blocked) > 0: time.sleep(0.1)
+      loops -= 1
+
     self.write_blocked = ''
 
 
@@ -1796,7 +1801,7 @@ class Tunnel(ChunkParser):
     if self.conns.config.fe_certname:
       # We can't set the SNI directly from Python, so we use CONNECT instead.
       self.Send(['CONNECT %s:443 HTTP/1.0\r\n\r\n' % self.conns.config.fe_certname[0]])
-      self.Flush()
+      self.Flush(wait=True)
       data = self._RecvHttpHeaders()
       if data is None or not data.startswith(HTTP_ConnectOK().strip()):
         LogError('CONNECT failed, could not initiate TLS.')
@@ -1819,7 +1824,7 @@ class Tunnel(ChunkParser):
 
     self.Send(HTTP_PageKiteRequest(server, conns.config.backends, tokens,
                                    nozchunks=conns.config.disable_zchunks)) 
-    self.Flush()
+    self.Flush(wait=True)
     
     data = self._RecvHttpHeaders()
     if data is None: return None, None
@@ -2088,7 +2093,7 @@ class UserConn(Selectable):
     Selectable.Cleanup(self)
 
   def Disconnect(self):
-    self.Flush()
+    self.Flush(loops=10, wait=False)
     self.conns.Remove(self)
     Selectable.Cleanup(self)
 
