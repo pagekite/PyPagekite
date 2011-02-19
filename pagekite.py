@@ -1060,21 +1060,31 @@ class Selectable(object):
 
   def __init__(self, fd=None, address=None, on_port=None, maxread=16000):
     self.SetFD(fd or rawsocket(socket.AF_INET, socket.SOCK_STREAM))
-    self.maxread = maxread
     self.address = address
     self.on_port = on_port
     self.created = self.bytes_logged = time.time()
-    self.read_bytes = self.all_in = 0
-
-    self.read_after = 0
-    self.wrote_bytes = self.all_out = 0
-    self.write_blocked = ''
-    self.write_speed = 102400
-
     self.dead = False
+
+    # Read-related variables
+    self.maxread = maxread
+    self.read_bytes = self.all_in = 0
+    self.read_after = 0
+    self.read_eof = False
     self.peeking = False
     self.peeked = 0
 
+    # Write-related variables
+    self.wrote_bytes = self.all_out = 0
+    self.write_blocked = ''
+    self.write_speed = 102400
+    self.write_eof = False
+
+    # Compression stuff
+    self.zw = None
+    self.zlevel = 1
+    self.zreset = False
+
+    # Logging
     global selectable_id
     selectable_id += 1
     self.sid = selectable_id
@@ -1085,10 +1095,7 @@ class Selectable(object):
     else:
       self.log_id = 's%s' % self.sid
 
-    self.zw = None
-    self.zlevel = 1
-    self.zreset = False
-
+    # Introspection
     if SELECTABLES is not None:
       old = selectable_id-150
       if old in SELECTABLES: del SELECTABLES[old]
@@ -1098,6 +1105,10 @@ class Selectable(object):
     self.countas = 'selectables_live'
     gYamon.vadd(self.countas, 1)
     gYamon.vadd('selectables', 1)
+
+  def EOF(self, reading=False, writing=False):
+    if reading: self.read_eof = True
+    if writing: self.write_eof = True
 
   def CountAs(self, what):
     gYamon.vadd(self.countas, -1)
