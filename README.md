@@ -556,10 +556,28 @@ certificates](http://curl.haxx.se/ca/cacert.pem) (the default works on Linux).
       --ca_certs=/path/to/ca-certificates.pem \
       ...
 
+
+#### Creating your own key and certificate (for tunnels) ####
+
 Note that if you are running your own front-end, you do not need to purchase
 a commecial certificate for this to work - you can generate your own
-self-signed certificate and use that on both ends, and this will actually be
-*more* secure than using a 3rd party certificate.
+self-signed certificate and use that on both ends (this will actually be
+*more* secure than using a 3rd party certificate). To generate a certificate
+and a key, run this:
+
+    openssl req -new -x509 \
+      -keyout site-key.pem -out site-cert.pem \
+      -days 365 -nodes
+
+OpenSSL will ask a few questions - you can answer them in any way you like,
+it does not really matter.  For use on the server, the key and certificate
+must be combined into a single file, like so:
+
+    cat site-key.pem site-cert.pem > frontend.pem
+
+This frontend.pem file you would then configure as a TLS endpoint on the
+front-end, and a copy of site-cert.pem would be distributed to all the
+back-ends and used with the --ca_certs parameter.
 
 
 #### Encrypting unencrypted back-ends ####
