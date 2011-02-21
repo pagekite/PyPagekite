@@ -134,6 +134,7 @@ class DroidKite(pagekite.PageKite):
 def Start(host, secret):
   ds = DroidKite(android.Android())
   ds.Configure(['--defaults',
+                '--httpd=localhost:9999',
                 '--backend=http:%s:localhost:9999:%s' % (host, secret)])
   ds.Start()
 
