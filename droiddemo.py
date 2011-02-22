@@ -110,7 +110,7 @@ class UiRequestHandler(pagekite.UiRequestHandler):
       self.wfile.write(flist[-1])
       return
     elif path == '/droiddemo.py':
-      pyfile = open('/sdcard/sl4a/scripts/droiddemo.py')
+      pyfile = open(__file__)
       self.begin_headers(200, 'text/plain')
       self.end_headers()
       self.wfile.write(pyfile.read().replace(SECRET, 'mysecret'))
