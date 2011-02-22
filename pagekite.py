@@ -2348,11 +2348,16 @@ class UnknownConn(MagicProtocolParser):
     if domain:
       domains = [domain]
     else:
-      domains = self.GetSni(data)
-      if not domains:
-        domains = [self.conns.LastIpDomain(self.address[0]) or self.conns.config.tls_default]
-        LogDebug('No SNI - trying: %s' % domains[0])
-        if not domains[0]: domains = None
+      try:
+        domains = self.GetSni(data)
+        if not domains:
+          domains = [self.conns.LastIpDomain(self.address[0]) or self.conns.config.tls_default]
+          LogDebug('No SNI - trying: %s' % domains[0])
+          if not domains[0]: domains = None
+      except Exception:
+        # Probably insufficient data, just return True and assume we'll have
+        # better luck on the next round.
+        return True
 
     if domains:
       # If we know how to terminate the TLS/SSL, do so!
