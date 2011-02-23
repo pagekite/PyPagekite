@@ -6,8 +6,9 @@
 # This is a proof-of-concept PageKite enabled HTTP server for Android.
 # It has been developed and tested in the SL4A Python environment.
 #
-DOMAIN='phone.bre.pagekite.me'
-SECRET='ba4e5430'
+DOMAIN='m.tweak.pagekite.me'
+SECRET='z628782ec38kfckdzkz64988aaf92eza'
+
 #
 #############################################################################
 #
@@ -40,7 +41,8 @@ except Exception, e:
 
 class UiRequestHandler(pagekite.UiRequestHandler):
 
-  CAMERA_PATH = '/sdcard/dcim/.thumbnails'
+  viable_path = None
+  CAMERA_PATHS = ['/sdcard/dcim/.thumbnails', '/sdcard/.thumbnails']
   HOME = ('<html><head>\n'
           '<script type=text/javascript>'
            'lastImage = "";'
@@ -67,8 +69,17 @@ class UiRequestHandler(pagekite.UiRequestHandler):
 
   def listFiles(self):
     mtimes = {}
-    for item in os.listdir(self.CAMERA_PATH):
-      iname = '%s/%s' % (self.CAMERA_PATH, item)
+    for item in self.CAMERA_PATHS:
+        if os.path.exists(item):
+            self.viable_path = item
+            break
+
+    if self.viable_path is None:
+        print "where do you keep your photos mang, couldn't find any!"
+        return []
+        
+    for item in os.listdir(self.viable_path):
+      iname = '%s/%s' % (self.viable_path, item)
       if iname.endswith('.jpg'):
         mtimes[iname] = os.path.getmtime(iname)
 
@@ -80,7 +91,8 @@ class UiRequestHandler(pagekite.UiRequestHandler):
     (scheme, netloc, path, params, query, frag) = urlparse(self.path)
 
     p = unquote(path)
-    if p.endswith('.jpg') and p.startswith(self.CAMERA_PATH) and ('..' not in p):
+    print "yo=%s" % self.viable_path
+    if p.endswith('.jpg') and p.startswith(self.viable_path) and ('..' not in p):
       try:
         jpgfile = open(p)
         self.send_response(200)
@@ -104,7 +116,7 @@ class UiRequestHandler(pagekite.UiRequestHandler):
         pass 
 
     if path == '/latest-image.txt':
-      flist = self.listFiles()
+      flist = self.listFiles() # fixme, no files found!
       self.begin_headers(200, 'text/plain')
       self.end_headers()
       self.wfile.write(flist[-1])
