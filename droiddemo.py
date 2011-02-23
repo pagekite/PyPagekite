@@ -29,6 +29,7 @@ SECRET='z628782ec38kfckdzkz64988aaf92eza'
 #
 import pagekite
 import os
+import sys
 from urllib import unquote
 try:
   from urlparse import parse_qs, urlparse
@@ -146,7 +147,10 @@ def Start(host, secret):
   ds.Configure(['--defaults',
                 '--httpd=localhost:9999',
                 '--backend=http:%s:localhost:9999:%s' % (host, secret)])
-  ds.Start()
-
+  try:
+    ds.Start()
+  except KeyboardInterrupt:
+    print "Interrupted from keyboard, quitting now..."
+    os._exit(os.EX_OK)
 
 Start(DOMAIN, SECRET)
