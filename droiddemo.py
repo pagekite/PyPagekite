@@ -41,8 +41,9 @@ except Exception, e:
 
 class UiRequestHandler(pagekite.UiRequestHandler):
 
-  viable_path = None
-  CAMERA_PATHS = ['/sdcard/dcim/.thumbnails', '/sdcard/.thumbnails']
+  CAMERA_PATHS = ['/sdcard/dcim/.thumbnails',
+    '/sdcard/.thumbnails',
+    '/home/karl/public_html']
   HOME = ('<html><head>\n'
           '<script type=text/javascript>'
            'lastImage = "";'
@@ -71,15 +72,15 @@ class UiRequestHandler(pagekite.UiRequestHandler):
     mtimes = {}
     for item in self.CAMERA_PATHS:
         if os.path.exists(item):
-            self.viable_path = item
+            self.server.viable_path = item
             break
 
-    if self.viable_path is None:
+    if self.server.viable_path is None:
         print "where do you keep your photos mang, couldn't find any!"
-        return []
+        return None
         
-    for item in os.listdir(self.viable_path):
-      iname = '%s/%s' % (self.viable_path, item)
+    for item in os.listdir(self.server.viable_path):
+      iname = '%s/%s' % (self.server.viable_path, item)
       if iname.endswith('.jpg'):
         mtimes[iname] = os.path.getmtime(iname)
 
@@ -89,10 +90,13 @@ class UiRequestHandler(pagekite.UiRequestHandler):
 
   def do_GET(self):
     (scheme, netloc, path, params, query, frag) = urlparse(self.path)
-
+    # ugly hacky init ... ;)
+    try:
+        blah = self.server.viable_path
+    except AttributeError:
+        self.server.viable_path = None
     p = unquote(path)
-    print "yo=%s" % self.viable_path
-    if p.endswith('.jpg') and p.startswith(self.viable_path) and ('..' not in p):
+    if p.endswith('.jpg') and p.startswith(self.server.viable_path) and ('..' not in p):
       try:
         jpgfile = open(p)
         self.send_response(200)
@@ -119,7 +123,8 @@ class UiRequestHandler(pagekite.UiRequestHandler):
       flist = self.listFiles() # fixme, no files found!
       self.begin_headers(200, 'text/plain')
       self.end_headers()
-      self.wfile.write(flist[-1])
+      if flist:
+        self.wfile.write(flist[-1])
       return
     elif path == '/droiddemo.py':
       pyfile = open(__file__)
