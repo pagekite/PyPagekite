@@ -27,7 +27,6 @@ SECRET='z628782ec38kfckdzkz64988aaf92eza'
 #
 #############################################################################
 #
-import android
 import pagekite
 import os
 from urllib import unquote
@@ -137,14 +136,13 @@ class UiRequestHandler(pagekite.UiRequestHandler):
 
 
 class DroidKite(pagekite.PageKite):
-  def __init__(self, droid):
+  def __init__(self):
     pagekite.PageKite.__init__(self)
-    self.droid = droid
     self.ui_request_handler = UiRequestHandler
 
 
 def Start(host, secret):
-  ds = DroidKite(android.Android())
+  ds = DroidKite()
   ds.Configure(['--defaults',
                 '--httpd=localhost:9999',
                 '--backend=http:%s:localhost:9999:%s' % (host, secret)])
