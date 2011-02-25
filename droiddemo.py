@@ -8,6 +8,7 @@
 #
 DOMAIN='phone.bre.pagekite.me'
 SECRET='ba4e5430'
+SOURCE='/sdcard/sl4a/scripts/droiddemo.py'
 #
 #############################################################################
 #
@@ -110,10 +111,15 @@ class UiRequestHandler(pagekite.UiRequestHandler):
       self.wfile.write(flist[-1])
       return
     elif path == '/droiddemo.py':
-      pyfile = open('/sdcard/sl4a/scripts/droiddemo.py')
-      self.begin_headers(200, 'text/plain')
-      self.end_headers()
-      self.wfile.write(pyfile.read().replace(SECRET, 'mysecret'))
+      try:
+        pyfile = open(SOURCE)
+        self.begin_headers(200, 'text/plain')
+        self.end_headers()
+        self.wfile.write(pyfile.read().replace(SECRET, 'mysecret'))
+      except IOError, e:
+        self.begin_headers(404, 'text/plain')
+        self.end_headers()
+        self.wfile.write('Could not read %s: %s' % (SOURCE, e))
       return
     elif path == '/':
       self.begin_headers(200, 'text/html')
