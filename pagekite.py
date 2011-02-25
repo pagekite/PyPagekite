@@ -698,7 +698,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                '<div id=body>%(body)s</div>\n'
                '<div id=footer><hr><i>Powered by <b>pagekite.py'
                 ' v%(ver)s</b> and'
-                ' <a href="' + WWWHOME + '"><i>pageKite.net</i></a>.<br>'
+                ' <a href="' + WWWHOME + '"><i>PageKite.net</i></a>.<br>'
                 'Local time is %(now)s.</i></div>\n'
               '</body></html>\n')
  
@@ -718,8 +718,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     backends = self.server.pkite.backends
 
     html = [(
-      '<div id=welcome><p>Welcome to your <i>pageKite</i> control panel!</p></div>\n'
-      '<p id=links>[ <a href="log.html">Logs</a>, '
+      '<div id=welcome><p>Welcome to your <i>PageKite</i> control panel!</p></div>\n'
+      '<p id=links>[ <a href="/log.html">Logs</a>, '
                     '<a href="/conns/">Connections</a> ]</p>\n'
       '<div id=live><h2>Flying kites:</h2><ul>\n'
     )]
@@ -769,12 +769,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     debug = path.find('debug') >= 0
     httpd = path.find('httpd') >= 0
     alllog = path.find('all') >= 0
-    html = ['<p id=links>[ <a href="/">Control Panel</a> | Logs: '
-                         ' <a href="log.html">normal</a>,'
-                         ' <a href="debug-log.html">debug</a>,'
-                         ' <a href="httpd-log.html">httpd</a>,'
-                         ' <a href="all-log.html">all</a>,'
-                         ' <a href="log.txt">raw</a> ]</p>'
+    html = ['<p id=links>[ <a href="/status.html">Control Panel</a> | Logs: '
+                         ' <a href="/log.html">normal</a>,'
+                         ' <a href="/debug-log.html">debug</a>,'
+                         ' <a href="/httpd-log.html">httpd</a>,'
+                         ' <a href="/all-log.html">all</a>,'
+                         ' <a href="/log.txt">raw</a> ]</p>'
             '<table>']
     lines = []
     for line in LOG:
