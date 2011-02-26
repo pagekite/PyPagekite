@@ -1106,10 +1106,6 @@ class Selectable(object):
     gYamon.vadd(self.countas, 1)
     gYamon.vadd('selectables', 1)
 
-  def EOF(self, reading=False, writing=False):
-    if reading: self.read_eof = True
-    if writing: self.write_eof = True
-
   def CountAs(self, what):
     gYamon.vadd(self.countas, -1)
     self.countas = what
@@ -1227,6 +1223,20 @@ class Selectable(object):
     self.LogError('Selectable::ProcessData: Should be overridden!')
     return False
 
+  def ProcessEof(self):
+    if self.read_eof and self.write_eof and not self.write_blocked:
+      self.Cleanup()
+
+  def ProcessEofRead(self):
+    self.read_eof = True
+    self.LogError('Selectable::ProcessEofRead: Should be overridden!')
+    return False
+
+  def ProcessEofWrite(self):
+    self.write_eof = True
+    self.LogError('Selectable::ProcessEofWrite: Should be overridden!')
+    return False
+
   def EatPeeked(self, eat_bytes=None, keep_peeking=False):
     if not self.peeking: return
     if eat_bytes is None: eat_bytes = self.peeked
@@ -1244,6 +1254,8 @@ class Selectable(object):
     return
 
   def ReadData(self, maxread=None):
+    if self.read_eof: return False
+
     try:
       maxread = maxread or self.maxread
       if self.peeking:
@@ -1270,7 +1282,8 @@ class Selectable(object):
         return False
 
     if data is None or data == '':
-      return False
+      self.read_eof = True
+      return self.ProcessData('')
     else:
       if not self.peeking:
         self.read_bytes += len(data)
@@ -1290,8 +1303,11 @@ class Selectable(object):
     self.read_after = int(time.time() + delay)
     self.LogDebug('Postponing reads until %x (flooded=%s, bps=%s)' % (
                     self.read_after, flooded, max_speed))
+    return True
 
   def Send(self, data, try_flush=False, bail_out=False):
+    if self.write_eof: return False
+
     global buffered_bytes
     buffered_bytes -= len(self.write_blocked)
 
@@ -1313,6 +1329,7 @@ class Selectable(object):
       except IOError, err:
         if err.errno not in self.HARMLESS_ERRNOS:
           self.LogError('Error sending: %s' % err)
+          self.ProcessEofWrite()
           return False
         else:
           self.LogDebug('Problem sending: %s' % err)
@@ -1321,11 +1338,13 @@ class Selectable(object):
       except socket.error, (errno, msg):
         if errno not in self.HARMLESS_ERRNOS:
           self.LogError('Error sending: %s (errno=%s)' % (msg, errno))
+          self.ProcessEofWrite()
           return False
         else:
           self.LogDebug('Problem sending: %s (errno=%s)' % (msg, errno))
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
         self.LogDebug('Error sending (SSL): %s' % err)
+        self.ProcessEofWrite()
         return False
 
     self.write_blocked = sending[sent_bytes:]
@@ -1344,6 +1363,7 @@ class Selectable(object):
     if zhistory and (zhistory[0] < zhistory[1]): compress = False
 
     sdata = ''.join(data)
+#   print '>> %s\n%s\n' % (self, sdata[:80])
     if self.zw and compress:
       try:
         zdata = self.zw.compress(sdata) + self.zw.flush(zlib.Z_SYNC_FLUSH)
@@ -1363,7 +1383,8 @@ class Selectable(object):
       if wait and len(self.write_blocked) > 0: time.sleep(0.1)
       loops -= 1
 
-    self.write_blocked = ''
+    if self.write_blocked: return False
+    return True
 
 
 class Connections(object):
@@ -1488,6 +1509,7 @@ class LineParser(Selectable):
       else:
         if not self.peeking: self.leftovers += line
 
+    if self.read_eof: return self.ProcessEofRead()
     return True
 
   def ProcessLine(self, line, lines):
@@ -1681,9 +1703,10 @@ class ChunkParser(Selectable):
       else:
         result = self.ProcessChunk(self.chunk)
       self.chunk = ''
-      if leftover:
-        return self.ProcessData(leftover) and result
+      if result and leftover:
+        result = self.ProcessData(leftover)
 
+    if result and self.read_eof: result = self.ProcessEofRead()
     return result
 
   def ProcessCorruptChunk(self, chunk):
@@ -1718,10 +1741,6 @@ class Tunnel(ChunkParser):
   def __html__(self):
     return ('<b>Server name</b>: %s<br>'
             '%s') % (self.server_name, ChunkParser.__html__(self))
-
-  def Cleanup(self):
-    # FIXME: Send good-byes to everyone?
-    ChunkParser.Cleanup(self)
 
   def _FrontEnd(conn, body, conns):
     """This is what the front-end does when a back-end requests a new tunnel."""
@@ -1763,7 +1782,10 @@ class Tunnel(ChunkParser):
       if r[0] in ('X-PageKite-OK', 'X-Beanstalk-OK'): ok[r[1]] = 1
 
     output.append(HTTP_StartBody())
-    self.Send(output)
+    if not self.Send(output):
+      conn.LogError('No tunnels configured, closing connection.')
+      self.Cleanup()
+      return None
 
     self.backends = ok.keys()
     if self.backends:
@@ -1781,7 +1803,12 @@ class Tunnel(ChunkParser):
   def _RecvHttpHeaders(self):
     data = ''
     while not data.endswith('\r\n\r\n') and not data.endswith('\n\n'):
-      buf = self.fd.recv(4096)
+      try:
+        buf = self.fd.recv(4096)
+      except Exception:
+        # This is sloppy, but the back-end will just connect somewhere else
+        # instead, so laziness here should be fine.
+        buf = None
       if buf is None or buf == '':
         LogDebug('Remote end closed connection.')
         return None
@@ -1811,8 +1838,10 @@ class Tunnel(ChunkParser):
 
     if self.conns.config.fe_certname:
       # We can't set the SNI directly from Python, so we use CONNECT instead.
-      self.Send(['CONNECT %s:443 HTTP/1.0\r\n\r\n' % self.conns.config.fe_certname[0]])
-      self.Flush(wait=True)
+      if (not self.Send(['CONNECT %s:443 HTTP/1.0\r\n\r\n' % (self.conns.config.fe_certname[0])])
+          or not self.Flush(wait=True)):
+        return None, None
+
       data = self._RecvHttpHeaders()
       if data is None or not data.startswith(HTTP_ConnectOK().strip()):
         LogError('CONNECT failed, could not initiate TLS.')
@@ -1833,10 +1862,11 @@ class Tunnel(ChunkParser):
         LogError('SSL handshake failed: probably a bad cert (%s)' % e)
         return None, None
 
-    self.Send(HTTP_PageKiteRequest(server, conns.config.backends, tokens,
-                                   nozchunks=conns.config.disable_zchunks)) 
-    self.Flush(wait=True)
-    
+    if (not self.Send(HTTP_PageKiteRequest(server, conns.config.backends, tokens,
+                                     nozchunks=conns.config.disable_zchunks))
+        or not self.Flush(wait=True)):
+      return None, None
+
     data = self._RecvHttpHeaders()
     if data is None: return None, None
 
@@ -1923,33 +1953,48 @@ class Tunnel(ChunkParser):
 
     return self.SendChunked(sending, zhistory=self.zhistory[sid])
 
-  def Disconnect(self, conn, sid=None, sendeof=True):
-    sid = int(sid or conn.sid)
-    if sendeof:
-      self.SendChunked('SID: %s\nEOF: 1\r\n\r\nBye!' % sid) 
+  def SendStreamEof(self, sid, write_eof=False, read_eof=False):
+    return self.SendChunked('SID: %s\nEOF: %s%s\r\n\r\nBye!' % (sid,
+                            (write_eof or not read_eof) and 'W' or '',
+                            (read_eof or not write_eof) and 'R' or ''))
+
+  def EofStream(self, sid, eof_type='WR'):
+    if sid in self.users and self.users[sid] is not None:
+      self.LogDebug('EOF stream %s (%s)' % (sid, eof_type))
+      write_eof = (-1 != eof_type.find('W'))
+      read_eof = (-1 != eof_type.find('R'))
+      self.users[sid].ProcessTunnelEof(read_eof=(read_eof or not write_eof),
+                                       write_eof=(write_eof or not read_eof))
+
+  def CloseStream(self, sid, stream_closed=False):
     if sid in self.users:
-      if self.users[sid] is not None: self.users[sid].Disconnect()
+      self.LogDebug('Closing stream %s (%s)' % (sid, stream_closed))
+      if not stream_closed:
+        if self.users[sid] is not None:
+          self.users[sid].CloseTunnel(tunnel_closed=True)
       del self.users[sid]
     if sid in self.zhistory:
       del self.zhistory[sid]
 
+  def Cleanup(self):
+    self.LogDebug('Cleaning up tunnel %s' % self)
+    for sid in self.users: self.CloseStream(sid)
+    ChunkParser.Cleanup(self)
+
   def ResetRemoteZChunks(self):
-    self.SendChunked('NOOP: 1\nZRST: 1\r\n\r\n!', compress=False)
+    return self.SendChunked('NOOP: 1\nZRST: 1\r\n\r\n!', compress=False)
 
   def SendPing(self):
     self.last_ping = int(time.time())
     self.Log([('ping', self.server_name)])
-    self.SendChunked('NOOP: 1\nPING: 1\r\n\r\n!', compress=False)
-    return True
+    return self.SendChunked('NOOP: 1\nPING: 1\r\n\r\n!', compress=False)
 
   def SendPong(self):
-    self.SendChunked('NOOP: 1\r\n\r\n!', compress=False)
-    return True
+    return self.SendChunked('NOOP: 1\r\n\r\n!', compress=False)
 
   def SendThrottle(self, sid, write_speed):
-    self.SendChunked('NOOP: 1\r\nSID: %s\r\nSPD: %d\r\n\r\n!' % (
-                       sid, write_speed), compress=False)
-    return True
+    return self.SendChunked('NOOP: 1\r\nSID: %s\r\nSPD: %d\r\n\r\n!' % (
+                              sid, write_speed), compress=False)
 
   def ProcessCorruptChunk(self, data):
     self.ResetRemoteZChunks()
@@ -1971,6 +2016,10 @@ class Tunnel(ChunkParser):
     except Exception, e:
       LogError('Tunnel::ProcessChunk: Invalid throttle request!')
 
+  # If a tunnel goes down, we just go down hard and kill all our connections.
+  def ProcessEofRead(self): self.Cleanup()
+  def ProcessEofWrite(self): self.Cleanup()
+
   def ProcessChunk(self, data):
     try:
       headers, data = data.split('\r\n\r\n', 1)
@@ -1982,8 +2031,8 @@ class Tunnel(ChunkParser):
 
     self.last_activity = time.time()
     if parse.Header('PING'): return self.SendPong()
-    if parse.Header('ZRST'): self.ResetZChunks() 
-    if parse.Header('SPD'): self.Throttle(parse)
+    if parse.Header('ZRST') and not self.ResetZChunks(): return False
+    if parse.Header('SPD') and not self.Throttle(parse): return False
     if parse.Header('NOOP'): return True
 
     conn = None
@@ -1996,7 +2045,7 @@ class Tunnel(ChunkParser):
       return False
 
     if eof:
-      self.Disconnect(None, sid=sid, sendeof=False)
+      self.EofStream(sid, eof[0])
     else:
       if sid in self.users:
         conn = self.users[sid]
@@ -2015,24 +2064,28 @@ class Tunnel(ChunkParser):
           if proto == 'probe':
             if self.conns.config.no_probes:
               LogDebug('Responding to probe for %s: rejected' % host)
-              self.SendChunked('SID: %s\r\n\r\n%s' % (
-                                 sid, HTTP_NoFeConnection() )) 
+              if not self.SendChunked('SID: %s\r\n\r\n%s' % (
+                                        sid, HTTP_NoFeConnection() )):
+                return False
             elif self.Probe(host):
               LogDebug('Responding to probe for %s: good' % host)
-              self.SendChunked('SID: %s\r\n\r\n%s' % (
-                                 sid, HTTP_GoodBeConnection() )) 
+              if not self.SendChunked('SID: %s\r\n\r\n%s' % (
+                                        sid, HTTP_GoodBeConnection() )):
+                return False
             else:
               LogDebug('Responding to probe for %s: back-end down' % host)
-              self.SendChunked('SID: %s\r\n\r\n%s' % (
-                                 sid, HTTP_NoBeConnection() )) 
+              if not self.SendChunked('SID: %s\r\n\r\n%s' % (
+                                        sid, HTTP_NoBeConnection() )):
+                return False
           else:
             conn = UserConn.BackEnd(proto, host, sid, self, port,
                                     remote_ip=rIp, remote_port=rPort)
             if proto in ('http', 'websocket'):
               if not conn:
-                self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
-                                   HTTP_Unavailable('be', proto, host,
-                                                    frame_url=self.conns.config.error_url) )) 
+                if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
+                                          HTTP_Unavailable('be', proto, host,
+                                                           frame_url=self.conns.config.error_url) )):
+                  return False
               elif rIp:
                 req, rest = re.sub(r'(?mi)^x-forwarded-for', 'X-Old-Forwarded-For', data
                                    ).split('\n', 1) 
@@ -2041,12 +2094,15 @@ class Tunnel(ChunkParser):
             self.users[sid] = conn
 
       if not conn:
-        self.Disconnect(None, sid=sid)
+        self.CloseStream(sid)
+        if not self.SendStreamEof(sid): return False
       else:
-        conn.Send(data)
+        if not conn.Send(data):
+          # FIXME
+          pass
         if len(conn.write_blocked) > 2*max(conn.write_speed, 50000):
           if conn.created < time.time()-3:
-            self.SendThrottle(sid, conn.write_speed)
+            if not self.SendThrottle(sid, conn.write_speed): return False
 
     return True
 
@@ -2070,7 +2126,10 @@ class LoopbackTunnel(Tunnel):
           self.Log([('FE', self.server_name), ('proto', proto), ('domain', domain)])
 
   def Cleanup(self):
+    other = self.other_end
     self.other_end = None
+    if other and other.other_end: other.Cleanup()
+    Tunnel.Cleanup(self)
 
   def Linkup(self, other):
     self.other_end = other
@@ -2099,12 +2158,14 @@ class UserConn(Selectable):
                      escape_html('%s' % (self.tunnel or '')),
                      Selectable.__html__(self))
  
-  def Cleanup(self):
-    self.tunnel.Disconnect(self)
-    Selectable.Cleanup(self)
+  def CloseTunnel(self, tunnel_closed=False):
+    self.ProcessTunnelEof(read_eof=True, write_eof=True)
+    if self.tunnel and not tunnel_closed:
+      self.tunnel.CloseStream(self.sid, stream_closed=True)
+    self.tunnel = None
 
-  def Disconnect(self):
-    self.Flush(loops=10, wait=False)
+  def Cleanup(self):
+    self.CloseTunnel()
     self.conns.Remove(self)
     Selectable.Cleanup(self)
 
@@ -2187,7 +2248,6 @@ class UserConn(Selectable):
       ('is', 'BE')
     ]
     if remote_ip: logInfo.append(('remote_ip', remote_ip))
-    #Boring: if remote_port: logInfo.append(('remote_port', remote_port))
 
     if not backend:
       logInfo.append(('err', 'No back-end'))
@@ -2222,12 +2282,48 @@ class UserConn(Selectable):
   FrontEnd = staticmethod(_FrontEnd)
   BackEnd = staticmethod(_BackEnd)
 
+  def Shutdown(self, direction):
+    try:
+      if self.fd: self.fd.shutdown(direction)
+    except IOError:
+      pass
+
+  def ProcessTunnelEof(self, read_eof=False, write_eof=False):
+    noop = True
+    if read_eof and not self.write_eof:
+      # A read EOF from the tunnel means we won't be receiving any more data,
+      # so we've reached the end of the stream we are writing.
+      self.write_eof = True
+      if not self.write_blocked: self.Shutdown(socket.SHUT_WR)
+      noop = False
+
+    if write_eof and not self.read_eof:
+      # Nothing more can be written to the tunnel, so stop reading.
+      self.read_eof = True
+      self.Shutdown(socket.SHUT_RD)
+      noop = False
+
+    if not noop: self.ProcessEof()
+
+  def ProcessEofRead(self):
+    if self.tunnel: self.tunnel.SendStreamEof(self.sid, read_eof=True)
+    self.Shutdown(socket.SHUT_RD)
+    self.read_eof = True
+    self.ProcessEof()
+
+  def ProcessEofWrite(self):
+    if self.tunnel: self.tunnel.SendStreamEof(self.sid, write_eof=True)
+    self.Shutdown(socket.SHUT_WR)
+    self.write_eof = True
+    self.ProcessEof()
+
   def ProcessData(self, data):
     if not self.tunnel.SendData(self, data): return False
 
     # Back off if tunnel is stuffed.
     if len(self.tunnel.write_blocked) > 2*102400: self.Throttle()
 
+    if self.read_eof: return self.ProcessEofRead()
     return True
 
 
