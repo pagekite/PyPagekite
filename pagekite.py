@@ -231,7 +231,7 @@ OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
             'ports=', 'protos=', 'portalias=', 'rawports=',
             'tls_default=', 'tls_endpoint=', 'fe_certname=', 'ca_certs=',
             'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
-            'new', 'all', 'noall', 'dyndns=', 'backend=', 'nozchunks',
+            'new', 'all', 'noall', 'dyndns=', 'nozchunks',
             'buffers=', 'noprobes']
 
 AUTH_ERRORS           = '128.'
@@ -1068,7 +1068,6 @@ class Selectable(object):
     # Read-related variables
     self.maxread = maxread
     self.read_bytes = self.all_in = 0
-    self.read_after = 0
     self.read_eof = False
     self.peeking = False
     self.peeked = 0
@@ -1078,6 +1077,9 @@ class Selectable(object):
     self.write_blocked = ''
     self.write_speed = 102400
     self.write_eof = False
+
+    # Throttle reads and writes
+    self.throttle_until = 0
 
     # Compression stuff
     self.zw = None
@@ -1254,7 +1256,9 @@ class Selectable(object):
     return
 
   def ReadData(self, maxread=None):
-    if self.read_eof: return False
+    if self.read_eof:
+      self.LogDebug("Read attempted after EOF!")
+      return False
 
     try:
       maxread = maxread or self.maxread
@@ -1283,6 +1287,7 @@ class Selectable(object):
 
     if data is None or data == '':
       self.read_eof = True
+      self.LogDebug("Got read EOF ...")
       return self.ProcessData('')
     else:
       if not self.peeking:
@@ -1290,7 +1295,7 @@ class Selectable(object):
         if self.read_bytes > 1024000: self.LogTraffic()
       return self.ProcessData(data)
 
-  def Throttle(self, max_speed=None):
+  def Throttle(self, max_speed=None, remote=False):
     if max_speed:
       flooded = self.read_bytes + self.all_in
       flooded -= int(max_speed * (time.time() - self.created))
@@ -1300,14 +1305,12 @@ class Selectable(object):
       flooded = '?'
       delay = 1
 
-    self.read_after = int(time.time() + delay)
-    self.LogDebug('Postponing reads until %x (flooded=%s, bps=%s)' % (
-                    self.read_after, flooded, max_speed))
+    self.throttle_until = int(time.time() + delay)
+    self.LogDebug('Throttled until %x (flooded=%s, bps=%s, remote=%s)' % (
+                    self.throttle_until, flooded, max_speed, remote))
     return True
 
   def Send(self, data, try_flush=False, bail_out=False):
-    if self.write_eof: return False
-
     global buffered_bytes
     buffered_bytes -= len(self.write_blocked)
 
@@ -1349,7 +1352,7 @@ class Selectable(object):
 
     self.write_blocked = sending[sent_bytes:]
     buffered_bytes += len(self.write_blocked)
-    if self.wrote_bytes >= 1024000: self.LogTraffic()
+    if self.wrote_bytes >= 512*1024: self.LogTraffic()
 
     return True
 
@@ -1439,7 +1442,7 @@ class Connections(object):
   def Sockets(self):
     # FIXME: This is O(n)
     now = time.time()
-    return [s.fd for s in self.conns if s.fd and s.read_after <= now]
+    return [s.fd for s in self.conns if s.fd and (not s.read_eof) and (s.throttle_until <= now)]
 
   def Blocked(self):
     # FIXME: This is O(n)
@@ -1968,17 +1971,19 @@ class Tunnel(ChunkParser):
 
   def CloseStream(self, sid, stream_closed=False):
     if sid in self.users:
-      self.LogDebug('Closing stream %s (%s)' % (sid, stream_closed))
-      if not stream_closed:
-        if self.users[sid] is not None:
-          self.users[sid].CloseTunnel(tunnel_closed=True)
+      self.LogDebug('Closing stream %s (closed=%s)' % (sid, stream_closed))
+      stream = self.users[sid]
       del self.users[sid]
+
+      if not stream_closed and stream is not None:
+        stream.CloseTunnel(tunnel_closed=True)
+
     if sid in self.zhistory:
       del self.zhistory[sid]
 
   def Cleanup(self):
     self.LogDebug('Cleaning up tunnel %s' % self)
-    for sid in self.users: self.CloseStream(sid)
+    for sid in self.users.keys(): self.CloseStream(sid)
     ChunkParser.Cleanup(self)
 
   def ResetRemoteZChunks(self):
@@ -2012,9 +2017,10 @@ class Tunnel(ChunkParser):
     try:
       sid = int(parse.Header('SID')[0])
       bps = int(parse.Header('SPD')[0])
-      if sid in self.users: self.users[sid].Throttle(bps)
+      if sid in self.users: self.users[sid].Throttle(bps, remote=True)
     except Exception, e:
       LogError('Tunnel::ProcessChunk: Invalid throttle request!')
+    return True
 
   # If a tunnel goes down, we just go down hard and kill all our connections.
   def ProcessEofRead(self): self.Cleanup()
@@ -2159,6 +2165,7 @@ class UserConn(Selectable):
                      Selectable.__html__(self))
  
   def CloseTunnel(self, tunnel_closed=False):
+    self.LogDebug("Closing tunnel: %s" % self.tunnel)
     self.ProcessTunnelEof(read_eof=True, write_eof=True)
     if self.tunnel and not tunnel_closed:
       self.tunnel.CloseStream(self.sid, stream_closed=True)
@@ -2285,43 +2292,44 @@ class UserConn(Selectable):
   def Shutdown(self, direction):
     try:
       if self.fd: self.fd.shutdown(direction)
-    except IOError:
-      pass
+    except IOError, e:
+      self.LogDebug('Shutdown (%s) error: %s' % (direction, e))
 
   def ProcessTunnelEof(self, read_eof=False, write_eof=False):
-    noop = True
+    self.LogDebug("Tunnel EOF: read=%s write=%s" % (read_eof, write_eof))
     if read_eof and not self.write_eof:
-      # A read EOF from the tunnel means we won't be receiving any more data,
-      # so we've reached the end of the stream we are writing.
-      self.write_eof = True
-      if not self.write_blocked: self.Shutdown(socket.SHUT_WR)
-      noop = False
+      self.ProcessEofWrite(tell_tunnel=False)
 
     if write_eof and not self.read_eof:
-      # Nothing more can be written to the tunnel, so stop reading.
-      self.read_eof = True
-      self.Shutdown(socket.SHUT_RD)
-      noop = False
+      self.ProcessEofRead(tell_tunnel=False)
 
-    if not noop: self.ProcessEof()
+  def ProcessEofRead(self, tell_tunnel=True):
+    self.LogDebug('Processing Read EOF')
 
-  def ProcessEofRead(self):
-    if self.tunnel: self.tunnel.SendStreamEof(self.sid, read_eof=True)
+    if tell_tunnel and self.tunnel:
+      self.tunnel.SendStreamEof(self.sid, read_eof=True)
+
     self.Shutdown(socket.SHUT_RD)
     self.read_eof = True
     self.ProcessEof()
 
-  def ProcessEofWrite(self):
-    if self.tunnel: self.tunnel.SendStreamEof(self.sid, write_eof=True)
-    self.Shutdown(socket.SHUT_WR)
+  def ProcessEofWrite(self, tell_tunnel=True):
+    self.LogDebug('Processing Write EOF')
+
+    if tell_tunnel and self.tunnel:
+      self.tunnel.SendStreamEof(self.sid, write_eof=True)
+
+    if not self.write_blocked: self.Shutdown(socket.SHUT_WR)
     self.write_eof = True
     self.ProcessEof()
 
   def ProcessData(self, data):
-    if not self.tunnel.SendData(self, data): return False
+    if not self.tunnel.SendData(self, data):
+      self.LogDebug('Send to tunnel failed')
+      return False
 
     # Back off if tunnel is stuffed.
-    if len(self.tunnel.write_blocked) > 2*102400: self.Throttle()
+    if len(self.tunnel.write_blocked) > 1024000: self.Throttle()
 
     if self.read_eof: return self.ProcessEofRead()
     return True
@@ -2631,7 +2639,7 @@ class PageKite(object):
     self.ui_password = None
     self.ui_pemfile = None
     self.disable_zchunks = False
-    self.buffer_max = 256
+    self.buffer_max = 4096 
     self.error_url = None
 
     self.tunnel_manager = None
@@ -3293,21 +3301,25 @@ class PageKite(object):
       if oready:
         for socket in oready:
           conn = conns.Connection(socket)
-          if conn: conn.Send([], try_flush=True)
+          if conn and not conn.Send([], try_flush=True):
+            LogDebug("Write error in main loop, closing %s" % conn)
+            conns.Remove(conn)
+            conn.Cleanup()
 
       if buffered_bytes < 1024 * self.buffer_max:
         throttle = None
       else:
         LogDebug("FIXME: Nasty pause to let buffers clear!")
         time.sleep(0.1)
-        throttle = 100
+        throttle = 1024
 
       if iready:
         for socket in iready:
           conn = conns.Connection(socket)
-          if conn and conn.ReadData(maxread=throttle) is False:
-            conn.Cleanup()
+          if conn and not conn.ReadData(maxread=throttle):
+            LogDebug("Read error in main loop, closing %s" % conn)
             conns.Remove(conn)
+            conn.Cleanup()
 
       last_loop = now
 
