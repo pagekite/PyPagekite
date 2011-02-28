@@ -1161,7 +1161,6 @@ class Selectable(object):
       self.zw = zlib.compressobj(self.zlevel)
 
   def EnableZChunks(self, level=1):
-    LogDebug('Selectable::EnableZChunks: ZChunks enabled!')
     self.zlevel = level
     self.zw = zlib.compressobj(level)
 
@@ -1298,7 +1297,6 @@ class Selectable(object):
 
     if data is None or data == '':
       self.read_eof = True
-      self.LogDebug("Got read EOF ...")
       return self.ProcessData('')
     else:
       if not self.peeking:
@@ -2001,7 +1999,6 @@ class Tunnel(ChunkParser):
 
   def EofStream(self, sid, eof_type='WR'):
     if sid in self.users and self.users[sid] is not None:
-      self.LogDebug('EOF stream %s (%s)' % (sid, eof_type))
       write_eof = (-1 != eof_type.find('W'))
       read_eof = (-1 != eof_type.find('R'))
       self.users[sid].ProcessTunnelEof(read_eof=(read_eof or not write_eof),
@@ -2009,7 +2006,6 @@ class Tunnel(ChunkParser):
 
   def CloseStream(self, sid, stream_closed=False):
     if sid in self.users:
-      self.LogDebug('Closing stream %s (closed=%s)' % (sid, stream_closed))
       stream = self.users[sid]
       del self.users[sid]
 
@@ -2020,7 +2016,6 @@ class Tunnel(ChunkParser):
       del self.zhistory[sid]
 
   def Cleanup(self):
-    self.LogDebug('Cleaning up tunnel %s' % self)
     for sid in self.users.keys(): self.CloseStream(sid)
     ChunkParser.Cleanup(self)
 
@@ -2207,7 +2202,6 @@ class UserConn(Selectable):
                      Selectable.__html__(self))
  
   def CloseTunnel(self, tunnel_closed=False):
-    self.LogDebug("Closing tunnel: %s" % self.tunnel)
     self.ProcessTunnelEof(read_eof=True, write_eof=True)
     if self.tunnel and not tunnel_closed:
       self.tunnel.CloseStream(self.sid, stream_closed=True)
@@ -2338,7 +2332,6 @@ class UserConn(Selectable):
       self.LogDebug('Shutdown (%s) error: %s' % (direction, e))
 
   def ProcessTunnelEof(self, read_eof=False, write_eof=False):
-    self.LogDebug("Tunnel EOF: read=%s write=%s" % (read_eof, write_eof))
     if read_eof and not self.write_eof:
       self.ProcessEofWrite(tell_tunnel=False)
 
@@ -3143,7 +3136,7 @@ class PageKite(object):
 
       fd.connect((host, port))
       fd.send('PING / HTTP/1.0\r\n\r\n')
-      fd.recv(1)
+      fd.recv(1024)
       fd.close()
 
     except Exception, e:
