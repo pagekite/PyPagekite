@@ -2414,9 +2414,10 @@ class UnknownConn(MagicProtocolParser):
 
     if self.parser.method == 'PING':
       self.Send('PONG %s\r\n\r\n' % self.parser.path)
-      done = True
+      self.read_eof = self.write_eof = done = True
+      self.fd.close()
 
-    if not done and self.parser.method == 'CONNECT':
+    elif self.parser.method == 'CONNECT':
       if self.parser.path.lower().startswith('pagekite:'):
         if Tunnel.FrontEnd(self, lines, self.conns) is None: return False
         done = True
