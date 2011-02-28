@@ -295,6 +295,11 @@ try:
 except ImportError:
   pass
 
+if not 'SHUT_RD' in dir(socket):
+  socket.SHUT_RD = 0
+  socket.SHUT_WR = 1
+  socket.SHUT_RDWR = 2
+
 # SSL/TLS strategy: prefer pyOpenSSL, as it comes with built-in Context
 # objects. If that fails, look for Python 2.6+ native ssl support and 
 # create a compatibility wrapper. If both fail, bomb with a ConfigError
@@ -2329,7 +2334,7 @@ class UserConn(Selectable):
   def Shutdown(self, direction):
     try:
       if self.fd: self.fd.shutdown(direction)
-    except IOError, e:
+    except Exception, e:
       self.LogDebug('Shutdown (%s) error: %s' % (direction, e))
 
   def ProcessTunnelEof(self, read_eof=False, write_eof=False):
