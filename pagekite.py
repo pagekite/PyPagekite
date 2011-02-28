@@ -465,10 +465,11 @@ class ConnectError(Exception):
 
 
 def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
-                         tls=False, testtoken=None):
+                         tls=False, testtoken=None, replace=None):
   req = ['CONNECT PageKite:1 HTTP/1.0\r\n']
 
   if not nozchunks: req.append('X-PageKite-Features: ZChunks\r\n')
+  if replace: req.append('X-PageKite-Replace: %s\r\n' % replace)
   if tls: req.append('X-PageKite-Features: TLS\r\n')
          
   tokens = tokens or {}
@@ -649,19 +650,23 @@ class AuthThread(threading.Thread):
         self.qc.release()
 
         results = []
+        session = ''
         for (proto, domain, srand, token, sign, prefix) in requests:
           what = '%s:%s:%s' % (proto, domain, srand)
+          session += what
           if not token or not sign:
             results.append(('%s-SignThis' % prefix,
                             '%s:%s' % (what, signToken(payload=what))))
           elif not self.conns.config.GetDomainQuota(proto, domain, srand, token, sign):
             results.append(('%s-Invalid' % prefix, what))
-          elif self.conns.Tunnel(proto, domain) is not None:
+          elif self.conns.Tunnel(proto, domain):
             # FIXME: Allow multiple backends!
             results.append(('%s-Duplicate' % prefix, what))
           else:
             results.append(('%s-OK' % prefix, what))
 
+        results.append(('%s-SessionID' % prefix,
+                        '%x:%s' % (time.time(), sha1hex(session))))
         callback(results) 
 
         self.qc.acquire()
@@ -1090,6 +1095,7 @@ class Selectable(object):
     global selectable_id
     selectable_id += 1
     self.sid = selectable_id
+    self.alt_id = None
 
     if address:
       addr = address or ('x.x.x.x', 'x')
@@ -1297,17 +1303,19 @@ class Selectable(object):
 
   def Throttle(self, max_speed=None, remote=False):
     if max_speed:
+      self.throttle_until = time.time()
       flooded = self.read_bytes + self.all_in
-      flooded -= int(max_speed * (time.time() - self.created))
-      delay = min(15, max(1, flooded/max_speed))
+      flooded -= max_speed * (time.time() - self.created)
+      delay = min(15, max(0.2, flooded/max_speed))
       if flooded < 0: delay = 15
     else:
+      if self.throttle_until < time.time(): self.throttle_until = time.time()
       flooded = '?'
-      delay = 1
+      delay = 0.2
 
-    self.throttle_until = int(time.time() + delay)
+    self.throttle_until += delay
     self.LogDebug('Throttled until %x (flooded=%s, bps=%s, remote=%s)' % (
-                    self.throttle_until, flooded, max_speed, remote))
+                    int(self.throttle_until), flooded, max_speed, remote))
     return True
 
   def Send(self, data, try_flush=False, bail_out=False):
@@ -1354,6 +1362,7 @@ class Selectable(object):
     buffered_bytes += len(self.write_blocked)
     if self.wrote_bytes >= 512*1024: self.LogTraffic()
 
+    if self.write_eof and not self.write_blocked: self.ProcessEofWrite()
     return True
 
   def SendChunked(self, data, compress=True, zhistory=None):
@@ -1397,6 +1406,7 @@ class Connections(object):
     self.config = config
     self.ip_tracker = {}
     self.conns = []
+    self.conns_by_id = {}
     self.tunnels = {}
     self.auth = None
 
@@ -1404,8 +1414,9 @@ class Connections(object):
     self.auth = auth_thread or AuthThread(self)
     self.auth.start()
 
-  def Add(self, conn):
+  def Add(self, conn, alt_id=None):
     self.conns.append(conn)
+    if alt_id: self.conns_by_id[alt_id] = conn
 
   def TrackIP(self, ip, domain):
     tick = '%d' % (time.time()/12)
@@ -1432,6 +1443,8 @@ class Connections(object):
     return self.ip_tracker
 
   def Remove(self, conn):
+    if conn.alt_id and conn.alt_id in self.conns_by_id:
+      del self.conns_by_id[conn.alt_id]
     if conn in self.conns:
       self.conns.remove(conn)
     for tid in self.tunnels.keys():
@@ -1439,14 +1452,19 @@ class Connections(object):
         self.tunnels[tid].remove(conn)
         if not self.tunnels[tid]: del self.tunnels[tid]
 
-  def Sockets(self):
+  def Readable(self):
     # FIXME: This is O(n)
     now = time.time()
-    return [s.fd for s in self.conns if s.fd and (not s.read_eof) and (s.throttle_until <= now)]
+    return [s.fd for s in self.conns if (s.fd 
+                                         and (not s.read_eof)
+                                         and (s.throttle_until <= now))]
 
   def Blocked(self):
     # FIXME: This is O(n)
     return [s.fd for s in self.conns if s.fd and len(s.write_blocked) > 0]
+
+  def Dead(self):
+    return [s.fd for s in self.conns if s.read_eof and s.write_eof and not s.write_blocked]
 
   def CleanFds(self):
     evil = []
@@ -1484,7 +1502,7 @@ class Connections(object):
     if tid in self.tunnels:
       return self.tunnels[tid]
     else:
-      return None
+      return []
 
 
 class LineParser(Selectable):
@@ -1658,7 +1676,9 @@ class ChunkParser(Selectable):
 
     if self.want_bytes == 0:
       self.header += data
-      if self.header.find('\r\n') < 0: return 1
+      if self.header.find('\r\n') < 0:
+        if self.read_eof: return self.ProcessEofRead()
+        return True
       try:
         size, data = self.header.split('\r\n', 1)
         self.header = ''
@@ -1709,7 +1729,7 @@ class ChunkParser(Selectable):
       if result and leftover:
         result = self.ProcessData(leftover)
 
-    if result and self.read_eof: result = self.ProcessEofRead()
+    if self.read_eof: result = self.ProcessEofRead() and result
     return result
 
   def ProcessCorruptChunk(self, chunk):
@@ -1754,6 +1774,13 @@ class Tunnel(ChunkParser):
         for feature in conn.parser.Header(prefix+'-Features'):
           if feature == 'ZChunks': self.EnableZChunks(level=1)
 
+        for replace in conn.parser.Header(prefix+'-Replace'):
+          if replace in self.conns.conns_by_id:
+            conn = self.conns.conns_by_id[replace]
+            self.LogDebug('Disconnecting old tunnel: %s' % conn)
+            self.conns.Remove(conn)
+            conn.Cleanup()
+
         for bs in conn.parser.Header(prefix):
           # X-Beanstalk: proto:my.domain.com:token:signature
           proto, domain, srand, token, sign = bs.split(':') 
@@ -1783,6 +1810,8 @@ class Tunnel(ChunkParser):
     for r in results:
       output.append('%s: %s\r\n' % r)
       if r[0] in ('X-PageKite-OK', 'X-Beanstalk-OK'): ok[r[1]] = 1
+      if r[0] in ('X-PageKite-SessionID', 'X-Beanstalk-SessionID'):
+        self.alt_id = r[1]
 
     output.append(HTTP_StartBody())
     if not self.Send(output):
@@ -1794,9 +1823,9 @@ class Tunnel(ChunkParser):
     if self.backends:
       for backend in self.backends:
         proto, domain, srand = backend.split(':')
-        self.Log([('BE', 'FIXME?'), ('proto', proto), ('domain', domain)])
+        self.Log([('BE', 'Live'), ('proto', proto), ('domain', domain)])
         self.conns.Tunnel(proto, domain, self)
-      self.conns.Add(self) 
+      self.conns.Add(self, alt_id=self.alt_id) 
       return self
     else:
       conn.LogError('No tunnels configured, closing connection.')
@@ -1888,6 +1917,10 @@ class Tunnel(ChunkParser):
       begin = time.time()
       data, parse = self._Connect(server, conns)
       if data and parse:
+
+        for sessionid in parse.Header('X-PageKite-SessionID'):
+          self.alt_id = sessionid
+          LogDebug('Got session ID: %s' % sessionid)
 
         tryagain = False
         tokens = {}
@@ -2023,8 +2056,12 @@ class Tunnel(ChunkParser):
     return True
 
   # If a tunnel goes down, we just go down hard and kill all our connections.
-  def ProcessEofRead(self): self.Cleanup()
-  def ProcessEofWrite(self): self.Cleanup()
+  def ProcessEofRead(self):
+    self.conns.Remove(self)
+    self.Cleanup()
+
+  def ProcessEofWrite(self):
+    self.ProcessEofRead()
 
   def ProcessChunk(self, data):
     try:
@@ -2324,6 +2361,10 @@ class UserConn(Selectable):
     self.ProcessEof()
 
   def ProcessData(self, data):
+    if not self.tunnel:
+      self.LogError('No tunnel! %s' % self)
+      return False
+
     if not self.tunnel.SendData(self, data):
       self.LogDebug('Send to tunnel failed')
       return False
@@ -2639,7 +2680,7 @@ class PageKite(object):
     self.ui_password = None
     self.ui_pemfile = None
     self.disable_zchunks = False
-    self.buffer_max = 4096 
+    self.buffer_max = 1024 
     self.error_url = None
 
     self.tunnel_manager = None
@@ -3070,7 +3111,7 @@ class PageKite(object):
   def CheckAllTunnels(self, conns):
     missing = []
     for backend in self.backends:
-      if conns.Tunnel(domain) is None:
+      if not conns.Tunnel(domain):
         missing.append(domain)
     if missing:
       self.FallDown('No tunnel for %s' % missing, help=False) 
@@ -3278,7 +3319,7 @@ class PageKite(object):
     self.looping = True
     iready, oready, eready = None, None, None
     while self.looping:
-      isocks, osocks = conns.Sockets(), conns.Blocked()
+      isocks, osocks = conns.Readable(), conns.Blocked()
       try:
         if isocks or osocks:
           iready, oready, eready = select.select(isocks, osocks, [], 1.1)
@@ -3320,6 +3361,10 @@ class PageKite(object):
             LogDebug("Read error in main loop, closing %s" % conn)
             conns.Remove(conn)
             conn.Cleanup()
+
+      for conn in conns.Dead():
+        conns.Remove(conn)
+        conn.Cleanup()
 
       last_loop = now
 
