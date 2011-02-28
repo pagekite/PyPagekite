@@ -962,7 +962,7 @@ class HttpUiThread(threading.Thread):
 
 HTTP_METHODS = ['OPTIONS', 'CONNECT', 'GET', 'HEAD', 'POST', 'PUT', 'TRACE',
                 'PROPFIND', 'PROPPATCH', 'MKCOL', 'DELETE', 'COPY', 'MOVE',
-                'LOCK', 'UNLOCK']
+                'LOCK', 'UNLOCK', 'PING']
 HTTP_VERSIONS = ['HTTP/1.0', 'HTTP/1.1']
 
 class HttpParser(object):
@@ -2413,7 +2413,7 @@ class UnknownConn(MagicProtocolParser):
     done = False
 
     if self.parser.method == 'PING':
-      self.Send('PONG\r\n\r\n')
+      self.Send('PONG %s\r\n\r\n' % self.parser.path)
       done = True
 
     if not done and self.parser.method == 'CONNECT':
