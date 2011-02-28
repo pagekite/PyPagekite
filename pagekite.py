@@ -2346,24 +2346,20 @@ class UserConn(Selectable):
       self.ProcessEofRead(tell_tunnel=False)
 
   def ProcessEofRead(self, tell_tunnel=True):
-    self.LogDebug('Processing Read EOF')
-
     if tell_tunnel and self.tunnel:
       self.tunnel.SendStreamEof(self.sid, read_eof=True)
 
     self.Shutdown(socket.SHUT_RD)
     self.read_eof = True
-    self.ProcessEof()
+    return self.ProcessEof()
 
   def ProcessEofWrite(self, tell_tunnel=True):
-    self.LogDebug('Processing Write EOF')
-
     if tell_tunnel and self.tunnel:
       self.tunnel.SendStreamEof(self.sid, write_eof=True)
 
     if not self.write_blocked: self.Shutdown(socket.SHUT_WR)
     self.write_eof = True
-    self.ProcessEof()
+    return self.ProcessEof()
 
   def ProcessData(self, data):
     if not self.tunnel:
@@ -2375,7 +2371,7 @@ class UserConn(Selectable):
       return False
 
     # Back off if tunnel is stuffed.
-    if len(self.tunnel.write_blocked) > 1024000: self.Throttle()
+    if self.tunnel and len(self.tunnel.write_blocked) > 1024000: self.Throttle()
 
     if self.read_eof: return self.ProcessEofRead()
     return True
@@ -2401,6 +2397,14 @@ class UnknownConn(MagicProtocolParser):
                               (self.on_port or '?'),
                               (self.host or '?'))
 
+  def ProcessEofRead(self):
+    self.read_eof = True
+    return self.ProcessEof()
+
+  def ProcessEofWrite(self):
+    self.read_eof = True
+    return self.ProcessEof()
+
   def ProcessLine(self, line, lines):
     if not self.parser: return True
     if self.parser.Parse(line) is False: return False
@@ -2408,7 +2412,11 @@ class UnknownConn(MagicProtocolParser):
 
     done = False
 
-    if self.parser.method == 'CONNECT':
+    if self.parser.method == 'PING':
+      self.Send('PONG\r\n\r\n')
+      done = True
+
+    if not done and self.parser.method == 'CONNECT':
       if self.parser.path.lower().startswith('pagekite:'):
         if Tunnel.FrontEnd(self, lines, self.conns) is None: return False
         done = True
@@ -3133,7 +3141,7 @@ class PageKite(object):
         fd.setblocking(1)
 
       fd.connect((host, port))
-      fd.send('ping\r\n\r\n')
+      fd.send('PING / HTTP/1.0\r\n\r\n')
       fd.recv(1)
       fd.close()
 
