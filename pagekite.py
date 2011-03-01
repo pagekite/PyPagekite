@@ -2327,9 +2327,14 @@ class UserConn(Selectable):
 
   def Shutdown(self, direction):
     try:
-      if self.fd: self.fd.shutdown(direction)
+      if self.fd:
+        if 'sock_shutdown' in dir(self.fd):
+          # This is a pyOpenSSL socket, which has incompatible shutdown.
+          if direction == socket.SHUT_RD: self.fd.shutdown()
+        else:
+          self.fd.shutdown(direction)
     except Exception, e:
-      self.LogDebug('Shutdown (%s) error: %s' % (direction, e))
+      self.LogDebug('Shutdown (%s/%s) error: %s' % (direction, self.fd, e))
 
   def ProcessTunnelEof(self, read_eof=False, write_eof=False):
     if read_eof and not self.write_eof:
