@@ -101,7 +101,7 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.3.14+github'
+APPVER = '0.3.15'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 DOC = """\
@@ -1267,7 +1267,7 @@ class Selectable(object):
 
   def ReadData(self, maxread=None):
     if self.read_eof:
-      self.LogDebug("Read attempted after EOF!")
+#     self.LogDebug("Read attempted after EOF!")
       return False
 
     try:
@@ -1346,7 +1346,8 @@ class Selectable(object):
           self.ProcessEofWrite()
           return False
         else:
-          self.LogDebug('Problem sending: %s' % err)
+#         self.LogDebug('Problem sending: %s' % err)
+          pass
       except (SSL.WantWriteError, SSL.WantReadError), err:
         pass
       except socket.error, (errno, msg):
@@ -1355,7 +1356,8 @@ class Selectable(object):
           self.ProcessEofWrite()
           return False
         else:
-          self.LogDebug('Problem sending: %s (errno=%s)' % (msg, errno))
+#         self.LogDebug('Problem sending: %s (errno=%s)' % (msg, errno))
+          pass
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
         self.LogDebug('Error sending (SSL): %s' % err)
         self.ProcessEofWrite()
@@ -1923,7 +1925,7 @@ class Tunnel(ChunkParser):
 
         for sessionid in parse.Header('X-PageKite-SessionID'):
           self.alt_id = sessionid
-          LogDebug('Got session ID: %s' % sessionid)
+#         LogDebug('Got session ID: %s' % sessionid)
 
         tryagain = False
         tokens = {}
@@ -2334,7 +2336,8 @@ class UserConn(Selectable):
         else:
           self.fd.shutdown(direction)
     except Exception, e:
-      self.LogDebug('Shutdown (%s/%s) error: %s' % (direction, self.fd, e))
+#     self.LogDebug('Shutdown (%s/%s) error: %s' % (direction, self.fd, e))
+      pass
 
   def ProcessTunnelEof(self, read_eof=False, write_eof=False):
     if read_eof and not self.write_eof:
@@ -3355,7 +3358,7 @@ class PageKite(object):
         for socket in oready:
           conn = conns.Connection(socket)
           if conn and not conn.Send([], try_flush=True):
-            LogDebug("Write error in main loop, closing %s" % conn)
+#           LogDebug("Write error in main loop, closing %s" % conn)
             conns.Remove(conn)
             conn.Cleanup()
 
@@ -3370,7 +3373,7 @@ class PageKite(object):
         for socket in iready:
           conn = conns.Connection(socket)
           if conn and not conn.ReadData(maxread=throttle):
-            LogDebug("Read error in main loop, closing %s" % conn)
+#           LogDebug("Read error in main loop, closing %s" % conn)
             conns.Remove(conn)
             conn.Cleanup()
 
