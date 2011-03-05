@@ -798,7 +798,7 @@ around this limitation.
 <a                                                              name=lic></a>
 ### 16. Credits and licence ###
 
-Pagekite.py is (C) Copyright 2010, Bjarni Rúnar Einarsson and The
+Pagekite.py is (C) Copyright 2010-2011, Bjarni Rúnar Einarsson and The
 Beanstalks Project ehf.
 
 This program is free software: you can redistribute it and/or modify
