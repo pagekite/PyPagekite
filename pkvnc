@@ -1,0 +1,33 @@
+#!/bin/bash
+#
+# This highly self-referencial script will open up VNC via. PageKite.
+#
+# It is assumed that the VNC server has a raw PageKite service registered
+# on whatever port is given to the vnc viewer.
+#
+# It requires GNU netcat and OpenBSD netcat, and a vnc viewer that understands
+# the -via argument and uses the VNC_VIA_CMD environment variable.  If you
+# don't have them, this might help:
+#
+#   sudo apt-get install xvnc4viewer netcat-traditional netcat-openbsd
+#
+NC_TRAD=nc.traditional
+NC_OPEN=nc.openbsd
+VNC_CMD=xvnc4viewer
+#
+if [ "$PKVNC_LPORT" = "" ]; then
+  if [ "$1" != "--nc" ]; then
+    # Invoked by the user!
+    export VNC_VIA_CMD="$0 --nc "'"$L" "$H" "$R"'
+    exec $VNC_CMD -via 127.0.0.1 "$@"
+  else
+    # Invoked by the vncviewer!
+    export PKVNC_LPORT=$2
+    export PKVNC_RHOST=$3
+    export PKVNC_RPORT=$4
+    $NC_TRAD -l -p $PKVNC_LPORT -e "$0" &
+  fi
+else
+  # Invoked by netcat!
+  exec $NC_OPEN -X connect -x $PKVNC_RHOST:443 $PKVNC_RHOST $PKVNC_RPORT
+fi
