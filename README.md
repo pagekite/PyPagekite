@@ -9,7 +9,7 @@ Try ./pagekite.py --help for instructions (or read the source).
 
 Front-end service is available at <http://pagekite.net/>, or you can run
 your own.  For a more general discussion of what *pageKite* is and how it
-works, check out <http://pagekite.net/docs/>.
+works, check out <http://pagekite.net/support/intro/>.
 
 
 <a                                                              name=toc></a>
