@@ -15,20 +15,20 @@ NC_TRAD=nc.traditional
 NC_OPEN=nc.openbsd
 VNC_CMD=xvnc4viewer
 
-SELF=$0
+SELF="$0"
 if [ "$PKVNC_LPORT" = "" ]; then
   if [ "$1" != "--nc" ]; then
     # Invoked by the user!
     export VNC_VIA_CMD="$SELF --nc "'"$L" "$H" "$R"'
-    exec $VNC_CMD -via 127.0.0.1 "$@"
+    exec "$VNC_CMD" -via 127.0.0.1 "$@"
   else
     # Invoked by the vncviewer!
-    export PKVNC_LPORT=$2
-    export PKVNC_RHOST=$3
-    export PKVNC_RPORT=$4
-    $NC_TRAD -l -p $PKVNC_LPORT -e "$SELF" &
+    export PKVNC_LPORT="$2"
+    export PKVNC_RHOST="$3"
+    export PKVNC_RPORT="$4"
+    "$NC_TRAD" -l -p "$PKVNC_LPORT" -e "$SELF" &
   fi
 else
   # Invoked by netcat!
-  exec $NC_OPEN -X connect -x $PKVNC_RHOST:443 $PKVNC_RHOST $PKVNC_RPORT
+  exec "$NC_OPEN" -X connect -x "$PKVNC_RHOST:443" "$PKVNC_RHOST" "$PKVNC_RPORT"
 fi
