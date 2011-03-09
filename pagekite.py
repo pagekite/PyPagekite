@@ -1054,8 +1054,8 @@ class HttpParser(object):
 
 
 def obfuIp(ip):
-  quads = ('%s' % ip).split('.')
-  return '~%s' % '.'.join([q for q in quads[2:]])
+  quads = ('%s' % ip).replace(':', '.').split('.')
+  return '~%s' % '.'.join([q for q in quads[-2:]])
 
 selectable_id = 0
 buffered_bytes = 0
@@ -1069,7 +1069,10 @@ class Selectable(object):
                      errno.EALREADY)
 
   def __init__(self, fd=None, address=None, on_port=None, maxread=16000):
-    self.SetFD(fd or rawsocket(socket.AF_INET, socket.SOCK_STREAM))
+    try:
+      self.SetFD(fd or rawsocket(socket.AF_INET6, socket.SOCK_STREAM))
+    except Exception:
+      self.SetFD(fd or rawsocket(socket.AF_INET, socket.SOCK_STREAM))
     self.address = address
     self.on_port = on_port
     self.created = self.bytes_logged = time.time()
