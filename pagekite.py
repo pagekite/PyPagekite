@@ -1070,7 +1070,7 @@ class Selectable(object):
 
   def __init__(self, fd=None, address=None, on_port=None, maxread=16000):
     try:
-      self.SetFD(fd or rawsocket(socket.AF_INET6, socket.SOCK_STREAM))
+      self.SetFD(fd or rawsocket(socket.AF_INET6, socket.SOCK_STREAM), six=True)
     except Exception:
       self.SetFD(fd or rawsocket(socket.AF_INET, socket.SOCK_STREAM))
     self.address = address
@@ -1167,11 +1167,11 @@ class Selectable(object):
     self.zlevel = level
     self.zw = zlib.compressobj(level)
 
-  def SetFD(self, fd):
+  def SetFD(self, fd, six=False):
     self.fd = fd
     self.fd.setblocking(0)
     try:
-      self.fd.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+      if six: self.fd.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
       self.fd.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
       self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPIDLE, 60)
       self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPCNT, 10)
