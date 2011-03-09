@@ -798,6 +798,30 @@ around this limitation.
 <a                                                              name=lic></a>
 ### 16. Credits and licence ###
 
+Please see individual files for details on their licensing; as a rule
+Python source code falls under the same license as pagekite.py,
+documentation (including this document) under the Creative Commons
+Attribution-ShareAlike (CC BY) 3.0, and sample configuration files are
+placed in the Public Domain.
+
+If these licensing terms to not suit you for some reason, please contact
+the authors as it may be possible to negotiate alternate terms.
+
+
+#### This document ####
+
+This document is (C) Copyright 2010-2011, Bjarni Rúnar Einarsson and The
+Beanstalks Project ehf.
+
+This work is licensed under the Creative Commons Attribution-ShareAlike
+3.0 Unported License. To view a copy of this license, visit 
+<http://creativecommons.org/licenses/by-sa/3.0/> or send a letter to
+Creative Commons, 171 Second Street, Suite 300, San Francisco,
+California, 94105, USA.
+
+
+#### pagekite.py ####
+
 Pagekite.py is (C) Copyright 2010-2011, Bjarni Rúnar Einarsson and The
 Beanstalks Project ehf.
 
@@ -813,5 +837,6 @@ GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 
 [ [up](#toc) ]
