@@ -1,4 +1,5 @@
 #!/bin/bash
+################################[ This file is placed in the Public Domain. ]##
 #
 # This highly self-referencial script will open up VNC via. PageKite.
 #
