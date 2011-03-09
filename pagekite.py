@@ -1171,6 +1171,7 @@ class Selectable(object):
     self.fd = fd
     self.fd.setblocking(0)
     try:
+      self.fd.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
       self.fd.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
       self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPIDLE, 60)
       self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPCNT, 10)
