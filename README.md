@@ -801,7 +801,7 @@ around this limitation.
 Please see individual files for details on their licensing; as a rule
 Python source code falls under the same license as pagekite.py,
 documentation (including this document) under the Creative Commons
-Attribution-ShareAlike (CC BY) 3.0, and sample configuration files are
+Attribution-ShareAlike (CC-BY-SA) 3.0, and sample configuration files are
 placed in the Public Domain.
 
 If these licensing terms to not suit you for some reason, please contact
