@@ -3146,7 +3146,8 @@ class PageKite(object):
   def CheckAllTunnels(self, conns):
     missing = []
     for backend in self.backends:
-      if not conns.Tunnel(domain):
+      proto, domain = backend.split(':')
+      if not conns.Tunnel(proto, domain):
         missing.append(domain)
     if missing:
       self.FallDown('No tunnel for %s' % missing, help=False) 
