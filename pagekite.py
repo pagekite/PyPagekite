@@ -954,9 +954,12 @@ class HttpUiThread(threading.Thread):
 
   def quit(self):
     self.serve = False
-    knock = rawsocket(socket.AF_INET, socket.SOCK_STREAM)
-    knock.connect(self.ui_sspec)
-    knock.close()
+    try:
+      knock = rawsocket(socket.AF_INET, socket.SOCK_STREAM)
+      knock.connect(self.ui_sspec)
+      knock.close()
+    except Exception:
+      pass
 
   def run(self):
     while self.serve:
