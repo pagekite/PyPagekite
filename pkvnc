@@ -39,6 +39,10 @@ else
   # Invoked by netcat!
   if [ "$(which $SC_OPEN)" == "" ]; then
     # No socat available, try netcat.
+    echo 1>&2
+    echo 'WARNING: Connection to $PKVNC_RHOST:443 is not encrypted.' 1>&2
+    echo '         Please install socat if you care.' 1>&2
+    echo 1>&2
     exec "$NC_OPEN" -X connect -x "$PKVNC_RHOST:443" "$PKVNC_RHOST" "$PKVNC_RPORT"
   else
     # We have socat!  Use the more secure SSL connection, manual HTTP CONNECT
