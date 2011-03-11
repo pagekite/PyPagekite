@@ -1487,8 +1487,8 @@ class Connections(object):
     # FIXME: This is O(n)
     return [s.fd for s in self.conns if s.fd and len(s.write_blocked) > 0]
 
-  def Dead(self):
-    return [s.fd for s in self.conns if s.read_eof and s.write_eof and not s.write_blocked]
+  def DeadConns(self):
+    return [s for s in self.conns if s.read_eof and s.write_eof and not s.write_blocked]
 
   def CleanFds(self):
     evil = []
@@ -3401,7 +3401,7 @@ class PageKite(object):
             conns.Remove(conn)
             conn.Cleanup()
 
-      for conn in conns.Dead():
+      for conn in conns.DeadConns():
         conns.Remove(conn)
         conn.Cleanup()
 
