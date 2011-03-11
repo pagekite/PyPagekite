@@ -6,15 +6,21 @@
 # It is assumed that the VNC server has a raw PageKite service registered
 # on whatever port is given to the vnc viewer.
 #
-# It requires GNU netcat and OpenBSD netcat, and a vnc viewer that understands
-# the -via argument and uses the VNC_VIA_CMD environment variable.  If you
+# It requires GNU netcat and (OpenBSD netcat OR socat), and a vnc viewer that
+# understands the -via argument and uses the VNC_VIA_CMD environment variable.  If you
 # don't have them, this might help:
 #
-#   sudo apt-get install xvnc4viewer netcat-traditional netcat-openbsd
+#   sudo apt-get install xvnc4viewer netcat-traditional socat
+#
+# (socat is preferred, as it uses SSL to connect to the front-end)
 #
 NC_TRAD=nc.traditional
 NC_OPEN=nc.openbsd
 VNC_CMD=xvnc4viewer
+
+SC_OPEN=socat
+SC_SSL_AUTH="capath=/etc/ssl/certs/"
+# If self-signed, use: SC_SSL_AUTH="verify=0"
 
 SELF="$0"
 if [ "$PKVNC_LPORT" = "" ]; then
@@ -31,5 +37,19 @@ if [ "$PKVNC_LPORT" = "" ]; then
   fi
 else
   # Invoked by netcat!
-  exec "$NC_OPEN" -X connect -x "$PKVNC_RHOST:443" "$PKVNC_RHOST" "$PKVNC_RPORT"
+  if [ "$(which $SC_OPEN)" == "" ]; then
+    # No socat available, try netcat.
+    exec "$NC_OPEN" -X connect -x "$PKVNC_RHOST:443" "$PKVNC_RHOST" "$PKVNC_RPORT"
+  else
+    # We have socat!  Use the more secure SSL connection, manual HTTP CONNECT
+    (
+       echo CONNECT $PKVNC_RHOST:$PKVNC_RPORT HTTP/1.0
+       echo
+       exec cat
+    ) | exec "$SC_OPEN" - "openssl:$PKVNC_RHOST:443,$SC_SSL_AUTH" | (
+       read REPLY
+       read NOTHING
+       exec cat
+    )
+  fi
 fi
