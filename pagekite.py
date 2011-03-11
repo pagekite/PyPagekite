@@ -3067,6 +3067,10 @@ class PageKite(object):
           (host, port) = arg.split(':')
           socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, host, int(port))
           self.socks_server = (host, port)
+          # This increases the odds of unrelated requests getting lumped
+          # together in the tunnel, which makes traffic analysis harder.
+          global SEND_ALWAYS_BUFFERS
+          SEND_ALWAYS_BUFFERS = True
         except Exception, e:
           raise ConfigError("Please instally SocksiPy: "
                             " http://code.google.com/p/socksipy-branch/")
