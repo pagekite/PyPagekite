@@ -304,11 +304,14 @@ if not 'SHUT_RD' in dir(socket):
 # objects. If that fails, look for Python 2.6+ native ssl support and 
 # create a compatibility wrapper. If both fail, bomb with a ConfigError
 # when the user tries to enable anything SSL-related.
+SEND_MAX_BYTES = 16 * 1024
+SEND_ALWAYS_BUFFERS = False
 try: 
   from OpenSSL import SSL
   def SSL_Connect(ctx, sock,
                   server_side=False, accepted=False, connected=False,
                   verify_names=None):
+    LogDebug('TLS is provided by pyOpenSSL')
     if verify_names:
       def vcb(conn, x509, errno, depth, rc):
         # FIXME: No ALT names, no wildcards ...
@@ -330,6 +333,12 @@ try:
 except ImportError:
   try:
     import ssl
+
+    # Because the native Python ssl module does not expose WantWriteError,
+    # we need this to keep tunnels from shutting down when busy.
+    SEND_ALWAYS_BUFFERS = True
+    SEND_MAX_BYTES = 4 * 1024
+
     class SSL(object):
       SSLv23_METHOD = ssl.PROTOCOL_SSLv23
       TLSv1_METHOD = ssl.PROTOCOL_TLSv1
@@ -367,6 +376,7 @@ except ImportError:
     def SSL_Connect(ctx, sock,
                     server_side=False, accepted=False, connected=False,
                     verify_names=None):
+      LogDebug('TLS is provided by native Python ssl')
       reqs = (verify_names and ssl.CERT_REQUIRED or ssl.CERT_NONE)
       fd = ssl.wrap_socket(sock, keyfile=ctx.privatekey_file, 
                                  certfile=ctx.certchain_file,
@@ -1090,6 +1100,7 @@ class Selectable(object):
     self.write_blocked = ''
     self.write_speed = 102400
     self.write_eof = False
+    self.write_retry = None
 
     # Throttle reads and writes
     self.throttle_until = 0
@@ -1330,7 +1341,7 @@ class Selectable(object):
     buffered_bytes -= len(self.write_blocked)
 
     # If we're already blocked, just buffer unless explicitly asked to flush.
-    if len(self.write_blocked) > 0 and not try_flush:
+    if (not try_flush) and (len(self.write_blocked) > 0 or SEND_ALWAYS_BUFFERS):
       self.write_blocked += ''.join(data)
       buffered_bytes += len(self.write_blocked)
       return True
@@ -1342,8 +1353,9 @@ class Selectable(object):
     sent_bytes = 0
     if sending:
       try:
-        sent_bytes = self.fd.send(sending)
+        sent_bytes = self.fd.send(sending[:(self.write_retry or SEND_MAX_BYTES)])
         self.wrote_bytes += sent_bytes
+        self.write_retry = None
       except IOError, err:
         if err.errno not in self.HARMLESS_ERRNOS:
           self.LogError('Error sending: %s' % err)
@@ -1351,9 +1363,9 @@ class Selectable(object):
           return False
         else:
 #         self.LogDebug('Problem sending: %s' % err)
-          pass
+          self.write_retry = len(sending)
       except (SSL.WantWriteError, SSL.WantReadError), err:
-        pass
+        self.write_retry = len(sending)
       except socket.error, (errno, msg):
         if errno not in self.HARMLESS_ERRNOS:
           self.LogError('Error sending: %s (errno=%s)' % (msg, errno))
@@ -1361,7 +1373,7 @@ class Selectable(object):
           return False
         else:
 #         self.LogDebug('Problem sending: %s (errno=%s)' % (msg, errno))
-          pass
+          self.write_retry = len(sending)
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
         self.LogDebug('Error sending (SSL): %s' % err)
         self.ProcessEofWrite()
