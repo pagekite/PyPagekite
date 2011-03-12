@@ -71,7 +71,7 @@ class PageKiteLogParser(object):
     first = True
     while first or follow:
       for line in fd:
-        self.ProcessLine(line)
+        self.ProcessLine(line.strip())
 
       if follow: fd = self.Follow(fd, filename)
       first = False
@@ -169,5 +169,8 @@ class DebugPKLT(PageKiteLogTracker):
 
 if __name__ == '__main__':
   sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
-  DebugPKLT().ReadSyslog(sys.argv[1], pname=sys.argv[2])
+  if len(sys.argv) > 2:
+    DebugPKLT().ReadSyslog(sys.argv[1], pname=sys.argv[2])
+  else:
+    DebugPKLT().ReadLog(sys.argv[1])
 
