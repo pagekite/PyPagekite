@@ -71,7 +71,9 @@ class PageKiteLogParser(object):
     first = True
     while first or follow:
       for line in fd:
-        self.ProcessLine(line.strip())
+        data = self.ParseLine(line.strip())
+        if after is None or int(data['ts'], 16) > after:
+          self.ProcessData(data)
 
       if follow: fd = self.Follow(fd, filename)
       first = False
