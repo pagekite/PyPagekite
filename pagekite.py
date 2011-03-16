@@ -417,11 +417,11 @@ try:
   def sha1hex(data):
     hl = hashlib.sha1()
     hl.update(data)
-    return hl.hexdigest()
+    return hl.hexdigest().lower()
 except ImportError:
   import sha
   def sha1hex(data):
-    return sha.new(data).hexdigest() 
+    return sha.new(data).hexdigest().lower()
 
 
 # YamonD is a part of PageKite.net's internal monitoring systems. It's not
@@ -471,17 +471,44 @@ def globalSecret():
 
   return gSecret
 
-def signToken(token=None, secret=None, payload='', length=36):
+def signToken(token=None, secret=None, payload='', timestamp=None, length=36):
   """
   This will generate a random token with a signature which could only have come
   from this server.  If a token is provided, it is re-signed so the original
   can be compared with what we would have generated, for verification purposes.
 
+  If a timestamp is provided it will be embedded in the signature to a
+  resolution of 10 minutes, and the signature will begin with the letter 't'
+
   Note: This is only as secure as random.randint() is random.
   """
   if not secret: secret = globalSecret()
-  if not token: token = '%8.8x' % (random.randint(0, 0x7FFFFFFD)+1)
-  return token[0:8] + sha1hex(secret + payload + token[0:8])[0:length-8]
+  if not token: token = sha1hex('%s%8.8x' % (globalSecret(),
+                                             random.randint(0, 0x7FFFFFFD)+1))
+  if timestamp:
+    tok = 't' + token[1:]
+    ts = '%x' % int(timestamp/600)
+    return tok[0:8] + sha1hex(secret + payload + ts + tok[0:8])[0:length-8]
+  else:
+    return token[0:8] + sha1hex(secret + payload + token[0:8])[0:length-8]
+
+def checkSignature(sign='', secret='', payload=''):
+  """
+  Check a signature for validity. When using timestamped signatures, we only
+  accept signatures from the current and previous windows.
+  """
+  if sign[0] == 't':
+    ts = int(time.time())
+    for window in (0, 1):
+      valid = signToken(token=sign, secret=secret, payload=payload,
+                        timestamp=(ts-(window*600)))
+      LogDebug('Comparing %s ?= %s (window=%d)' % (sign, valid, window))
+      if sign == valid: return True
+    return False
+  else:
+    valid = signToken(token=sign, secret=secret, payload=payload)
+    LogDebug('Comparing %s ?= %s' % (sign, valid))
+    return sign == valid
 
 
 class ConfigError(Exception):
@@ -502,14 +529,21 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
   tokens = tokens or {}
   for d in backends.keys():
     if backends[d][BE_BACKEND]:
-      token = d in tokens and tokens[d] or ''
-      data = '%s:%s:%s' % (d, signToken(token=globalSecret(),
-                                        payload=globalSecret(),
-                                        secret=server),
-                           token)
+
+      # A stable (for replay on challenge) but unguessable salt.
+      my_token = sha1hex(globalSecret() + server + backends[d][BE_SECRET])[:36]
+
+      # This is the challenge (salt) from the front-end, if any.
+      server_token = d in tokens and tokens[d] or ''
+
+      # Our payload is the (proto, name) combined with both salts
+      data = '%s:%s:%s' % (d, my_token, server_token)
+
+      # Sign the payload with the shared secret (random salt).
       sign = signToken(secret=backends[d][BE_SECRET],
                        payload=data,
                        token=testtoken)
+
       req.append('X-PageKite: %s:%s\r\n' % (data, sign))
 
   req.append('\r\n')
@@ -684,8 +718,11 @@ class AuthThread(threading.Thread):
           what = '%s:%s:%s' % (proto, domain, srand)
           session += what
           if not token or not sign:
+            # Send a challenge. Our challenges are time-stamped, so we can
+            # put stict bounds on possible replay attacks (20 minutes atm).
             results.append(('%s-SignThis' % prefix,
-                            '%s:%s' % (what, signToken(payload=what))))
+                            '%s:%s' % (what, signToken(payload=what,
+                                                       timestamp=time.time()))))
           elif not self.conns.config.GetDomainQuota(proto, domain, srand, token, sign):
             results.append(('%s-Invalid' % prefix, what))
           elif self.conns.Tunnel(proto, domain):
@@ -2922,8 +2959,8 @@ class PageKite(object):
     return server
 
   def IsSignatureValid(self, sign, secret, proto, domain, srand, token):
-    return sign == signToken(token=sign, secret=secret,
-                           payload='%s:%s:%s:%s' % (proto, domain, srand, token))
+    return checkSignature(sign=sign, secret=secret,
+                          payload='%s:%s:%s:%s' % (proto, domain, srand, token))
 
   def LookupDomainQuota(self, lookup):
     ip = socket.gethostbyname(lookup)
@@ -2964,7 +3001,7 @@ class PageKite(object):
       return None
 
     data = '%s:%s:%s' % (protoport, domain, srand)
-    if not token or token == signToken(token=token, payload=data):
+    if not token or checkSignature(sign=token, payload=data):
       if self.auth_domain:
         lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
         try:
