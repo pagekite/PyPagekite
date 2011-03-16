@@ -454,9 +454,21 @@ except Exception:
 gSecret = None
 def globalSecret():
   global gSecret
-  if not gSecret: gSecret = '%8.8x%8.8x%8.8x' % (random.randint(0, 0x7FFFFFFE), 
-                                                 time.time(),
-                                                 random.randint(0, 0x7FFFFFFE))
+
+  if not gSecret:
+    # This always works...
+    gSecret = '%8.8x%8.8x%8.8x' % (random.randint(0, 0x7FFFFFFE), 
+                                   time.time(),
+                                   random.randint(0, 0x7FFFFFFE))
+    try:
+      # See if we can augment that with some real randomness
+      newSecret = sha1hex(open('/dev/random').read(16) + gSecret)
+      gSecret = newSecret
+      LogDebug('Seeded signatures using /dev/random, hooray!')
+    except Exception:
+      # FIXME: What is a better source of randomness on e.g. Windows?
+      LogDebug('WARNING: Seeding signatures with time.time() and random.randint()')
+
   return gSecret
 
 def signToken(token=None, secret=None, payload='', length=36):
@@ -495,7 +507,9 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
                                         payload=globalSecret(),
                                         secret=server),
                            token)
-      sign = signToken(secret=backends[d][BE_SECRET], payload=data, token=testtoken)
+      sign = signToken(secret=backends[d][BE_SECRET],
+                       payload=data,
+                       token=testtoken)
       req.append('X-PageKite: %s:%s\r\n' % (data, sign))
 
   req.append('\r\n')
@@ -1918,7 +1932,9 @@ class Tunnel(ChunkParser):
         LogError('SSL handshake failed: probably a bad cert (%s)' % e)
         return None, None
 
-    if (not self.Send(HTTP_PageKiteRequest(server, conns.config.backends, tokens,
+    if (not self.Send(HTTP_PageKiteRequest(server,
+                                         conns.config.backends,
+                                       tokens,
                                      nozchunks=conns.config.disable_zchunks))
         or not self.Flush(wait=True)):
       return None, None
