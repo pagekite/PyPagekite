@@ -471,7 +471,9 @@ def globalSecret():
 
   return gSecret
 
-def signToken(token=None, secret=None, payload='', timestamp=None, length=36):
+TOKEN_LENGTH=36
+def signToken(token=None, secret=None, payload='', timestamp=None,
+              length=TOKEN_LENGTH):
   """
   This will generate a random token with a signature which could only have come
   from this server.  If a token is provided, it is re-signed so the original
@@ -531,7 +533,8 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
     if backends[d][BE_BACKEND]:
 
       # A stable (for replay on challenge) but unguessable salt.
-      my_token = sha1hex(globalSecret() + server + backends[d][BE_SECRET])[:36]
+      my_token = sha1hex(globalSecret() + server + backends[d][BE_SECRET]
+                         )[:TOKEN_LENGTH]
 
       # This is the challenge (salt) from the front-end, if any.
       server_token = d in tokens and tokens[d] or ''

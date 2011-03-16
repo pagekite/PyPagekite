@@ -1,6 +1,12 @@
 Version history - highlights
 ============================
 
+v0.3.17  ??
+-------
+   - Crypto cleanup: better random numbers (on *nix), clarified code, added
+     timestamps to front-end challenges to limit the replay attack window.
+
+
 v0.3.16  2011.03.11
 -------
    - Worked around bug in native Python ssl module which kills busy tunnels.
