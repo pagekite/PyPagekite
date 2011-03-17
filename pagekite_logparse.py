@@ -51,15 +51,19 @@ class PageKiteLogParser(object):
     # Record last position...      
     pos = fd.tell()
 
-    if os.stat(filename).st_size < pos:
-      # Re-open log-file if it's been rotated/trucated
-      fd.close() 
-      fd = open(filename, 'r')
-    else:
-      # Else, sleep a bit and then try to read some more
-      time.sleep(1)
-      fd.seek(pos)
+    try:
+      if os.stat(filename).st_size < pos:
+        # Re-open log-file if it's been rotated/trucated
+        new_fd = open(filename, 'r')
+        fd.close()
+        return new_fd
+    except (OSError, IOError), e:
+      # Failed to stat or open new file, just try again later.
+      pass
 
+    # Sleep a bit and then try to read some more
+    time.sleep(1)
+    fd.seek(pos)
     return fd
 
   def ReadLog(self, filename=None, after=None, follow=False):
