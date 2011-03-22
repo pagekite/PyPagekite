@@ -504,12 +504,10 @@ def checkSignature(sign='', secret='', payload=''):
     for window in (0, 1):
       valid = signToken(token=sign, secret=secret, payload=payload,
                         timestamp=(ts-(window*600)))
-      LogDebug('Comparing %s ?= %s (window=%d)' % (sign, valid, window))
       if sign == valid: return True
     return False
   else:
     valid = signToken(token=sign, secret=secret, payload=payload)
-    LogDebug('Comparing %s ?= %s' % (sign, valid))
     return sign == valid
 
 
@@ -2966,6 +2964,7 @@ class PageKite(object):
                           payload='%s:%s:%s:%s' % (proto, domain, srand, token))
 
   def LookupDomainQuota(self, lookup):
+    LogDebug('Lookup: %s' % lookup)
     ip = socket.gethostbyname(lookup)
 
     # High bit not set, then access is granted and the "ip" is a quota.
@@ -3004,7 +3003,7 @@ class PageKite(object):
       return None
 
     data = '%s:%s:%s' % (protoport, domain, srand)
-    if not token or checkSignature(sign=token, payload=data):
+    if (not token) or checkSignature(sign=token, payload=data):
       if self.auth_domain:
         lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
         try:
