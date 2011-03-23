@@ -223,7 +223,7 @@ MAGIC_PATH = '%sv%s' % (MAGIC_PREFIX, PROTOVER)
 MAGIC_PATHS = (MAGIC_PATH, '/Beanstalk~Magic~Beans/0.2')
 
 OPT_FLAGS = 'o:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
-OPT_ARGS = ['noloop', 'clean', 'nocrashreport',
+OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'optfile=', 'httpd=', 'pemfile=', 'httppass=', 'errorurl=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
@@ -307,6 +307,9 @@ if not 'SHUT_RD' in dir(socket):
 SEND_MAX_BYTES = 16 * 1024
 SEND_ALWAYS_BUFFERS = False
 try: 
+  if '--nopyopenssl' in sys.argv:
+    raise ImportError('pyOpenSSL disabled')
+
   from OpenSSL import SSL
   def SSL_Connect(ctx, sock,
                   server_side=False, accepted=False, connected=False,
@@ -317,7 +320,12 @@ try:
         # FIXME: No ALT names, no wildcards ...
         if errno != 0: return False
         if depth != 0: return True
-        return (x509.get_subject().commonName.lower() in verify_names)
+        commonName = x509.get_subject().commonName.lower()
+        cNameDigest = '%s/%s' % (commonName, x509.digest('sha1').replace(':','').lower())
+        if (commonName in verify_names) or (cNameDigest in verify_names):
+          LogDebug('Cert OK: %s' % (cNameDigest))
+          return True
+        return False
       ctx.set_verify(SSL.VERIFY_PEER | SSL.VERIFY_FAIL_IF_NO_PEER_CERT, vcb)
     else:
       def vcb(conn, x509, errno, depth, rc): return (errno == 0)
@@ -359,17 +367,24 @@ except ImportError:
 
     def SSL_CheckPeerName(fd, names):
       cert = fd.getpeercert()
+      certhash = sha1hex(fd.getpeercert(binary_form=True))
       if not cert: return None
       for field in cert['subject']:
         if field[0][0].lower() == 'commonname':
           name = field[0][1].lower()
-          if name in names: return name
+          namehash = '%s/%s' % (name, certhash)
+          if name in names or namehash in names:
+            LogDebug('Cert OK: %s' % (namehash))
+            return name
 
       if 'subjectAltName' in cert:
         for field in cert['subjectAltName']:
           if field[0].lower() == 'dns':
             name = field[1].lower()
-            if name in names: return name
+            namehash = '%s/%s' % (name, certhash)
+            if name in names or namehash in names:
+              LogDebug('Cert OK: %s' % (namehash))
+              return name
 
       return None
 
@@ -1945,8 +1960,9 @@ class Tunnel(ChunkParser):
       self.fd.connect((server, 443))
 
     if self.conns.config.fe_certname:
-      # We can't set the SNI directly from Python, so we use CONNECT instead.
-      if (not self.Send(['CONNECT %s:443 HTTP/1.0\r\n\r\n' % (self.conns.config.fe_certname[0])])
+      # We can't set the SNI directly from Python, so we use CONNECT instead
+      commonName = self.conns.config.fe_certname[0].split('/')[0]
+      if (not self.Send(['CONNECT %s:443 HTTP/1.0\r\n\r\n' % commonName])
           or not self.Flush(wait=True)):
         return None, None
 
@@ -3179,6 +3195,7 @@ class PageKite(object):
       elif opt == '--buffers': self.buffer_max = int(arg)
       elif opt == '--nocrashreport': self.crash_report_url = None
       elif opt == '--clean': pass
+      elif opt == '--nopyopenssl': pass
       elif opt == '--noloop': self.main_loop = False
 
       elif opt == '--defaults':
