@@ -675,11 +675,13 @@ def LogSyslog(values):
   else:
     syslog.syslog(syslog.LOG_INFO, '; '.join(['='.join(x) for x in words]))
 
-def LogStdout(values):
+LogFile = sys.stdout
+def LogToFile(values):
   words, wdict = LogValues(values)
-  print '; '.join(['='.join(x) for x in words])
+  LogFile.write('; '.join(['='.join(x) for x in words]))
+  LogFile.write('\n')
 
-Log = LogStdout
+Log = LogToFile
 
 def LogError(msg, parms=None):
   emsg = [('err', msg)]
@@ -3389,6 +3391,13 @@ class PageKite(object):
     return failures
 
   def LogTo(self, filename, close_all=True):
+    # Try to open the file before we close everything, so errors don't get
+    # squelched.
+    try:
+      open(filename, "a").close()
+    except IOError, e:
+      raise ConfigError('%s' % e)
+
     if filename == 'syslog':
       global Log
       Log = LogSyslog
@@ -3403,15 +3412,12 @@ class PageKite(object):
         except Exception: # ERROR, fd wasn't open to begin with (ignored)
           pass  
 
-      os.open(filename, os.O_RDWR | os.O_APPEND | os.O_CREAT)
-      os.dup2(0, 1)
-      os.dup2(0, 2)
-    else:
-      fd = os.open(filename, os.O_RDWR | os.O_APPEND | os.O_CREAT)
-      os.dup2(fd, 0)
-      os.dup2(fd, 1)
-      os.dup2(fd, 2)
-      os.close(fd)
+    fd = open(filename, "a", 0)
+    os.dup2(fd.fileno(), 0)
+    os.dup2(fd.fileno(), 1)
+    os.dup2(fd.fileno(), 2)
+    global LogFile
+    LogFile = fd
 
   def Daemonize(self):
     # Fork once...
@@ -3478,8 +3484,6 @@ class PageKite(object):
         conn.Cleanup()
 
       last_loop = now
-
-    ## NOT REACHED ##
 
   def Loop(self):
     self.conns.start()
@@ -3567,9 +3571,11 @@ class PageKite(object):
     self.Loop()
 
     Log([('stopping', 'pagekite.py')])
-    if self.conns and self.conns.auth: self.conns.auth.quit()
     if self.ui_httpd: self.ui_httpd.quit()
     if self.tunnel_manager: self.tunnel_manager.quit()
+    if self.conns:
+      if self.conns.auth: self.conns.auth.quit()
+      for conn in self.conns.conns: conn.Cleanup()
 
 
 ##[ Main ]#####################################################################
