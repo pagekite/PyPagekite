@@ -3510,8 +3510,8 @@ class PageKite(object):
           self.LogTo(self.logfile, close_all=False)
           LogDebug('SIGHUP received, reopening: %s' % self.logfile)
         signal.signal(signal.SIGHUP, reopen)
-      except ImportError:
-        LogError('Warning: importing signal failed, logrotate will not work.')
+      except Exception:
+        LogError('Warning: configure signal handler failed, logrotate will not work.')
 
     # Log that we've started up
     config_report = [('started', sys.argv[0]), ('version', APPVER),
