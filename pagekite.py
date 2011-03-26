@@ -3410,7 +3410,7 @@ class PageKite(object):
         try:
           os.close(fd)
         except Exception: # ERROR, fd wasn't open to begin with (ignored)
-          pass  
+          pass
 
     fd = open(filename, "a", 0)
     os.dup2(fd.fileno(), 0)
@@ -3501,26 +3501,6 @@ class PageKite(object):
   def Start(self):
     conns = self.conns = Connections(self)
 
-    # Create log-file
-    if self.logfile:
-      self.LogTo(self.logfile)
-      try:
-        import signal
-        def reopen(x,y):
-          self.LogTo(self.logfile, close_all=False)
-          LogDebug('SIGHUP received, reopening: %s' % self.logfile)
-        signal.signal(signal.SIGHUP, reopen)
-      except Exception:
-        LogError('Warning: configure signal handler failed, logrotate will not work.')
-
-    # Log that we've started up
-    config_report = [('started', sys.argv[0]), ('version', APPVER),
-                     ('argv', ' '.join(sys.argv[1:])), 
-                     ('ca_certs', self.ca_certs)]
-    for optf in self.rcfiles_loaded: config_report.append(('optfile', optf))
-    Log(config_report)
-    LogDebug('Harmless errnos: %s' % (Selectable.HARMLESS_ERRNOS, ))
-
     try:
       # Set up our listeners if we are a server.
       if self.isfrontend:
@@ -3542,6 +3522,25 @@ class PageKite(object):
 
     except Exception, e:
       raise ConfigError(e)
+
+    # Create log-file
+    if self.logfile:
+      self.LogTo(self.logfile)
+      try:
+        import signal
+        def reopen(x,y):
+          self.LogTo(self.logfile, close_all=False)
+          LogDebug('SIGHUP received, reopening: %s' % self.logfile)
+        signal.signal(signal.SIGHUP, reopen)
+      except Exception:
+        LogError('Warning: configure signal handler failed, logrotate will not work.')
+
+    # Log that we've started up
+    config_report = [('started', sys.argv[0]), ('version', APPVER),
+                     ('argv', ' '.join(sys.argv[1:])),
+                     ('ca_certs', self.ca_certs)]
+    for optf in self.rcfiles_loaded: config_report.append(('optfile', optf))
+    Log(config_report)
 
     # Daemonize!
     if self.daemonize:
