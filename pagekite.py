@@ -355,6 +355,7 @@ import urllib
 import xmlrpclib
 import zlib
 
+import SocketServer
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 
 
@@ -657,6 +658,9 @@ class ConfigError(Exception):
 class ConnectError(Exception):
   pass
 
+class AuthError(Exception):
+  pass
+
 
 def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
                          tls=False, testtoken=None, replace=None):
@@ -944,6 +948,18 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   # Make all paths/endpoints legal, we interpret them below.
   rpc_paths = ( )
 
+  MIME_TYPES = {
+    'txt': 'text/plain',
+    'html': 'text/html',
+    'htm': 'text/html',
+    'css': 'text/css',
+    'js': 'application/javascript',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'jpg': 'image/jpeg',
+    'jepg': 'image/jpeg',
+    'DEFAULT': 'application/octet-stream'
+  }
   TEMPLATE_TEXT = ('%(body)s')
   TEMPLATE_HTML = ('<html><head>\n'
                '<link rel="stylesheet" media="screen, screen"'
@@ -958,7 +974,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                 ' <a href="' + WWWHOME + '"><i>PageKite.net</i></a>.<br>'
                 'Local time is %(now)s.</i></div>\n'
               '</body></html>\n')
- 
+
   def setup(self):
     if self.server.enable_ssl:
       self.connection = self.request
@@ -970,177 +986,178 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   def log_message(self, format, *args):
     Log([('uireq', format % args)])
 
-  def html_overview(self):
-    conns = self.server.conns
-    backends = self.server.pkite.backends
-
-    html = [(
-      '<div id=welcome><p>Welcome to your <i>PageKite</i> control panel!</p></div>\n'
-      '<p id=links>[ <a href="/log.html">Logs</a>, '
-                    '<a href="/conns/">Connections</a> ]</p>\n'
-      '<div id=live><h2>Flying kites:</h2><ul>\n'
-    )]
-
-    for tid in conns.tunnels:
-      proto, domain = tid.split(':')
-      if '-' in proto: proto, unused_port = proto.split('-')
-      if tid in backends:
-        bh, bp = (backends[tid][BE_BHOST], backends[tid][BE_BPORT])
-        if proto.startswith('http'):
-          binfo = '<a href="%s://%s:%s">%s:%s</a>' % (proto, bh, bp, bh, bp)
-        else:
-          binfo = '<b>%s:%s</b>' % (bh, bp) 
-      else:
-        binfo = '<i>none</i>'
-
-      if proto.startswith('http'):
-        tinfo = '%s: <a href="%s://%s">%s</a>' % (proto, proto, domain, domain)
-      else:
-        tinfo = '%s: <b>%s</b>' % (proto, domain) 
-
-      for tunnel in conns.tunnels[tid]:
-        html.append(('<li><span class=tid>%s</span></b>'
-                     ' (<span class=ips>%s</span> to'
-                     ' <span class=backend>%s</span>,'
-                     ' <span class=bytes>%s in, %s out</span>)'
-                     '</li>\n') % (tinfo,
-                                   tunnel.server_info[tunnel.S_NAME].split(':')[0],
-                                   binfo,
-                                   fmt_size(tunnel.all_in + tunnel.read_bytes),
-                                   fmt_size(tunnel.all_out + tunnel.wrote_bytes))) 
-    if not conns.tunnels:
-      html.append('<i>None</i>')
-    
-    html.append(
-      '</ul></div>\n'
-    )
-    return {
-      'title': 'Control Panel',
-      'body': ''.join(html)
-    }
-
-  def txt_log(self):
-    return '\n'.join(['%s' % x for x in LOG])
-
-  def html_log(self, path):
-    debug = path.find('debug') >= 0
-    httpd = path.find('httpd') >= 0
-    alllog = path.find('all') >= 0
-    html = ['<p id=links>[ <a href="/status.html">Control Panel</a> | Logs: '
-                         ' <a href="/log.html">normal</a>,'
-                         ' <a href="/debug-log.html">debug</a>,'
-                         ' <a href="/httpd-log.html">httpd</a>,'
-                         ' <a href="/all-log.html">all</a>,'
-                         ' <a href="/log.txt">raw</a> ]</p>'
-            '<table>']
-    lines = []
-    for line in LOG:
-      if not alllog and ('debug' in line) != debug: continue
-      if not alllog and ('uireq' in line) != httpd: continue
-
-      keys = line.keys()
-      keys.sort()
-      lhtml = ('<tr><td colspan=3><b>%s</b></td>'
-               '</tr>' % time.strftime('%Y-%m-%d %H:%M:%S',
-                                       time.localtime(int(line['ts'], 16))))
-      for key in keys:
-        if key != 'ts':
-          lhtml += ('<tr><td></td><td align=right>%s&nbsp;=</td><td>%s</td>'
-                    '</tr>' % (key, escape_html(line[key])))
-      lines.insert(0, lhtml)
-
-    html.extend(lines)
-    html.append('</table>')
-    return {
-      'title': 'Log viewer, recent events',
-      'body': ''.join(html)
-    }
-
-  def html_conns(self):
-    html = ['<ul>']
-    sids = SELECTABLES.keys()
-    sids.sort(reverse=True)
-    for sid in sids:
-      sel = SELECTABLES[sid]
-      html.append('<li><a href="/conn/%s">%s</a>%s'
-                  ' ' % (sid, escape_html(str(sel)),
-                         sel.dead and ' ' or ' <i>alive</i>'))
-    html.append('</ul>')
-    return {
-      'title': 'Connection log',
-      'body': ''.join(html)
-    }
-
-  def html_conn(self, path):
-    sid = int(path[len('/conn/'):])
-    if sid in SELECTABLES:
-      html = ['<h2>%s</h2>' % escape_html('%s' % SELECTABLES[sid]),
-              SELECTABLES[sid].__html__()]
-    else:
-      html = ['<h2>Connection %s not found. Expired?</h2>' % sid]
-    return {
-      'title': 'Connection details',
-      'body': ''.join(html)
-    }
-
-  def begin_headers(self, code, mimetype):
-    self.send_response(code)
-    self.send_header('Cache-Control', 'no-store')
-    self.send_header('Pragma', 'no-cache')
+  def sendStdHdrs(self, header_list=[], cachectrl='private', mimetype='text/html'):
+    self.send_header('Cache-Control', cachectrl)
     self.send_header('Content-Type', mimetype)
+    for header in header_list:
+      self.send_header(header[0], header[1])
+    self.end_headers()
+
+  def sendChunk(self, chunk):
+    self.wfile.write('%x\r\n' % len(chunk))
+    self.wfile.write(chunk)
+    self.wfile.write('\r\n')
+
+  def sendEof(self):
+    if self.chunked: self.wfile.write('0\r\n\r\n')
+
+  def sendResponse(self, message, code=200, msg='OK', mimetype='text/html',
+                         header_list=[], chunked=False):
+    self.wfile.write('HTTP/1.1 %s %s\n' % (code, msg))
+    if code == 401:
+      self.send_header('WWW-Authenticate',
+                       'Basic realm=PK%d' % (time.time()/3600))
+    if chunked:
+      self.chunked = True
+      self.send_header('Transfer-Encoding', 'chunked')
+    else:
+      self.chunked = False
+      self.send_header('Content-Length', len(message))
+    self.sendStdHdrs(header_list=header_list, mimetype=mimetype)
+    if message:
+      if chunked:
+        self.sendChunk(message)
+      else:
+        self.wfile.write(message)
+
+  def checkUsernamePasswordAuth(self, username, password):
+    if self.server.pkite.ui_password: 
+      if password != self.server.pkite.ui_password: 
+        raise AuthError("Invalid password")
+
+  def checkRequestAuth(self, scheme, netloc, path, qs):
+    if self.server.pkite.ui_password: 
+      raise AuthError("checkRequestAuth not implemented")
+
+  def checkPostAuth(self, scheme, netloc, path, qs, posted):
+    if self.server.pkite.ui_password: 
+      raise AuthError("checkRequestAuth not implemented")
+
+  def performAuthChecks(self, scheme, netloc, path, qs):
+    try:
+      auth = self.headers.get('authorization')
+      if auth:
+        (how, ab64) = auth.split()
+        if how.lower() == 'basic':
+          (username, password) = base64.b64decode(ab64).split(':')
+          self.checkUsernamePasswordAuth(username, password)
+          return True
+
+      self.checkRequestAuth(scheme, netloc, path, qs)
+      return True
+
+    except (ValueError, KeyError, AuthError), e:
+      LogDebug('HTTP Auth failed: %s' % e)
+    else:
+      LogDebug('HTTP Auth failed: Unauthorized')
+
+    self.sendResponse('<h1>Unauthorized</h1>\n', code=401, msg='Forbidden')
+    return False
+
+  def performPostAuthChecks(self, scheme, netloc, path, qs, posted):
+    try:
+      self.checkPostAuth(scheme, netloc, path, qs, posted)
+      return True
+    except AuthError:
+      self.sendResponse('<h1>Unauthorized</h1>\n', code=401, msg='Forbidden')
+      return False
 
   def do_GET(self):
     (scheme, netloc, path, params, query, frag) = urlparse(self.path) 
+    qs = parse_qs(query)
+    if not self.performAuthChecks(scheme, netloc, path, qs): return
+    try:
+      return self.handleHttpRequest(scheme, netloc, path, params, query, frag,
+                                    qs, None)
+    except Exception, e:
+      Log([('err', 'GET error at %s: %s' % (path, e))])
+      self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
+  def do_POST(self):
+    (scheme, netloc, path, params, query, frag) = urlparse(self.path)
+    qs = parse_qs(query)
+    if not self.performAuthChecks(scheme, netloc, path, qs): return
+
+    posted = None
+    try:
+      ctype, pdict = cgi.parse_header(self.headers.get('content-type'))
+      if ctype == 'multipart/form-data':
+        posted = cgi.parse_multipart(self.rfile, pdict)
+      elif ctype == 'application/x-www-form-urlencoded':
+        clength = int(self.headers.get('content-length'))
+        posted = cgi.parse_qs(self.rfile.read(clength), 1)
+      else:
+        return SimpleXMLRPCServer.SimpleXMLRPCRequestHandler.do_POST(self)
+    except Exception, e:
+      Log([('err', 'POST error at %s: %s' % (path, e))])
+
+    if not self.performPostAuthChecks(scheme, netloc, path, qs, posted): return
+    try:
+      return self.handleHttpRequest(scheme, netloc, path, params, query, frag,
+                                    qs, posted)
+    except Exception, e:
+      Log([('err', 'POST error at %s: %s' % (path, e))])
+      self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
+
+  def sendStaticFile(self, path, mimetype):
+    try:
+      rf = open('jsui/%s' % path, "rb")
+    except (IOError, OSError), e:
+      return False
+
+    self.sendResponse(None, mimetype=mimetype, chunked=True) 
+    while True:
+      data = rf.read(16*4096)
+      if data == "": break
+      self.sendChunk(data)
+    self.sendEof()
+    rf.close()
+    return True
+
+  def getMimeType(self, path):
+    try:
+      ext = path.split('.')[-1].lower()
+    except IndexError:
+      ext = 'DIRECTORY'
+
+    if ext in self.MIME_TYPES: return self.MIME_TYPES[ext]
+    return self.MIME_TYPES['DEFAULT']
+
+  def handleHttpRequest(self, scheme, netloc, path, params, query, frag,
+                              qs, posted):
     data = {
       'prog': self.server.pkite.progname,
       'now': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
       'ver': APPVER
     }
-
-    authenticated = False
-    if self.server.pkite.ui_password: 
-      auth = self.headers.get('authorization')
-      if auth:
-        (how, ab64) = auth.split()
-        if how.lower() == 'basic':
-          (uid, password) = base64.b64decode(ab64).split(':')
-          authenticated = (password == self.server.pkite.ui_password)
-      elif query.find('auth=%s' % self.server.pkite.ui_password) != -1:
-        authenticated = True
-
-      if not authenticated:
-        self.begin_headers(401, 'text/html')
-        self.send_header('WWW-Authenticate',
-                         'Basic realm=PK%d' % (time.time()/3600))
-        self.end_headers()
-        data['title'] = data['body'] = 'Authentication required.'
-        self.wfile.write(self.TEMPLATE_HTML % data)
-        return
-    
-    if path.endswith('.txt'):
-      template = self.TEMPLATE_TEXT
-      self.begin_headers(200, 'text/plain')
-    else:
-      template = self.TEMPLATE_HTML
-      self.begin_headers(200, 'text/html')
-    self.end_headers()
-
-    qs = parse_qs(query)
+    mimetype = self.getMimeType(path)
 
     if path == '/vars.txt':
       global gYamon
       data['body'] = gYamon.render_vars_text()
 
-    elif path == '/log.txt':        data['body'] = self.txt_log()
-    elif path.endswith('log.html'): data.update(self.html_log(path))
-    elif path == '/conns/':         data.update(self.html_conns())
-    elif path.startswith('/conn/'): data.update(self.html_conn(path))
-    else: data.update(self.html_overview())
-        
-    self.wfile.write(template % data)
+    elif path.startswith('/pagekite/'):
+      if path.endswith('/log.txt'): data['body'] = self.txt_log()
+      elif path.endswith('log.html'): data.update(self.html_log(path))
+      elif path.endswith('/conns/'):  data.update(self.html_conns())
+      elif path.startswith('/pagekite/conn/'): data.update(self.html_conn(path))
+      else: data.update(self.html_overview())
 
-class UiHttpServer(SimpleXMLRPCServer):
+    else:
+      if not self.sendStaticFile(path, mimetype):
+        self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
+      return
+
+    if path.endswith('.txt'):
+      response = self.TEMPLATE_TEXT % data
+    else:
+      response = self.TEMPLATE_HTML % data
+
+    self.sendResponse(response, mimetype=mimetype, chunked=False)
+    self.sendEof()
+
+
+class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
   def __init__(self, sspec, pkite, conns,
                handler=UiRequestHandler,
                ssl_pem_filename=None):
@@ -2102,7 +2119,7 @@ class Tunnel(ChunkParser):
   def AuthCallback(self, conn, results):
     
     output = [HTTP_ResponseHeader(200, 'OK'),
-              HTTP_Header('Content-Transfer-Encoding', 'chunked'),
+              HTTP_Header('Transfer-Encoding', 'chunked'),
               HTTP_Header('X-PageKite-Features', 'ZChunks'),
               HTTP_Header('X-PageKite-Protos', ', '.join(['%s' % p
                             for p in self.conns.config.server_protos])),
