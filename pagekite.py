@@ -2519,7 +2519,7 @@ class Tunnel(ChunkParser):
                 return False
           else:
             conn = UserConn.BackEnd(proto, host, sid, self, port,
-                                    remote_ip=rIp, remote_port=rPort)
+                                    remote_ip=rIp, remote_port=rPort, data=data)
             if proto in ('http', 'websocket'):
               if not conn:
                 if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
@@ -2671,7 +2671,8 @@ class UserConn(Selectable):
                                     ('domain', self.host), ('is', 'FE')])
       return None
 
-  def _BackEnd(proto, host, sid, tunnel, on_port, remote_ip=None, remote_port=None):
+  def _BackEnd(proto, host, sid, tunnel, on_port,
+               remote_ip=None, remote_port=None, data=None):
     # This is when we open a backend connection, because a user asked for it.
     self = UserConn(None, ui=tunnel.conns.config.ui)
     self.sid = sid
@@ -2704,6 +2705,14 @@ class UserConn(Selectable):
       self.ui.Notify(('%s <=> %s://%s:%s (FAIL: no server)'
                       ) % (remote_ip or 'unknown', proto, host, on_port),
                      prefix='?')
+
+    # FIXME: Do access control interception HERE.
+    #        Non-HTTP protocols will just get rejected if they don't match,
+    #        for HTTP we will do a captive portal kind of thing.
+    #        For HTTP we are guaranteed to have the initial HTTP request in
+    #        `data`, so we should be able to parse that for cookies etc.
+
+    if not backend:
       logInfo.append(('err', 'No back-end'))
       self.Log(logInfo)
       return None
