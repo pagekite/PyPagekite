@@ -13,6 +13,8 @@ The pagekite.py HTTPD does:
 
 4. /vars.txt for monitoring.  Make optional?
 
+5. Access controls for backends.
+
 
 ### Sharing files ###
 
@@ -34,4 +36,20 @@ Shared files and directories *could* have access controls based on:
   * SSL certificates
   * Time (files could expire)
   * Access counts (files could expire)
+  * Banning/allowing bot traffic
+
+
+### Access controls for backends ###
+
+We should be able to limit access to backend resources using some/all of
+the above methods.  Granting access should/could become an interactive
+process.
+
+
+### Presenting human readable log info ###
+
+The HTTP UI should give human readable information about visits to a site.
+This means adding visual cues such as grouping, pictures and colors so it
+is easy to see that the same person is browsing your site.
+
 
