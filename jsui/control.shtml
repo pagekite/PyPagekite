@@ -1,0 +1,161 @@
+<html><head>
+
+ <link rel="stylesheet" media="screen, screen" href="http://pagekite.net/css/pagekite.css" type="text/css" title="Default stylesheet" />
+ <script language=javascript src='https://ajax.googleapis.com/ajax/libs/jquery/1.5/jquery.min.js'></script> 
+ <script language=javascript src='js/rpc.js'></script> 
+ <script language=javascript src='/pagekite/vars.jsonp'></script> 
+ <script language=javascript>
+  (function(){
+    window.pkUI = window.pkUI || {};
+    pkUI.log_lines = [];
+    pkUI.kite_list = [];
+    pkUI.auth_token = 'FIXME';
+
+    pkUI.display_log_line = function(ll) {
+      var lp = $('<p/>').attr('id', 'll_'+ll.ll);
+      if (ll.is == 'BE') {
+        lp.html(ll.remote_ip + ' =&gt; ' + ll.proto +'/'+ ll.on_port +' '+ ll.domain )
+      }
+      $('#logdata').append(lp);
+    },
+
+    pkUI.log_tail = function() {
+      var last_ll = '0';
+      if (pkUI.log_lines.length > 0) {
+        last_ll = pkUI.log_lines[pkUI.log_lines.length-1].ll;
+      }
+      pkUI.rpc.get_log_after({
+        params: [pkUI.auth_token, last_ll, 30],
+        onSuccess: function(lines) {
+          for (var l in lines) {
+            // Trim old elements (FIXME: 20 is probably too low)
+            while (pkUI.log_lines.length > 20) {
+              $('#ll_'+(pkUI.log_lines.shift()).ll).remove();
+            }
+            // Collect and display
+            pkUI.log_lines.push(lines[l]);
+            pkUI.display_log_line(lines[l]);
+          }
+          // Go grab the next batch!
+          // FIXME: Is this kind of recursion bad?
+          pkUI.log_tail();
+        }
+        // FIXME: Handle errors instead of just giving up on updates.
+        // onException(errorObj): // except
+        // onComplete(responseObj): // finally
+      });
+    };
+
+    pkUI.update_kite_list = function(kites) {
+      for (kn in pkUI.kite_list) {
+        $(('#kite_'+(pkUI.kite_list[kn].id)).replace(/[:\.]/g, '_')).remove();
+      }
+      pkUI.kite_list = kites;
+      for (var kn in kites) {
+        var kite = kites[kn];
+        var ktr = $('<tr />').attr('id', ('kite_'+kite.id).replace(/[:\.]/g, '_'));
+
+        if ((/^http/).test(kite.fe_proto)) {
+          ktr.append($('<td />').append($('<a />').attr('href',
+                                                        kite.fe_proto+'://'+kite.domain+':'+(kite.fe_port||''))
+                                                  .html(kite.domain)));
+        } else {
+          ktr.append($('<td />').html(kite.domain));
+        }
+
+        ktr.append($('<td />').html(kite.fe_proto+'/'+(kite.fe_port||'*')));
+
+        var kfe = $('<td />')
+        for (var tn in kite.fe_list) {
+          var fe = kite.fe_list[tn];
+          var p = $('<p />').html(fe.name);
+          if (fe.tls) {
+            p.attr('class', 'encrypted')
+             .attr('title', 'Secure tunnel, certificate: '+fe.tls);
+          } else {
+            p.attr('class', 'unencrypted')
+             .attr('title', 'Unencrypted tunnel');
+          }
+          kfe.append(p);
+        }
+        ktr.append(kfe)
+
+        if ((/^http/).test(kite.be_proto)) {
+          ktr.append($('<td />').append($('<a />').attr('href',
+                                                        kite.be_proto+'://'+kite.backend)
+                                                  .html(kite.backend)));
+        } else {
+          ktr.append($('<td />').html(kite.backend));
+        }
+
+        var rm = $('<a href="#"/>').html('disable').click(function(ev){
+          pkUI.rpc.remove_kite({params: [pkUI.auth_token, kite.id],
+                                onSuccess: pkUI.update_kite_list});
+        });
+        ktr.append($('<td />').append(rm));
+
+        $('#kitetable').append(ktr);
+      }
+    },
+
+    pkUI.initial_setup = function() {
+      // FIXME: Grab the current list of connections and populate the
+      //        screen.  Tailing the log will then keep things updated.
+      pkUI.rpc.get_kites({params: [pkUI.auth_token],
+                          onSuccess: pkUI.update_kite_list});
+    },
+
+    pkUI.main = function() {
+      // Create our RPC proxy
+      pkUI.rpc = new rpc.ServiceProxy("/pagekite/xmlrpc", {
+                                        asynchronous: true,
+                                        protocol: "XML-RPC"
+                                      });
+      // Create initial state
+      pkUI.initial_setup();
+
+      // Start watching for updates
+      pkUI.log_tail();
+    }; 
+
+  })();
+ </script>
+ <title>%(http_host)s - PageKite Control Panel</title>
+
+</head><body onload='pkUI.main();'>
+
+ <h1>%(http_host)s - PageKite Control Panel</h1>
+ <noscript>
+  <p>Sorry to be so lame, but this control panel requires Javascript in
+     order to interact with pagekite.py's XML-RPC API. :-( </p>
+  <p>Firefox is awesome, right?</p>
+ </noscript>
+
+ <div id=kitelist>
+  <h2>Your kites</h2>
+  <table id=kitetable>
+   <tr>
+    <th id=kl_kn>Kite name</th>
+    <th id=kl_kp>Protocol</th>
+    <th id=kl_fe>Front-ends</th>
+    <th id=kl_be>Server</th>
+   </tr>
+  </table>
+ </div>
+
+ <div id=activity>
+  <h2>Activity</h2>
+  <table>
+  </table>
+ </div>
+
+ <div id=sharing>
+  <h2>Sharing</h2>
+  <table>
+  </table>
+ </div>
+
+ <div id=content></div>
+ <div id=logdata></div>
+
+</body></html>

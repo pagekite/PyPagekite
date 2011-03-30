@@ -1,0 +1,16 @@
+<html><head>
+
+ <link rel="stylesheet" media="screen, screen" href="http://pagekite.net/css/pagekite.css" type="text/css" title="Default stylesheet" />
+ <title>%(http_host)s - %(prog)s</title>
+
+</head><body style='text-align: center'>
+
+ <br><br><br>
+ <p><img src='https://pagekite.net/static/skin/i/pagekite-logo.png'></p>
+ <h2>http://%(http_host)s/</h2>
+ <p><tt>[ <a href='control.shtml'>control panel</a> ]</tt></p>
+ <p><tt><small>
+  Carried to the Clouds by <i><a href='http://pagekite.net/'>PageKite</a></i>.
+ </small></tt></p>
+
+</body></html>
