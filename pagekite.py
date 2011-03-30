@@ -1152,6 +1152,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     elif path.startswith('/pagekite/'):
       if path.endswith('/log.txt'): data['body'] = self.txt_log()
       elif path.endswith('/pagekite.rc'): data['body'] = '\n'.join(self.server.pkite.GenerateConfig())
+      elif path.endswith('/pagekite.txt'): data['body'] = '\n'.join(self.server.pkite.GenerateConfig())
       elif path.endswith('/pagekite.cfg'): data['body'] = '\r\n'.join(self.server.pkite.GenerateConfig())
       elif path.endswith('log.html'): data.update(self.html_log(path))
       elif path.endswith('/conns/'):  data.update(self.html_conns())
@@ -1217,6 +1218,14 @@ class RemoteControlInterface(object):
     print 'Sending %s' % kites
     return kites
 
+  def add_kite(self, auth_token,
+               proto,
+               fe_port, fe_domain,
+               be_port, be_domain,
+               shared_secret):
+    if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
+    # FIXME
+    
   def remove_kite(self, auth_token, kite_id):
     if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
     if kite_id in self.pkite.backends:

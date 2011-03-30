@@ -13,7 +13,7 @@
 
     pkUI.display_log_line = function(ll) {
       if (ll.reconfigured) {
-        // FOO
+        // FIXME: Add a big CONFIG CHANGED warning and a SAVE button to UI.
       }
       else {
         var lp = $('<p/>').attr('id', 'll_'+ll.ll);
@@ -106,10 +106,9 @@
     },
 
     pkUI.initial_setup = function() {
-      // FIXME: Grab the current list of connections and populate the
-      //        screen.  Tailing the log will then keep things updated.
       pkUI.rpc.get_kites({params: [pkUI.auth_token],
                           onSuccess: pkUI.update_kite_list});
+      // FIXME: Get other configuration details as well?
     },
 
     pkUI.main = function() {
@@ -137,11 +136,6 @@
      order to interact with pagekite.py's XML-RPC API. :-( </p>
   <p>Firefox is awesome, right?</p>
  </noscript>
- <p style='text-align: right'>
-   Download current configuration:
-     <a href='/pagekite/pagekite.cfg'>for Windows</a>,
-     <a href='/pagekite/pagekite.rc'>for Linux/OS X</a>
- </p>
 
  <div id=kitelist>
   <h2>Your kites</h2>
@@ -154,6 +148,13 @@
    </tr>
   </table>
  </div>
+
+ <p id=cfg_download>
+   Download current configuration for
+     <a href='/pagekite/pagekite.cfg'>Windows</a> or
+     <a href='/pagekite/pagekite.rc'>Linux / OS X</a>
+     (<a href='/pagekite/pagekite.txt'>view</a>).
+ </p>
 
  <div id=activity>
   <h2>Activity</h2>
