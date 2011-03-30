@@ -12,11 +12,16 @@
     pkUI.auth_token = 'FIXME';
 
     pkUI.display_log_line = function(ll) {
-      var lp = $('<p/>').attr('id', 'll_'+ll.ll);
-      if (ll.is == 'BE') {
-        lp.html(ll.remote_ip + ' =&gt; ' + ll.proto +'/'+ ll.on_port +' '+ ll.domain )
+      if (ll.reconfigured) {
+        // FOO
       }
-      $('#logdata').append(lp);
+      else {
+        var lp = $('<p/>').attr('id', 'll_'+ll.ll);
+        if (ll.is == 'BE') {
+          lp.html(ll.remote_ip + ' =&gt; ' + ll.proto +'/'+ ll.on_port +' '+ ll.domain )
+        }
+        $('#logdata').append(lp);
+      }
     },
 
     pkUI.log_tail = function() {
@@ -88,9 +93,11 @@
           ktr.append($('<td />').html(kite.backend));
         }
 
-        var rm = $('<a href="#"/>').html('disable').click(function(ev){
-          pkUI.rpc.remove_kite({params: [pkUI.auth_token, kite.id],
-                                onSuccess: pkUI.update_kite_list});
+        var rm = $('<a href="#"/>').html('remove').click(function(ev){
+          if (confirm('Really remove '+kite.id+'?')) {
+            pkUI.rpc.remove_kite({params: [pkUI.auth_token, kite.id],
+                                  onSuccess: pkUI.update_kite_list});
+          }
         });
         ktr.append($('<td />').append(rm));
 
@@ -130,6 +137,11 @@
      order to interact with pagekite.py's XML-RPC API. :-( </p>
   <p>Firefox is awesome, right?</p>
  </noscript>
+ <p style='text-align: right'>
+   Download current configuration:
+     <a href='/pagekite/pagekite.cfg'>for Windows</a>,
+     <a href='/pagekite/pagekite.rc'>for Linux/OS X</a>
+ </p>
 
  <div id=kitelist>
   <h2>Your kites</h2>

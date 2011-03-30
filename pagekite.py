@@ -1151,6 +1151,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
     elif path.startswith('/pagekite/'):
       if path.endswith('/log.txt'): data['body'] = self.txt_log()
+      elif path.endswith('/pagekite.rc'): data['body'] = '\n'.join(self.server.pkite.GenerateConfig())
+      elif path.endswith('/pagekite.cfg'): data['body'] = '\r\n'.join(self.server.pkite.GenerateConfig())
       elif path.endswith('log.html'): data.update(self.html_log(path))
       elif path.endswith('/conns/'):  data.update(self.html_conns())
       elif path.startswith('/pagekite/conn/'): data.update(self.html_conn(path))
@@ -1164,7 +1166,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
       return
 
-    if path.endswith('.txt'):
+    if path.endswith('.txt') or path.endswith('.cfg') or path.endswith('.rc'):
       response = self.TEMPLATE_TEXT % data
     elif path.endswith('.jsonp'):
       response = self.TEMPLATE_JSONP % (data, )
@@ -1180,6 +1182,7 @@ class RemoteControlInterface(object):
     self.pkite = pkite
     self.conns = conns
     self.yamon = yamon
+    self.modified = False
     self.auth_tokens = {'FIXME': 1}
 
   def connections(self, auth_token):
@@ -1218,6 +1221,8 @@ class RemoteControlInterface(object):
     if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
     if kite_id in self.pkite.backends:
       del self.pkite.backends[kite_id]
+      Log([('reconfigured', '1'), ('removed', kite_id)])
+      self.modified = True
     return self.get_kites(auth_token)
      
   def get_log(self, auth_token):
