@@ -134,6 +134,7 @@ Common Options:
  --pemfile=X    -P X    Use X as a PEM key for the HTTPS UI.
  --httppass=X   -X X    Require password X to access the UI.
  --nozchunks            Disable zlib tunnel compression.
+ --sslzlib              Enable zlib compression in OpenSSL.
  --buffers       N      Buffer at most N kB of back-end data before blocking.
  --logfile=F    -L F    Log to file F.
  --daemonize    -Z      Run as a daemon.
@@ -231,7 +232,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'ports=', 'protos=', 'portalias=', 'rawports=',
             'tls_default=', 'tls_endpoint=', 'fe_certname=', 'ca_certs=',
             'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
-            'new', 'all', 'noall', 'dyndns=', 'nozchunks',
+            'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes']
 
 AUTH_ERRORS           = '128.'
@@ -419,7 +420,28 @@ except ImportError:
         def __init__(self, method):
           raise ConfigError('Neither pyOpenSSL nor python 2.6+ ssl modules found!')
 
+
+def DisableSSLCompression():
+  # Hack to disable compression in OpenSSL and reduce memory usage *lots*.
+  # Source:
+  #   http://journal.paul.querna.org/articles/2011/04/05/openssl-memory-use/
+  try:
+    import ctypes
+    import glob
+    openssl = ctypes.CDLL(None, ctypes.RTLD_GLOBAL)
+    try:
+      f = openssl.SSL_COMP_get_compression_methods
+    except AttributeError:
+      ssllib = sorted(glob.glob("/usr/lib/libssl.so.*"))[0]
+      openssl = ctypes.CDLL(ssllib, ctypes.RTLD_GLOBAL)
+
+    openssl.SSL_COMP_get_compression_methods.restype = ctypes.c_void_p
+    openssl.sk_zero.argtypes = [ctypes.c_void_p]
+    openssl.sk_zero(openssl.SSL_COMP_get_compression_methods())
+  except Exception, e:
+    LogError('disableSSLCompression: Failed: %s' % e)
  
+
 # Different Python 2.x versions complain about deprecation depending on
 # where we pull these from.
 try:
@@ -2786,6 +2808,7 @@ class PageKite(object):
     self.ui_password = None
     self.ui_pemfile = None
     self.disable_zchunks = False
+    self.enable_sslzlib = False
     self.buffer_max = 1024 
     self.error_url = None
 
@@ -3194,6 +3217,7 @@ class PageKite(object):
       elif opt == '--nodaemonize': self.daemonize = False
       elif opt == '--noall': self.require_all = False
       elif opt == '--nozchunks': self.disable_zchunks = True
+      elif opt == '--sslzlib': self.enable_sslzlib = True
       elif opt == '--buffers': self.buffer_max = int(arg)
       elif opt == '--nocrashreport': self.crash_report_url = None
       elif opt == '--clean': pass
@@ -3541,6 +3565,10 @@ class PageKite(object):
                      ('ca_certs', self.ca_certs)]
     for optf in self.rcfiles_loaded: config_report.append(('optfile', optf))
     Log(config_report)
+
+    # Disable compression in OpenSSL
+    if not self.enable_sslzlib:
+      DisableSSLCompression()
 
     # Daemonize!
     if self.daemonize:
