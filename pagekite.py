@@ -3423,7 +3423,7 @@ class PageKite(object):
 
     return failures
 
-  def LogTo(self, filename, close_all=True):
+  def LogTo(self, filename, close_all=True, dont_close=[]):
     # Try to open the file before we close everything, so errors don't get
     # squelched.
     try:
@@ -3441,7 +3441,8 @@ class PageKite(object):
     if close_all:
       for fd in range(0, 1024): # Not MAXFD, but should be enough.
         try:
-          os.close(fd)
+          if fd not in dont_close:
+            os.close(fd)
         except Exception: # ERROR, fd wasn't open to begin with (ignored)
           pass
 
@@ -3558,7 +3559,9 @@ class PageKite(object):
 
     # Create log-file
     if self.logfile:
-      self.LogTo(self.logfile)
+      keep_open = [s.fd.fileno() for s in conns.conns]
+      if self.ui_httpd: keep_open.append(self.ui_httpd.httpd.socket.fileno())
+      self.LogTo(self.logfile, dont_close=keep_open)
       try:
         import signal
         def reopen(x,y):
