@@ -2445,7 +2445,10 @@ class UserConn(Selectable):
       if self.fd:
         if 'sock_shutdown' in dir(self.fd):
           # This is a pyOpenSSL socket, which has incompatible shutdown.
-          if direction == socket.SHUT_RD: self.fd.shutdown()
+          if direction == socket.SHUT_RD:
+            self.fd.shutdown()
+          else:
+            self.fd.sock_shutdown(direction)
         else:
           self.fd.shutdown(direction)
     except Exception, e:
@@ -2474,6 +2477,12 @@ class UserConn(Selectable):
     if not self.write_blocked: self.Shutdown(socket.SHUT_WR)
     self.write_eof = True
     return self.ProcessEof()
+
+  def Send(self, data, try_flush=False, bail_out=False):
+    rv = Selectable.Send(self, data, try_flush=try_flush, bail_out=bail_out)
+    if self.write_eof and not self.write_blocked:
+      self.Shutdown(socket.SHUT_WR)
+    return rv
 
   def ProcessData(self, data):
     if not self.tunnel:
