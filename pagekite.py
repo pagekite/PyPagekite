@@ -248,9 +248,17 @@ LOOPBACK_BE = LOOPBACK_HN + ':2'
 LOOPBACK = {'FE': LOOPBACK_FE, 'BE': LOOPBACK_BE}
 
 BE_PROTO = 0
-BE_DOMAIN = 1
-BE_BACKEND = 2
-BE_SECRET = 3
+BE_PORT = 1
+BE_DOMAIN = 2
+BE_BACKEND = 3
+BE_SECRET = 4
+BE_STATUS = 5
+
+BE_STATUS_OK = 0
+BE_STATUS_BE_FAIL = 2
+BE_STATUS_NO_TUNNEL = 1
+BE_STATUS_DISABLED = -1
+BE_STATUS_UNKNOWN = -2
 
 DYNDNS = {
   'pagekite.net': ('http://up.b5p.us/'
@@ -2140,7 +2148,7 @@ class Tunnel(ChunkParser):
 
   def SendPing(self):
     self.last_ping = int(time.time())
-    self.Log([('ping', self.server_name)])
+    self.LogDebug("Ping", [('host', self.server_name)])
     return self.SendChunked('NOOP: 1\nPING: 1\r\n\r\n!', compress=False)
 
   def SendPong(self):
@@ -2994,7 +3002,9 @@ class PageKite(object):
 
   def GetBackendData(self, proto, domain, field, recurse=True):
     backend = '%s:%s' % (proto.lower(), domain.lower())
-    if backend in self.backends: return self.backends[backend][field]  
+    if backend in self.backends:
+      if BE_STATUS_DISABLED != self.backends[backend][BE_STATUS]:
+        return self.backends[backend][field]  
 
     if recurse:
       dparts = domain.split('.')
@@ -3209,12 +3219,14 @@ class PageKite(object):
             proto, port = proto.split('-')
             bid = '%s-%d:%s' % (proto.lower(), int(port), domain.lower())
           else:
+            port = ''
             bid = '%s:%s' % (proto.lower(), domain.lower())
 
           backend = '%s:%s' % (bhost.lower(), bport)
           if bid in self.backends:
             raise ConfigError("Same backend/domain defined twice: %s" % bid)
-          self.backends[bid] = (proto.lower(), domain.lower(), backend, secret)
+          self.backends[bid] = (proto.lower(), port, domain.lower(),
+                                backend, secret, BE_STATUS_UNKNOWN)
 
       elif opt == '--domain':
         protos, domain, secret = arg.split(':')
@@ -3223,7 +3235,8 @@ class PageKite(object):
           bid = '%s:%s' % (proto, domain)
           if bid in self.backends:
             raise ConfigError("Same backend/domain defined twice: %s" % bid)
-          self.backends[bid] = (proto, domain, None, secret)
+          self.backends[bid] = (proto, None, domain, None, secret,
+                                BE_STATUS_UNKNOWN)
 
       elif opt == '--noprobes': self.no_probes = True
       elif opt == '--nofrontend': self.isfrontend = False
@@ -3443,10 +3456,10 @@ class PageKite(object):
                      syslog.LOG_PID, syslog.LOG_DAEMON)
 
     if close_all:
-      for fd in range(0, 1024): # Not MAXFD, but should be enough.
+      for fd in [sys.stdin, sys.stdout, sys.stderr]:
         try:
           if fd not in dont_close:
-            os.close(fd)
+            os.close(fd.fileno())
         except Exception: # ERROR, fd wasn't open to begin with (ignored)
           pass
 
@@ -3641,7 +3654,8 @@ def Main(pagekite, configure):
         pk.FallDown(msg)
 
       except KeyboardInterrupt, msg:
-        pk.FallDown(None, help=False)
+        pk.FallDown(None, help=False, noexit=True)
+        return
 
     except SystemExit:
       sys.exit(1)
