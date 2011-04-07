@@ -235,9 +235,11 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes']
 
-AUTH_ERRORS           = '128.'
-AUTH_ERR_USER_UNKNOWN = '128.0.0.0'
-AUTH_ERR_INVALID      = '128.0.0.1'
+AUTH_ERRORS_OLD       = '128.0.0.'
+AUTH_ERRORS           = '255.255.255.'
+AUTH_ERR_USER_UNKNOWN = '.0'
+AUTH_ERR_INVALID      = '.1'
+AUTH_QUOTA_MAX        = '255.255.254.255'
 
 VIRTUAL_PN = 'virtual'
 CATCHALL_HN = 'unknown'
@@ -3017,12 +3019,13 @@ class PageKite(object):
     LogDebug('Lookup: %s' % lookup)
     ip = socket.gethostbyname(lookup)
 
-    # High bit not set, then access is granted and the "ip" is a quota.
-    if not ip.startswith(AUTH_ERRORS):
-      return 1024 # FIXME: Decode and return quota.
+    # If not an authentication error, quota should be encoded as an IP.
+    if not (ip.startswith(AUTH_ERRORS) or ip.startswith(AUTH_ERRORS_OLD)):
+      o = [int(x) for x in ip.split('.')]
+      return (((o[0]*256 + o[1])*256 + o[2])*256 + o[3])
   
     # Errors on real errors are final.
-    if ip != AUTH_ERR_USER_UNKNOWN: return None
+    if ip.endswith(AUTH_ERR_USER_UNKNOWN): return None
 
     # User unknown, fall through to local test.
     return -1 
@@ -3058,6 +3061,7 @@ class PageKite(object):
         lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
         try:
           rv = self.LookupDomainQuota(lookup)
+          LogDebug('Got domain quota: %s' % rv)
           if rv is None or rv >= 0: return rv
         except Exception:
           # Lookup failed, fall through to local test.
