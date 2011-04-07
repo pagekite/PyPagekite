@@ -792,6 +792,8 @@ class AuthThread(threading.Thread):
             quota = min(nz_quotas)
             conn.quota = [quota, requests[quotas.index(quota)], time.time()]
             results.append(('%s-Quota' % prefix, quota))
+          elif requests:
+            conn.quota = [0, requests[0], time.time()]
 
         callback(results)
         self.qc.acquire()
@@ -1946,7 +1948,9 @@ class Tunnel(ChunkParser):
                        lambda r: self.QuotaCallback(conns, r))
 
   def QuotaCallback(self, conns, results):
-    # FIXME: Should report new values to the back-end
+    # Report new values to the back-end...
+    self.SendQuota()
+
     for r in results:
       if r[0] in ('X-PageKite-OK', 'X-PageKite-Duplicate'):
         return self
@@ -2191,6 +2195,10 @@ class Tunnel(ChunkParser):
   def SendPong(self):
     return self.SendChunked('NOOP: 1\r\n\r\n!', compress=False)
 
+  def SendQuota(self):
+    return self.SendChunked('NOOP: 1\r\nQuota: %s\r\n!' % self.quota[0],
+                            compress=False)
+
   def SendThrottle(self, sid, write_speed):
     return self.SendChunked('NOOP: 1\r\nSID: %s\r\nSPD: %d\r\n\r\n!' % (
                               sid, write_speed), compress=False)
@@ -2234,10 +2242,15 @@ class Tunnel(ChunkParser):
       return False
 
     self.last_activity = time.time()
-    if parse.Header('PING'): return self.SendPong()
-    if parse.Header('ZRST') and not self.ResetZChunks(): return False
-    if parse.Header('SPD') and not self.Throttle(parse): return False
-    if parse.Header('NOOP'): return True
+    try:
+      if parse.Header('Quota'): self.quota[0] = int(parse.Header('Quota')[0])
+      if parse.Header('PING'): return self.SendPong()
+      if parse.Header('ZRST') and not self.ResetZChunks(): return False
+      if parse.Header('SPD') and not self.Throttle(parse): return False
+      if parse.Header('NOOP'): return True
+    except Exception, e:
+      LogError('Tunnel::ProcessChunk: Corrupt chunk: %s' % e)
+      return False
 
     conn = None
     sid = None
