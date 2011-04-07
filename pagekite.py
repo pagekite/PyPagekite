@@ -2202,7 +2202,7 @@ class Tunnel(ChunkParser):
     return self.SendChunked('NOOP: 1\r\n\r\n!', compress=False)
 
   def SendQuota(self):
-    return self.SendChunked('NOOP: 1\r\nQuota: %s\r\n!' % self.quota[0],
+    return self.SendChunked('NOOP: 1\r\nQuota: %s\r\n\r\n!' % self.quota[0],
                             compress=False)
 
   def SendThrottle(self, sid, write_speed):
