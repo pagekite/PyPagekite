@@ -776,7 +776,7 @@ class AuthThread(threading.Thread):
           else:
             quota = self.conns.config.GetDomainQuota(proto, domain, srand, token, sign)
             quotas.append(quota)
-            if quota is None:
+            if not quota:
               results.append(('%s-Invalid' % prefix, what))
             elif self.conns.Tunnel(proto, domain):
               # FIXME: Allow multiple backends?
@@ -787,10 +787,10 @@ class AuthThread(threading.Thread):
         results.append(('%s-SessionID' % prefix,
                         '%x:%s' % (time.time(), sha1hex(session))))
         if quotas:
-          nz_quotas = [q for q in quotas if q and q >= 0]
+          nz_quotas = [q for q in quotas if q and q > 0]
           if nz_quotas:
             quota = min(nz_quotas)
-            conn.quota = (quota, requests[quotas.index(quota)])
+            conn.quota = [quota, requests[quotas.index(quota)], time.time()]
             results.append(('%s-Quota' % prefix, quota))
 
         callback(results)
@@ -1938,6 +1938,24 @@ class Tunnel(ChunkParser):
 
     return self
 
+  def RecheckQuota(self, conns, when=None):
+    if when is None: when = time.time()
+    if self.quota and self.quota[1] and (self.quota[2] < when-900):
+      self.quota[2] = when
+      conns.auth.check([self.quota[1]], self,
+                       lambda r: self.QuotaCallback(conns, r))
+
+  def QuotaCallback(self, conns, results):
+    # FIXME: Should report new values to the back-end
+    for r in results:
+      if r[0] in ('X-PageKite-OK', 'X-PageKite-Duplicate'):
+        return self
+
+    self.LogError('Ran out of quota or account deleted, closing tunnel.')
+    conns.Remove(self)
+    self.Cleanup()
+    return None
+
   def AuthCallback(self, conn, results):
     
     output = [HTTP_ResponseHeader(200, 'OK'),
@@ -1961,6 +1979,9 @@ class Tunnel(ChunkParser):
         proto, domain, srand = backend.split(':')
         self.Log([('BE', 'Live'), ('proto', proto), ('domain', domain)])
         self.conns.Tunnel(proto, domain, self)
+      if conn.quota:
+        self.quota = conn.quota
+        self.Log([('BE', 'Live'), ('quota', self.quota[0])])
       self.conns.Add(self, alt_id=self.alt_id) 
       return self
     else:
@@ -2094,7 +2115,7 @@ class Tunnel(ChunkParser):
                       ('domain', domain)])
 
           for quota in parse.Header('X-PageKite-Quota'):
-            self.quota = (int(quota), None)
+            self.quota = [int(quota), None, None]
             self.Log([('FE', self.server_name), ('quota', quota)])
 
         self.rtt = (time.time() - begin)
@@ -2774,6 +2795,11 @@ class TunnelManager(threading.Thread):
     self.pkite = pkite
     self.conns = conns
 
+  def CheckTunnelQuotas(self, now):
+    for tid in self.conns.tunnels:
+      for tunnel in self.conns.tunnels[tid]:
+        tunnel.RecheckQuota(self.conns, when=now)
+
   def PingTunnels(self, now):
     dead = {}
     for tid in self.conns.tunnels:
@@ -2805,7 +2831,8 @@ class TunnelManager(threading.Thread):
 
         # If all connected, make sure tunnels are really alive.
         if self.pkite.isfrontend:
-          pass # FIXME: Front-ends should close dead back-end tunnels.
+          self.CheckTunnelQuotas(time.time())
+          # FIXME: Front-ends should close dead back-end tunnels.
         else:
           self.PingTunnels(time.time())
 
@@ -3087,7 +3114,6 @@ class PageKite(object):
         lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
         try:
           rv = self.LookupDomainQuota(lookup)
-          LogDebug('Got domain quota: %s' % rv)
           if rv is None or rv >= 0: return rv
         except Exception:
           # Lookup failed, fall through to local test.
