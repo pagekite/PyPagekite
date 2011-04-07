@@ -235,7 +235,6 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes']
 
-AUTH_ERRORS_OLD       = '128.0.0.'
 AUTH_ERRORS           = '255.255.255.'
 AUTH_ERR_USER_UNKNOWN = '.0'
 AUTH_ERR_INVALID      = '.1'
@@ -3021,7 +3020,7 @@ class PageKite(object):
     LogDebug('Lookup: %s => %s' % (lookup, ip))
 
     # If not an authentication error, quota should be encoded as an IP.
-    if not (ip.startswith(AUTH_ERRORS) or ip.startswith(AUTH_ERRORS_OLD)):
+    if not ip.startswith(AUTH_ERRORS):
       o = [int(x) for x in ip.split('.')]
       return (((o[0]*256 + o[1])*256 + o[2])*256 + o[3])
   
