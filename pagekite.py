@@ -741,9 +741,9 @@ class AuthThread(threading.Thread):
     self.jobs = []
     self.conns = conns
 
-  def check(self, requests, callback):
+  def check(self, requests, conn, callback):
     self.qc.acquire()
-    self.jobs.append((requests, callback))
+    self.jobs.append((requests, conn, callback))
     self.qc.notify()
     self.qc.release()
 
@@ -758,9 +758,10 @@ class AuthThread(threading.Thread):
     self.qc.acquire()
     while self.keep_running:
       if self.jobs:
-        (requests, callback) = self.jobs.pop(0)
+        (requests, conn, callback) = self.jobs.pop(0)
         self.qc.release()
 
+        quotas = []
         results = []
         session = ''
         for (proto, domain, srand, token, sign, prefix) in requests:
@@ -772,18 +773,27 @@ class AuthThread(threading.Thread):
             results.append(('%s-SignThis' % prefix,
                             '%s:%s' % (what, signToken(payload=what,
                                                        timestamp=time.time()))))
-          elif not self.conns.config.GetDomainQuota(proto, domain, srand, token, sign):
-            results.append(('%s-Invalid' % prefix, what))
-          elif self.conns.Tunnel(proto, domain):
-            # FIXME: Allow multiple backends!
-            results.append(('%s-Duplicate' % prefix, what))
           else:
-            results.append(('%s-OK' % prefix, what))
+            quota = self.conns.config.GetDomainQuota(proto, domain, srand, token, sign)
+            quotas.append(quota)
+            if quota is None:
+              results.append(('%s-Invalid' % prefix, what))
+            elif self.conns.Tunnel(proto, domain):
+              # FIXME: Allow multiple backends?
+              results.append(('%s-Duplicate' % prefix, what))
+            else:
+              results.append(('%s-OK' % prefix, what))
 
         results.append(('%s-SessionID' % prefix,
                         '%x:%s' % (time.time(), sha1hex(session))))
-        callback(results) 
+        if quotas:
+          nz_quotas = [q for q in quotas if q and q >= 0]
+          if nz_quotas:
+            quota = min(nz_quotas)
+            conn.quota = (quota, requests[quotas.index(quota)])
+            results.append(('%s-Quota' % prefix, quota))
 
+        callback(results)
         self.qc.acquire()
       else:
         self.qc.wait()
@@ -1190,6 +1200,9 @@ class Selectable(object):
     self.on_port = on_port
     self.created = self.bytes_logged = time.time()
     self.dead = False
+
+    # Quota-related stuff
+    self.quota = None
 
     # Read-related variables
     self.maxread = maxread
@@ -1921,7 +1934,7 @@ class Tunnel(ChunkParser):
 
     self.CountAs('backends_live')
     self.SetConn(conn)
-    conns.auth.check(requests, lambda r: self.AuthCallback(conn, r))
+    conns.auth.check(requests, conn, lambda r: self.AuthCallback(conn, r))
 
     return self
 
@@ -1932,10 +1945,9 @@ class Tunnel(ChunkParser):
               HTTP_Header('X-PageKite-Features', 'ZChunks')]
     ok = {}
     for r in results:
-      output.append('%s: %s\r\n' % r)
       if r[0] in ('X-PageKite-OK', 'X-Beanstalk-OK'): ok[r[1]] = 1
-      if r[0] in ('X-PageKite-SessionID', 'X-Beanstalk-SessionID'):
-        self.alt_id = r[1]
+      if r[0] == 'X-PageKite-SessionID': self.alt_id = r[1]
+      output.append('%s: %s\r\n' % r)
 
     output.append(HTTP_StartBody())
     if not self.Send(output):
@@ -2080,6 +2092,10 @@ class Tunnel(ChunkParser):
                       ('err', 'Duplicate'),
                       ('proto', proto),
                       ('domain', domain)])
+
+          for quota in parse.Header('X-PageKite-Quota'):
+            self.quota = (int(quota), None)
+            self.Log([('FE', self.server_name), ('quota', quota)])
 
         self.rtt = (time.time() - begin)
     
@@ -3081,7 +3097,7 @@ class PageKite(object):
       if not secret: secret = self.GetBackendData(proto, domain, BE_SECRET)
       if secret:
         if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
-          return 1024
+          return -1
         else:
           LogError('Invalid signature for: %s (%s:%s)' % (proto, protoport, domain))
           return None
