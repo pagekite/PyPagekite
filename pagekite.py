@@ -3025,7 +3025,7 @@ class PageKite(object):
       return (((o[0]*256 + o[1])*256 + o[2])*256 + o[3])
   
     # Errors on real errors are final.
-    if ip.endswith(AUTH_ERR_USER_UNKNOWN): return None
+    if not ip.endswith(AUTH_ERR_USER_UNKNOWN): return None
 
     # User unknown, fall through to local test.
     return -1 
