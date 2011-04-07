@@ -3016,8 +3016,9 @@ class PageKite(object):
                           payload='%s:%s:%s:%s' % (proto, domain, srand, token))
 
   def LookupDomainQuota(self, lookup):
-    LogDebug('Lookup: %s' % lookup)
+    if not lookup.endswith('.'): lookup += '.'
     ip = socket.gethostbyname(lookup)
+    LogDebug('Lookup: %s => %s' % (lookup, ip))
 
     # If not an authentication error, quota should be encoded as an IP.
     if not (ip.startswith(AUTH_ERRORS) or ip.startswith(AUTH_ERRORS_OLD)):
