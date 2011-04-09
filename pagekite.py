@@ -129,7 +129,8 @@ Usage:
 
 Common Options:
 
- --optfile=X    -o X    Read options from file X. Default is ~/.pagekiterc.
+ --optfile=X    -o X    Read options from file X. Default is ~/.pagekite.rc.
+ --savefile=X   -S X    Read/write options from file X.
  --httpd=X:P    -H X:P  Enable the HTTP user interface on hostname X, port P.
  --pemfile=X    -P X    Use X as a PEM key for the HTTPS UI.
  --httppass=X   -X X    Require password X to access the UI.
@@ -223,9 +224,10 @@ MAGIC_PREFIX = '/~:PageKite:~/'
 MAGIC_PATH = '%sv%s' % (MAGIC_PREFIX, PROTOVER)
 MAGIC_PATHS = (MAGIC_PATH, '/Beanstalk~Magic~Beans/0.2')
 
-OPT_FLAGS = 'o:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
+OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
-            'optfile=', 'httpd=', 'pemfile=', 'httppass=', 'errorurl=',
+            'optfile=', 'savefile=',
+            'httpd=', 'pemfile=', 'httppass=', 'errorurl=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'register=', 'host=',
@@ -2909,6 +2911,7 @@ class PageKite(object):
     self.crash_report_url = '%scgi-bin/crashes.pl' % WWWHOME
     self.rcfile_recursion = 0
     self.rcfiles_loaded = []
+    self.savefile = None
 
     # Searching for our configuration file!  We prefer the documented
     # 'standard' locations, but if nothing is found there and something local
@@ -3174,6 +3177,10 @@ class PageKite(object):
 
     for opt, arg in opts:
       if opt in ('-o', '--optfile'): self.ConfigureFromFile(arg) 
+      elif opt in ('-S', '--savefile'):
+        if self.savefile: raise ConfigError('Multiple save-files!')
+        self.ConfigureFromFile(arg)
+        self.savefile = arg
 
       elif opt in ('-I', '--pidfile'): self.pidfile = arg
       elif opt in ('-L', '--logfile'): self.logfile = arg
