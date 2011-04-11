@@ -263,7 +263,7 @@ BE_STATUS_DISABLED = -1
 BE_STATUS_UNKNOWN = -2
 
 DYNDNS = {
-  'pagekite.net': ('http://up.b5p.us/'
+  'pagekite.net': ('https://up.pagekite.net/'
                    '?hostname=%(domain)s&myip=%(ips)s&sign=%(sign)s'),
   'beanstalks.net': ('http://up.b5p.us/'
                      '?hostname=%(domain)s&myip=%(ips)s&sign=%(sign)s'),
@@ -792,9 +792,10 @@ class AuthThread(threading.Thread):
           nz_quotas = [q for q in quotas if q and q > 0]
           if nz_quotas:
             quota = min(nz_quotas)
-            conn.quota = [quota, requests[quotas.index(quota)], time.time()]
+            if not conn.quota:
+              conn.quota = [quota, requests[quotas.index(quota)], time.time()]
             results.append(('%s-Quota' % prefix, quota))
-          elif requests:
+          elif requests and not conn.quota:
             conn.quota = [0, requests[0], time.time()]
 
         callback(results)
@@ -1956,6 +1957,9 @@ class Tunnel(ChunkParser):
     for r in results:
       if r[0] in ('X-PageKite-OK', 'X-PageKite-Duplicate'):
         return self
+
+    self.LogDebug('Ran out of quota?')
+    return self
 
     self.LogError('Ran out of quota or account deleted, closing tunnel.')
     conns.Remove(self)
