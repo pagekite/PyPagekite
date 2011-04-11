@@ -776,7 +776,11 @@ class AuthThread(threading.Thread):
                             '%s:%s' % (what, signToken(payload=what,
                                                        timestamp=time.time()))))
           else:
-            quota = self.conns.config.GetDomainQuota(proto, domain, srand, token, sign)
+            # This is a bit lame, but we only check the token if the quota
+            # for this connection has never been verified.
+            quota = self.conns.config.GetDomainQuota(proto, domain, srand,
+                                                     token, sign,
+                                                   check_token=(conn.quota is None))
             quotas.append(quota)
             if not quota:
               results.append(('%s-Invalid' % prefix, what))
@@ -788,14 +792,14 @@ class AuthThread(threading.Thread):
 
         results.append(('%s-SessionID' % prefix,
                         '%x:%s' % (time.time(), sha1hex(session))))
+
         if quotas:
           nz_quotas = [q for q in quotas if q and q > 0]
           if nz_quotas:
             quota = min(nz_quotas)
-            if not conn.quota:
-              conn.quota = [quota, requests[quotas.index(quota)], time.time()]
+            conn.quota = [quota, requests[quotas.index(quota)], time.time()]
             results.append(('%s-Quota' % prefix, quota))
-          elif requests and not conn.quota:
+          elif requests:
             conn.quota = [0, requests[0], time.time()]
 
         callback(results)
@@ -1947,6 +1951,7 @@ class Tunnel(ChunkParser):
     if when is None: when = time.time()
     if self.quota and self.quota[1] and (self.quota[2] < when-900):
       self.quota[2] = when
+      LogDebug('Rechecking: %s' % (self.quota, ))
       conns.auth.check([self.quota[1]], self,
                        lambda r: self.QuotaCallback(conns, r))
 
@@ -1958,7 +1963,7 @@ class Tunnel(ChunkParser):
       if r[0] in ('X-PageKite-OK', 'X-PageKite-Duplicate'):
         return self
 
-    self.LogDebug('Ran out of quota?')
+    self.LogDebug('Ran out of quota? %s' % (results, ))
     return self
 
     self.LogError('Ran out of quota or account deleted, closing tunnel.')
@@ -3089,8 +3094,8 @@ class PageKite(object):
 
   def LookupDomainQuota(self, lookup):
     if not lookup.endswith('.'): lookup += '.'
+    #LogDebug('Lookup: %s' % lookup)
     ip = socket.gethostbyname(lookup)
-    LogDebug('Lookup: %s => %s' % (lookup, ip))
 
     # If not an authentication error, quota should be encoded as an IP.
     if not ip.startswith(AUTH_ERRORS):
@@ -3103,7 +3108,8 @@ class PageKite(object):
     # User unknown, fall through to local test.
     return -1 
 
-  def GetDomainQuota(self, protoport, domain, srand, token, sign, recurse=True):
+  def GetDomainQuota(self, protoport, domain, srand, token, sign,
+                     recurse=True, check_token=True):
     if '-' in protoport:
       proto, port = protoport.split('-')
       try:
@@ -3129,7 +3135,7 @@ class PageKite(object):
       return None
 
     data = '%s:%s:%s' % (protoport, domain, srand)
-    if (not token) or checkSignature(sign=token, payload=data):
+    if (not token) or (not check_token) or checkSignature(sign=token, payload=data):
       if self.auth_domain:
         lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
         try:
@@ -3145,10 +3151,10 @@ class PageKite(object):
         if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
           return -1
         else:
-          LogError('Invalid signature for: %s (%s:%s)' % (proto, protoport, domain))
+          LogError('Invalid signature for: %s (%s)' % (domain, protoport))
           return None
 
-    LogError('No authentication found for: %s (%s:%s)' % (proto, protoport, domain))
+    LogError('No authentication found for: %s (%s)' % (domain, protoport))
     return None
 
   def ConfigureFromFile(self, filename=None):
@@ -3724,7 +3730,7 @@ def Main(pagekite, configure):
         return
 
     except SystemExit:
-      sys.exit(1)
+      sys.exit(0)
 
     except Exception, msg:
       traceback.print_exc(file=sys.stderr)
