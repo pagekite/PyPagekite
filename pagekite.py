@@ -797,8 +797,9 @@ class AuthThread(threading.Thread):
           nz_quotas = [q for q in quotas if q and q > 0]
           if nz_quotas:
             quota = min(nz_quotas)
-            conn.quota = [quota, requests[quotas.index(quota)], time.time()]
-            results.append(('%s-Quota' % prefix, quota))
+            if quota is not None:
+              conn.quota = [quota, requests[quotas.index(quota)], time.time()]
+              results.append(('%s-Quota' % prefix, quota))
           elif requests:
             conn.quota = [0, requests[0], time.time()]
 
@@ -1957,7 +1958,7 @@ class Tunnel(ChunkParser):
 
   def QuotaCallback(self, conns, results):
     # Report new values to the back-end...
-    self.SendQuota()
+    if self.quota: self.SendQuota()
 
     for r in results:
       if r[0] in ('X-PageKite-OK', 'X-PageKite-Duplicate'):
