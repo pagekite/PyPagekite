@@ -161,6 +161,7 @@ Common Options:
                         an options file would be.
 
  --httpd=X:P    -H X:P  Enable the HTTP user interface on hostname X, port P.
+ --webroot=X            Directory to serve as root of built-in HTTPD.
  --pemfile=X    -P X    Use X as a PEM key for the HTTPS UI.
  --httppass=X   -X X    Require password X to access the UI.
 
@@ -279,9 +280,10 @@ SERVICE_TOS_URL = 'https://pagekite.net/support/terms/'
 SERVICE_XMLRPC = 'pk:http://pagekite.net/xmlrpc/'
 
 OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
-OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport', 'signup',
+OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
+            'signup', 'nullui',
             'optfile=', 'savefile=', 'signup=', 'help', 'service_xmlrpc=',
-            'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'nullui',
+            'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webroot=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'register=', 'host=',
@@ -983,6 +985,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
               '</body></html>\n')
 
   def setup(self):
+    self.suppress_body = False
     if self.server.enable_ssl:
       self.connection = self.request
       self.rfile = socket._fileobject(self.request, "rb", self.rbufsize)
@@ -1006,7 +1009,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     self.wfile.write('\r\n')
 
   def sendEof(self):
-    if self.chunked: self.wfile.write('0\r\n\r\n')
+    if self.chunked and not self.suppress_body: self.wfile.write('0\r\n\r\n')
 
   def sendResponse(self, message, code=200, msg='OK', mimetype='text/html',
                          header_list=[], chunked=False):
@@ -1021,7 +1024,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       self.chunked = False
       self.send_header('Content-Length', len(message))
     self.sendStdHdrs(header_list=header_list, mimetype=mimetype)
-    if message:
+    if message and not self.suppress_body:
       if chunked:
         self.sendChunk(message)
       else:
@@ -1069,6 +1072,18 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       self.sendResponse('<h1>Unauthorized</h1>\n', code=401, msg='Forbidden')
       return False
 
+  def do_PING(self):
+    self.sendResponse('PONG\n', code=200, msg='PONG', mimetype='text/plain')
+
+  def do_UNSUPPORTED(self):
+    self.sendResponse('Unsupported request method.\n',
+                      code=503, msg='Sorry', mimetype='text/plain')
+
+  # Misc methods we don't support (yet)
+  def do_OPTIONS(self): self.do_UNSUPPORTED()
+  def do_DELETE(self): self.do_UNSUPPORTED()
+  def do_PUT(self): self.do_UNSUPPORTED()
+
   def do_GET(self):
     (scheme, netloc, path, params, query, frag) = urlparse(self.path) 
     qs = parse_qs(query)
@@ -1079,6 +1094,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     except Exception, e:
       Log([('err', 'GET error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
+
+  def do_HEAD(self):
+    self.suppress_body = True
+    self.do_GET()
 
   def do_POST(self):
     (scheme, netloc, path, params, query, frag) = urlparse(self.path)
@@ -1110,12 +1129,24 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def sendStaticFile(self, path, mimetype, shtml_vars=None):
     try:
-      rf = open('jsui/%s' % path, "rb")
+      if path.find('..') >= 0: raise IOError("Evil")
+      # FIXME: What about dynamic path mappings?
+      full_path = '%s/%s' % (self.server.pkite.ui_webroot, path)
+      for index in ('index.htm', 'index.html', 'index.shtml'):
+        ipath = os.path.join(full_path, index)
+        if os.path.exists(ipath):
+          mimetype = 'text/html'
+          full_path = ipath
+          break
+      if not full_path.endswith('.shtml'): shtml_vars = None
+      rf = open(full_path, "rb")
     except (IOError, OSError), e:
       return False
 
+    # FIXME: Do ETag magic, last modified, etc.
+
     self.sendResponse(None, mimetype=mimetype, chunked=True) 
-    while True:
+    while not self.suppress_body:
       data = rf.read(32*4096)
       if data == "": break
       if shtml_vars:
@@ -1172,9 +1203,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                      'body': '\r\n'.join(self.server.pkite.GenerateConfig())})
 
     else:
-      shtml_vars = None
-      if path.endswith('.shtml'): shtml_vars = data
-      if not self.sendStaticFile(path, data['mimetype'], shtml_vars=shtml_vars):
+      if not self.sendStaticFile(path, data['mimetype'], shtml_vars=data):
         self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
       return
 
@@ -3509,6 +3538,7 @@ class PageKite(object):
     self.ui_httpd = None
     self.ui_password = None
     self.ui_pemfile = None
+    self.ui_webroot = None
     self.disable_zchunks = False
     self.enable_sslzlib = False
     self.buffer_max = 1024 
@@ -3611,6 +3641,7 @@ class PageKite(object):
                          or '# httppass=YOURSECRET'),
       (self.ui_pemfile and 'pemfile=%s' % self.ui_pemfile
                         or '# pemfile=/path/to/sslcert.pem'),
+      '# webroot=/path/to/webroot/omitted/for/security/reasons/',
       '', 
     ]
 
@@ -3712,6 +3743,9 @@ class PageKite(object):
       '',
       '#/ Includes (should usually be at the top or bottom of the file)',
       '# optfile=/path/to/common/settings',
+      '',
+      '#/ Save-files are never configured automatically for security reasons.',
+      '# savefile=/path/to/savefile',
       '',
       '#/ Front-end Options:',
       (self.isfrontend and 'isfrontend' or '# isfrontend')
@@ -4041,6 +4075,7 @@ class PageKite(object):
           self.ui_sspec = (host, int(parts[1]))
         else:
           self.ui_sspec = (host, 80)
+      elif opt == '--webroot': self.ui_webroot = arg
 
       elif opt == '--tls_default': self.tls_default = arg
       elif opt == '--tls_endpoint':
