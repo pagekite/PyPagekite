@@ -1201,6 +1201,17 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       elif path.endswith('/pagekite.cfg'):
         data.update({'mimetype': 'application/octet-stream',
                      'body': '\r\n'.join(self.server.pkite.GenerateConfig())})
+      elif path.startswith('/pagekite/token/'):
+        token = path.split('/')[3]
+        if token == self.server.secret:
+          self.sendResponse('\n', code=301, msg='Moved', header_list=[
+                              ('Set-Cookie', 'token=%s' % token),
+                              ('Location', 'http://%s/' % data['http_host'])
+                            ])
+        else:
+          LogDebug("Invalid token, %s != %s" % (token, self.server.secret))
+          self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
+        return
 
     else:
       if not self.sendStaticFile(path, data['mimetype'], shtml_vars=data):
@@ -3538,7 +3549,7 @@ class PageKite(object):
     self.ui_httpd = None
     self.ui_password = None
     self.ui_pemfile = None
-    self.ui_webroot = None
+    self.ui_webroot = '/invalid/path/to/nowhere'
     self.disable_zchunks = False
     self.enable_sslzlib = False
     self.buffer_max = 1024 
