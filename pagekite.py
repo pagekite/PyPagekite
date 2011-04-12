@@ -966,8 +966,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     'jepg': 'image/jpeg',
     'DEFAULT': 'application/octet-stream'
   }
+  TEMPLATE_RAW = ('%(body)s')
   TEMPLATE_JSONP = ('window.pkData = %s;')
-  TEMPLATE_TEXT = ('%(body)s')
   TEMPLATE_HTML = ('<html><head>\n'
                '<link rel="stylesheet" media="screen, screen"'
                 ' href="http://pagekite.net/css/pagekite.css"'
@@ -1135,51 +1135,66 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     if ext in self.MIME_TYPES: return self.MIME_TYPES[ext]
     return self.MIME_TYPES['DEFAULT']
 
+  def add_kite(self, qs):
+    if 'secret' not in qs or qs['secret'] != self.server.secret:
+      return {'mimetype': 'text/plain', 'body': 'Invalid secret'}
+
+    pass
+
   def handleHttpRequest(self, scheme, netloc, path, params, query, frag,
                               qs, posted):
     data = {
       'prog': self.server.pkite.progname,
+      'code': 200,
+      'msg': 'OK',
+      'mimetype': self.getMimeType(path),
       'now': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
       'ver': APPVER
     }
-    for key in self.headers.keys(): data['http_'+key.lower()] = self.headers.get(key)
-    mimetype = self.getMimeType(path)
+    for key in self.headers.keys():
+      data['http_'+key.lower()] = self.headers.get(key)
 
     if path == '/vars.txt':
       global gYamon
       data['body'] = gYamon.render_vars_text()
 
     elif path.startswith('/pagekite/'):
-      if path.endswith('/log.txt'): data['body'] = self.txt_log()
-      elif path.endswith('/pagekite.rc'): data['body'] = '\n'.join(self.server.pkite.GenerateConfig())
-      elif path.endswith('/pagekite.txt'): data['body'] = '\n'.join(self.server.pkite.GenerateConfig())
-      elif path.endswith('/pagekite.cfg'): data['body'] = '\r\n'.join(self.server.pkite.GenerateConfig())
-      elif path.endswith('log.html'): data.update(self.html_log(path))
-      elif path.endswith('/conns/'):  data.update(self.html_conns())
-      elif path.startswith('/pagekite/conn/'): data.update(self.html_conn(path))
-      elif path.endswith('/vars.jsonp'): pass
-      else: data.update(self.html_overview())
+      if path.endswith('/add_kite/'):
+        data.update(self.add_kite(qs))
+      elif path.endswith('/pagekite.rc'):
+        data.update({'mimetype': 'application/octet-stream',
+                     'body': '\n'.join(self.server.pkite.GenerateConfig())})
+      elif path.endswith('/pagekite.txt'):
+        data.update({'mimetype': 'text/plain',
+                     'body': '\n'.join(self.server.pkite.GenerateConfig())})
+      elif path.endswith('/pagekite.cfg'):
+        data.update({'mimetype': 'application/octet-stream',
+                     'body': '\r\n'.join(self.server.pkite.GenerateConfig())})
 
     else:
       shtml_vars = None
       if path.endswith('.shtml'): shtml_vars = data
-      if not self.sendStaticFile(path, mimetype, shtml_vars=shtml_vars):
+      if not self.sendStaticFile(path, data['mimetype'], shtml_vars=shtml_vars):
         self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
       return
 
-    if path.endswith('.txt') or path.endswith('.cfg') or path.endswith('.rc'):
-      response = self.TEMPLATE_TEXT % data
+    if data['mimetype'] in ('application/octet-stream', 'text/plain'):
+      response = self.TEMPLATE_RAW % data
     elif path.endswith('.jsonp'):
       response = self.TEMPLATE_JSONP % (data, )
     else:
       response = self.TEMPLATE_HTML % data
 
-    self.sendResponse(response, mimetype=mimetype, chunked=False)
+    self.sendResponse(response, msg=data['msg'],
+                                code=data['code'],
+                                mimetype=data['mimetype'],
+                                chunked=False)
     self.sendEof()
 
 
 class RemoteControlInterface(object):
-  def __init__(self, pkite, conns, yamon):
+  def __init__(self, httpd, pkite, conns, yamon):
+    self.httpd = httpd
     self.pkite = pkite
     self.conns = conns
     self.yamon = yamon
@@ -1265,6 +1280,7 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     SimpleXMLRPCServer.__init__(self, sspec, handler)
     self.pkite = pkite
     self.conns = conns
+    self.secret = signToken(payload=('%s' % self))
 
     if ssl_pem_filename:
       ctx = SSL.Context(SSL.SSLv23_METHOD)
@@ -1287,7 +1303,7 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     gYamon.vset("bytes_all", 0)
 
     self.register_introspection_functions()
-    self.register_instance(RemoteControlInterface(pkite, conns, gYamon))
+    self.register_instance(RemoteControlInterface(self, pkite, conns, gYamon))
 
 
 class HttpUiThread(threading.Thread):
