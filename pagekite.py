@@ -2254,7 +2254,11 @@ class Tunnel(ChunkParser):
 
     self.last_activity = time.time()
     try:
-      if parse.Header('Quota'): self.quota[0] = int(parse.Header('Quota')[0])
+      if parse.Header('Quota'):
+        if self.quota:
+          self.quota[0] = int(parse.Header('Quota')[0])
+        else:
+          self.quota = [int(parse.Header('Quota')[0]), None, None]
       if parse.Header('PING'): return self.SendPong()
       if parse.Header('ZRST') and not self.ResetZChunks(): return False
       if parse.Header('SPD') and not self.Throttle(parse): return False
