@@ -3877,8 +3877,8 @@ class PageKite(object):
     # secret and use the remote-control APIs as long as they can read the
     # *entire* config (which contains all the sensitive bits anyway).
     #
-    if self.ui_httpd and self.ui_httpd.secret and not new:
-      return self.ui_httpd.secret
+    if self.ui_httpd and self.ui_httpd.httpd and not new:
+      return self.ui_httpd.httpd.secret
     else:
       return sha1hex('\n'.join(self.GenerateConfig()))
 
