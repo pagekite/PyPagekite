@@ -1,10 +1,10 @@
 <html><head>
 
- <link rel="stylesheet" media="screen, screen" href="http://pagekite.net/css/pagekite.css" type="text/css" title="Default stylesheet" />
- <script language=javascript src='https://ajax.googleapis.com/ajax/libs/jquery/1.5/jquery.min.js'></script>
- <script language=javascript src='js/rpc.js'></script> 
- <script language=javascript src='js/jquery.cookie.js'></script>
- <script language=javascript src='/pagekite/vars.jsonp'></script> 
+ <link rel="stylesheet" media="screen, screen" href="%(method)s://pagekite.net/css/pagekite.css" type="text/css" title="Default stylesheet" />
+ <script language=javascript src='%(method)s://ajax.googleapis.com/ajax/libs/jquery/1.5/jquery.min.js'></script>
+ <script language=javascript src='/js/rpc.js'></script>
+ <script language=javascript src='/js/jquery.cookie.js'></script>
+ <script language=javascript src='/pagekite/vars.jsonp'></script>
  <script language=javascript>
   (function(){
     window.pkUI = window.pkUI || {};

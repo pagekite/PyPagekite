@@ -360,6 +360,7 @@ import zlib
 
 import SocketServer
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
+import Cookie
 
 
 ##[ Conditional imports & compatibility magic! ]###############################
@@ -1185,13 +1186,41 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     for key in self.headers.keys():
       data['http_'+key.lower()] = self.headers.get(key)
 
+    data['method'] = data.get('http_x-pagekite-proto', 'http').lower()
+
+    if 'http_cookie' in data:
+      cookies = Cookie.SimpleCookie(data['http_cookie'])
+    else:
+      cookies = {}
+
     if path == '/vars.txt':
       global gYamon
       data['body'] = gYamon.render_vars_text()
 
+    elif path.startswith('/pagekite/login/'):
+      parts = path.split('/', 4)
+      token = parts[3]
+      location = parts[4] or ('%s://%s/control.shtml' % (data['method'],
+                                                         data['http_host']))
+      if query: location += '?' + query
+      if token == self.server.secret:
+        self.sendResponse('\n', code=302, msg='Moved', header_list=[
+                            ('Set-Cookie', 'pkite_token=%s; path=/' % token),
+                            ('Location', location)
+                          ])
+      else:
+        LogDebug("Invalid token, %s != %s" % (token, self.server.secret))
+        self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
+      return
+
     elif path.startswith('/pagekite/'):
+      if not ('pkite_token' in cookies and cookies['pkite_token'].value == self.server.secret):
+        self.sendResponse('<h1>Forbidden</h1>\n', code=403, msg='Forbidden')
+        return
+
       if path.endswith('/add_kite/'):
         data.update(self.add_kite(qs))
+
       elif path.endswith('/pagekite.rc'):
         data.update({'mimetype': 'application/octet-stream',
                      'body': '\n'.join(self.server.pkite.GenerateConfig())})
@@ -1201,18 +1230,6 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       elif path.endswith('/pagekite.cfg'):
         data.update({'mimetype': 'application/octet-stream',
                      'body': '\r\n'.join(self.server.pkite.GenerateConfig())})
-      elif path.startswith('/pagekite/login/'):
-        token = path.split('/')[3]
-        if token == self.server.secret:
-          self.sendResponse('\n', code=301, msg='Moved', header_list=[
-                              ('Set-Cookie', 'pkite_token=%s; path=/' % token),
-                              ('Location', 'http://%s/control.shtml' % data['http_host'])
-                            ])
-        else:
-          LogDebug("Invalid token, %s != %s" % (token, self.server.secret))
-          self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
-        return
-
     else:
       if not self.sendStaticFile(path, data['mimetype'], shtml_vars=data):
         self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
@@ -1270,7 +1287,6 @@ class RemoteControlInterface(object):
                      'sid': fe.sid} for fe in self.conns.Tunnel(proto, domain)]
       }
       kites.append(kite_info)
-    print 'Sending %s' % kites
     return kites
 
   def add_kite(self, auth_token,
@@ -1990,6 +2006,7 @@ class MagicProtocolParser(LineParser):
     self.leftovers = ''
     self.might_be_tls = True
     self.is_tls = False
+    self.my_tls = False
 
   def __html__(self):
     return ('<b>Detected TLS</b>: %s<br>'
@@ -2654,6 +2671,7 @@ class Tunnel(ChunkParser):
         host = (parse.Header('Host') or [''])[0].lower()
         rIp = (parse.Header('RIP') or [''])[0].lower()
         rPort = (parse.Header('RPort') or [''])[0].lower()
+        rTLS = (parse.Header('RTLS') or [''])[0].lower()
         if proto and host:
 # FIXME: 
 #         if proto == 'https':
@@ -2686,9 +2704,15 @@ class Tunnel(ChunkParser):
                                                            frame_url=self.conns.config.error_url) )):
                   return False
               elif rIp:
+                add_headers = ('\nX-Forwarded-For: %s\r\n'
+                               'X-PageKite-Port: %s\r\n'
+                               'X-PageKite-Proto: %s\r\n'
+                               ) % (rIp, port,
+                                    # FIXME: Checking for port == 443 is wrong!
+                                    (rTLS or (int(port) == 443)) and 'https' or 'http')
                 req, rest = re.sub(r'(?mi)^x-forwarded-for', 'X-Old-Forwarded-For', data
                                    ).split('\n', 1) 
-                data = ''.join([req, '\nX-Forwarded-For: %s\r\n' % rIp, rest])
+                data = ''.join([req, add_headers, rest])
           if conn:
             self.users[sid] = conn
 
@@ -2814,7 +2838,8 @@ class UserConn(Selectable):
     if not tunnels: tunnels = conns.Tunnel(protos[0], CATCHALL_HN)
 
     if self.address:
-      chunk_headers = [('RIP', self.address[0]), ('RPort', self.address[1])]
+      chunk_headers = [('RIP', self.address[0]),('RPort', self.address[1])]
+      if conn.my_tls: chunk_headers.append(('RTLS', 1))
 
     if tunnels: self.tunnel = tunnels[0]
     if self.tunnel and self.tunnel.SendData(self, ''.join(body),
@@ -3128,6 +3153,7 @@ class UnknownConn(MagicProtocolParser):
         self.fd = SSL_Connect(ctx, self.fd, accepted=True, server_side=True)
         self.peeking = False
         self.is_tls = False
+        self.my_tls = True
         return True
 
     if domains and domains[0] is not None:
@@ -3549,7 +3575,7 @@ class PageKite(object):
     self.ui_httpd = None
     self.ui_password = None
     self.ui_pemfile = None
-    self.ui_webroot = '/invalid/path/to/nowhere'
+    self.ui_webroot = None
     self.disable_zchunks = False
     self.enable_sslzlib = False
     self.buffer_max = 1024 
@@ -3633,7 +3659,7 @@ class PageKite(object):
       if HAVE_SSL: self.fe_certname.extend(def_fe_certs)
       return True
 
-  def GenerateConfig(self):
+  def GenerateConfig(self, safe=False):
     config = [
       '####[ Current settings for pagekite.py v%s. ]####' % APPVER,
       '#',
@@ -3652,6 +3678,8 @@ class PageKite(object):
       (self.ui_pemfile and 'pemfile=%s' % self.ui_pemfile
                         or '# pemfile=/path/to/sslcert.pem'),
       '# webroot=/path/to/webroot/omitted/for/security/reasons/',
+      (self.ui_webroot and safe and 'webroot=%s' % self.ui_webroot
+                                 or '# webroot=/path/to/webroot/'),
       '', 
     ]
 
@@ -3751,11 +3779,10 @@ class PageKite(object):
       '',
       '###[ The following stuff can usually be ignored. ]###',
       '',
-      '#/ Includes (should usually be at the top or bottom of the file)',
-      '# optfile=/path/to/common/settings',
-      '',
       '#/ Save-files are never configured automatically for security reasons.',
       '# savefile=/path/to/savefile',
+      (self.savefile and safe and 'savefile=%s' % self.savefile
+                               or '# savefile=/path/to/savefile'),
       '',
       '#/ Front-end Options:',
       (self.isfrontend and 'isfrontend' or '# isfrontend')
@@ -3815,17 +3842,29 @@ class PageKite(object):
     ])
     return config
 
-  def ConfigSecret(self):
-    return sha1hex('\n'.join(self.GenerateConfig()))
+  def ConfigSecret(self, new=False):
+    # This method returns a stable secret for the lifetime of this process.
+    #
+    # The secret depends on the active configuration as, reported by
+    # GenerateConfig().  This lets external processes generate the same
+    # secret and use the remote-control APIs as long as they can read the
+    # *entire* config (which contains all the sensitive bits anyway).
+    #
+    if self.ui_httpd and self.ui_httpd.secret and not new:
+      return self.ui_httpd.secret
+    else:
+      return sha1hex('\n'.join(self.GenerateConfig()))
 
-  def LoginPath(self):
-    return '/pagekite/login/%s' % self.ConfigSecret()
+  def LoginPath(self, goto):
+    return '/pagekite/login/%s/%s' % (self.ConfigSecret(), goto)
 
-  def LoginUrl(self):
-    return 'http://%s%s' % ('%s:%s' % self.ui_sspec, self.LoginPath())
+  def LoginUrl(self, goto=''):
+    return 'http%s://%s%s' % (self.ui_pemfile and 's' or '',
+                              '%s:%s' % self.ui_sspec,
+                              self.LoginPath(goto))
 
-  def PrintSettings(self):
-    print '\n'.join(self.GenerateConfig())
+  def PrintSettings(self, safe=False):
+    print '\n'.join(self.GenerateConfig(safe=safe))
 
   def SaveNewUserConfig(self):
     try:
@@ -4200,7 +4239,7 @@ class PageKite(object):
       elif opt == '--noloop': self.main_loop = False
       elif opt == '--defaults': self.SetServiceDefaults()
       elif opt == '--settings':
-        self.PrintSettings()
+        self.PrintSettings(safe=True)
         sys.exit(0)
 
       elif opt == '--help':
