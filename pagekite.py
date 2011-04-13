@@ -281,8 +281,8 @@ SERVICE_XMLRPC = 'pk:http://pagekite.net/xmlrpc/'
 
 OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
-            'signup', 'nullui',
-            'optfile=', 'savefile=', 'signup=', 'help', 'service_xmlrpc=',
+            'signup', 'nullui', 'help',
+            'optfile=', 'savefile=', 'service_xmlrpc=', 'controlpanel',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webroot=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
@@ -1201,12 +1201,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       elif path.endswith('/pagekite.cfg'):
         data.update({'mimetype': 'application/octet-stream',
                      'body': '\r\n'.join(self.server.pkite.GenerateConfig())})
-      elif path.startswith('/pagekite/token/'):
+      elif path.startswith('/pagekite/login/'):
         token = path.split('/')[3]
         if token == self.server.secret:
           self.sendResponse('\n', code=301, msg='Moved', header_list=[
-                              ('Set-Cookie', 'token=%s' % token),
-                              ('Location', 'http://%s/' % data['http_host'])
+                              ('Set-Cookie', 'pkite_token=%s; path=/' % token),
+                              ('Location', 'http://%s/control.shtml' % data['http_host'])
                             ])
         else:
           LogDebug("Invalid token, %s != %s" % (token, self.server.secret))
@@ -1239,7 +1239,7 @@ class RemoteControlInterface(object):
     self.conns = conns
     self.yamon = yamon
     self.modified = False
-    self.auth_tokens = {'FIXME': 1}
+    self.auth_tokens = {httpd.secret: 1}
 
   def connections(self, auth_token):
     if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
@@ -1320,7 +1320,7 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     SimpleXMLRPCServer.__init__(self, sspec, handler)
     self.pkite = pkite
     self.conns = conns
-    self.secret = signToken(payload=('%s' % self))
+    self.secret = pkite.ConfigSecret()
 
     if ssl_pem_filename:
       ctx = SSL.Context(SSL.SSLv23_METHOD)
@@ -3575,7 +3575,6 @@ class PageKite(object):
     self.conns = None
     self.looping = False
     self.main_loop = True
-    self.do_signup_email = None
 
     self.crash_report_url = '%scgi-bin/crashes.pl' % WWWHOME
     self.rcfile_recursion = 0
@@ -3815,6 +3814,15 @@ class PageKite(object):
       ''
     ])
     return config
+
+  def ConfigSecret(self):
+    return sha1hex('\n'.join(self.GenerateConfig()))
+
+  def LoginPath(self):
+    return '/pagekite/login/%s' % self.ConfigSecret()
+
+  def LoginUrl(self):
+    return 'http://%s%s' % ('%s:%s' % self.ui_sspec, self.LoginPath())
 
   def PrintSettings(self):
     print '\n'.join(self.GenerateConfig())
@@ -4190,7 +4198,6 @@ class PageKite(object):
       elif opt == '--clean': pass
       elif opt == '--nopyopenssl': pass
       elif opt == '--noloop': self.main_loop = False
-      elif opt == '--signup': self.do_signup_email = arg
       elif opt == '--defaults': self.SetServiceDefaults()
       elif opt == '--settings':
         self.PrintSettings()
@@ -4198,6 +4205,12 @@ class PageKite(object):
 
       elif opt == '--help':
         self.HelpAndExit(longhelp=True)
+
+      elif opt == '--controlpanel':
+        import webbrowser
+        webbrowser.open(self.LoginUrl())
+        sys.exit(0)
+
       else:
         self.HelpAndExit()
 
