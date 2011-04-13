@@ -8,7 +8,7 @@
  <br><br><br>
  <p><img src='%(method)s://pagekite.net/static/skin/i/pagekite-logo.png'></p>
  <h2>%(method)s://%(http_host)s/</h2>
- <p><tt>[ <a href='control.shtml'>control panel</a> ]</tt></p>
+ <p><tt>[ <a href='/_pagekite/'>control panel</a> ]</tt></p>
  <p><tt><small>
   Carried to the Clouds by <i><a href='http://pagekite.net/'>PageKite</a></i>.
  </small></tt></p>

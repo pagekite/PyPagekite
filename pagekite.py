@@ -282,7 +282,8 @@ SERVICE_XMLRPC = 'pk:http://pagekite.net/xmlrpc/'
 OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'signup', 'nullui', 'help',
-            'optfile=', 'savefile=', 'service_xmlrpc=', 'controlpanel',
+            'optfile=', 'savefile=', 'service_xmlrpc=',
+            'controlpanel', 'controlpass',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webroot=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
@@ -1014,6 +1015,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def sendResponse(self, message, code=200, msg='OK', mimetype='text/html',
                          header_list=[], chunked=False):
+    self.log_request(code, message and len(message) or '-')
     self.wfile.write('HTTP/1.1 %s %s\n' % (code, msg))
     if code == 401:
       self.send_header('WWW-Authenticate',
@@ -1178,6 +1180,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     data = {
       'prog': self.server.pkite.progname,
       'code': 200,
+      'body': '',
       'msg': 'OK',
       'mimetype': self.getMimeType(path),
       'now': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
@@ -1197,11 +1200,20 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       global gYamon
       data['body'] = gYamon.render_vars_text()
 
-    elif path.startswith('/pagekite/login/'):
+    elif path.startswith('/_pagekite/logout/'):
+      parts = path.split('/')
+      location = parts[3] or ('%s://%s/' % (data['method'], data['http_host']))
+      self.sendResponse('\n', code=302, msg='Moved', header_list=[
+                          ('Set-Cookie', 'pkite_token=; path=/'),
+                          ('Location', location)
+                        ])
+      return
+
+    elif path.startswith('/_pagekite/login/'):
       parts = path.split('/', 4)
       token = parts[3]
-      location = parts[4] or ('%s://%s/control.shtml' % (data['method'],
-                                                         data['http_host']))
+      location = parts[4] or ('%s://%s/_pagekite/' % (data['method'],
+                                                      data['http_host']))
       if query: location += '?' + query
       if token == self.server.secret:
         self.sendResponse('\n', code=302, msg='Moved', header_list=[
@@ -1213,23 +1225,29 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
       return
 
-    elif path.startswith('/pagekite/'):
+    elif path.startswith('/_pagekite/'):
       if not ('pkite_token' in cookies and cookies['pkite_token'].value == self.server.secret):
         self.sendResponse('<h1>Forbidden</h1>\n', code=403, msg='Forbidden')
         return
 
-      if path.endswith('/add_kite/'):
+      if path == '/_pagekite/':
+        if not self.sendStaticFile('/control.shtml', 'text/html', shtml_vars=data):
+          self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
+        return
+      elif path.endswith('/add_kite/'):
         data.update(self.add_kite(qs))
-
       elif path.endswith('/pagekite.rc'):
         data.update({'mimetype': 'application/octet-stream',
                      'body': '\n'.join(self.server.pkite.GenerateConfig())})
-      elif path.endswith('/pagekite.txt'):
+      elif path.endswith('/pagekite.rc.txt'):
         data.update({'mimetype': 'text/plain',
                      'body': '\n'.join(self.server.pkite.GenerateConfig())})
       elif path.endswith('/pagekite.cfg'):
         data.update({'mimetype': 'application/octet-stream',
                      'body': '\r\n'.join(self.server.pkite.GenerateConfig())})
+      else:
+        self.sendResponse('<h1>Not found</h1>\n', code=403, msg='Missing')
+        return
     else:
       if not self.sendStaticFile(path, data['mimetype'], shtml_vars=data):
         self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
@@ -1257,6 +1275,10 @@ class RemoteControlInterface(object):
     self.yamon = yamon
     self.modified = False
     self.auth_tokens = {httpd.secret: 1}
+
+    # Channels are in-memory logs which can be tailed over XML-RPC.
+    # Javascript apps can create these for implementing chat etc.
+    self.channels = {'LOG': {'secure': 1, 'data': LOG}}
 
   def connections(self, auth_token):
     if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
@@ -1304,29 +1326,34 @@ class RemoteControlInterface(object):
       Log([('reconfigured', '1'), ('removed', kite_id)])
       self.modified = True
     return self.get_kites(auth_token)
-     
-  def get_log(self, auth_token):
-    if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
-    return LOG
 
-  def get_log_after(self, auth_token, last_seen, timeout):
-    if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
+  def get_channel(self, auth_token, channel):
+    if self.channels.get(channel, {}).get('secure', False):
+      if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
+    return self.channels.get(channel, {}).get('data', [])
+
+  def get_channel_after(self, auth_token, channel, last_seen, timeout):
+    chan = self.channels.get(channel, {})
+    if chan.get('secure', False):
+      if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
     last_seen = int(last_seen, 16)
+    data = chan.get('data', [])
 
     # If our internal LOG_LINE counter is less than the count of the last seen
     # line at the remote end, then we've restarted and should send everything.
-    if (last_seen == 0) or (LOG_LINE < last_seen): return LOG
+    if (last_seen == 0) or (LOG_LINE < last_seen): return data
+    # FIXME: LOG_LINE global for all channels?  Is that suck?
 
     # Else, wait at least one second, AND wait for a new line to be added to
     # the log (or the timeout to expire).
     time.sleep(1)
-    last_ll = LOG[-1]['ll']
-    while (timeout > 0) and (LOG[-1]['ll'] == last_ll):
+    last_ll = data[-1]['ll']
+    while (timeout > 0) and (data[-1]['ll'] == last_ll):
       time.sleep(1)
       timeout -= 1
 
     # Return everything the client hasn't already seen.
-    return [ll for ll in LOG if int(ll['ll'], 16) > last_seen]
+    return [ll for ll in data if int(ll['ll'], 16) > last_seen]
 
 
 class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
@@ -3856,7 +3883,7 @@ class PageKite(object):
       return sha1hex('\n'.join(self.GenerateConfig()))
 
   def LoginPath(self, goto):
-    return '/pagekite/login/%s/%s' % (self.ConfigSecret(), goto)
+    return '/_pagekite/login/%s/%s' % (self.ConfigSecret(), goto)
 
   def LoginUrl(self, goto=''):
     return 'http%s://%s%s' % (self.ui_pemfile and 's' or '',
@@ -4248,6 +4275,10 @@ class PageKite(object):
       elif opt == '--controlpanel':
         import webbrowser
         webbrowser.open(self.LoginUrl())
+        sys.exit(0)
+
+      elif opt == '--controlpass':
+        print self.ConfigSecret()
         sys.exit(0)
 
       else:

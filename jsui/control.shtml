@@ -4,7 +4,7 @@
  <script language=javascript src='%(method)s://ajax.googleapis.com/ajax/libs/jquery/1.5/jquery.min.js'></script>
  <script language=javascript src='/js/rpc.js'></script>
  <script language=javascript src='/js/jquery.cookie.js'></script>
- <script language=javascript src='/pagekite/vars.jsonp'></script>
+ <script language=javascript src='/_pagekite/vars.jsonp'></script>
  <script language=javascript>
   (function(){
     window.pkUI = window.pkUI || {};
@@ -30,8 +30,8 @@
       if (pkUI.log_lines.length > 0) {
         last_ll = pkUI.log_lines[pkUI.log_lines.length-1].ll;
       }
-      pkUI.rpc.get_log_after({
-        params: [pkUI.auth_token, last_ll, 30],
+      pkUI.rpc.get_channel_after({
+        params: [pkUI.auth_token, 'LOG', last_ll, 30],
         onSuccess: function(lines) {
           for (var l in lines) {
             // Trim old elements (FIXME: 20 is probably too low)
@@ -135,18 +135,21 @@
    #kitelist td,
    #kitelist th {border-bottom: 1px solid #999; border-right: 1px solid #ccc; padding: 3px; margin: 0px;}
    #kitelist td {padding: 2px 10px; margin: 0; }
+   #kitelist td a { color: #000; }
    #kitelist td.kitename { }
    #kitelist td.kiteproto,
    #kitelist td.frontend,
+   #kitelist td.actions a,
    #kitelist td.backend { color: #777; }
-   #kitelist td.actions { border: 0; text-align: right; margin-right: 0; padding-right: 0; }
-   #kitelist td a { color: #000; }
+   #kitelist td.actions { border: 0; font-size: 0.8em; text-align: right; margin-right: 0; padding-right: 0; }
+   #logout {float: right; display: inline; margin: 5px;}
  </style>
  <title>%(http_host)s - PageKite Control Panel</title>
 
 </head><body onload='pkUI.main();'>
 
  <h1>%(http_host)s - PageKite Control Panel</h1>
+ <p id=logout><a href='/_pagekite/logout/'>Log out</a></p>
  <noscript>
   <p>Sorry to be so lame, but this control panel requires Javascript in
      order to interact with pagekite.py's XML-RPC API. :-( </p>
@@ -168,9 +171,9 @@
 
  <p id=cfg_download>
    Download current configuration for
-     <a href='/pagekite/pagekite.cfg'>Windows</a> or
-     <a href='/pagekite/pagekite.rc'>Linux / OS X</a>
-     (<a href='/pagekite/pagekite.txt'>view</a>).
+     <a href='/_pagekite/pagekite.cfg'>Windows</a> or
+     <a href='/_pagekite/pagekite.rc'>Linux / OS X</a>
+     (<a href='/_pagekite/pagekite.rc.txt'>view</a>).
  </p>
 
  <div id=activity>
