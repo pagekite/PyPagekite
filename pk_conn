@@ -1,0 +1,60 @@
+#!/usr/bin/python -u
+#
+# This is a minimal netcat replacement for connecting to "virtual" raw TCP
+# services behind PageKite's HTTP proxy.
+#
+# For the search engines: This file demonstrates non-blocking IO in Python,
+# using stdin, stdout, a socket and select.
+#
+# This file is in the Public Domain.
+#
+import os, fcntl, socket, sys, select
+
+def unblock(f):
+  fd = f.fileno()
+  fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+  fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+
+def netcat(s, i, o):
+  unblock(s)
+  unblock(i)
+  while True:
+    in_r, out_r, err_r = select.select([s, i], [s, o], [s, i, o], 10)
+    if s in in_r:
+      data = s.recv(4096)
+      if data == "": break
+      o.write(data)
+    if i in in_r:
+      data = os.read(i.fileno(), 4096)
+      if data == "":
+        s.shutdown(socket.SHUT_WR)
+      else:
+        s.sendall(data)
+  s.close()
+
+def http_connect_netcat(hostname, port, proxy_host, proxy_port):
+  s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  s.connect((proxy_host, proxy_port))
+  s.sendall('CONNECT %s:%s HTTP/1.0\r\n\r\n' % (hostname, port))
+  reply = s.recv(4096)
+  if reply.startswith('HTTP/1.0 200'):
+    netcat(s, sys.stdin, sys.stdout) 
+    return True
+  else:
+    sys.stderr.write(reply)
+    sys.stderr.write('\n')
+    return False
+
+try:
+  dest_host = sys.argv[1]
+  dest_port = int(sys.argv[2])
+  proxy_host = (len(sys.argv) >= 4) and sys.argv[3] or dest_host
+  proxy_port = (len(sys.argv) == 5) and int(sys.argv[4]) or 443
+except:
+  sys.stderr.write(('Usage: %s <dest-host> <dest-port> '
+                    '[<proxy-host> [<proxy-port>]]\n') % sys.argv[0])
+  sys.exit(1)
+
+if not http_connect_netcat(dest_host, dest_port, proxy_host, proxy_port):
+  sys.exit(2)
+
