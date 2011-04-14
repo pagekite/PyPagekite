@@ -1,6 +1,13 @@
-<html><head>
-
- <link rel="stylesheet" media="screen, screen" href="%(method)s://pagekite.net/css/pagekite.css" type="text/css" title="Default stylesheet" />
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+ <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+ <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+ <meta name="HandheldFriendly" content="true" />
+ <meta name="viewport" content="width=device-width" />
+ <link href="%(method)s://pagekite.net/static/skin/main.css" media="all" rel="stylesheet" type="text/css" />
+ <!--[if (lt IE 9)&(!IEMobile) ]><link href="%(method)s://pagekite.net//static/skin/main-full.css" media="all" rel="stylesheet" type="text/css" /> <![endif]--><!--[if (gte IE 9)|!(IE)]><!-->
+ <link href="%(method)s://pagekite.net/static/skin/main-full.css" media="all and (min-width: 720px) and (min-device-width: 720px)" rel="stylesheet" type="text/css" /><!--<![endif]-->
+ <link rel="shortcut icon" href="%(method)s://pagekite.net/static/skin/i/fav.ico" />
  <script language=javascript src='%(method)s://ajax.googleapis.com/ajax/libs/jquery/1.5/jquery.min.js'></script>
  <script language=javascript src='/js/rpc.js'></script>
  <script language=javascript src='/js/jquery.cookie.js'></script>
@@ -62,8 +69,13 @@
         var ktr = $('<tr />').attr('id', ('kite_'+kite.id).replace(/[:\.]/g, '_'));
 
         if ((/^http/).test(kite.fe_proto)) {
+          var proto = kite.fe_proto;
+          if ((proto == 'http') && (kite.fe_port == '443') &&
+              (/\.pagekite\.(me|us|info)$/).test(kite.domain)) {
+            proto = 'https';
+          }
           ktr.append($('<td />').append($('<a />').attr('href',
-                                                        kite.fe_proto+'://'+kite.domain+':'+(kite.fe_port||''))
+                                                        proto+'://'+kite.domain+':'+(kite.fe_port||''))
                                                   .html(kite.domain)));
         } else {
           ktr.append($('<td />').attr('class', 'kitename').html(kite.domain));
@@ -87,16 +99,23 @@
         }
         ktr.append(kfe.attr('class', 'frontend'))
 
-        if ((/^http/).test(kite.be_proto)) {
-          ktr.append($('<td />').attr('class', 'backend')
-                                .append($('<a />').attr('href',
-                                                        kite.be_proto+'://'+kite.backend)
-                                                  .html(kite.backend)));
-        } else {
-          ktr.append($('<td />').attr('class', 'backend').html(kite.backend));
-        }
+        ktr.append($('<td />').attr('class', 'backend').html(kite.backend));
 
-        var rm = $('<a href="#"/>').html('remove').click(
+        var edit = $('<a href="#"/>'
+                     ).attr('class', 'be_edit')
+                      .attr('title', 'Edit this PageKite')
+                      .append($('<img/>').attr('alt', 'edit')
+                                         .attr('src', '/icons/edit.png'))
+                      .click(
+          (function(k){return function(ev){
+            alert('Should edit '+kite);
+          };})(kite)
+        );
+        var remove = $('<a href="#"/>'
+                       ).attr('title', 'Delete this PageKite')
+                        .append($('<img/>').attr('alt', 'remove')
+                                           .attr('src', '/icons/delete.png'))
+                        .click(
           (function(k){return function(ev){
             if (confirm('Really remove '+k.id+'?')) {
               pkUI.rpc.remove_kite({params: [pkUI.auth_token, k.id],
@@ -104,7 +123,9 @@
             }
           };})(kite)
         );
-        ktr.append($('<td />').attr('class', 'actions').append(rm));
+
+        ktr.append($('<td />').attr('class', 'actions')
+                              .append(edit).append(remove));
 
         $('#kitetable').append(ktr);
       }
@@ -115,6 +136,8 @@
                           onSuccess: pkUI.update_kite_list});
       // FIXME: Get other configuration details as well?
     },
+
+    pkUI.hide = function(e) { $('#'+e).hide(); },
 
     pkUI.main = function() {
       // Create our RPC proxy
@@ -127,44 +150,70 @@
 
       // Start watching for updates
       pkUI.log_tail();
+  
+      // Show the current auth token
+      $('#auth_token').html(pkUI.auth_token)
+                      .attr('href', '/_pagekite/login/'+pkUI.auth_token+'/');
+      
+      // Generate a proper (authenticated) link for adding kites.
+      $('#add_kite').attr('href', 'http://localhost:8000/signup/'+
+                                  '?more=kites&do_login=1'+
+                                  '&r=%(method)s://%(http_host)s' +
+                                  '/_pagekite/add_kite/' + pkUI.auth_token);
     }; 
 
   })();
  </script>
  <style type='text/css'>
-   #kitelist td,
-   #kitelist th {border-bottom: 1px solid #999; border-right: 1px solid #ccc; padding: 3px; margin: 0px;}
-   #kitelist td {padding: 2px 10px; margin: 0; }
-   #kitelist td a { color: #000; }
-   #kitelist td.kitename { }
+   #auth_token_li, #auth_token {color: #bbb;}
+   #kitelist td {vertical-align: top;}
+   #kitelist td p {margin: 0; padding: 0px 0px 2px 0px;}
    #kitelist td.kiteproto,
    #kitelist td.frontend,
    #kitelist td.actions a,
-   #kitelist td.backend { color: #777; }
-   #kitelist td.actions { border: 0; font-size: 0.8em; text-align: right; margin-right: 0; padding-right: 0; }
-   #logout {float: right; display: inline; margin: 5px;}
+   #kitelist td.backend { color: #777; font-size: 0.9em; }
+   #kitelist td.actions { text-align: right; }
+   #cfg_download {font-size: 0.9em; margin: 5px 0px 5px 20px;}
+   a img {border: 0; margin-right: 10px;}
+   p.error {background: #ff0; padding: 2px; text-align: center; border: 2px solid #000; }
+   a.close {font-size: 0.7em; float: right; color: #777; background: #eee; padding: 2px 5px;}
  </style>
- <title>%(http_host)s - PageKite Control Panel</title>
+ <title>PageKite Control Panel on %(hostname)s (%(http_host)s)</title>
 
-</head><body onload='pkUI.main();'>
+</head>
+<!--[if lt IE 9 ]><body onload='pkUI.main();' class="msie"> <![endif]--><!--[if (gte IE 9)|!(IE)]><!-->
+<body onload='pkUI.main();'> <!--<![endif]-->
 
- <h1>%(http_host)s - PageKite Control Panel</h1>
- <p id=logout><a href='/_pagekite/logout/'>Log out</a></p>
- <noscript>
-  <p>Sorry to be so lame, but this control panel requires Javascript in
-     order to interact with pagekite.py's XML-RPC API. :-( </p>
-  <p>Firefox is awesome, right?</p>
- </noscript>
+ <div class="pghead"><a name='top'></a>
+  <h1 class="brand">
+   <a href="/" title="Pagekite - home">
+    <img class="logo" src="%(method)s://pagekite.net/static/skin/i/pagekite-logo.png" alt="Pagekite" />
+   </a>
+  </h1>
+  <p class="stream skiplink"><a href='#pgnav'>Skip to navigation</a></p>
+  <hr class="stream" />
+ </div><!-- /.pghead -->
+
+ <div class="pgmiddle"><div class="pgmain">
+
+ <noscript><p class='error'>
+  Sorry to be so lame, but this control panel requires Javascript in
+  order to interact with pagekite.py's XML-RPC API. :-( 
+ </p></noscript>
+
+ <p></p>
 
  <div id=kitelist>
-  <h2>Your kites</h2>
   <table id=kitetable>
    <tr>
-    <th id=kl_kn>Kite name</th>
-    <th id=kl_kp>Protocol</th>
-    <th id=kl_fe>Front-ends</th>
-    <th id=kl_be>Server</th>
-    <td class=actions><a href='#'>add</a></td>
+    <th id=kl_kn>Your pagekites</th>
+    <th id=kl_kp>protocol</th>
+    <th id=kl_fe>front-ends</th>
+    <th id=kl_be>server</th>
+    <td class=actions><a id=add_kite href='#'
+        title="Add a new PageKite"
+        onClick='return confirm("Sending you to PageKite.net ...")'><img
+        src="/icons/add.png" alt='add'></a></td>
    </tr>
   </table>
  </div>
@@ -176,19 +225,67 @@
      (<a href='/_pagekite/pagekite.rc.txt'>view</a>).
  </p>
 
- <div id=activity>
-  <h2>Activity</h2>
-  <table>
-  </table>
- </div>
-
- <div id=sharing>
+ <div id=sharing class="col">
   <h2>Sharing</h2>
   <table>
   </table>
+  <p>asdf lakdsjf;lkaj ;laskdjfl;ksj a;lksdjf ;akldjf ;lkjasdflkj alkj<p>
  </div>
 
  <div id=content></div>
- <div id=logdata></div>
 
+
+ </div><!-- /.pgmain --><div class="pgaside">
+    
+  <div id=about class=box>
+   <h2>About <a class=close onClick='pkUI.hide("about")'>X</a></h2>
+   <p>This is your PageKite Control Panel on <b>%(hostname)s</b>.</p>
+   <p>Note that this page is <b>on your computer</b>, but some
+      of the links may take you to the on-line service at
+      <a class=ext href='http://pagekite.net/'>PageKite.net</a>.</p>
+  </div>
+
+  <div id=activity class=col>
+   <h2>Activity</h2>
+   <table>
+   </table>
+   <div id=logdata></div>
+  </div>
+
+ </div><!-- /.pgaside --></div><!-- /.pgmiddle -->
+ <div class="pgnav" id="pgnav"><a name="pgnav"></a>
+
+  <hr class="stream" />
+  <div class="mainmenu">
+    <h2>Pagekite.net - main pages:</h2>
+    <ul>
+      <li><a href="http://pagekite.net/">PageKite.net</a></li>
+      <li class="current"><a href="#">%(hostname)s: Control Panel</a></li>
+      <li><a href="http://pagekite.net/wiki/">Community Wiki</a></li>
+      <li><a href="http://pagekite.net/support/">Help</a></li>
+      <li class="userinfo">
+        <a class="account" href="https://pagekite.net/home/">PageKite.net Account</a>
+        <a class="btn logout" href="/_pagekite/logout/">Log out</a></noscript>
+      </li>
+    </ul>
+  </div>
+
+ </div><!-- /.pgnav --><div class="pgfoot">
+
+   <hr class="stream" />
+   <div class="footer">
+     <div class="col">
+      <h3>This is %(prog)s v%(ver)s<br>&nbsp; by The Beanstalks Project</h3>
+      <ul>
+       <li><a href="https://pagekite.net/company/">About the Company</a></li>
+       <li><a href="https://pagekite.net/support/terms/">Terms &amp; Privacy Policy</a></li>
+      </ul>
+      <br/>
+      <ul>
+       <li id='auth_token_li'>Auth Token: <a href='' id='auth_token'></a></li>
+      </ul>
+     </div>
+   </div>
+
+ </div><!-- /.pgfoot -->
 </body></html>

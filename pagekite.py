@@ -1169,8 +1169,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     if ext in self.MIME_TYPES: return self.MIME_TYPES[ext]
     return self.MIME_TYPES['DEFAULT']
 
-  def add_kite(self, qs):
-    if 'secret' not in qs or qs['secret'] != self.server.secret:
+  def add_kite(self, path, qs):
+    if path.find(self.server.secret) == -1:
       return {'mimetype': 'text/plain', 'body': 'Invalid secret'}
 
     pass
@@ -1182,6 +1182,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       'code': 200,
       'body': '',
       'msg': 'OK',
+      'hostname': socket.gethostname() or 'Your Computer',
       'mimetype': self.getMimeType(path),
       'now': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
       'ver': APPVER
@@ -1234,8 +1235,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         if not self.sendStaticFile('/control.shtml', 'text/html', shtml_vars=data):
           self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
         return
-      elif path.endswith('/add_kite/'):
-        data.update(self.add_kite(qs))
+      elif path.startswith('/_pagekite/add_kite/'):
+        data.update(self.add_kite(path, qs))
       elif path.endswith('/pagekite.rc'):
         data.update({'mimetype': 'application/octet-stream',
                      'body': '\n'.join(self.server.pkite.GenerateConfig())})
