@@ -1269,30 +1269,41 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
 
 class RemoteControlInterface(object):
+  ACL_OPEN = ''
+  ACL_READ = 'r'
+  ACL_WRITE = 'w'
+
   def __init__(self, httpd, pkite, conns, yamon):
     self.httpd = httpd
     self.pkite = pkite
     self.conns = conns
     self.yamon = yamon
     self.modified = False
-    self.auth_tokens = {httpd.secret: 1}
+
+    # For now, nobody gets ACL_WRITE
+    self.auth_tokens = {httpd.secret: self.ACL_READ}
 
     # Channels are in-memory logs which can be tailed over XML-RPC.
     # Javascript apps can create these for implementing chat etc.
-    self.channels = {'LOG': {'secure': 1, 'data': LOG}}
+    self.channels = {'LOG': {'access': self.ACL_READ, 'data': LOG}}
 
   def connections(self, auth_token):
-    if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
+    if self.ACL_READ not in self.auth_tokens.get(auth_token, self.ACL_OPEN):
+      raise AuthError('Unauthorized')
+
     return [{'sid': c.sid,
              'dead': c.dead,
              'html': c.__html__()} for c in self.conns.conns]
 
   def add_kite(self, auth_token, kite_domain, kite_proto):
-    if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
+    if self.ACL_WRITE not in self.auth_tokens.get(auth_token, self.ACL_OPEN):
+      raise AuthError('Unauthorized')
     pass
 
   def get_kites(self, auth_token):
-    if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
+    if self.ACL_READ not in self.auth_tokens.get(auth_token, self.ACL_OPEN):
+      raise AuthError('Unauthorized')
+
     kites = []
     for bid in self.pkite.backends:
       proto, domain = bid.split(':')
@@ -1317,11 +1328,14 @@ class RemoteControlInterface(object):
                fe_port, fe_domain,
                be_port, be_domain,
                shared_secret):
-    if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
+    if self.ACL_WRITE not in self.auth_tokens.get(auth_token, self.ACL_OPEN):
+      raise AuthError('Unauthorized')
     # FIXME
     
   def remove_kite(self, auth_token, kite_id):
-    if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
+    if self.ACL_WRITE not in self.auth_tokens.get(auth_token, self.ACL_OPEN):
+      raise AuthError('Unauthorized')
+
     if kite_id in self.pkite.backends:
       del self.pkite.backends[kite_id]
       Log([('reconfigured', '1'), ('removed', kite_id)])
@@ -1329,14 +1343,18 @@ class RemoteControlInterface(object):
     return self.get_kites(auth_token)
 
   def get_channel(self, auth_token, channel):
-    if self.channels.get(channel, {}).get('secure', False):
-      if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
+    req = self.channels.get(channel, {}).get('access', self.ACL_WRITE)
+    if req not in self.auth_tokens.get(auth_token, self.ACL_OPEN):
+      raise AuthError('Unauthorized')
+
     return self.channels.get(channel, {}).get('data', [])
 
   def get_channel_after(self, auth_token, channel, last_seen, timeout):
     chan = self.channels.get(channel, {})
-    if chan.get('secure', False):
-      if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
+    req = chan.get('access', self.ACL_OPEN)
+    if req not in self.auth_tokens.get(auth_token, self.ACL_WRITE):
+      raise AuthError('Unauthorized')
+
     last_seen = int(last_seen, 16)
     data = chan.get('data', [])
 

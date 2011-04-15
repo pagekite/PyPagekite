@@ -124,8 +124,8 @@
           };})(kite)
         );
 
-        ktr.append($('<td />').attr('class', 'actions')
-                              .append(edit).append(remove));
+        // ktr.append($('<td />').attr('class', 'actions')
+        //                       .append(edit).append(remove));
 
         $('#kitetable').append(ktr);
       }
@@ -156,10 +156,10 @@
                       .attr('href', '/_pagekite/login/'+pkUI.auth_token+'/');
       
       // Generate a proper (authenticated) link for adding kites.
-      $('#add_kite').attr('href', 'http://localhost:8000/signup/'+
-                                  '?more=kites&do_login=1'+
-                                  '&r=%(method)s://%(http_host)s' +
-                                  '/_pagekite/add_kite/' + pkUI.auth_token);
+      //$('#add_kite').attr('href', 'https://pagekite.net/signup/'+
+      //                            '?more=kites&do_login=1'+
+      //                             '&r=%(method)s://%(http_host)s' +
+      //                             '/_pagekite/add_kite/' + pkUI.auth_token);
     }; 
 
   })();
@@ -178,7 +178,7 @@
    p.error {background: #ff0; padding: 2px; text-align: center; border: 2px solid #000; }
    a.close {font-size: 0.7em; float: right; color: #777; background: #eee; padding: 2px 5px;}
  </style>
- <title>PageKite Control Panel on %(hostname)s (%(http_host)s)</title>
+ <title>PageKite Status on %(hostname)s (%(http_host)s)</title>
 
 </head>
 <!--[if lt IE 9 ]><body onload='pkUI.main();' class="msie"> <![endif]--><!--[if (gte IE 9)|!(IE)]><!-->
@@ -197,7 +197,7 @@
  <div class="pgmiddle"><div class="pgmain">
 
  <noscript><p class='error'>
-  Sorry to be so lame, but this control panel requires Javascript in
+  Sorry to be so lame, but this status page requires Javascript in
   order to interact with pagekite.py's XML-RPC API. :-( 
  </p></noscript>
 
@@ -210,10 +210,12 @@
     <th id=kl_kp>protocol</th>
     <th id=kl_fe>front-ends</th>
     <th id=kl_be>server</th>
+<!--
     <td class=actions><a id=add_kite href='#'
         title="Add a new PageKite"
         onClick='return confirm("Sending you to PageKite.net ...")'><img
         src="/icons/add.png" alt='add'></a></td>
+-->
    </tr>
   </table>
  </div>
@@ -239,7 +241,7 @@
     
   <div id=about class=box>
    <h2>About <a class=close onClick='pkUI.hide("about")'>X</a></h2>
-   <p>This is your PageKite Control Panel on <b>%(hostname)s</b>.</p>
+   <p>This is your PageKite Status on <b>%(hostname)s</b>.</p>
    <p>Note that this page is <b>on your computer</b>, but some
       of the links may take you to the on-line service at
       <a class=ext href='http://pagekite.net/'>PageKite.net</a>.</p>
@@ -260,7 +262,7 @@
     <h2>Pagekite.net - main pages:</h2>
     <ul>
       <li><a href="http://pagekite.net/">PageKite.net</a></li>
-      <li class="current"><a href="#">%(hostname)s: Control Panel</a></li>
+      <li class="current"><a href="#">%(hostname)s: PageKite Status</a></li>
       <li><a href="http://pagekite.net/wiki/">Community Wiki</a></li>
       <li><a href="http://pagekite.net/support/">Help</a></li>
       <li class="userinfo">
