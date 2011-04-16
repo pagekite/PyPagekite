@@ -887,7 +887,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                      ' <span class=backend>%s</span>,'
                      ' <span class=bytes>%s in, %s out</span>)'
                      '</li>\n') % (tinfo,
-                                   tunnel.server_name.split(':')[0],
+                                   tunnel.server_info[tunnel.S_NAME].split(':')[0],
                                    binfo,
                                    fmt_size(tunnel.all_in + tunnel.read_bytes),
                                    fmt_size(tunnel.all_out + tunnel.wrote_bytes))) 
@@ -1634,7 +1634,7 @@ class Connections(object):
     servers = {}
     for tid in self.tunnels:
       for tunnel in self.tunnels[tid]:
-        server = tunnel.server_name
+        server = tunnel.server_info[tunnel.S_NAME]
         if server is not None:
           servers[server] = 1
     return servers.keys() 
@@ -1891,6 +1891,11 @@ class ChunkParser(Selectable):
 class Tunnel(ChunkParser):
   """A Selectable representing a PageKite tunnel."""
   
+  S_NAME = 0
+  S_PORTS = 1
+  S_RAW_PORTS = 2
+  S_PROTOS = 3
+
   def __init__(self, conns):
     ChunkParser.__init__(self)
 
@@ -1899,7 +1904,7 @@ class Tunnel(ChunkParser):
     # read here.
     self.maxread *= 2
 
-    self.server_name = 'x.x.x.x:x'
+    self.server_info = ['x.x.x.x:x', [], [], []]
     self.conns = conns
     self.users = {}
     self.zhistory = {}
@@ -1910,7 +1915,7 @@ class Tunnel(ChunkParser):
 
   def __html__(self):
     return ('<b>Server name</b>: %s<br>'
-            '%s') % (self.server_name, ChunkParser.__html__(self))
+            '%s') % (self.server_info[self.S_NAME], ChunkParser.__html__(self))
 
   def _FrontEnd(conn, body, conns):
     """This is what the front-end does when a back-end requests a new tunnel."""
@@ -1976,7 +1981,19 @@ class Tunnel(ChunkParser):
     
     output = [HTTP_ResponseHeader(200, 'OK'),
               HTTP_Header('Content-Transfer-Encoding', 'chunked'),
-              HTTP_Header('X-PageKite-Features', 'ZChunks')]
+              HTTP_Header('X-PageKite-Features', 'ZChunks'),
+              HTTP_Header('X-PageKite-Protos', ', '.join(['%s' % p
+                            for p in self.conns.config.server_protos])),
+              HTTP_Header('X-PageKite-Ports', ', '.join(
+                            ['%s' % self.conns.config.server_portalias.get(p, p)
+                             for p in self.conns.config.server_ports]))]
+
+    if self.conns.config.server_raw_ports:
+      output.append(
+        HTTP_Header('X-PageKite-Raw-Ports',
+                    ', '.join(['%s' % p for p
+                               in self.conns.config.server_raw_ports])))
+
     ok = {}
     for r in results:
       if r[0] in ('X-PageKite-OK', 'X-Beanstalk-OK'): ok[r[1]] = 1
@@ -2088,11 +2105,19 @@ class Tunnel(ChunkParser):
     self = Tunnel(conns)
     self.backends = backends
     self.require_all = require_all
-    self.server_name = server
+    self.server_info[self.S_NAME] = server
     try:
       begin = time.time()
       data, parse = self._Connect(server, conns)
       if data and parse:
+
+        # Collect info about front-end capabilities, for interactive config
+        for portlist in parse.Header('X-PageKite-Ports'):
+          self.server_info[self.S_PORTS].extend(portlist.split(', '))
+        for portlist in parse.Header('X-PageKite-Raw-Ports'):
+          self.server_info[self.S_RAW_PORTS].extend(portlist.split(', '))
+        for protolist in parse.Header('X-PageKite-Protos'):
+          self.server_info[self.S_PROTOS].extend(protolist.split(', '))
 
         for sessionid in parse.Header('X-PageKite-SessionID'):
           self.alt_id = sessionid
@@ -2116,23 +2141,29 @@ class Tunnel(ChunkParser):
 
           for request in parse.Header('X-PageKite-OK'):
             proto, domain, srand = request.split(':')
-            self.Log([('FE', self.server_name), ('proto', proto), ('domain', domain)])
+            self.Log([('FE', self.server_info[self.S_NAME]),
+                      ('proto', proto),
+                      ('domain', domain)])
             conns.Tunnel(proto, domain, self)
 
           for request in parse.Header('X-PageKite-Invalid'):
             proto, domain, srand = request.split(':')
-            self.Log([('FE', self.server_name), ('err', 'Rejected'), ('proto', proto), ('domain', domain)])
+            self.Log([('FE', self.server_info[self.S_NAME]),
+                      ('err', 'Rejected'),
+                      ('proto', proto),
+                      ('domain', domain)])
 
           for request in parse.Header('X-PageKite-Duplicate'):
             proto, domain, srand = request.split(':')
-            self.Log([('FE', self.server_name),
+            self.Log([('FE', self.server_info[self.S_NAME]),
                       ('err', 'Duplicate'),
                       ('proto', proto),
                       ('domain', domain)])
 
           for quota in parse.Header('X-PageKite-Quota'):
             self.quota = [int(quota), None, None]
-            self.Log([('FE', self.server_name), ('quota', quota)])
+            self.Log([('FE', self.server_info[self.S_NAME]),
+                      ('quota', quota)])
 
         self.rtt = (time.time() - begin)
     
@@ -2201,7 +2232,7 @@ class Tunnel(ChunkParser):
 
   def SendPing(self):
     self.last_ping = int(time.time())
-    self.LogDebug("Ping", [('host', self.server_name)])
+    self.LogDebug("Ping", [('host', self.server_info[self.S_NAME])])
     return self.SendChunked('NOOP: 1\nPING: 1\r\n\r\n!', compress=False)
 
   def SendPong(self):
@@ -2348,7 +2379,7 @@ class LoopbackTunnel(Tunnel):
 
     self.backends = backends
     self.require_all = True
-    self.server_name = LOOPBACK[which]
+    self.server_info[self.S_NAME] = LOOPBACK[which]
     self.other_end = None
 
     if which == 'FE':
@@ -2356,7 +2387,9 @@ class LoopbackTunnel(Tunnel):
         if backends[d][BE_BACKEND]:
           proto, domain = d.split(':')
           self.conns.Tunnel(proto, domain, self)
-          self.Log([('FE', self.server_name), ('proto', proto), ('domain', domain)])
+          self.Log([('FE', self.server_info[self.S_NAME]),
+                    ('proto', proto),
+                    ('domain', domain)])
 
   def Cleanup(self):
     other = self.other_end
@@ -2839,7 +2872,7 @@ class TunnelManager(threading.Thread):
           tunnel.SendPing()
 
     for tunnel in dead.values():
-      Log([('dead', tunnel.server_name)])
+      Log([('dead', tunnel.server_info[tunnel.S_NAME])])
       self.conns.Remove(tunnel)
       tunnel.Cleanup()
 
@@ -3470,7 +3503,7 @@ class PageKite(object):
           ips = []
           bips = []
           for tunnel in conns.tunnels[bid]:
-            ip = tunnel.server_name.split(':')[0]
+            ip = tunnel.server_info[tunnel.S_NAME].split(':')[0]
             if not ip == LOOPBACK_HN:
               if not self.servers_preferred or ip in self.servers_preferred:
                 ips.append(ip)
