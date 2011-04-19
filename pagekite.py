@@ -1006,32 +1006,36 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     self.end_headers()
 
   def sendChunk(self, chunk):
-    self.wfile.write('%x\r\n' % len(chunk))
-    self.wfile.write(chunk)
-    self.wfile.write('\r\n')
+    if self.chunked:
+      self.wfile.write('%x\r\n' % len(chunk))
+      self.wfile.write(chunk)
+      self.wfile.write('\r\n')
+    else:
+      self.wfile.write(chunk)
 
   def sendEof(self):
     if self.chunked and not self.suppress_body: self.wfile.write('0\r\n\r\n')
 
   def sendResponse(self, message, code=200, msg='OK', mimetype='text/html',
-                         header_list=[], chunked=False):
+                         header_list=[], chunked=False, length=None):
     self.log_request(code, message and len(message) or '-')
     self.wfile.write('HTTP/1.1 %s %s\n' % (code, msg))
     if code == 401:
       self.send_header('WWW-Authenticate',
                        'Basic realm=PK%d' % (time.time()/3600))
+
+    self.chunked = chunked
     if chunked:
-      self.chunked = True
       self.send_header('Transfer-Encoding', 'chunked')
     else:
-      self.chunked = False
-      self.send_header('Content-Length', len(message))
+      if length:
+        self.send_header('Content-Length', length)
+      elif not chunked:
+        self.send_header('Content-Length', len(message))
+
     self.sendStdHdrs(header_list=header_list, mimetype=mimetype)
     if message and not self.suppress_body:
-      if chunked:
-        self.sendChunk(message)
-      else:
-        self.wfile.write(message)
+      self.sendChunk(message)
 
   def checkUsernamePasswordAuth(self, username, password):
     if self.server.pkite.ui_password: 
@@ -1143,14 +1147,36 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
           break
       if not full_path.endswith('.shtml'): shtml_vars = None
       rf = open(full_path, "rb")
+      rf_stat = os.fstat(rf.fileno())
     except (IOError, OSError), e:
       return False
 
-    # FIXME: Do ETag magic, last modified, etc.
+    headers = [ ]
+    if not shtml_vars:
+      # ETags for static content: we trust the file-system.
+      etag = sha1hex(':'.join(['%s' % s for s in [full_path, rf_stat.st_mode,
+                                   rf_stat.st_ino, rf_stat.st_dev,
+                                   rf_stat.st_nlink, rf_stat.st_uid,
+                                   rf_stat.st_gid, rf_stat.st_size,
+                                   int(rf_stat.st_mtime),
+                                   int(rf_stat.st_ctime)]]))[0:24]
+      if etag == self.headers.get('if-none-match', None):
+        rf.close()
+        self.sendResponse('', code=304, msg='Not Modified', mimetype=mimetype)
+        return True
+      else:
+        headers.append(('ETag', etag))
 
-    self.sendResponse(None, mimetype=mimetype, chunked=True) 
+    # FIXME: Support ranges for resuming aborted transfers.
+
+    self.sendResponse(None, mimetype=mimetype,
+                            length=rf_stat.st_size,
+                            chunked=(shtml_vars is not None),
+                            header_list=headers)
+
+    chunk_size = (shtml_vars and 1024 or 8) * 1024
     while not self.suppress_body:
-      data = rf.read(32*4096)
+      data = rf.read(chunk_size)
       if data == "": break
       if shtml_vars:
         self.sendChunk(data % shtml_vars)
@@ -1179,11 +1205,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                               qs, posted):
     data = {
       'prog': self.server.pkite.progname,
+      'mimetype': self.getMimeType(path),
+      'hostname': socket.gethostname() or 'Your Computer',
+      'http_host': 'unknown',
       'code': 200,
       'body': '',
       'msg': 'OK',
-      'hostname': socket.gethostname() or 'Your Computer',
-      'mimetype': self.getMimeType(path),
       'now': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
       'ver': APPVER
     }
@@ -4633,7 +4660,7 @@ class PageKite(object):
         fd.setblocking(1)
 
       fd.connect((host, port))
-      fd.send('PING / HTTP/1.0\r\n\r\n')
+      fd.send('HEAD / HTTP/1.0\r\n\r\n')
       fd.recv(1024)
       fd.close()
 
