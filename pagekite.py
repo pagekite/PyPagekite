@@ -686,6 +686,7 @@ def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None):
                          ['<html><body>', message, '</body></html>'])
 
 LOG = []
+LOG_THRESHOLD = 256 * 1024
 
 def LogValues(values, testtime=None):
   words = [(kv[0], ('%s' % kv[1]).replace('\t', ' ')
@@ -1442,10 +1443,10 @@ class Selectable(object):
     else:
       if not self.peeking:
         self.read_bytes += len(data)
-        if self.read_bytes > 1024000: self.LogTraffic()
+        if self.read_bytes > LOG_THRESHOLD: self.LogTraffic()
       return self.ProcessData(data)
 
-  def Throttle(self, max_speed=None, remote=False):
+  def Throttle(self, max_speed=None, remote=False, delay=0.2):
     if max_speed:
       self.throttle_until = time.time()
       flooded = self.read_bytes + self.all_in
@@ -1455,7 +1456,6 @@ class Selectable(object):
     else:
       if self.throttle_until < time.time(): self.throttle_until = time.time()
       flooded = '?'
-      delay = 0.2
 
     self.throttle_until += delay
     self.LogDebug('Throttled until %x (flooded=%s, bps=%s, remote=%s)' % (
@@ -1507,7 +1507,7 @@ class Selectable(object):
 
     self.write_blocked = sending[sent_bytes:]
     buffered_bytes += len(self.write_blocked)
-    if self.wrote_bytes >= 512*1024: self.LogTraffic()
+    if self.wrote_bytes >= LOG_THRESHOLD: self.LogTraffic()
 
     if self.write_eof and not self.write_blocked: self.ProcessEofWrite()
     return True
@@ -2228,12 +2228,12 @@ class Tunnel(ChunkParser):
     ChunkParser.Cleanup(self)
 
   def ResetRemoteZChunks(self):
-    return self.SendChunked('NOOP: 1\nZRST: 1\r\n\r\n!', compress=False)
+    return self.SendChunked('NOOP: 1\r\nZRST: 1\r\n\r\n!', compress=False)
 
   def SendPing(self):
     self.last_ping = int(time.time())
     self.LogDebug("Ping", [('host', self.server_info[self.S_NAME])])
-    return self.SendChunked('NOOP: 1\nPING: 1\r\n\r\n!', compress=False)
+    return self.SendChunked('NOOP: 1\r\nPING: 1\r\n\r\n!', compress=False)
 
   def SendPong(self):
     return self.SendChunked('NOOP: 1\r\n\r\n!', compress=False)
@@ -2602,7 +2602,8 @@ class UserConn(Selectable):
       return False
 
     # Back off if tunnel is stuffed.
-    if self.tunnel and len(self.tunnel.write_blocked) > 1024000: self.Throttle()
+    if self.tunnel and len(self.tunnel.write_blocked) > 1024000:
+      self.Throttle(delay=(len(self.tunnel.write_blocked)-204800)/max(50000, self.tunnel.write_speed))
 
     if self.read_eof: return self.ProcessEofRead()
     return True
@@ -2866,7 +2867,8 @@ class TunnelManager(threading.Thread):
     dead = {}
     for tid in self.conns.tunnels:
       for tunnel in self.conns.tunnels[tid]:
-        if tunnel.last_activity < tunnel.last_ping-45:
+        grace = max(40, len(tunnel.write_blocked)/tunnel.write_speed)
+        if tunnel.last_activity < tunnel.last_ping-(5+grace):
           dead['%s' % tunnel] = tunnel
         elif tunnel.last_activity < now-30 and tunnel.last_ping < now-2:
           tunnel.SendPing()
@@ -3289,7 +3291,10 @@ class PageKite(object):
         self.server_raw_ports = [(x == VIRTUAL_PN and x or int(x)) for x in arg.split(',')]
       elif opt in ('-h', '--host'): self.server_host = arg
       elif opt in ('-A', '--authdomain'): self.auth_domain = arg
-      elif opt in ('-f', '--isfrontend'): self.isfrontend = True
+      elif opt in ('-f', '--isfrontend'):
+        self.isfrontend = True
+        global LOG_THRESHOLD
+        LOG_THRESHOLD *= 4
 
       elif opt in ('-a', '--all'): self.require_all = True
       elif opt in ('-N', '--new'): self.servers_new_only = True
