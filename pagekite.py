@@ -1079,9 +1079,6 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       self.sendResponse('<h1>Unauthorized</h1>\n', code=401, msg='Forbidden')
       return False
 
-  def do_PING(self):
-    self.sendResponse('PONG\n', code=200, msg='PONG', mimetype='text/plain')
-
   def do_UNSUPPORTED(self):
     self.sendResponse('Unsupported request method.\n',
                       code=503, msg='Sorry', mimetype='text/plain')
@@ -1174,7 +1171,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                             chunked=(shtml_vars is not None),
                             header_list=headers)
 
-    chunk_size = (shtml_vars and 1024 or 8) * 1024
+    chunk_size = (shtml_vars and 1024 or 16) * 1024
     while not self.suppress_body:
       data = rf.read(chunk_size)
       if data == "": break
