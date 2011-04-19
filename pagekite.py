@@ -263,7 +263,7 @@ BE_STATUS_DISABLED = -1
 BE_STATUS_UNKNOWN = -2
 
 DYNDNS = {
-  'pagekite.net': ('https://up.pagekite.net/'
+  'pagekite.net': ('http://up.pagekite.net/'
                    '?hostname=%(domain)s&myip=%(ips)s&sign=%(sign)s'),
   'beanstalks.net': ('http://up.b5p.us/'
                      '?hostname=%(domain)s&myip=%(ips)s&sign=%(sign)s'),
@@ -2866,7 +2866,7 @@ class TunnelManager(threading.Thread):
     dead = {}
     for tid in self.conns.tunnels:
       for tunnel in self.conns.tunnels[tid]:
-        if tunnel.last_activity < now-45:
+        if tunnel.last_activity < tunnel.last_ping-45:
           dead['%s' % tunnel] = tunnel
         elif tunnel.last_activity < now-30 and tunnel.last_ping < now-2:
           tunnel.SendPing()
