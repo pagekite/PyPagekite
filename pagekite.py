@@ -502,20 +502,24 @@ except Exception:
 gSecret = None
 def globalSecret():
   global gSecret
-
   if not gSecret:
     # This always works...
     gSecret = '%8.8x%8.8x%8.8x' % (random.randint(0, 0x7FFFFFFE), 
                                    time.time(),
                                    random.randint(0, 0x7FFFFFFE))
+
+    # Next, see if we can augment that with some real randomness.
     try:
-      # See if we can augment that with some real randomness
       newSecret = sha1hex(open('/dev/random').read(16) + gSecret)
       gSecret = newSecret
       LogDebug('Seeded signatures using /dev/random, hooray!')
-    except Exception:
-      # FIXME: What is a better source of randomness on e.g. Windows?
-      LogDebug('WARNING: Seeding signatures with time.time() and random.randint()')
+    except:
+      try:
+        newSecret = sha1hex(os.urandom(64) + gSecret)
+        gSecret = newSecret
+        LogDebug('Seeded signatures using os.urandom(), hooray!')
+      except:
+        LogDebug('WARNING: Seeding signatures with time.time() and random.randint()')
 
   return gSecret
 
