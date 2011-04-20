@@ -1,6 +1,10 @@
 Version history - highlights
 ============================
 
+v0.3.18  ??
+-------
+
+
 v0.3.17  2011.04.20
 -------
    - Crypto cleanup: better random numbers, clarified code, added timestamps
