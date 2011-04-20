@@ -760,13 +760,14 @@ class AuthThread(threading.Thread):
     self.keep_running = True
     self.qc.acquire()
     while self.keep_running:
+      now = int(time.time())
       if self.jobs:
         (requests, conn, callback) = self.jobs.pop(0)
         self.qc.release()
 
         quotas = []
         results = []
-        session = ''
+        session = '%x:%s:' % (now, globalSecret())
         for (proto, domain, srand, token, sign, prefix) in requests:
           what = '%s:%s:%s' % (proto, domain, srand)
           session += what
@@ -775,7 +776,7 @@ class AuthThread(threading.Thread):
             # put stict bounds on possible replay attacks (20 minutes atm).
             results.append(('%s-SignThis' % prefix,
                             '%s:%s' % (what, signToken(payload=what,
-                                                       timestamp=time.time()))))
+                                                       timestamp=now))))
           else:
             # This is a bit lame, but we only check the token if the quota
             # for this connection has never been verified.
@@ -792,7 +793,7 @@ class AuthThread(threading.Thread):
               results.append(('%s-OK' % prefix, what))
 
         results.append(('%s-SessionID' % prefix,
-                        '%x:%s' % (time.time(), sha1hex(session))))
+                        '%x:%s' % (now, sha1hex(session))))
 
         if quotas:
           nz_quotas = [q for q in quotas if q and q > 0]
@@ -1585,10 +1586,6 @@ class Connections(object):
       if ip in self.ip_tracker[tick]: domain = self.ip_tracker[tick][ip][1]
     return domain
 
-  def IpTracking(self):
-    print '%s' % self.ip_tracker
-    return self.ip_tracker
-
   def Remove(self, conn):
     if conn.alt_id and conn.alt_id in self.conns_by_id:
       del self.conns_by_id[conn.alt_id]
@@ -2085,10 +2082,12 @@ class Tunnel(ChunkParser):
         LogError('SSL handshake failed: probably a bad cert (%s)' % e)
         return None, None
 
+    replace_sessionid = self.conns.config.servers_sessionids.get(server, None)
     if (not self.Send(HTTP_PageKiteRequest(server,
                                          conns.config.backends,
                                        tokens,
-                                     nozchunks=conns.config.disable_zchunks))
+                                     nozchunks=conns.config.disable_zchunks,
+                                    replace=replace_sessionid))
         or not self.Flush(wait=True)):
       return None, None
 
@@ -2121,7 +2120,7 @@ class Tunnel(ChunkParser):
 
         for sessionid in parse.Header('X-PageKite-SessionID'):
           self.alt_id = sessionid
-#         LogDebug('Got session ID: %s' % sessionid)
+          conns.config.servers_sessionids[server] = sessionid
 
         tryagain = False
         tokens = {}
@@ -2949,6 +2948,7 @@ class PageKite(object):
     self.servers_new_only = False
     self.servers_no_ping = False
     self.servers_preferred = []
+    self.servers_sessionids = {}
 
     self.dyndns = None
     self.last_updates = []
