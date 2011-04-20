@@ -3589,20 +3589,12 @@ class PageKite(object):
       syslog.openlog((sys.argv[0] or 'pagekite.py').split('/')[-1],
                      syslog.LOG_PID, syslog.LOG_DAEMON)
 
-    if close_all:
-      for fd in [sys.stdin, sys.stdout, sys.stderr]:
-        try:
-          if fd not in dont_close:
-            os.close(fd.fileno())
-        except Exception: # ERROR, fd wasn't open to begin with (ignored)
-          pass
-
-    fd = open(filename, "a", 0)
-    os.dup2(fd.fileno(), 0)
-    os.dup2(fd.fileno(), 1)
-    os.dup2(fd.fileno(), 2)
-    global LogFile
-    LogFile = fd
+    if filename != 'stdio':
+      global LogFile
+      LogFile = fd = open(filename, "a", 0)
+      os.dup2(fd.fileno(), sys.stdin.fileno())
+      os.dup2(fd.fileno(), sys.stdout.fileno())
+      os.dup2(fd.fileno(), sys.stderr.fileno())
 
   def Daemonize(self):
     # Fork once...
