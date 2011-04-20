@@ -686,22 +686,24 @@ def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None):
                          ['<html><body>', message, '</body></html>'])
 
 LOG = []
+LOG_LENGTH = 300
 LOG_THRESHOLD = 256 * 1024
 
 def LogValues(values, testtime=None):
-  words = [(kv[0], ('%s' % kv[1]).replace('\t', ' ')
-                                 .replace('\r', ' ')
-                                 .replace('\n', ' ')
-                                 .replace('; ', ', ')
-                                 .strip()) for kv in values]
-  words.append(('ts', '%x' % (testtime or time.time())))
+  words = [('ts', '%x' % (testtime or time.time()))]
+  words.extend([(kv[0], ('%s' % kv[1]).replace('\t', ' ')
+                                      .replace('\r', ' ')
+                                      .replace('\n', ' ')
+                                      .replace('; ', ', ')
+                                      .strip()) for kv in values])
   wdict = dict(words)
   LOG.append(wdict)
-  if len(LOG) > 100: LOG.pop(0)
+  while len(LOG) > LOG_LENGTH: LOG.pop(0)
   return (words, wdict)
  
-def LogSyslog(values):
-  words, wdict = LogValues(values)
+def LogSyslog(values, wdict=None, words=None):
+  if values:
+    words, wdict = LogValues(values)
   if 'err' in wdict:
     syslog.syslog(syslog.LOG_ERR, '; '.join(['='.join(x) for x in words]))
   elif 'debug' in wdict:
@@ -710,18 +712,25 @@ def LogSyslog(values):
     syslog.syslog(syslog.LOG_INFO, '; '.join(['='.join(x) for x in words]))
 
 LogFile = sys.stdout
-def LogToFile(values):
-  words, wdict = LogValues(values)
+def LogToFile(values, wdict=None, words=None):
+  if values:
+    words, wdict = LogValues(values)
   LogFile.write('; '.join(['='.join(x) for x in words]))
   LogFile.write('\n')
 
-Log = LogToFile
+def LogToMemory(values, wdict=None, words=None):
+  if values: LogValues(values)
+
+def FlushLogMemory():
+  for l in LOG:
+    Log(None, wdict=l, words=[(w, l[w]) for w in l])
+
+Log = LogToMemory
 
 def LogError(msg, parms=None):
   emsg = [('err', msg)]
   if parms: emsg.extend(parms)
   Log(emsg)
-  #time.sleep(0.1)
 
   global gYamon
   gYamon.vadd('errors', 1, wrap=1000000)
@@ -730,7 +739,6 @@ def LogDebug(msg, parms=None):
   emsg = [('debug', msg)]
   if parms: emsg.extend(parms)
   Log(emsg)
-  #time.sleep(0.1)
 
 
 # FIXME: This could easily be a pool of threads to let us handle more
@@ -2969,9 +2977,11 @@ class PageKite(object):
       if os.getenv('USERPROFILE'):
         # Windows
         self.rcfile = os.path.join(os.getenv('USERPROFILE'), 'pagekite.cfg')
+        self.devnull = 'nul'
       else:
         # Everything else
         self.rcfile = os.path.join(os.getenv('HOME'), '.pagekite.rc')
+        self.devnull = '/dev/null'
 
     except Exception, e:
       # The above stuff may fail in some cases, e.g. on Android in SL4A.
@@ -3556,6 +3566,8 @@ class PageKite(object):
     return failures
 
   def LogTo(self, filename, close_all=True, dont_close=[]):
+    global Log
+
     # Try to open the file before we close everything, so errors don't get
     # squelched.
     try:
@@ -3563,10 +3575,13 @@ class PageKite(object):
     except IOError, e:
       raise ConfigError('%s' % e)
 
+    if filename == 'memory':
+      Log = LogToMemory
+      filename = self.devnull
+
     if filename == 'syslog':
-      global Log
       Log = LogSyslog
-      filename = '/dev/null'
+      filename = self.devnull
       syslog.openlog((sys.argv[0] or 'pagekite.py').split('/')[-1],
                      syslog.LOG_PID, syslog.LOG_DAEMON)
 
@@ -3666,6 +3681,14 @@ class PageKite(object):
 
   def Start(self):
     conns = self.conns = Connections(self)
+    global Log
+
+    # Log that we've started up
+    config_report = [('started', sys.argv[0]), ('version', APPVER),
+                     ('argv', ' '.join(sys.argv[1:])),
+                     ('ca_certs', self.ca_certs)]
+    for optf in self.rcfiles_loaded: config_report.append(('optfile', optf))
+    Log(config_report)
 
     try:
       # Set up our listeners if we are a server.
@@ -3687,9 +3710,12 @@ class PageKite(object):
       self.tunnel_manager = TunnelManager(self, conns)
 
     except Exception, e:
+      Log = LogToFile
+      FlushLogMemory()
       raise ConfigError(e)
 
     # Create log-file
+    Log = LogToFile
     if self.logfile:
       keep_open = [s.fd.fileno() for s in conns.conns]
       if self.ui_httpd: keep_open.append(self.ui_httpd.httpd.socket.fileno())
@@ -3702,13 +3728,7 @@ class PageKite(object):
         signal.signal(signal.SIGHUP, reopen)
       except Exception:
         LogError('Warning: configure signal handler failed, logrotate will not work.')
-
-    # Log that we've started up
-    config_report = [('started', sys.argv[0]), ('version', APPVER),
-                     ('argv', ' '.join(sys.argv[1:])),
-                     ('ca_certs', self.ca_certs)]
-    for optf in self.rcfiles_loaded: config_report.append(('optfile', optf))
-    Log(config_report)
+    FlushLogMemory()
 
     # Disable compression in OpenSSL
     if not self.enable_sslzlib:
