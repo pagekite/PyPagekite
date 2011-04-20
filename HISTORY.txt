@@ -6,6 +6,7 @@ v0.3.17  2011.04.20
    - Crypto cleanup: better random numbers, clarified code, added timestamps
      to front-end challenges (limits replay attack window), allowed hardcoding
      of front-end SSL cert hash in config file.
+   - Fixed hanging SSL connections on front-ends with native termination.
    - Rapid network switching should work (session-id based disconnects).
    - Minor flow-control tweaks and fixes.
    - Fixed a bug where large file transfers could disconnect tunnels.
