@@ -1937,10 +1937,10 @@ class Tunnel(ChunkParser):
 
         for replace in conn.parser.Header(prefix+'-Replace'):
           if replace in self.conns.conns_by_id:
-            conn = self.conns.conns_by_id[replace]
-            self.LogDebug('Disconnecting old tunnel: %s' % conn)
-            self.conns.Remove(conn)
-            conn.Cleanup()
+            repl = self.conns.conns_by_id[replace]
+            self.LogDebug('Disconnecting old tunnel: %s' % repl)
+            self.conns.Remove(repl)
+            repl.Cleanup()
 
         for bs in conn.parser.Header(prefix):
           # X-Beanstalk: proto:my.domain.com:token:signature
