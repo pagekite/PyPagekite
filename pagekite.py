@@ -104,6 +104,22 @@ PROTOVER = '0.8'
 APPVER = '0.3.17+github'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
+MINIDOC = """\
+Welcome to pagekite.py v%s!
+
+  To make public a webserver running on localhost (port 80):
+  $ pagekite.py yourname.pagekite.me
+
+  To make public a webserver running on localhost (port 3000):
+  $ pagekite.py yourname.pagekite.me:3000
+
+  To get more detailed instructions:
+  $ pagekite.py --help
+
+Note that if you don't have an account with http://pagekite.net/, the above
+commands will walk you through the process of creating one.  Just choose
+what-ever name you like and if it's available, it will be granted.
+""" % APPVER
 DOC = """\
 pagekite.py is Copyright 2010, 2011, the Beanstalks Project ehf. 
      v%s                               http://pagekite.net/
@@ -226,14 +242,15 @@ MAGIC_PATHS = (MAGIC_PATH, '/Beanstalk~Magic~Beans/0.2')
 
 OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
-            'optfile=', 'savefile=',
+            'optfile=', 'savefile=', 'signup=', 'help',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'register=', 'host=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
             'tls_default=', 'tls_endpoint=', 'fe_certname=', 'ca_certs=',
-            'backend=', 'frontend=', 'frontends=', 'torify=', 'socksify=',
+            'backend=', 'define_backend=',
+            'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes']
 
@@ -252,15 +269,18 @@ LOOPBACK = {'FE': LOOPBACK_FE, 'BE': LOOPBACK_BE}
 BE_PROTO = 0
 BE_PORT = 1
 BE_DOMAIN = 2
-BE_BACKEND = 3
-BE_SECRET = 4
-BE_STATUS = 5
+BE_BHOST = 3
+BE_BPORT = 4
+BE_SECRET = 5
+BE_STATUS = 6
 
-BE_STATUS_OK = 0
+BE_STATUS_OK = 100
 BE_STATUS_BE_FAIL = 2
 BE_STATUS_NO_TUNNEL = 1
 BE_STATUS_DISABLED = -1
 BE_STATUS_UNKNOWN = -2
+
+BE_NONE = (None, None, None, None, None, '', BE_STATUS_UNKNOWN)
 
 DYNDNS = {
   'pagekite.net': ('http://up.pagekite.net/'
@@ -273,6 +293,7 @@ DYNDNS = {
   'no-ip.com': ('https://%(user)s:%(pass)s@dynupdate.no-ip.com'
                 '/nic/update?hostname=%(domain)s&myip=%(ip)s'),
 }
+SERVICE_DOMAINS = ('pagekite.me', 'pagekite.us', 'pagekite.info')
 
 
 ##[ Standard imports ]########################################################
@@ -580,7 +601,7 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
          
   tokens = tokens or {}
   for d in backends.keys():
-    if backends[d][BE_BACKEND]:
+    if backends[d][BE_BHOST]:
 
       # A stable (for replay on challenge) but unguessable salt.
       my_token = sha1hex(globalSecret() + server + backends[d][BE_SECRET]
@@ -880,13 +901,13 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
     for tid in conns.tunnels:
       proto, domain = tid.split(':')
-      if '-' in proto: proto, port = proto.split('-')
+      if '-' in proto: proto, unused_port = proto.split('-')
       if tid in backends:
-        backend = backends[tid][BE_BACKEND]
+        bh, bp = (backends[tid][BE_BHOST], backends[tid][BE_BPORT])
         if proto.startswith('http'):
-          binfo = '<a href="%s://%s">%s</a>' % (proto, backend, backend)
+          binfo = '<a href="%s://%s:%s">%s:%s</a>' % (proto, bh, bp, bh, bp)
         else:
-          binfo = '<b>%s</b>' % backend
+          binfo = '<b>%s:%s</b>' % (bh, bp) 
       else:
         binfo = '<i>none</i>'
 
@@ -2265,7 +2286,8 @@ class Tunnel(ChunkParser):
     for bid in self.conns.config.backends:
       be = self.conns.config.backends[bid]
       if be[BE_DOMAIN] == host:
-        bhost, bport = be[BE_BACKEND].split(':')
+        bhost, bport = (be[BE_BHOST], be[BE_BPORT])
+        # FIXME: Should vary probe by backend type
         if self.conns.config.Ping(bhost, int(bport)) > 2: return False
     return True
 
@@ -2395,7 +2417,7 @@ class LoopbackTunnel(Tunnel):
 
     if which == 'FE':
       for d in backends.keys():
-        if backends[d][BE_BACKEND]:
+        if backends[d][BE_BHOST]:
           proto, domain = d.split(':')
           self.conns.Tunnel(proto, domain, self)
           self.Log([('FE', self.server_info[self.S_NAME]),
@@ -2968,6 +2990,7 @@ class PageKite(object):
     self.conns = None
     self.looping = False
     self.main_loop = True
+    self.do_signup_email = None
 
     self.crash_report_url = '%scgi-bin/crashes.pl' % WWWHOME
     self.rcfile_recursion = 0
@@ -3039,8 +3062,10 @@ class PageKite(object):
     bprinted = 0
     for bid in self.backends:
       be = self.backends[bid]
-      if be[BE_BACKEND]:
-        print 'backend=%s:%s:%s' % (bid, be[BE_BACKEND], be[BE_SECRET])
+      if be[BE_BHOST]:
+        print '%s=%s:%s:%s:%s' % ((be[BE_STATUS] == BE_STATUS_DISABLED
+                                   ) and 'define_backend' or 'backend', bid,
+                                  be[BE_BHOST], be[BE_BPORT], be[BE_SECRET])
         bprinted += 1
     if bprinted == 0:
       print '#backend=http:YOU.pagekite.me:localhost:80:SECRET'
@@ -3078,7 +3103,7 @@ class PageKite(object):
     print (self.auth_domain and '%sauthdomain=%s' % (comment, self.auth_domain) or '#authdomain=foo.com')
     for bid in self.backends:
       be = self.backends[bid]
-      if not be[BE_BACKEND]:
+      if not be[BE_BHOST]:
         print 'domain=%s:%s' % (bid, be[BE_SECRET])
     print '#domain=http:*.pagekite.me:SECRET1'
     print '#domain=http,https,websocket:THEM.pagekite.me:SECRET2'
@@ -3100,13 +3125,13 @@ class PageKite(object):
       print '#ca_certs=%s' % self.ca_certs
     print
 
-  def FallDown(self, message, help=True, noexit=False):
+  def FallDown(self, message, help=True, longhelp=False, noexit=False):
     if self.conns and self.conns.auth: self.conns.auth.quit()
     if self.ui_httpd: self.ui_httpd.quit()
     if self.tunnel_manager: self.tunnel_manager.quit()
     self.conns = self.ui_httpd = self.tunnel_manager = None
-    if help:
-      print DOC
+    if help or longhelp:
+      print longhelp and DOC or MINIDOC
       print '*****'
     if message: print 'Error: %s' % message
     if not noexit: sys.exit(1)
@@ -3122,25 +3147,26 @@ class PageKite(object):
       parts.pop(0)
     return None
 
-  def GetBackendData(self, proto, domain, field, recurse=True):
+  def GetBackendData(self, proto, domain, recurse=True):
     backend = '%s:%s' % (proto.lower(), domain.lower())
     if backend in self.backends:
       if BE_STATUS_DISABLED != self.backends[backend][BE_STATUS]:
-        return self.backends[backend][field]  
+        return self.backends[backend]
 
     if recurse:
       dparts = domain.split('.')
       while len(dparts) > 1:
         dparts = dparts[1:]
-        data = self.GetBackendData(proto, '.'.join(['*'] + dparts), field, recurse=False)
+        data = self.GetBackendData(proto, '.'.join(['*'] + dparts), recurse=False)
         if data: return data
 
     return None
 
   def GetBackendServer(self, proto, domain, recurse=True):
-    server = self.GetBackendData(proto, domain, BE_BACKEND) 
-    if server == '-': return None
-    return server
+    backend = self.GetBackendData(proto, domain) or BE_NONE
+    bhost, bport = (backend[BE_BHOST], backend[BE_BPORT])
+    if bhost == '-': return None
+    return (bhost, bport)
 
   def IsSignatureValid(self, sign, secret, proto, domain, srand, token):
     return checkSignature(sign=sign, secret=secret,
@@ -3199,8 +3225,9 @@ class PageKite(object):
           # Lookup failed, fall through to local test.
           pass
 
-      secret = self.GetBackendData(protoport, domain, BE_SECRET)
-      if not secret: secret = self.GetBackendData(proto, domain, BE_SECRET)
+      secret = (self.GetBackendData(protoport, domain) or BE_NONE)[BE_SECRET]
+      if not secret:
+        secret = (self.GetBackendData(proto, domain) or BE_NONE)[BE_SECRET]
       if secret:
         if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
           return -1
@@ -3210,6 +3237,10 @@ class PageKite(object):
 
     LogError('No authentication found for: %s (%s)' % (domain, protoport))
     return None
+
+  def ConfigureNewUser(self):
+    print 'Should configure new user...'
+    sys.exit(1)
 
   def ConfigureFromFile(self, filename=None):
     if not filename: filename = self.rcfile
@@ -3232,9 +3263,72 @@ class PageKite(object):
     self.rcfile_recursion -= 1
     return self
 
-  def HelpAndExit(self):
-    print DOC
+  def HelpAndExit(self, longhelp=False):
+    print longhelp and DOC or MINIDOC
     sys.exit(0)
+
+  def ArgToBackendSpecs(self, arg, status=BE_STATUS_UNKNOWN):
+    protos, fe_domain, be_host, be_port, secret = 'http', None, None, None, ''
+
+    parts = arg.split(':')
+    if len(parts) == 5:
+      protos, fe_domain, be_host, be_port, secret = parts
+    elif len(parts) == 4:
+      protos, fe_domain, be_host, be_port = parts
+    elif len(parts) == 3:
+      protos, fe_domain, be_port = parts
+    elif len(parts) == 2:
+      fe_domain, be_port = parts
+    elif len(parts) == 1:
+      fe_domain = parts[0]
+    else:
+      return {}
+
+    is_service_domain = False
+    for sdom in SERVICE_DOMAINS:
+      if fe_domain.endswith(sdom): is_service_domain = True
+
+    backends = {}
+    for proto in protos.lower().split(','):
+      fdom, bhost, bport, sec = fe_domain.lower(), be_host, be_port, secret
+
+      # Normalize proto, create bid.
+      proto = proto.replace('/', '-')
+      if '-' in proto:
+        proto, port = proto.split('-')
+        bid = '%s-%d:%s' % (proto, int(port), fdom)
+      else:
+        port = ''
+        bid = '%s:%s' % (proto, fdom)
+
+      # Try and fill in the blanks from pre-defined configurations
+      if bid in self.backends:
+        be = self.backends[bid]
+        if not bhost: bhost = be[BE_BHOST]
+        if not bport: bport = be[BE_BPORT]
+      else:
+        be = None
+        for tbe in self.backends:
+          if self.backends[tbe][BE_DOMAIN] == fdom:
+            be = self.backends[tbe]
+        # FIXME: If it's a service domain, try even harder to find the secret.
+
+      if be and not sec: sec = be[BE_SECRET]
+      if not bport:
+        if proto == 'http': bport = 80
+        elif proto == 'https': bport = 443
+
+      backends[bid] = [proto,
+                       port,
+                       fdom.lower(),
+                       (bhost or 'localhost').lower(),
+                       int(bport),
+                       secret or '',
+                       status]
+      print 'Got %s' % (backends[bid], )
+
+    return backends
+
 
   def Configure(self, argv):
     opts, args = getopt.getopt(argv, OPT_FLAGS, OPT_ARGS) 
@@ -3340,22 +3434,14 @@ class PageKite(object):
         self.servers_auto = (int(count), domain, int(port))
 
       elif opt in ('--errorurl', '-E'): self.error_url = arg
-      elif opt == '--backend':
-        protos, domain, bhost, bport, secret = arg.split(':')
-        for proto in protos.split(','): 
-          proto = proto.replace('/', '-')
-          if '-' in proto:
-            proto, port = proto.split('-')
-            bid = '%s-%d:%s' % (proto.lower(), int(port), domain.lower())
-          else:
-            port = ''
-            bid = '%s:%s' % (proto.lower(), domain.lower())
-
-          backend = '%s:%s' % (bhost.lower(), bport)
+      elif opt in ('--backend', '--define_backend'):
+        bes = self.ArgToBackendSpecs(arg, status=((opt == '--backend')
+                                                  and BE_STATUS_UNKNOWN
+                                                  or BE_STATUS_DISABLED))
+        for bid in bes:
           if bid in self.backends:
             raise ConfigError("Same backend/domain defined twice: %s" % bid)
-          self.backends[bid] = (proto.lower(), port, domain.lower(),
-                                backend, secret, BE_STATUS_UNKNOWN)
+        self.backends.update(bes)
 
       elif opt == '--domain':
         protos, domain, secret = arg.split(':')
@@ -3364,8 +3450,8 @@ class PageKite(object):
           bid = '%s:%s' % (proto, domain)
           if bid in self.backends:
             raise ConfigError("Same backend/domain defined twice: %s" % bid)
-          self.backends[bid] = (proto, None, domain, None, secret,
-                                BE_STATUS_UNKNOWN)
+          self.backends[bid] = [proto, None, domain, None, None, secret,
+                                BE_STATUS_UNKNOWN]
 
       elif opt == '--noprobes': self.no_probes = True
       elif opt == '--nofrontend': self.isfrontend = False
@@ -3378,6 +3464,7 @@ class PageKite(object):
       elif opt == '--clean': pass
       elif opt == '--nopyopenssl': pass
       elif opt == '--noloop': self.main_loop = False
+      elif opt == '--signup': self.do_signup_email = arg
 
       elif opt == '--defaults':
         self.dyndns = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
@@ -3388,8 +3475,25 @@ class PageKite(object):
         self.PrintSettings()
         sys.exit(0)
 
+      elif opt == '--help':
+        self.HelpAndExit(longhelp=True)
       else:
         self.HelpAndExit()
+
+    just_these_backends = {}
+    for arg in args:
+      bes = self.ArgToBackendSpecs(arg)
+      for bid in bes:
+        if not bes[bid][BE_SECRET]:
+          print 'Unknown secret for %s' % bid
+          # FIXME: No secret found, so either sign up or add a new kite.
+      just_these_backends.update(bes)
+         
+    if just_these_backends.keys():
+      for bid in self.backends:
+        self.backends[bid][BE_STATUS] = BE_STATUS_DISABLED
+      self.backends.update(just_these_backends)
+      print 'Backends: %s' % self.backends
 
     return self
 
@@ -3464,14 +3568,15 @@ class PageKite(object):
       # First, check for old addresses and always connect to those.
       if not self.servers_new_only:
         for bid in self.backends: 
-          (proto, bdom) = bid.split(':')
-          try:
-            (hn, al, ips) = self.GetHostDetails(bdom)
-            for ip in ips:
-              server = '%s:%s' % (ip, port)
-              if server not in self.servers: self.servers.append(server)
-          except Exception, e:
-            LogDebug('DNS lookup failed for %s' % bdom)
+          if self.backends[bid][BE_STATUS] != BE_STATUS_DISABLED:
+            (proto, bdom) = bid.split(':')
+            try:
+              (hn, al, ips) = self.GetHostDetails(bdom)
+              for ip in ips:
+                server = '%s:%s' % (ip, port)
+                if server not in self.servers: self.servers.append(server)
+            except Exception, e:
+              LogDebug('DNS lookup failed for %s' % bdom)
 
       try:
         (hn, al, ips) = socket.gethostbyname_ex(domain)
@@ -3826,6 +3931,10 @@ def Configure(pk):
 
   pk.Configure(sys.argv[1:])
   pk.CheckConfig()
+
+  if '--clean' not in sys.argv:
+    if not pk.rcfiles_loaded: pk.ConfigureNewUser()
+      
 
 if __name__ == '__main__':
   Main(PageKite, Configure)
