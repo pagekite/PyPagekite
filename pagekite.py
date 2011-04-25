@@ -108,10 +108,13 @@ MINIDOC = """\
 Welcome to pagekite.py v%s!
 
   To make public a webserver running on localhost (port 80):
-  $ pagekite.py yourname.pagekite.me
+  $ pagekite.py NAME.pagekite.me
 
   To make public a webserver running on localhost (port 3000):
-  $ pagekite.py yourname.pagekite.me:3000
+  $ pagekite.py NAME.pagekite.me:3000
+
+  To make public HTTP, HTTPS and SSH servers (standard ports):
+  $ pagekite.py http,https,ssh:NAME.pagekite.me
 
   To get more detailed instructions:
   $ pagekite.py --help
@@ -3278,11 +3281,18 @@ class PageKite(object):
     elif len(parts) == 3:
       protos, fe_domain, be_port = parts
     elif len(parts) == 2:
-      fe_domain, be_port = parts
+      try:
+        fe_domain, be_port = parts[0], int(parts[1])
+      except:
+        be_port = None
+        protos, fe_domain = parts
     elif len(parts) == 1:
       fe_domain = parts[0]
     else:
       return {}
+
+    # Allow http:// as a common typo instead of http:
+    fe_domain = fe_domain.replace('/', '')
 
     is_service_domain = False
     for sdom in SERVICE_DOMAINS:
@@ -3293,6 +3303,10 @@ class PageKite(object):
       fdom, bhost, bport, sec = fe_domain.lower(), be_host, be_port, secret
 
       # Normalize proto, create bid.
+      if proto == 'ssh':
+        proto = 'raw-22'
+        if not bport: bport = 22
+
       proto = proto.replace('/', '-')
       if '-' in proto:
         proto, port = proto.split('-')
