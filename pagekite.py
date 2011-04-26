@@ -2990,10 +2990,10 @@ class NullUi(object):
 class BasicUi(NullUi):
   """Stdio based user interface."""
  
-  EMAIL_REGEXP = re.compile(r'^[a-z0-9!#$%&\'\*\+\/=?^_`{|}~-]+'
-                             '(?:\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'
-                             '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
-                             '(?:[a-zA-Z]{2,4}|museum)$')
+  EMAIL_RE = re.compile(r'^[a-z0-9!#$%&\'\*\+\/=?^_`{|}~-]+'
+                         '(?:\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'
+                         '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
+                         '(?:[a-zA-Z]{2,4}|museum)$')
 
   def StartWizard(self, title):
     self.Welcome()
@@ -3007,8 +3007,8 @@ class BasicUi(NullUi):
       sys.stdout.write('%s ' % (question, ))
       answer = sys.stdin.readline().strip()
       if default and answer == '': return default
-      if self.EMAIL_REGEXP.match(answer): return answer
-      if back and answer.startswith('b'): return back
+      if self.EMAIL_RE.match(answer): return answer
+      if back is not None and answer.startswith('b'): return back
 
   def AskYesNo(self, question, default=None,
                wizard_hint=False, image=None, back=None):
@@ -3020,7 +3020,7 @@ class BasicUi(NullUi):
       sys.stdout.write('%s %s ' % (question, yn))
       answer = sys.stdin.readline().strip().lower()
       if default is not None and answer == '': answer = default and 'y' or 'n'
-      if back and answer.startswith('b'): return back
+      if back is not None and answer.startswith('b'): return back
       if answer in ('y', 'n'): return (answer == 'y')
 
   def AskMultipleChoice(self, pre, choices, post, default=None,
@@ -3035,7 +3035,7 @@ class BasicUi(NullUi):
       sys.stdout.write('%s [1-%d%s] ' % (post, len(choices), d))
       try:
         answer = sys.stdin.readline().strip()
-        if back and answer.startswith('b'): return back
+        if back is not None and answer.startswith('b'): return back
         choice = int(answer or default)
         if choice > 0 and choice <= len(choices): return choice
       except (ValueError, IndexError):
@@ -3625,7 +3625,6 @@ class PageKite(object):
     service_account_list = service_accounts.keys()
 
     is_service_domain = SERVICE_DOMAIN_RE.search(kitename)
-    print is_service_domain
 
     if service_account_list:
       state = ['choose_kite_account']
@@ -3648,7 +3647,11 @@ class PageKite(object):
                                           'Do not use the service (manual configuration)'],
                                          'Your choice', default=3)
           if ch == 1:
-            Goto('service_signup')
+            if is_service_domain:
+              register = kitename
+              Goto('service_signup_email')
+            else:
+              Goto('service_signup_bad_domain')
           elif ch == 2:
             Goto('service_login')
           else:
@@ -3661,30 +3664,26 @@ class PageKite(object):
           self.ui.EndWizard()
           sys.exit(1)
         
-        elif 'service_signup' in state:
-          if is_service_domain:
-            Goto('service_signup_email', back_skips_current=True)
-            register = kitename
+        elif 'service_signup_bad_domain' in state:
+          alternate = kitename.split('.')[-2]+'.'+SERVICE_DOMAINS[0]
+          ch = self.ui.AskYesNo(('Sorry, %s is not a valid service domain.\n'
+                                  'Try to register %s instead?'
+                                 ) % (kitename, alternate),
+                                default=True, back=-1)
+          if ch is True:
+            register = alternate
+            Goto('service_signup_email')
+          elif ch is False:
+            Goto('manual_abort')
           else:
-            alternate = kitename.split('.')[-2]+'.'+SERVICE_DOMAINS[0]
-            ch = self.ui.AskYesNo(('Sorry, %s is not a valid service domain.\n'
-                                    'Try to register %s instead?'
-                                   ) % (kitename, alternate),
-                                  default=True, back=-1)
-            if ch == -1:
-              Back()
-            elif ch is False:
-              Goto('manual_abort')
-            elif ch is True:
-              Goto('service_signup_email')
-              register = alternate
+            Back()
 
         elif 'service_signup_email' in state:
-          email = self.ui.AskEmail('What is your e-mail address?', back=-1)
-          if email == -1:
-            Back()
-          else:
+          email = self.ui.AskEmail('What is your e-mail address?', back=False)
+          if email:
             raise ConfigError('Should register %s/%s' % (email, register))
+          else:
+            Back()
 
         elif 'choose_kite_account' in state:
           choices = service_account_list[:]
