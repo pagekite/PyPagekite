@@ -325,6 +325,9 @@ from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 
 ##[ Conditional imports & compatibility magic! ]###############################
 
+# Create our service-domain matching regexp
+SERVICE_DOMAIN_RE = re.compile('\.(' + '|'.join(SERVICE_DOMAINS) + ')$')
+
 # System logging on Unix
 try:
   import syslog
@@ -2957,23 +2960,58 @@ class NullUi(object):
       print self.welcome
       self.welcome = None
 
-  def AskYesNo(self, question, default=None,
-               wizard_hint=False, image=None, back=None):
+  def StartWizard(self, title): pass
+  def EndWizard(self): pass
+
+  def DefaultOrFail(self, question, default):
     if default is not None: return default
     raise ConfigError('Unanswerable question: %s' % question)
 
+  def AskEmail(self, question, default=None,
+               wizard_hint=False, image=None, back=None):
+    return self.DefaultOrFail(question, default)
+
+  def AskYesNo(self, question, default=None,
+               wizard_hint=False, image=None, back=None):
+    return self.DefaultOrFail(question, default)
+
   def AskMultipleChoice(self, pre, choices, post, default=None,
                         wizard_hint=False, image=None, back=None):
-    if default: return choices[default-1]
-    raise ConfigError('Unanswerable question: %s' % pre)
+    return self.DefaultOrFail(question, default)
+
+  def Tell(self, lines, error=False):
+    if error:
+      LogError(' '.join(lines))
+      raise ConfigError(' '.join(lines))
+    else:
+      Log(['message', ' '.join(lines)])
 
 
 class BasicUi(NullUi):
   """Stdio based user interface."""
+ 
+  EMAIL_REGEXP = re.compile(r'^[a-z0-9!#$%&\'\*\+\/=?^_`{|}~-]+'
+                             '(?:\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'
+                             '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
+                             '(?:[a-zA-Z]{2,4}|museum)$')
+
+  def StartWizard(self, title):
+    self.Welcome()
+    print
+    print '### %s ###' % title
+
+  def AskEmail(self, question, default=None,
+               wizard_hint=False, image=None, back=None):
+    while True:
+      print
+      sys.stdout.write('%s ' % (question, ))
+      answer = sys.stdin.readline().strip()
+      if default and answer == '': return default
+      if self.EMAIL_REGEXP.match(answer): return answer
+      if back and answer.startswith('b'): return back
 
   def AskYesNo(self, question, default=None,
                wizard_hint=False, image=None, back=None):
-    self.Welcome()
     yn = ((default is True) and '[Y/n]'
           ) or ((default is False) and '[y/N]'
                 ) or ('[y/n]')
@@ -2989,7 +3027,8 @@ class BasicUi(NullUi):
                         wizard_hint=False, image=None, back=None):
     self.Welcome()
     print '\n%s\n' % pre
-    for i in range(0, len(choices)): print '  %d) %s' % (i+1, choices[i])
+    for i in range(0, len(choices)):
+      print ' %s %d) %s' % ((default==i+1) and '*' or ' ', i+1, choices[i])
     print
     while True:
       d = default and (', default=%d' % default) or ''
@@ -2998,9 +3037,15 @@ class BasicUi(NullUi):
         answer = sys.stdin.readline().strip()
         if back and answer.startswith('b'): return back
         choice = int(answer or default)
-        if choice > 0 and choice <= len(choices): return choices[choice-1]
+        if choice > 0 and choice <= len(choices): return choice
       except (ValueError, IndexError):
         pass
+
+  def Tell(self, lines, error=False):
+    self.Welcome()
+    print
+    for line in lines: print line
+    if error: print
 
 
 class PageKite(object):
@@ -3359,10 +3404,6 @@ class PageKite(object):
     # Allow http:// as a common typo instead of http:
     fe_domain = fe_domain.replace('/', '')
 
-    is_service_domain = False
-    for sdom in SERVICE_DOMAINS:
-      if fe_domain.endswith(sdom): is_service_domain = True
-
     backends = {}
     for proto in protos.lower().split(','):
       fdom, bhost, bport, sec = fe_domain.lower(), be_host, be_port, secret
@@ -3561,12 +3602,8 @@ class PageKite(object):
       bes = self.ArgToBackendSpecs(arg)
       for bid in bes:
         if not bes[bid][BE_SECRET]:
-          # FIXME: No secret found, so either sign up or add a new kite.
-          if self.ui.AskYesNo('This appears to be a new kite: %s\n'
-                              'Attempt to get it from PageKite.net?' % bid,
-                              default=True):
-            # FIXME: Go get it!
-            pass
+          if not self.RegisterNewKite(bes[bid][BE_DOMAIN], backend=bes[bid]):
+            raise ConfigError("Not sure what to do with %s, giving up." % bid)
       just_these_backends.update(bes)
          
     if just_these_backends.keys():
@@ -3576,6 +3613,96 @@ class PageKite(object):
       print 'Backends: %s' % self.backends
 
     return self
+
+  def RegisterNewKite(self, kitename, backend=None):
+    self.ui.StartWizard('Creating a kite named %s' % kitename)
+
+    service_accounts = {}
+    for be in self.backends.values():
+      if SERVICE_DOMAIN_RE.match(be[BE_DOMAIN]):
+        if be[BE_SECRET] not in service_accounts.values():
+          service_accounts[be[BE_DOMAIN]] = be[BE_SECRET]
+    service_account_list = service_accounts.keys()
+
+    is_service_domain = SERVICE_DOMAIN_RE.search(kitename)
+    print is_service_domain
+
+    if service_account_list:
+      state = ['choose_kite_account']
+    else:
+      state = ['use_service_question']
+    history = []
+
+    def Back():
+      state[0] = history.pop(-1)
+    def Goto(goto, back_skips_current=False):
+      if not back_skips_current: history.append(state[0])
+      state[0] = goto
+
+    while 'end' not in state:
+      try:
+        if 'use_service_question' in state:
+          ch = self.ui.AskMultipleChoice('Use the PageKite.net service?',
+                                         ['Yes, create a new account',
+                                          'Yes, I have an account', 
+                                          'Do not use the service (manual configuration)'],
+                                         'Your choice', default=3)
+          if ch == 1:
+            Goto('service_signup')
+          elif ch == 2:
+            Goto('service_login')
+          else:
+            Goto('manual_abort')
+
+        elif 'manual_abort' in state: 
+          self.ui.Tell(['Aborted. Please add information about the kite and your',
+                        'front-ends to a config-file in %s' % self.rcfile],
+                       error=True)
+          self.ui.EndWizard()
+          sys.exit(1)
+        
+        elif 'service_signup' in state:
+          if is_service_domain:
+            Goto('service_signup_email', back_skips_current=True)
+            register = kitename
+          else:
+            alternate = kitename.split('.')[-2]+'.'+SERVICE_DOMAINS[0]
+            ch = self.ui.AskYesNo(('Sorry, %s is not a valid service domain.\n'
+                                    'Try to register %s instead?'
+                                   ) % (kitename, alternate),
+                                  default=True, back=-1)
+            if ch == -1:
+              Back()
+            elif ch is False:
+              Goto('manual_abort')
+            elif ch is True:
+              Goto('service_signup_email')
+              register = alternate
+
+        elif 'service_signup_email' in state:
+          email = self.ui.AskEmail('What is your e-mail address?', back=-1)
+          if email == -1:
+            Back()
+          else:
+            raise ConfigError('Should register %s/%s' % (email, register))
+
+        elif 'choose_kite_account' in state:
+          choices = service_account_list[:]
+          choices.append('Do not use PageKite.net')
+          ch = self.ui.AskMultipleChoice('Choose an account for this kite:', 
+                                         choices, 'Register with', default=1)
+          Goto('end')
+ 
+        else:
+          raise ConfigError('Unknown state: %s' % state)
+      except KeyboardInterrupt:
+        if history:
+          Back()
+        else:
+          print
+          raise KeyboardInterrupt()
+
+    self.ui.EndWizard()
 
   def CheckConfig(self):
     if not self.servers_manual and not self.servers_auto and not self.isfrontend:
