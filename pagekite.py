@@ -342,11 +342,13 @@ if not 'SHUT_RD' in dir(socket):
 # when the user tries to enable anything SSL-related.
 SEND_MAX_BYTES = 16 * 1024
 SEND_ALWAYS_BUFFERS = False
+HAVE_SSL = False
 try: 
   if '--nopyopenssl' in sys.argv:
     raise ImportError('pyOpenSSL disabled')
 
   from OpenSSL import SSL
+  HAVE_SSL = True
   def SSL_Connect(ctx, sock,
                   server_side=False, accepted=False, connected=False,
                   verify_names=None):
@@ -382,6 +384,7 @@ except ImportError:
     # we need this to keep tunnels from shutting down when busy.
     SEND_ALWAYS_BUFFERS = True
     SEND_MAX_BYTES = 4 * 1024
+    HAVE_SSL = True
 
     class SSL(object):
       SSLv23_METHOD = ssl.PROTOCOL_SSLv23
@@ -2940,10 +2943,70 @@ class TunnelManager(threading.Thread):
         if self.keep_running: time.sleep(1)
 
 
+class NullUi(object):
+  """This is a UI that always returns default values or raises errors."""
+
+  def __init__(self, welcome=None):
+    self.welcome = welcome
+    self.Splash()
+
+  def Splash(self): pass
+
+  def Welcome(self):
+    if self.welcome:
+      print self.welcome
+      self.welcome = None
+
+  def AskYesNo(self, question, default=None,
+               wizard_hint=False, image=None, back=None):
+    if default is not None: return default
+    raise ConfigError('Unanswerable question: %s' % question)
+
+  def AskMultipleChoice(self, pre, choices, post, default=None,
+                        wizard_hint=False, image=None, back=None):
+    if default: return choices[default-1]
+    raise ConfigError('Unanswerable question: %s' % pre)
+
+
+class BasicUi(NullUi):
+  """Stdio based user interface."""
+
+  def AskYesNo(self, question, default=None,
+               wizard_hint=False, image=None, back=None):
+    self.Welcome()
+    yn = ((default is True) and '[Y/n]'
+          ) or ((default is False) and '[y/N]'
+                ) or ('[y/n]')
+    while True:
+      print
+      sys.stdout.write('%s %s ' % (question, yn))
+      answer = sys.stdin.readline().strip().lower()
+      if default is not None and answer == '': answer = default and 'y' or 'n'
+      if back and answer.startswith('b'): return back
+      if answer in ('y', 'n'): return (answer == 'y')
+
+  def AskMultipleChoice(self, pre, choices, post, default=None,
+                        wizard_hint=False, image=None, back=None):
+    self.Welcome()
+    print '\n%s\n' % pre
+    for i in range(0, len(choices)): print '  %d) %s' % (i+1, choices[i])
+    print
+    while True:
+      d = default and (', default=%d' % default) or ''
+      sys.stdout.write('%s [1-%d%s] ' % (post, len(choices), d))
+      try:
+        answer = sys.stdin.readline().strip()
+        if back and answer.startswith('b'): return back
+        choice = int(answer or default)
+        if choice > 0 and choice <= len(choices): return choices[choice-1]
+      except (ValueError, IndexError):
+        pass
+
+
 class PageKite(object):
   """Configuration and master select loop."""
 
-  def __init__(self):
+  def __init__(self, ui=None):
     self.isfrontend = False
     self.auth_domain = None
     self.server_host = ''
@@ -2999,6 +3062,7 @@ class PageKite(object):
     self.rcfile_recursion = 0
     self.rcfiles_loaded = []
     self.savefile = None
+    self.ui = ui
 
     # Searching for our configuration file!  We prefer the documented
     # 'standard' locations, but if nothing is found there and something local
@@ -3242,6 +3306,7 @@ class PageKite(object):
     return None
 
   def ConfigureNewUser(self):
+    self.SetServiceDefaults()
     print 'Should configure new user...'
     sys.exit(1)
 
@@ -3339,10 +3404,12 @@ class PageKite(object):
                        int(bport),
                        secret or '',
                        status]
-      print 'Got %s' % (backends[bid], )
-
     return backends
 
+  def SetServiceDefaults(self):
+    self.dyndns = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
+    self.servers_auto = (1, 'frontends.b5p.us', 443)
+    if HAVE_SSL: self.fe_certname = ['frontends.b5p.us', 'b5p.us', 'pagekite.net']
 
   def Configure(self, argv):
     opts, args = getopt.getopt(argv, OPT_FLAGS, OPT_ARGS) 
@@ -3479,12 +3546,7 @@ class PageKite(object):
       elif opt == '--nopyopenssl': pass
       elif opt == '--noloop': self.main_loop = False
       elif opt == '--signup': self.do_signup_email = arg
-
-      elif opt == '--defaults':
-        self.dyndns = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
-        self.servers_auto = (1, 'frontends.b5p.us', 443)
-        #self.fe_certname = ['frontends.b5p.us', 'b5p.us']
-
+      elif opt == '--defaults': self.SetServiceDefaults()
       elif opt == '--settings':
         self.PrintSettings()
         sys.exit(0)
@@ -3499,8 +3561,12 @@ class PageKite(object):
       bes = self.ArgToBackendSpecs(arg)
       for bid in bes:
         if not bes[bid][BE_SECRET]:
-          print 'Unknown secret for %s' % bid
           # FIXME: No secret found, so either sign up or add a new kite.
+          if self.ui.AskYesNo('This appears to be a new kite: %s\n'
+                              'Attempt to get it from PageKite.net?' % bid,
+                              default=True):
+            # FIXME: Go get it!
+            pass
       just_these_backends.update(bes)
          
     if just_these_backends.keys():
@@ -3886,11 +3952,14 @@ class PageKite(object):
 
 ##[ Main ]#####################################################################
 
-def Main(pagekite, configure):
+def Main(pagekite, configure, uiclass=NullUi, progname=None, appver=APPVER):
   crashes = 1
 
+  progname = progname or (sys.argv[0] or 'pagekite.py').split('/')[-1]
+  ui = uiclass(welcome='Welcome to %s version %s!' % (progname, appver))
+
   while True:
-    pk = pagekite()
+    pk = pagekite(ui=ui)
     try:
       try:
         try:
@@ -3944,13 +4013,16 @@ def Configure(pk):
     if os.path.exists(pk.rcfile): pk.ConfigureFromFile()
 
   pk.Configure(sys.argv[1:])
-  pk.CheckConfig()
 
-  if '--clean' not in sys.argv:
-    if not pk.rcfiles_loaded: pk.ConfigureNewUser()
+  if '--clean' not in sys.argv and not pk.rcfiles_loaded:
+    if pk.ui.AskYesNo('Save current configuration to %s?' % pk.rcfile,
+                      default=(len(pk.backends.keys()) > 0)):
+      pk.ConfigureNewUser()
+  else:
+    pk.CheckConfig()
       
 
 if __name__ == '__main__':
-  Main(PageKite, Configure)
+  Main(PageKite, Configure, uiclass=BasicUi)
 
 # vi:ts=2 expandtab
