@@ -2175,7 +2175,6 @@ class Tunnel(ChunkParser):
     self.backends = backends
     self.require_all = require_all
     self.server_info[self.S_NAME] = server
-    abort = False
     try:
       begin = time.time()
       data, parse = self._Connect(server, conns)
@@ -2188,12 +2187,6 @@ class Tunnel(ChunkParser):
           self.server_info[self.S_RAW_PORTS].extend(portlist.split(', '))
         for protolist in parse.Header('X-PageKite-Protos'):
           self.server_info[self.S_PROTOS].extend(protolist.split(', '))
-
-        sname = self.server_info[self.S_NAME]
-        conns.config.ui.Notify(('%s protocols: %s') % (sname, ', '.join(self.server_info[self.S_PROTOS])))
-        conns.config.ui.Notify(('%s ports: %s') % (sname, ', '.join(self.server_info[self.S_PORTS])))
-        if 'raw' in self.server_info[self.S_PROTOS]:
-          conns.config.ui.Notify(('%s raw ports: %s') % (sname, ', '.join(self.server_info[self.S_RAW_PORTS])))
 
         for sessionid in parse.Header('X-PageKite-SessionID'):
           self.alt_id = sessionid
@@ -2211,11 +2204,46 @@ class Tunnel(ChunkParser):
           data, parse = self._Connect(server, conns, tokens)
 
         if data and parse:
+          sname = self.server_info[self.S_NAME]
+          conns.config.ui.Notify(('%s protocols: %s') % (sname, ', '.join(self.server_info[self.S_PROTOS])))
+          conns.config.ui.Notify(('%s ports: %s') % (sname, ', '.join(self.server_info[self.S_PORTS])))
+          if 'raw' in self.server_info[self.S_PROTOS]:
+            conns.config.ui.Notify(('%s raw ports: %s') % (sname, ', '.join(self.server_info[self.S_RAW_PORTS])))
+
+          for quota in parse.Header('X-PageKite-Quota'):
+            self.quota = [int(quota), None, None]
+            self.Log([('FE', sname), ('quota', quota)])
+            qGB = 1024 * 1024
+            conns.config.ui.Notify(('%s reports %.2f GB of quota left.'
+                                    ) % (sname, float(quota) / qGB),
+                                   prefix=(int(quota) < qGB) and '!' or ' ')
+
+          for request in parse.Header('X-PageKite-Invalid'):
+            abort = True
+            proto, domain, srand = request.split(':')
+            self.Log([('FE', sname),
+                      ('err', 'Rejected'),
+                      ('proto', proto),
+                      ('domain', domain)])
+            conns.config.ui.Notify(('%s rejected: %s:%s'
+                                    ) % (sname, proto, domain), prefix='!')
+
+          for request in parse.Header('X-PageKite-Duplicate'):
+            abort = True
+            proto, domain, srand = request.split(':')
+            self.Log([('FE', self.server_info[self.S_NAME]),
+                      ('err', 'Duplicate'),
+                      ('proto', proto),
+                      ('domain', domain)])
+            conns.config.ui.Notify(('%s already has: %s:%s'
+                                    ) % (sname, proto, domain), prefix='!')
+
           if not conns.config.disable_zchunks:
             for feature in parse.Header('X-PageKite-Features'):
               if feature == 'ZChunks': self.EnableZChunks(level=9)
 
           for request in parse.Header('X-PageKite-OK'):
+            abort = False
             proto, domain, srand = request.split(':')
             conns.Tunnel(proto, domain, self)
             self.Log([('FE', sname),
@@ -2228,28 +2256,6 @@ class Tunnel(ChunkParser):
             else:
               conns.config.ui.Notify(('%s is front-end for: %s://%s'
                                       ) % (sname, proto, domain))
-
-          for request in parse.Header('X-PageKite-Invalid'):
-            abort = True
-            proto, domain, srand = request.split(':')
-            self.Log([('FE', sname),
-                      ('err', 'Rejected'),
-                      ('proto', proto),
-                      ('domain', domain)])
-
-          for request in parse.Header('X-PageKite-Duplicate'):
-            abort = True
-            proto, domain, srand = request.split(':')
-            self.Log([('FE', self.server_info[self.S_NAME]),
-                      ('err', 'Duplicate'),
-                      ('proto', proto),
-                      ('domain', domain)])
-
-          for quota in parse.Header('X-PageKite-Quota'):
-            self.quota = [int(quota), None, None]
-            self.Log([('FE', sname), ('quota', quota)])
-            conns.config.ui.Notify(('%s reports %.2f GB of quota left.'
-                                    ) % (sname, float(quota) / (1024*1024)))
 
         self.rtt = (time.time() - begin)
     
@@ -3582,7 +3588,8 @@ class PageKite(object):
   def SetServiceDefaults(self):
     self.dyndns = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
     self.servers_auto = (1, 'frontends.b5p.us', 443)
-    if HAVE_SSL: self.fe_certname = ['frontends.b5p.us', 'b5p.us', 'pagekite.net']
+    if HAVE_SSL:
+      self.fe_certname = ['frontends.b5p.us', 'b5p.us', 'pagekite.net']
 
   def Configure(self, argv):
     opts, args = getopt.getopt(argv, OPT_FLAGS, OPT_ARGS) 
@@ -4266,6 +4273,10 @@ class PageKite(object):
                      ('ca_certs', self.ca_certs)]
     for optf in self.rcfiles_loaded: config_report.append(('optfile', optf))
     Log(config_report)
+
+    if not HAVE_SSL:
+      self.ui.Notify('SECURITY WARNING: No SSL support was found, tunnels are insecure!', prefix='!')
+      self.ui.Notify('Please install either pyOpenSSL or python-ssl.',  prefix='!')
 
     try:
       # Set up our listeners if we are a server.
