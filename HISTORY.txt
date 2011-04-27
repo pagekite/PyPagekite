@@ -3,6 +3,9 @@ Version history - highlights
 
 v0.3.18  ??
 -------
+   - Much improved console user interface. For backwards compatbility, it is
+     only enabled if you specify a logfile for the old verbose stuff, and
+     never enabled if you use --daemonize. To disable, use --nullui.
 
 
 v0.3.17  2011.04.20
