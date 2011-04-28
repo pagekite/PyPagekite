@@ -2991,10 +2991,13 @@ class TunnelManager(threading.Thread):
         time.sleep(1)
         tunnel_count = len(self.pkite.conns.TunnelServers())
         tunnel_total = len(self.pkite.servers)
-        if tunnel_count < tunnel_total:
-          self.pkite.ui.Status((tunnel_count < 1) and 'retry' or 'flying',
-                               message=('Only connected to %d/%d front-ends, will retry...'
-                                        ) % (tunnel_count, tunnel_total))
+        if tunnel_count == 0:
+          self.pkite.ui.Status('down',
+                       message='Not connected to any front-ends, will retry...')
+        elif tunnel_count < tunnel_total:
+          self.pkite.ui.Status('flying',
+                    message=('Only connected to %d/%d front-ends, will retry...'
+                             ) % (tunnel_count, tunnel_total))
         else:
           self.pkite.ui.Status('flying',
                                message='DynDNS updates may be incomplete, will retry...')
@@ -3020,7 +3023,7 @@ class NullUi(object):
 
   def __init__(self, welcome=None):
     self.in_wizard = False
-    self.last_notification = ''
+    self.notify_history = {}
     self.status_tag = ''
     self.status_msg = ''
     self.welcome = welcome
@@ -3044,15 +3047,15 @@ class NullUi(object):
                wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
-  def AskEmail(self, question, default=None,
+  def AskEmail(self, question, default=None, pre=None,
                wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
-  def AskYesNo(self, question, default=None,
+  def AskYesNo(self, question, default=None, pre=None,
                wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
-  def AskMultipleChoice(self, pre, choices, post, default=None,
+  def AskMultipleChoice(self, choices, question, pre=[], default=None,
                         wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
@@ -3079,10 +3082,15 @@ class BasicUi(NullUi):
                          '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
                          '(?:[a-zA-Z]{2,4}|museum)$')
 
-  def Notify(self, message, prefix=' ', popup=False):
+  def Notify(self, message, prefix=' ', popup=False, now=None):
+    now = now or time.time()
+    for key in self.notify_history.keys():
+      if self.notify_history[key] < now-300:
+        del self.notify_history[key]
+
     message = '%s' % message
-    if message != self.last_notification:
-      self.last_notification = message
+    if message not in self.notify_history:
+      self.notify_history[message] = now
       msg = '\r%s %s%s\n' % (prefix * 3, message, ' ' * (75-len(message)))
       sys.stderr.write(msg)
       self.Status(self.status_tag, self.status_msg)
@@ -3093,10 +3101,10 @@ class BasicUi(NullUi):
     if not self.in_wizard:
       if message:
         message = '%s' % message
-        msg = '\r pagekite.py [%s]%s %s%s\r' % (tag, ' ' * (8-len(tag)),
-                                               message, ' ' * (54-len(message)))
+        msg = '\r<<< pagekite.py [%s]%s %s%s\r' % (tag, ' ' * (8-len(tag)),
+                                               message, ' ' * (52-len(message)))
       else:
-        msg = '\r pagekite.py [%s]%s\r' % (tag, ' ' * (8-len(tag)))
+        msg = '\r<<< pagekite.py [%s]%s\r' % (tag, ' ' * (8-len(tag)))
       sys.stderr.write(msg)
     if tag == 'exiting':
       sys.stderr.write('\n')
@@ -3111,8 +3119,9 @@ class BasicUi(NullUi):
 
   def EndWizard(self):
     self.in_wizard = None
+    sys.stderr.write('\n')
     if os.getenv('USERPROFILE'):
-      sys.stderr.write('\n\n** press ENTER to continue **\n')
+      sys.stderr.write('\n<<< press ENTER to continue >>>\n')
       sys.stdin.readline()
 
   def AskLogin(self, question, default=None, email=None,
@@ -3130,8 +3139,9 @@ class BasicUi(NullUi):
     sys.stderr.write('==> ')
     return (email, getpass.getpass() or def_pass)
 
-  def AskEmail(self, question, default=None,
+  def AskEmail(self, question, default=None, pre=[],
                wizard_hint=False, image=None, back=None):
+    for line in pre: sys.stderr.write('\n    %s ' % line)
     while True:
       sys.stderr.write('\n==> %s ' % (question, ))
       answer = sys.stdin.readline().strip()
@@ -3139,11 +3149,12 @@ class BasicUi(NullUi):
       if self.EMAIL_RE.match(answer): return answer
       if back is not None and answer == 'back': return back
 
-  def AskYesNo(self, question, default=None,
+  def AskYesNo(self, question, default=None, pre=[],
                wizard_hint=False, image=None, back=None):
     yn = ((default is True) and '[Y/n]'
           ) or ((default is False) and '[y/N]'
                 ) or ('[y/n]')
+    for line in pre: sys.stderr.write('\n    %s ' % line)
     while True:
       sys.stderr.write('\n==> %s %s ' % (question, yn))
       answer = sys.stdin.readline().strip().lower()
@@ -3151,17 +3162,18 @@ class BasicUi(NullUi):
       if back is not None and answer.startswith('b'): return back
       if answer in ('y', 'n'): return (answer == 'y')
 
-  def AskMultipleChoice(self, pre, choices, post, default=None,
+  def AskMultipleChoice(self, choices, question, pre=[], default=None,
                         wizard_hint=False, image=None, back=None):
     self.Welcome()
-    sys.stderr.write('\n    %s\n\n' % pre)
-    for i in range(0, len(choices)):
-      sys.stderr.write(('  %s %d) %s\n'
-                        ) % ((default==i+1) and '*' or ' ', i+1, choices[i]))
+    for line in pre: sys.stderr.write('\n    %s' % line)
     sys.stderr.write('\n')
+    for i in range(0, len(choices)):
+      sys.stderr.write(('\n  %s %d) %s'
+                        ) % ((default==i+1) and '*' or ' ', i+1, choices[i]))
+    sys.stderr.write('\n\n')
     while True:
       d = default and (', default=%d' % default) or ''
-      sys.stderr.write('==> %s [1-%d%s] ' % (post, len(choices), d))
+      sys.stderr.write('==> %s [1-%d%s] ' % (question, len(choices), d))
       try:
         answer = sys.stdin.readline().strip()
         if back is not None and answer.startswith('b'): return back
@@ -3380,7 +3392,7 @@ class PageKite(object):
     if help or longhelp:
       print longhelp and DOC or MINIDOC
       print '*****'
-    elif not noexit:
+    else:
       self.ui.Status('exiting', message=(message or 'Good-bye!'))
     if message: print 'Error: %s' % message
     if not noexit: sys.exit(1)
@@ -3799,9 +3811,9 @@ class PageKite(object):
       return xmlrpclib.ServerProxy(self.service_xmlrpc)
 
   def RegisterNewKite(self, kitename, backend=None):
-    self.ui.StartWizard('Creating: %s' % kitename)
-    self.ui.Tell(['!! WARNING WARNING WARNING WARNING !!',
-                  '!! EXPERIMENTAL STUFF AHEAD!  8-)  !!'])
+    self.ui.StartWizard('Creating kite: %s' % kitename)
+    #self.ui.Tell(['!! WARNING WARNING WARNING WARNING !!',
+    #              '!! EXPERIMENTAL STUFF AHEAD!  8-)  !!'])
 
     is_service_domain = kitename and SERVICE_DOMAIN_RE.search(kitename)
     is_cname_for = is_cname_ready = False
@@ -3840,21 +3852,17 @@ class PageKite(object):
     while 'end' not in state:
       try:
         if 'use_service_question' in state:
-          ch = self.ui.AskMultipleChoice('Use the %s service?' % self.service_provider,
-                                         ['Yes, create a new account',
-                                          'Yes, I have an account', 
-                                          'Do not use the service (manual configuration)'],
-                                         'Your choice', default=3)
-          if ch in (1, 2):
-            which = (ch == 1) and 'signup' or 'login'
+          ch = self.ui.AskYesNo('Use the %s service?' % self.service_provider,
+                                default=True, back=-1)
+          if ch is True:
             if is_cname_for and is_cname_ready:
               register = kitename
-              Goto('service_%s_email' % which)
+              Goto('service_signup_email')
             elif is_service_domain:
               register = is_cname_for or kitename
-              Goto('service_%s_email' % which)
+              Goto('service_signup_email')
             else:
-              Goto('service_%s_bad_domain' % which)
+              Goto('service_signup_bad_domain')
           else:
             Goto('manual_abort')
 
@@ -3878,11 +3886,16 @@ class PageKite(object):
 
         elif ('service_signup_bad_domain' in state or
               'service_login_bad_domain' in state):
-          alternate = is_cname_for or kitename.split('.')[-2]+'.'+SERVICE_DOMAINS[0]
-          ch = self.ui.AskYesNo(('Sorry, %s is not a valid service domain.\n'
-                                  'Try to register %s instead?'
-                                 ) % (kitename, alternate),
-                                default=True, back=-1)
+          if is_cname_for:
+            alternate = is_cname_for
+            ch = self.ui.AskYesNo('Create both?',
+                                  pre=['%s is a CNAME for %s.' % (kitename, is_cname_for)],
+                                  default=True, back=-1)
+          else:
+            alternate = kitename.split('.')[-2]+'.'+SERVICE_DOMAINS[0]
+            ch = self.ui.AskYesNo('Try to create %s instead?' % alternate,
+                                  pre=['Sorry, %s is not a valid service domain.' % kitename],
+                                  default=True, back=-1)
           if ch is True:
             register = alternate
             Goto(state[0].replace('bad_domain', 'email'))
@@ -3921,7 +3934,7 @@ class PageKite(object):
               ])
               # FIXME: Handle CNAMEs somehow?
               self.ui.EndWizard()
-              time.sleep(1) # Give the service side a moment to replicate...
+              time.sleep(2) # Give the service side a moment to replicate...
               return (register, details['secret'])
             else:
               error = details.get('error', 'unknown')
