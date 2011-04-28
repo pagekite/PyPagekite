@@ -335,6 +335,7 @@ from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 
 # Create our service-domain matching regexp
 SERVICE_DOMAIN_RE = re.compile('\.(' + '|'.join(SERVICE_DOMAINS) + ')$')
+SERVICE_SUBKITE_RE = re.compile(r'^[A-Za-z0-9_]+$')
 
 # System logging on Unix
 try:
@@ -3016,7 +3017,8 @@ class TunnelManager(threading.Thread):
           self.pkite.ui.Status('flying')
           self.PingTunnels(time.time())
 
-      tunnel_count = len(self.pkite.conns.TunnelServers() or [])
+      tunnel_count = len(self.pkite.conns and
+                         self.pkite.conns.TunnelServers() or [])
       tunnel_total = len(self.pkite.servers)
       if tunnel_count == 0:
         self.pkite.ui.Status('down',
@@ -3048,11 +3050,7 @@ class NullUi(object):
 
   def Splash(self): pass
 
-  def Welcome(self):
-    if self.welcome:
-      print self.welcome
-      self.welcome = None
-
+  def Welcome(self): pass
   def StartWizard(self, title): pass
   def EndWizard(self): pass
 
@@ -3077,6 +3075,10 @@ class NullUi(object):
                wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
+  def AskKiteName(self, domains, question, pre=[], default=None,
+                  wizard_hint=False, image=None, back=None):
+    return self.DefaultOrFail(question, default)
+
   def AskMultipleChoice(self, choices, question, pre=[], default=None,
                         wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
@@ -3089,8 +3091,10 @@ class NullUi(object):
       Log(['message', ' '.join(lines)])
       return True
 
-  def Notify(self, message, prefix=' ', popup=False):
-    if popup: Log([('info', message)])
+  def Notify(self, message, prefix=' ', popup=False, now=None, alignright=''):
+    if popup: Log([('info', '%s%s%s' % (message,
+                                        alignright and ' ' or '',
+                                        alignright))])
 
   def Status(self, tag, message=None): pass
 
@@ -3104,7 +3108,7 @@ class BasicUi(NullUi):
                          '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
                          '(?:[a-zA-Z]{2,4}|museum)$')
 
-  def Notify(self, message, prefix=' ', popup=False, now=None):
+  def Notify(self, message, prefix=' ', popup=False, now=None, alignright=''):
     now = now or time.time()
 
     # We suppress duplicates that are either new or still on the screen.
@@ -3117,7 +3121,9 @@ class BasicUi(NullUi):
     message = '%s' % message
     if message not in self.notify_history:
       self.notify_history[message] = now
-      msg = '\r%s %s%s\n' % (prefix * 3, message, ' ' * (75-len(message)))
+      msg = '\r%s %s%s%s\n' % (prefix * 3, message,
+                               ' ' * (75-len(message)-len(alignright)),
+                               alignright)
       sys.stderr.write(msg)
       self.Status(self.status_tag, self.status_msg)
 
@@ -3135,12 +3141,20 @@ class BasicUi(NullUi):
     if tag == 'exiting':
       sys.stderr.write('\n')
 
+  def Welcome(self, pre=None):
+    if self.welcome:
+      sys.stderr.write('%s\n' % self.welcome)
+      self.welcome = None
+    if pre:
+      sys.stderr.write('\n')
+      for line in pre: sys.stderr.write('    %s\n' % line)
+
   def StartWizard(self, title):
     #sys.stderr.write('[H[J')
     self.Welcome()
     banner = '>>> %s' %  title
     self.in_wizard = title
-    sys.stderr.write(('\n%s%s[CTRL+C = Cancel]\n'
+    sys.stderr.write(('%s%s[CTRL+C = Cancel]\n'
                       ) % (banner, ' ' * (62-len(banner))))
 
   def EndWizard(self):
@@ -3150,56 +3164,81 @@ class BasicUi(NullUi):
       sys.stderr.write('\n<<< press ENTER to continue >>>\n')
       sys.stdin.readline()
 
-  def AskLogin(self, question, default=None, email=None,
-               wizard_hint=False, image=None, back=None):
-    def_email, def_pass = default or (email, None)
-
-    sys.stderr.write('\n    %s' % (question, ))
-    if not email:
-      email = self.AskEmail('Your e-mail:', default=def_email, back=back)
-      if email == back: return back
-    else:
-      sys.stderr.write('\n')
-
-    import getpass
-    sys.stderr.write('==> ')
-    return (email, getpass.getpass() or def_pass)
-
   def AskEmail(self, question, default=None, pre=[],
                wizard_hint=False, image=None, back=None):
-    for line in pre: sys.stderr.write('\n    %s ' % line)
+    self.Welcome(pre)
     while True:
-      sys.stderr.write('\n==> %s ' % (question, ))
+      sys.stderr.write(' => %s ' % (question, ))
       answer = sys.stdin.readline().strip()
       if default and answer == '': return default
       if self.EMAIL_RE.match(answer): return answer
       if back is not None and answer == 'back': return back
 
+  def AskLogin(self, question, default=None, email=None, pre=None,
+               wizard_hint=False, image=None, back=None):
+    self.Welcome(pre)
+    def_email, def_pass = default or (email, None)
+    sys.stderr.write('    %s\n' % (question, ))
+    if not email:
+      email = self.AskEmail('Your e-mail:', default=def_email, back=back)
+      if email == back: return back
+
+    import getpass
+    sys.stderr.write(' => ')
+    return (email, getpass.getpass() or def_pass)
+
   def AskYesNo(self, question, default=None, pre=[],
                wizard_hint=False, image=None, back=None):
+    self.Welcome(pre)
     yn = ((default is True) and '[Y/n]'
           ) or ((default is False) and '[y/N]'
                 ) or ('[y/n]')
-    for line in pre: sys.stderr.write('\n    %s ' % line)
     while True:
-      sys.stderr.write('\n==> %s %s ' % (question, yn))
+      sys.stderr.write(' => %s %s ' % (question, yn))
       answer = sys.stdin.readline().strip().lower()
       if default is not None and answer == '': answer = default and 'y' or 'n'
       if back is not None and answer.startswith('b'): return back
       if answer in ('y', 'n'): return (answer == 'y')
 
+  def AskKiteName(self, domains, question, pre=[], default=None,
+                  wizard_hint=False, image=None, back=None):
+    self.Welcome(pre)
+    if len(domains) == 1:
+      sys.stderr.write(('\n    (Note: the ending %s will be added for you.)'
+                        ) % domains[0])
+    else:
+      sys.stderr.write('\n    Please use one of the following domains:\n')
+      for domain in domains:
+        sys.stderr.write('\n     %s' % domain)
+      sys.stderr.write('\n')
+    while True:
+      sys.stderr.write('\n => %s ' % question)
+      answer = sys.stdin.readline().strip().lower()
+      if back is not None and answer == 'back':
+        return back
+      elif len(domains) == 1:
+        answer = answer.replace(domains[0], '')
+        if answer and SERVICE_SUBKITE_RE.match(answer):
+          return answer+domains[0]
+      else:
+        for domain in domains:
+          if answer.endswith(domain):
+            answer = answer.replace(domain, '')
+            if answer and SERVICE_SUBKITE_RE.match(answer):
+              return answer+domain
+      sys.stderr.write('    (Please only use characters A-Z, 0-9 and _.)')
+
   def AskMultipleChoice(self, choices, question, pre=[], default=None,
                         wizard_hint=False, image=None, back=None):
-    self.Welcome()
-    for line in pre: sys.stderr.write('\n    %s' % line)
+    self.Welcome(pre)
     sys.stderr.write('\n')
     for i in range(0, len(choices)):
-      sys.stderr.write(('\n  %s %d) %s'
+      sys.stderr.write(('  %s %d) %s\n'
                         ) % ((default==i+1) and '*' or ' ', i+1, choices[i]))
-    sys.stderr.write('\n\n')
+    sys.stderr.write('\n')
     while True:
       d = default and (', default=%d' % default) or ''
-      sys.stderr.write('==> %s [1-%d%s] ' % (question, len(choices), d))
+      sys.stderr.write(' => %s [1-%d%s] ' % (question, len(choices), d))
       try:
         answer = sys.stdin.readline().strip()
         if back is not None and answer.startswith('b'): return back
@@ -3212,7 +3251,7 @@ class BasicUi(NullUi):
     self.Welcome()
     sys.stderr.write('\n')
     for line in lines: sys.stderr.write('    %s\n' % line)
-    if error:  sys.stderr.write('\n')
+    if error: sys.stderr.write('\n')
     return True
 
 
@@ -3525,9 +3564,8 @@ class PageKite(object):
     LogError('No authentication found for: %s (%s)' % (domain, protoport))
     return None
 
-  def ConfigureNewUser(self):
-    self.SetServiceDefaults()
-    print 'Should configure new user...'
+  def SaveNewUserConfig(self):
+    print 'Should save new user settings...'
     sys.exit(1)
 
   def ConfigureFromFile(self, filename=None):
@@ -3804,7 +3842,7 @@ class PageKite(object):
       if not be[BE_SECRET]: need_registration[be[BE_DOMAIN]] = True
 
     for domain in need_registration:
-      result = self.RegisterNewKite(domain)
+      result = self.RegisterNewKite(kitename=domain)
       if not result:
         raise ConfigError("Not sure what to do with %s, giving up." % domain)
 
@@ -3836,11 +3874,7 @@ class PageKite(object):
     else:
       return xmlrpclib.ServerProxy(self.service_xmlrpc)
 
-  def RegisterNewKite(self, kitename, backend=None):
-    self.ui.StartWizard('Creating kite: %s' % kitename)
-    #self.ui.Tell(['!! WARNING WARNING WARNING WARNING !!',
-    #              '!! EXPERIMENTAL STUFF AHEAD!  8-)  !!'])
-
+  def _KiteInfo(self, kitename):
     is_service_domain = kitename and SERVICE_DOMAIN_RE.search(kitename)
     is_cname_for = is_cname_ready = False
     if kitename and not is_service_domain:
@@ -3850,6 +3884,16 @@ class PageKite(object):
           is_cname_for = hn
       except:
         pass
+
+    return is_service_domain, is_cname_for, is_cname_ready
+
+  def RegisterNewKite(self, kitename=None, autoconfigure=False):
+    if kitename:
+      self.ui.StartWizard('Creating kite: %s' % kitename)
+      is_service_domain, is_cname_for, is_cname_ready = self._KiteInfo(kitename)
+    else:
+      self.ui.StartWizard('Create your first kite!')
+      is_service_domain = is_cname_for = is_cname_ready = False
 
     service = self.GetServiceXmlRpc()
     service_accounts = {}
@@ -3874,14 +3918,16 @@ class PageKite(object):
       if not back_skips_current: history.append(state[0])
       state[0] = goto
 
-    email = None
+    register = email = None
     while 'end' not in state:
       try:
         if 'use_service_question' in state:
           ch = self.ui.AskYesNo('Use the %s service?' % self.service_provider,
                                 default=True, back=-1)
           if ch is True:
-            if is_cname_for and is_cname_ready:
+            if not kitename:
+              Goto('service_signup_email')
+            elif is_cname_for and is_cname_ready:
               register = kitename
               Goto('service_signup_email')
             elif is_service_domain:
@@ -3926,7 +3972,8 @@ class PageKite(object):
             register = alternate
             Goto(state[0].replace('bad_domain', 'email'))
           elif ch is False:
-            Goto('manual_abort')
+            register = alternate = kitename = False
+            Goto('service_signup_kitename', back_skips_current=True)
           else:
             Back()
 
@@ -3939,17 +3986,28 @@ class PageKite(object):
           else:
             Back()
 
-        elif 'service_register' in state:
-          # FIXME: Ask for a kite name.
-          Goto('end')
+        elif 'service_signup_kitename' in state:
+          try:
+            domains = service.getAvailableDomains(None, None)
+          except:
+            domains = ['.%s' % x for x in SERVICE_DOMAINS]
+
+          ch = self.ui.AskKiteName(domains, 'Name your kite:', back=False)
+          if ch:
+            kitename = register = ch
+            (is_service_domain, is_cname_for, is_cname_ready) = self._KiteInfo(ch)
+            self.ui.StartWizard('Creating kite: %s' % kitename)
+            Goto('service_signup')
+          else:
+            Back()
 
         elif 'service_signup' in state:
-          ch = self.ui.AskMultipleChoice(['View Software License (AGPLv3)',
-                                          'View PageKite.net Terms of Service',
-                                          'Yes, I accept the license and terms',
+          ch = self.ui.AskMultipleChoice(['View Software License (AGPLv3).',
+                                          'View PageKite.net Terms of Service.',
+                                          'Yes, looks good to me!',
                                           'No, I do not accept.'],
                                          'Your choice:',
-                                         pre=['Accept the license and terms of service?'],
+                                         pre=['Do you accept the license and terms of service?'],
                                          default=3, back=False)
           if ch is False:
             Back()
@@ -3977,6 +4035,8 @@ class PageKite(object):
                 # FIXME: Handle CNAMEs somehow?
                 self.ui.EndWizard()
                 time.sleep(2) # Give the service side a moment to replicate...
+                if autoconfigure:
+                  self.backends.update(self.ArgToBackendSpecs(register))
                 return (register, details['secret'])
               else:
                 error = details.get('error', 'unknown')
@@ -4327,7 +4387,7 @@ class PageKite(object):
     if epoll: LogDebug("FIXME: Should try epoll!")
     self.SelectLoop()
 
-  def Start(self, howtoquit='Press CTRL+C to Quit.'):
+  def Start(self, howtoquit='CTRL+C = Quit'):
     conns = self.conns = Connections(self)
     global Log
 
@@ -4338,9 +4398,9 @@ class PageKite(object):
 
     # Announce that we've started up!
     self.ui.Status('startup', message='Starting up...')
-    self.ui.Notify(('Hello! This is %s v%s. %s'
-                    ) % (self.progname, APPVER, howtoquit),
-                    prefix='>')
+    self.ui.Notify(('Hello! This is %s v%s.'
+                    ) % (self.progname, APPVER),
+                    prefix='>', alignright='[%s]' % howtoquit)
     config_report = [('started', sys.argv[0]), ('version', APPVER),
                      ('argv', ' '.join(sys.argv[1:])),
                      ('ca_certs', self.ca_certs)]
@@ -4493,9 +4553,12 @@ def Configure(pk):
   pk.Configure(sys.argv[1:])
 
   if '--clean' not in sys.argv and not pk.rcfiles_loaded:
-    if pk.ui.AskYesNo('Save current configuration to %s?' % pk.rcfile,
-                      default=(len(pk.backends.keys()) > 0)):
-      pk.ConfigureNewUser()
+    if pk.backends.keys() or pk.RegisterNewKite(autoconfigure=True):
+      pk.SetServiceDefaults()
+      if pk.ui.AskYesNo('Save current configuration to %s?' % pk.rcfile,
+                        default=(len(pk.backends.keys()) > 0)):
+        pk.SaveNewUserConfig()
+      pk.servers_new_only = True
   else:
     pk.CheckConfig()
       
