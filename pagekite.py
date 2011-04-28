@@ -3583,12 +3583,22 @@ class PageKite(object):
 
     return backends
 
-  def SetServiceDefaults(self):
-    self.dyndns = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
-    self.servers_auto = (1, 'frontends.b5p.us', 443)
-    self.ca_certs = sys.argv[0]
-    if HAVE_SSL:
-      self.fe_certname = ['frontends.b5p.us', 'b5p.us', 'pagekite.net']
+  def SetServiceDefaults(self, check=False):
+    def_dyndns    = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
+    def_frontends = (1, 'frontends.b5p.us', 443)
+    def_ca_certs  = sys.argv[0]
+    def_fe_certs  = ['frontends.b5p.us', 'b5p.us', 'pagekite.net']
+    if check:
+      return (self.dyndns == def_dyndns and
+              self.servers_auto == def_frontends and
+              self.ca_certs == def_ca_certs and
+              (self.fe_certname == def_fe_certs or not HAVE_SSL))
+    else:
+      self.dyndns = def_dyndns
+      self.servers_auto = def_frontends
+      self.ca_certs = def_ca_certs
+      if HAVE_SSL: self.fe_certname = def_fe_certs
+      return True
 
   def Configure(self, argv):
     opts, args = getopt.getopt(argv, OPT_FLAGS, OPT_ARGS) 
