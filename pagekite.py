@@ -2388,7 +2388,7 @@ class Tunnel(ChunkParser):
           self.quota = [int(parse.Header('Quota')[0]), None, None]
         self.conns.config.ui.Notify(('%s reports %.2f GB of quota left.'
                                      ) % (self.server_info[self.S_NAME],
-                                          float(self.quota) / (1024*1024)))
+                                          float(self.quota[0]) / (1024*1024)))
       if parse.Header('PING'): return self.SendPong()
       if parse.Header('ZRST') and not self.ResetZChunks(): return False
       if parse.Header('SPD') and not self.Throttle(parse): return False
