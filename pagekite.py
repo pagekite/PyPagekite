@@ -105,23 +105,23 @@ APPVER = '0.3.17+github'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 MINIDOC = """\
-Welcome to pagekite.py v%s!
+>>> Welcome to pagekite.py v%s!
 
-  To make public a webserver running on localhost (port 80):
-  $ pagekite.py NAME.pagekite.me
+    To make public a webserver running on localhost (port 80):
+    $ pagekite.py NAME.pagekite.me
 
-  To make public a webserver running on localhost (port 3000):
-  $ pagekite.py NAME.pagekite.me:3000
+    To make public a webserver running on localhost (port 3000):
+    $ pagekite.py NAME.pagekite.me:3000
 
-  To make public HTTP, HTTPS and SSH servers (standard ports):
-  $ pagekite.py http,https,ssh:NAME.pagekite.me
+    To make public HTTP, HTTPS and SSH servers (standard ports):
+    $ pagekite.py http,https,ssh:NAME.pagekite.me
 
-  To get more detailed instructions:
-  $ pagekite.py --help
+    To get more detailed instructions:
+    $ pagekite.py --help
 
-Note that if you don't have an account with http://pagekite.net/, the above
-commands will walk you through the process of creating one.  Just choose
-whatever name you like and if it's available, it will be granted.
+    If you don't have an account with http://pagekite.net/, the program
+    will offer to help you create one. Just choose whatever name you like
+    and if it's available, it will be granted.
 """ % APPVER
 DOC = """\
 pagekite.py is Copyright 2010, 2011, the Beanstalks Project ehf. 
@@ -3040,7 +3040,7 @@ class NullUi(object):
     if default is not None: return default
     raise ConfigError('Unanswerable question: %s' % question)
 
-  def AskLogin(self, question, default=None,
+  def AskLogin(self, question, default=None, email=None,
                wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
@@ -3104,10 +3104,10 @@ class BasicUi(NullUi):
   def StartWizard(self, title):
     #sys.stderr.write('[H[J')
     self.Welcome()
-    banner = '### %s ###' %  title
+    banner = '>>> %s' %  title
     self.in_wizard = title
-    sys.stderr.write(('\n%s%s( CTRL+C = Cancel )\n'
-                      ) % (banner, ' ' * (60-len(banner))))
+    sys.stderr.write(('\n%s%s[CTRL+C = Cancel]\n'
+                      ) % (banner, ' ' * (62-len(banner))))
 
   def EndWizard(self):
     self.in_wizard = None
@@ -3115,21 +3115,25 @@ class BasicUi(NullUi):
       sys.stderr.write('\n\n** press ENTER to continue **\n')
       sys.stdin.readline()
 
-  def AskLogin(self, question, default=None,
+  def AskLogin(self, question, default=None, email=None,
                wizard_hint=False, image=None, back=None):
-    def_email, def_pass = default or (None, None)
+    def_email, def_pass = default or (email, None)
 
-    sys.stderr.write('\n%s ' % (question, ))
-    email = self.AskEmail('Your e-mail:', default=def_email, back=back)
-    if email == back: return back
+    sys.stderr.write('\n    %s' % (question, ))
+    if not email:
+      email = self.AskEmail('Your e-mail:', default=def_email, back=back)
+      if email == back: return back
+    else:
+      sys.stderr.write('\n')
 
     import getpass
+    sys.stderr.write('==> ')
     return (email, getpass.getpass() or def_pass)
 
   def AskEmail(self, question, default=None,
                wizard_hint=False, image=None, back=None):
     while True:
-      sys.stderr.write('\n%s ' % (question, ))
+      sys.stderr.write('\n==> %s ' % (question, ))
       answer = sys.stdin.readline().strip()
       if default and answer == '': return default
       if self.EMAIL_RE.match(answer): return answer
@@ -3141,7 +3145,7 @@ class BasicUi(NullUi):
           ) or ((default is False) and '[y/N]'
                 ) or ('[y/n]')
     while True:
-      sys.stderr.write('\n%s %s ' % (question, yn))
+      sys.stderr.write('\n==> %s %s ' % (question, yn))
       answer = sys.stdin.readline().strip().lower()
       if default is not None and answer == '': answer = default and 'y' or 'n'
       if back is not None and answer.startswith('b'): return back
@@ -3150,14 +3154,14 @@ class BasicUi(NullUi):
   def AskMultipleChoice(self, pre, choices, post, default=None,
                         wizard_hint=False, image=None, back=None):
     self.Welcome()
-    sys.stderr.write('\n%s\n\n' % pre)
+    sys.stderr.write('\n    %s\n\n' % pre)
     for i in range(0, len(choices)):
-      sys.stderr.write((' %s %d) %s\n'
+      sys.stderr.write(('  %s %d) %s\n'
                         ) % ((default==i+1) and '*' or ' ', i+1, choices[i]))
     sys.stderr.write('\n')
     while True:
       d = default and (', default=%d' % default) or ''
-      sys.stderr.write('%s [1-%d%s] ' % (post, len(choices), d))
+      sys.stderr.write('==> %s [1-%d%s] ' % (post, len(choices), d))
       try:
         answer = sys.stdin.readline().strip()
         if back is not None and answer.startswith('b'): return back
@@ -3169,8 +3173,8 @@ class BasicUi(NullUi):
   def Tell(self, lines, error=False, back=None):
     self.Welcome()
     sys.stderr.write('\n')
-    for line in lines: print line
-    if error: print
+    for line in lines: sys.stderr.write('    %s\n' % line)
+    if error:  sys.stderr.write('\n')
     return True
 
 
@@ -3369,7 +3373,6 @@ class PageKite(object):
     print
 
   def FallDown(self, message, help=True, longhelp=False, noexit=False):
-    self.ui.Status('exiting', message=(message or 'Good-bye!'))
     if self.conns and self.conns.auth: self.conns.auth.quit()
     if self.ui_httpd: self.ui_httpd.quit()
     if self.tunnel_manager: self.tunnel_manager.quit()
@@ -3377,6 +3380,8 @@ class PageKite(object):
     if help or longhelp:
       print longhelp and DOC or MINIDOC
       print '*****'
+    elif not noexit:
+      self.ui.Status('exiting', message=(message or 'Good-bye!'))
     if message: print 'Error: %s' % message
     if not noexit: sys.exit(1)
 
@@ -3831,6 +3836,7 @@ class PageKite(object):
       if not back_skips_current: history.append(state[0])
       state[0] = goto
 
+    email = None
     while 'end' not in state:
       try:
         if 'use_service_question' in state:
@@ -3853,21 +3859,21 @@ class PageKite(object):
             Goto('manual_abort')
 
         elif 'service_login_email' in state:
-          e = p = None
-          while not e and not p:
-            (e, p) = self.ui.AskLogin('Please type in your %s account '
-                                      'details.' % self.service_provider,
-                                      back=(False, -1))
-            if e and p:
+          p = None
+          while not email or not p:
+            (email, p) = self.ui.AskLogin('Please type in your %s account '
+                                          'details.' % self.service_provider,
+                                          email=email, back=(False, -1))
+            if email and p:
               try:
-                service_accounts[e] = service.getSharedSecret(e, p)
-                account = e
+                service_accounts[email] = service.getSharedSecret(email, p)
+                account = email
                 Goto('create_kite')
               except:
-                e = p = None
+                email = p = None
                 if not self.ui.Tell(['Login failed! Try again?'], back=False):
                   Back()
-            if e is False:
+            if email is False:
               Back()
 
         elif ('service_signup_bad_domain' in state or
@@ -3922,13 +3928,14 @@ class PageKite(object):
               if error == 'domaintaken':
                 self.ui.Tell([('Sorry, that domain (%s) is already taken.'
                                ) % register], error=True)
+                Goto('abort')
               elif error == 'pleaselogin':
-                self.ui.Tell(['You already have an account, please log in.'],
-                             error=True)
+                self.ui.Tell(['You already have an account, please log in.'])
+                Goto('service_login_email', back_skips_current=True)
               else:
                 self.ui.Tell(['Signup failed! (%s)' % error,
                               'Please try again later?'], error=True)
-              Goto('abort')
+                Goto('abort')
           except Exception, e:
             self.ui.Tell(['Signup failed! (%s)' % e,
                           'Please try again later?'], error=True)
@@ -3950,8 +3957,8 @@ class PageKite(object):
 
         elif 'manual_abort' in state:
           if self.ui.Tell(['Aborted!',
-            'Please add information about your kites and front-ends to the',
-            'configuration file named: %s' % self.rcfile],
+            'Please add information about your kites and front-ends',
+            'to the configuration file: %s' % self.rcfile],
                           error=True, back=False) is False:
             Back()
           else:
@@ -3966,10 +3973,10 @@ class PageKite(object):
           raise ConfigError('Unknown state: %s' % state)
 
       except KeyboardInterrupt:
+        sys.stderr.write('\n')
         if history:
           Back()
         else:
-          print
           raise KeyboardInterrupt()
 
     self.ui.EndWizard()
