@@ -3104,9 +3104,13 @@ class BasicUi(NullUi):
 
   def Notify(self, message, prefix=' ', popup=False, now=None):
     now = now or time.time()
-    for key in self.notify_history.keys():
-      if self.notify_history[key] < now-300:
-        del self.notify_history[key]
+
+    # We suppress duplicates that are either new or still on the screen.
+    keys = self.notify_history.keys()
+    if len(keys) > 20:
+      for key in keys:
+        if self.notify_history[key] < now-300:
+          del self.notify_history[key]
 
     message = '%s' % message
     if message not in self.notify_history:
