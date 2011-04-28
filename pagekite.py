@@ -3016,7 +3016,7 @@ class TunnelManager(threading.Thread):
           self.pkite.ui.Status('flying')
           self.PingTunnels(time.time())
 
-      tunnel_count = len(self.pkite.conns.TunnelServers())
+      tunnel_count = len(self.pkite.conns.TunnelServers() or [])
       tunnel_total = len(self.pkite.servers)
       if tunnel_count == 0:
         self.pkite.ui.Status('down',
@@ -4222,21 +4222,24 @@ class PageKite(object):
   def LogTo(self, filename, close_all=True, dont_close=[]):
     global Log
 
+    if filename == 'memory':
+      Log = LogToMemory
+      filename = self.devnull
+
+    elif filename == 'syslog':
+      Log = LogSyslog
+      filename = self.devnull
+      syslog.openlog(self.progname, syslog.LOG_PID, syslog.LOG_DAEMON)
+
+    else:
+      Log = LogToFile
+
     # Try to open the file before we close everything, so errors don't get
     # squelched.
     try:
       open(filename, "a").close()
     except IOError, e:
       raise ConfigError('%s' % e)
-
-    if filename == 'memory':
-      Log = LogToMemory
-      filename = self.devnull
-
-    if filename == 'syslog':
-      Log = LogSyslog
-      filename = self.devnull
-      syslog.openlog(self.progname, syslog.LOG_PID, syslog.LOG_DAEMON)
 
     if filename != 'stdio':
       global LogFile
@@ -4331,7 +4334,7 @@ class PageKite(object):
     # If we are going to spam stdout with ugly crap, then there is no point
     # attempting the fancy stuff. This also makes us backwards compatible
     # for the most part.
-    if not self.logfile: self.ui = NullUi()
+    if self.logfile == 'stdio': self.ui = NullUi()
 
     # Announce that we've started up!
     self.ui.Status('startup', message='Starting up...')
@@ -4373,7 +4376,6 @@ class PageKite(object):
       raise ConfigError(e)
 
     # Create log-file
-    Log = LogToFile
     if self.logfile:
       keep_open = [s.fd.fileno() for s in conns.conns]
       if self.ui_httpd: keep_open.append(self.ui_httpd.httpd.socket.fileno())
