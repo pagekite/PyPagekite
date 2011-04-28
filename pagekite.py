@@ -104,24 +104,25 @@ PROTOVER = '0.8'
 APPVER = '0.3.17+github'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
+LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
 MINIDOC = """\
-Welcome to pagekite.py v%s!
+>>> Welcome to pagekite.py v%s!
 
-  To make public a webserver running on localhost (port 80):
-  $ pagekite.py NAME.pagekite.me
+    To make public a webserver running on localhost (port 80):
+    $ pagekite.py NAME.pagekite.me
 
-  To make public a webserver running on localhost (port 3000):
-  $ pagekite.py NAME.pagekite.me:3000
+    To make public a webserver running on localhost (port 3000):
+    $ pagekite.py NAME.pagekite.me:3000
 
-  To make public HTTP, HTTPS and SSH servers (standard ports):
-  $ pagekite.py http,https,ssh:NAME.pagekite.me
+    To make public HTTP, HTTPS and SSH servers (standard ports):
+    $ pagekite.py http,https,ssh:NAME.pagekite.me
 
-  To get more detailed instructions:
-  $ pagekite.py --help
+    To get more detailed instructions:
+    $ pagekite.py --help
 
-Note that if you don't have an account with http://pagekite.net/, the above
-commands will walk you through the process of creating one.  Just choose
-whatever name you like and if it's available, it will be granted.
+    If you don't have an account with http://pagekite.net/, the program
+    will offer to help you create one. Just choose whatever name you like
+    and if it's available, it will be granted.
 """ % APPVER
 DOC = """\
 pagekite.py is Copyright 2010, 2011, the Beanstalks Project ehf. 
@@ -246,6 +247,8 @@ MAGIC_PATHS = (MAGIC_PATH, '/Beanstalk~Magic~Beans/0.2')
 SERVICE_PROVIDER = 'PageKite.net'
 SERVICE_DOMAINS = ('pagekite.me', )
 SERVICE_XMLRPC = 'pk:http://pagekite.net/xmlrpc/'
+SERVICE_TOS_URL = 'https://pagekite.net/support/terms/'
+
 SERVICE_XMLRPC = 'http://localhost:8000/xmlrpc/'
 
 OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
@@ -1048,7 +1051,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     (scheme, netloc, path, params, query, frag) = urlparse(self.path) 
 
     data = {
-      'prog': (sys.argv[0] or 'pagekite.py').split('/')[-1],
+      'prog': self.server.pkite.progname,
       'now': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
       'ver': APPVER
     }
@@ -1273,7 +1276,7 @@ class Selectable(object):
                      errno.EDEADLK, errno.EWOULDBLOCK, errno.ENOBUFS,
                      errno.EALREADY)
 
-  def __init__(self, fd=None, address=None, on_port=None, maxread=16000):
+  def __init__(self, fd=None, address=None, on_port=None, maxread=16000, ui=None):
     try:
       self.SetFD(fd or rawsocket(socket.AF_INET6, socket.SOCK_STREAM), six=True)
     except Exception:
@@ -1282,6 +1285,7 @@ class Selectable(object):
     self.on_port = on_port
     self.created = self.bytes_logged = time.time()
     self.dead = False
+    self.ui = ui
 
     # Quota-related stuff
     self.quota = None
@@ -1413,6 +1417,8 @@ class Selectable(object):
       now = time.time()
       self.all_out += self.wrote_bytes
       self.all_in += self.read_bytes
+
+      if self.ui: self.ui.Status('traffic')
 
       global gYamon
       gYamon.vadd("bytes_all", self.wrote_bytes
@@ -1722,8 +1728,8 @@ class Connections(object):
 class LineParser(Selectable):
   """A Selectable which parses the input as lines of text."""
 
-  def __init__(self, fd=None, address=None, on_port=None):
-    Selectable.__init__(self, fd, address, on_port)
+  def __init__(self, fd=None, address=None, on_port=None, ui=None):
+    Selectable.__init__(self, fd, address, on_port, ui=ui)
     self.leftovers = ''
 
   def __html__(self):
@@ -1759,8 +1765,8 @@ SSL_CLIENTHELLO = '\x80'
 class MagicProtocolParser(LineParser):
   """A Selectable which recognizes HTTP, TLS or XMPP preambles."""
 
-  def __init__(self, fd=None, address=None, on_port=None):
-    LineParser.__init__(self, fd, address, on_port)
+  def __init__(self, fd=None, address=None, on_port=None, ui=None):
+    LineParser.__init__(self, fd, address, on_port, ui=ui)
     self.leftovers = ''
     self.might_be_tls = True
     self.is_tls = False
@@ -1866,8 +1872,8 @@ class MagicProtocolParser(LineParser):
 class ChunkParser(Selectable):
   """A Selectable which parses the input as chunks."""
 
-  def __init__(self, fd=None, address=None, on_port=None):
-    Selectable.__init__(self, fd, address, on_port)
+  def __init__(self, fd=None, address=None, on_port=None, ui=None):
+    Selectable.__init__(self, fd, address, on_port, ui=ui)
     self.want_cbytes = 0
     self.want_bytes = 0
     self.compressed = False
@@ -1964,7 +1970,7 @@ class Tunnel(ChunkParser):
   S_PROTOS = 3
 
   def __init__(self, conns):
-    ChunkParser.__init__(self)
+    ChunkParser.__init__(self, ui=conns.config.ui)
 
     # We want to be sure to read the entire chunk at once, including
     # headers to save cycles, so we double the size we're willing to 
@@ -2512,8 +2518,8 @@ class LoopbackTunnel(Tunnel):
 class UserConn(Selectable):
   """A Selectable representing a user's connection."""
   
-  def __init__(self, address):
-    Selectable.__init__(self, address=address)
+  def __init__(self, address, ui=None):
+    Selectable.__init__(self, address=address, ui=ui)
     self.tunnel = None
 
   def __html__(self):
@@ -2536,7 +2542,7 @@ class UserConn(Selectable):
   def _FrontEnd(conn, address, proto, host, on_port, body, conns):
     # This is when an external user connects to a server and requests a
     # web-page.  We have to give it to them!
-    self = UserConn(address)
+    self = UserConn(address, ui=conns.config.ui)
     self.conns = conns
     self.SetConn(conn)
 
@@ -2586,7 +2592,7 @@ class UserConn(Selectable):
 
   def _BackEnd(proto, host, sid, tunnel, on_port, remote_ip=None, remote_port=None):
     # This is when we open a backend connection, because a user asked for it.
-    self = UserConn(None)
+    self = UserConn(None, ui=tunnel.conns.config.ui)
     self.sid = sid
     self.proto = proto
     self.host = host 
@@ -2614,6 +2620,9 @@ class UserConn(Selectable):
     if remote_ip: logInfo.append(('remote_ip', remote_ip))
 
     if not backend or not backend[0]:
+      self.ui.Notify(('%s <=> %s://%s:%s (FAIL: no server)'
+                      ) % (remote_ip or 'unknown', proto, host, on_port),
+                     prefix='?')
       logInfo.append(('err', 'No back-end'))
       self.Log(logInfo)
       return None
@@ -2625,19 +2634,25 @@ class UserConn(Selectable):
       except Exception:
         self.fd.setblocking(1)
 
-      if len(backend) > 1:
-        self.fd.connect(backend)
-      else:
-        self.fd.connect((backend[0], 80))
+      sspec = list(backend)
+      if len(sspec) == 1: sspec.append(80)
+      self.fd.connect(tuple(sspec))
 
       self.fd.setblocking(0)
 
     except socket.error, err:
       logInfo.append(('err', '%s' % err))
+      self.ui.Notify(('%s <=> %s://%s:%s (FAIL: %s:%s is down)'
+                      ) % (remote_ip or 'unknown', proto, host, on_port,
+                           sspec[0], sspec[1]), prefix='!')
       self.Log(logInfo)
       Selectable.Cleanup(self)
       return None
 
+    self.ui.Status('serving')
+    self.ui.Notify(('%s <=> %s//%s:%s (OK: %s:%s)'
+                    ) % (remote_ip or 'unknown', proto, host, on_port,
+                         sspec[0], sspec[1]))
     self.Log(logInfo)
     self.conns.Add(self)
     return self
@@ -2710,7 +2725,7 @@ class UnknownConn(MagicProtocolParser):
   """This class is a connection which we're not sure what is yet."""
 
   def __init__(self, fd, address, on_port, conns):
-    MagicProtocolParser.__init__(self, fd, address, on_port)
+    MagicProtocolParser.__init__(self, fd, address, on_port, ui=conns.config.ui)
     self.peeking = True
     self.parser = HttpParser()
     self.conns = conns
@@ -2984,20 +2999,12 @@ class TunnelManager(threading.Thread):
     while self.keep_running:
 
       # Reconnect if necessary, randomized exponential fallback.
+      problem = False
       if self.pkite.CreateTunnels(self.conns) > 0:
         check_interval += int(random.random()*check_interval)
         if check_interval > 300: check_interval = 300
-
+        problem = True
         time.sleep(1)
-        tunnel_count = len(self.pkite.conns.TunnelServers())
-        tunnel_total = len(self.pkite.servers)
-        if tunnel_count < tunnel_total:
-          self.pkite.ui.Status((tunnel_count < 1) and 'retry' or 'flying',
-                               message=('Only connected to %d/%d front-ends, will retry...'
-                                        ) % (tunnel_count, tunnel_total))
-        else:
-          self.pkite.ui.Status('flying',
-                               message='DynDNS updates may be incomplete, will retry...')
       else:
         check_interval = 5
 
@@ -3008,6 +3015,19 @@ class TunnelManager(threading.Thread):
         else:
           self.pkite.ui.Status('flying')
           self.PingTunnels(time.time())
+
+      tunnel_count = len(self.pkite.conns.TunnelServers())
+      tunnel_total = len(self.pkite.servers)
+      if tunnel_count == 0:
+        self.pkite.ui.Status('down',
+                       message='Not connected to any front-ends, will retry...')
+      elif tunnel_count < tunnel_total:
+        self.pkite.ui.Status('flying',
+                    message=('Only connected to %d/%d front-ends, will retry...'
+                             ) % (tunnel_count, tunnel_total))
+      elif problem:
+        self.pkite.ui.Status('flying',
+                      message='DynDNS updates may be incomplete, will retry...')
 
       for i in xrange(0, check_interval):
         if self.keep_running: time.sleep(1)
@@ -3020,7 +3040,7 @@ class NullUi(object):
 
   def __init__(self, welcome=None):
     self.in_wizard = False
-    self.last_notification = ''
+    self.notify_history = {}
     self.status_tag = ''
     self.status_msg = ''
     self.welcome = welcome
@@ -3036,23 +3056,28 @@ class NullUi(object):
   def StartWizard(self, title): pass
   def EndWizard(self): pass
 
+  def Browse(self, url):
+    import webbrowser
+    self.Tell(['Opening %s in your browser...' % url])
+    webbrowser.open(url)
+
   def DefaultOrFail(self, question, default):
     if default is not None: return default
     raise ConfigError('Unanswerable question: %s' % question)
 
-  def AskLogin(self, question, default=None,
+  def AskLogin(self, question, default=None, email=None,
                wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
-  def AskEmail(self, question, default=None,
+  def AskEmail(self, question, default=None, pre=None,
                wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
-  def AskYesNo(self, question, default=None,
+  def AskYesNo(self, question, default=None, pre=None,
                wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
-  def AskMultipleChoice(self, pre, choices, post, default=None,
+  def AskMultipleChoice(self, choices, question, pre=[], default=None,
                         wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
@@ -3065,13 +3090,9 @@ class NullUi(object):
       return True
 
   def Notify(self, message, prefix=' ', popup=False):
-    Log([('info', message)])
+    if popup: Log([('info', message)])
 
-  def Status(self, tag, message=None):
-    if message:
-      Log([('status', tag), ('info', message)])
-    else:
-      Log([('status', tag)])
+  def Status(self, tag, message=None): pass
 
 
 class BasicUi(NullUi):
@@ -3083,10 +3104,19 @@ class BasicUi(NullUi):
                          '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
                          '(?:[a-zA-Z]{2,4}|museum)$')
 
-  def Notify(self, message, prefix=' ', popup=False):
+  def Notify(self, message, prefix=' ', popup=False, now=None):
+    now = now or time.time()
+
+    # We suppress duplicates that are either new or still on the screen.
+    keys = self.notify_history.keys()
+    if len(keys) > 20:
+      for key in keys:
+        if self.notify_history[key] < now-300:
+          del self.notify_history[key]
+
     message = '%s' % message
-    if message != self.last_notification:
-      self.last_notification = message
+    if message not in self.notify_history:
+      self.notify_history[message] = now
       msg = '\r%s %s%s\n' % (prefix * 3, message, ' ' * (75-len(message)))
       sys.stderr.write(msg)
       self.Status(self.status_tag, self.status_msg)
@@ -3097,10 +3127,10 @@ class BasicUi(NullUi):
     if not self.in_wizard:
       if message:
         message = '%s' % message
-        msg = '\r pagekite.py [%s]%s %s%s\r' % (tag, ' ' * (8-len(tag)),
-                                               message, ' ' * (54-len(message)))
+        msg = '\r<<< pagekite.py [%s]%s %s%s\r' % (tag, ' ' * (8-len(tag)),
+                                               message, ' ' * (52-len(message)))
       else:
-        msg = '\r pagekite.py [%s]%s\r' % (tag, ' ' * (8-len(tag)))
+        msg = '\r<<< pagekite.py [%s]%s\r' % (tag, ' ' * (8-len(tag)))
       sys.stderr.write(msg)
     if tag == 'exiting':
       sys.stderr.write('\n')
@@ -3108,60 +3138,68 @@ class BasicUi(NullUi):
   def StartWizard(self, title):
     #sys.stderr.write('[H[J')
     self.Welcome()
-    banner = '### %s ###' %  title
+    banner = '>>> %s' %  title
     self.in_wizard = title
-    sys.stderr.write(('\n%s%s( CTRL+C = Cancel )\n'
-                      ) % (banner, ' ' * (60-len(banner))))
+    sys.stderr.write(('\n%s%s[CTRL+C = Cancel]\n'
+                      ) % (banner, ' ' * (62-len(banner))))
 
   def EndWizard(self):
     self.in_wizard = None
+    sys.stderr.write('\n')
     if os.getenv('USERPROFILE'):
-      sys.stderr.write('\n\n** press ENTER to continue **\n')
+      sys.stderr.write('\n<<< press ENTER to continue >>>\n')
       sys.stdin.readline()
 
-  def AskLogin(self, question, default=None,
+  def AskLogin(self, question, default=None, email=None,
                wizard_hint=False, image=None, back=None):
-    def_email, def_pass = default or (None, None)
+    def_email, def_pass = default or (email, None)
 
-    sys.stderr.write('\n%s ' % (question, ))
-    email = self.AskEmail('Your e-mail:', default=def_email, back=back)
-    if email == back: return back
+    sys.stderr.write('\n    %s' % (question, ))
+    if not email:
+      email = self.AskEmail('Your e-mail:', default=def_email, back=back)
+      if email == back: return back
+    else:
+      sys.stderr.write('\n')
 
     import getpass
+    sys.stderr.write('==> ')
     return (email, getpass.getpass() or def_pass)
 
-  def AskEmail(self, question, default=None,
+  def AskEmail(self, question, default=None, pre=[],
                wizard_hint=False, image=None, back=None):
+    for line in pre: sys.stderr.write('\n    %s ' % line)
     while True:
-      sys.stderr.write('\n%s ' % (question, ))
+      sys.stderr.write('\n==> %s ' % (question, ))
       answer = sys.stdin.readline().strip()
       if default and answer == '': return default
       if self.EMAIL_RE.match(answer): return answer
       if back is not None and answer == 'back': return back
 
-  def AskYesNo(self, question, default=None,
+  def AskYesNo(self, question, default=None, pre=[],
                wizard_hint=False, image=None, back=None):
     yn = ((default is True) and '[Y/n]'
           ) or ((default is False) and '[y/N]'
                 ) or ('[y/n]')
+    for line in pre: sys.stderr.write('\n    %s ' % line)
     while True:
-      sys.stderr.write('\n%s %s ' % (question, yn))
+      sys.stderr.write('\n==> %s %s ' % (question, yn))
       answer = sys.stdin.readline().strip().lower()
       if default is not None and answer == '': answer = default and 'y' or 'n'
       if back is not None and answer.startswith('b'): return back
       if answer in ('y', 'n'): return (answer == 'y')
 
-  def AskMultipleChoice(self, pre, choices, post, default=None,
+  def AskMultipleChoice(self, choices, question, pre=[], default=None,
                         wizard_hint=False, image=None, back=None):
     self.Welcome()
-    sys.stderr.write('\n%s\n\n' % pre)
-    for i in range(0, len(choices)):
-      sys.stderr.write((' %s %d) %s\n'
-                        ) % ((default==i+1) and '*' or ' ', i+1, choices[i]))
+    for line in pre: sys.stderr.write('\n    %s' % line)
     sys.stderr.write('\n')
+    for i in range(0, len(choices)):
+      sys.stderr.write(('\n  %s %d) %s'
+                        ) % ((default==i+1) and '*' or ' ', i+1, choices[i]))
+    sys.stderr.write('\n\n')
     while True:
       d = default and (', default=%d' % default) or ''
-      sys.stderr.write('%s [1-%d%s] ' % (post, len(choices), d))
+      sys.stderr.write('==> %s [1-%d%s] ' % (question, len(choices), d))
       try:
         answer = sys.stdin.readline().strip()
         if back is not None and answer.startswith('b'): return back
@@ -3173,8 +3211,8 @@ class BasicUi(NullUi):
   def Tell(self, lines, error=False, back=None):
     self.Welcome()
     sys.stderr.write('\n')
-    for line in lines: print line
-    if error: print
+    for line in lines: sys.stderr.write('    %s\n' % line)
+    if error:  sys.stderr.write('\n')
     return True
 
 
@@ -3182,6 +3220,8 @@ class PageKite(object):
   """Configuration and master select loop."""
 
   def __init__(self, ui=None):
+    self.progname = ((sys.argv[0] or 'pagekite.py').split('/')[-1]
+                                                   .split('\\')[-1])
     self.isfrontend = False
     self.auth_domain = None
     self.server_host = ''
@@ -3269,7 +3309,7 @@ class PageKite(object):
     # we assume there might be something good in the config file.
     self.ca_certs_default = '/etc/ssl/certs/ca-certificates.crt'
     if not os.path.exists(self.ca_certs_default):
-      self.ca_certs_default = self.rcfile
+      self.ca_certs_default = sys.argv[0]
     self.ca_certs = self.ca_certs_default
 
 
@@ -3371,7 +3411,6 @@ class PageKite(object):
     print
 
   def FallDown(self, message, help=True, longhelp=False, noexit=False):
-    self.ui.Status('exiting', message=(message or 'Good-bye!'))
     if self.conns and self.conns.auth: self.conns.auth.quit()
     if self.ui_httpd: self.ui_httpd.quit()
     if self.tunnel_manager: self.tunnel_manager.quit()
@@ -3379,6 +3418,8 @@ class PageKite(object):
     if help or longhelp:
       print longhelp and DOC or MINIDOC
       print '*****'
+    else:
+      self.ui.Status('exiting', message=(message or 'Good-bye!'))
     if message: print 'Error: %s' % message
     if not noexit: sys.exit(1)
 
@@ -3585,11 +3626,22 @@ class PageKite(object):
 
     return backends
 
-  def SetServiceDefaults(self):
-    self.dyndns = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
-    self.servers_auto = (1, 'frontends.b5p.us', 443)
-    if HAVE_SSL:
-      self.fe_certname = ['frontends.b5p.us', 'b5p.us', 'pagekite.net']
+  def SetServiceDefaults(self, check=False):
+    def_dyndns    = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
+    def_frontends = (1, 'frontends.b5p.us', 443)
+    def_ca_certs  = sys.argv[0]
+    def_fe_certs  = ['frontends.b5p.us', 'b5p.us', 'pagekite.net']
+    if check:
+      return (self.dyndns == def_dyndns and
+              self.servers_auto == def_frontends and
+              self.ca_certs == def_ca_certs and
+              (self.fe_certname == def_fe_certs or not HAVE_SSL))
+    else:
+      self.dyndns = def_dyndns
+      self.servers_auto = def_frontends
+      self.ca_certs = def_ca_certs
+      if HAVE_SSL: self.fe_certname = def_fe_certs
+      return True
 
   def Configure(self, argv):
     opts, args = getopt.getopt(argv, OPT_FLAGS, OPT_ARGS) 
@@ -3785,9 +3837,9 @@ class PageKite(object):
       return xmlrpclib.ServerProxy(self.service_xmlrpc)
 
   def RegisterNewKite(self, kitename, backend=None):
-    self.ui.StartWizard('Creating: %s' % kitename)
-    self.ui.Tell(['!! WARNING WARNING WARNING WARNING !!',
-                  '!! EXPERIMENTAL STUFF AHEAD!  8-)  !!'])
+    self.ui.StartWizard('Creating kite: %s' % kitename)
+    #self.ui.Tell(['!! WARNING WARNING WARNING WARNING !!',
+    #              '!! EXPERIMENTAL STUFF AHEAD!  8-)  !!'])
 
     is_service_domain = kitename and SERVICE_DOMAIN_RE.search(kitename)
     is_cname_for = is_cname_ready = False
@@ -3822,52 +3874,54 @@ class PageKite(object):
       if not back_skips_current: history.append(state[0])
       state[0] = goto
 
+    email = None
     while 'end' not in state:
       try:
         if 'use_service_question' in state:
-          ch = self.ui.AskMultipleChoice('Use the %s service?' % self.service_provider,
-                                         ['Yes, create a new account',
-                                          'Yes, I have an account', 
-                                          'Do not use the service (manual configuration)'],
-                                         'Your choice', default=3)
-          if ch in (1, 2):
-            which = (ch == 1) and 'signup' or 'login'
+          ch = self.ui.AskYesNo('Use the %s service?' % self.service_provider,
+                                default=True, back=-1)
+          if ch is True:
             if is_cname_for and is_cname_ready:
               register = kitename
-              Goto('service_%s_email' % which)
+              Goto('service_signup_email')
             elif is_service_domain:
               register = is_cname_for or kitename
-              Goto('service_%s_email' % which)
+              Goto('service_signup_email')
             else:
-              Goto('service_%s_bad_domain' % which)
+              Goto('service_signup_bad_domain')
           else:
             Goto('manual_abort')
 
         elif 'service_login_email' in state:
-          e = p = None
-          while not e and not p:
-            (e, p) = self.ui.AskLogin('Please type in your %s account '
-                                      'details.' % self.service_provider,
-                                      back=(False, -1))
-            if e and p:
+          p = None
+          while not email or not p:
+            (email, p) = self.ui.AskLogin('Please type in your %s account '
+                                          'details.' % self.service_provider,
+                                          email=email, back=(False, -1))
+            if email and p:
               try:
-                service_accounts[e] = service.getSharedSecret(e, p)
-                account = e
+                service_accounts[email] = service.getSharedSecret(email, p)
+                account = email
                 Goto('create_kite')
               except:
-                e = p = None
+                email = p = None
                 if not self.ui.Tell(['Login failed! Try again?'], back=False):
                   Back()
-            if e is False:
+            if email is False:
               Back()
 
         elif ('service_signup_bad_domain' in state or
               'service_login_bad_domain' in state):
-          alternate = is_cname_for or kitename.split('.')[-2]+'.'+SERVICE_DOMAINS[0]
-          ch = self.ui.AskYesNo(('Sorry, %s is not a valid service domain.\n'
-                                  'Try to register %s instead?'
-                                 ) % (kitename, alternate),
-                                default=True, back=-1)
+          if is_cname_for:
+            alternate = is_cname_for
+            ch = self.ui.AskYesNo('Create both?',
+                                  pre=['%s is a CNAME for %s.' % (kitename, is_cname_for)],
+                                  default=True, back=-1)
+          else:
+            alternate = kitename.split('.')[-2]+'.'+SERVICE_DOMAINS[0]
+            ch = self.ui.AskYesNo('Try to create %s instead?' % alternate,
+                                  pre=['Sorry, %s is not a valid service domain.' % kitename],
+                                  default=True, back=-1)
           if ch is True:
             register = alternate
             Goto(state[0].replace('bad_domain', 'email'))
@@ -3890,40 +3944,57 @@ class PageKite(object):
           Goto('end')
 
         elif 'service_signup' in state:
-          try:
-            details = service.signUp(email, register)
-            if details.get('secret', False):
-              service_accounts[email] = details['secret']
-              self.ui.Tell([
-                'Your kite, %s, is live!' % register,
-                '',
-                'NOTE: Your account still needs to be activated. Instructions',
-                'have been mailed to %s, please follow them ASAP. To' % email,
-                'avoid automated abuse, kites on unactivated %s'
-                ' accounts' % self.service_provider,
-                'can only be used for %d minutes.'
-                ' Activation makes them permanent.' % details['timeout'],
-              ])
-              # FIXME: Handle CNAMEs somehow?
-              self.ui.EndWizard()
-              time.sleep(1) # Give the service side a moment to replicate...
-              return (register, details['secret'])
-            else:
-              error = details.get('error', 'unknown')
-              if error == 'domaintaken':
-                self.ui.Tell([('Sorry, that domain (%s) is already taken.'
-                               ) % register], error=True)
-              elif error == 'pleaselogin':
-                self.ui.Tell(['You already have an account, please log in.'],
-                             error=True)
+          ch = self.ui.AskMultipleChoice(['View Software License (AGPLv3)',
+                                          'View PageKite.net Terms of Service',
+                                          'Yes, I accept the license and terms',
+                                          'No, I do not accept.'],
+                                         'Your choice:',
+                                         pre=['Accept the license and terms of service?'],
+                                         default=3, back=False)
+          if ch is False:
+            Back()
+          elif ch == 1:
+            self.ui.Browse(LICENSE_URL)
+          elif ch == 2:
+            self.ui.Browse(SERVICE_TOS_URL)
+          elif ch == 4:
+            Goto('manual_abort')
+          else:
+            try:
+              details = service.signUp(email, register)
+              if details.get('secret', False):
+                service_accounts[email] = details['secret']
+                self.ui.Tell([
+                  'Your kite, %s, is live!' % register,
+                  '',
+                  'NOTE: Your account still needs to be activated. Instructions',
+                  'have been mailed to %s, please follow them ASAP. To' % email,
+                  'avoid automated abuse, kites on unactivated %s'
+                  ' accounts' % self.service_provider,
+                  'can only be used for %d minutes.'
+                  ' Activation makes them permanent.' % details['timeout'],
+                ])
+                # FIXME: Handle CNAMEs somehow?
+                self.ui.EndWizard()
+                time.sleep(2) # Give the service side a moment to replicate...
+                return (register, details['secret'])
               else:
-                self.ui.Tell(['Signup failed! (%s)' % error,
-                              'Please try again later?'], error=True)
+                error = details.get('error', 'unknown')
+                if error == 'domaintaken':
+                  self.ui.Tell([('Sorry, that domain (%s) is already taken.'
+                                 ) % register], error=True)
+                  Goto('abort')
+                elif error == 'pleaselogin':
+                  self.ui.Tell(['You already have an account, please log in.'])
+                  Goto('service_login_email', back_skips_current=True)
+                else:
+                  self.ui.Tell(['Signup failed! (%s)' % error,
+                                'Please try again later?'], error=True)
+                  Goto('abort')
+            except Exception, e:
+              self.ui.Tell(['Signup failed! (%s)' % e,
+                            'Please try again later?'], error=True)
               Goto('abort')
-          except Exception, e:
-            self.ui.Tell(['Signup failed! (%s)' % e,
-                          'Please try again later?'], error=True)
-            Goto('abort')
 
         elif 'choose_kite_account' in state:
           choices = service_account_list[:]
@@ -3941,8 +4012,8 @@ class PageKite(object):
 
         elif 'manual_abort' in state:
           if self.ui.Tell(['Aborted!',
-            'Please add information about your kites and front-ends to the',
-            'configuration file named: %s' % self.rcfile],
+            'Please add information about your kites and front-ends',
+            'to the configuration file: %s' % self.rcfile],
                           error=True, back=False) is False:
             Back()
           else:
@@ -3957,10 +4028,10 @@ class PageKite(object):
           raise ConfigError('Unknown state: %s' % state)
 
       except KeyboardInterrupt:
+        sys.stderr.write('\n')
         if history:
           Back()
         else:
-          print
           raise KeyboardInterrupt()
 
     self.ui.EndWizard()
@@ -4165,8 +4236,7 @@ class PageKite(object):
     if filename == 'syslog':
       Log = LogSyslog
       filename = self.devnull
-      syslog.openlog((sys.argv[0] or 'pagekite.py').split('/')[-1],
-                     syslog.LOG_PID, syslog.LOG_DAEMON)
+      syslog.openlog(self.progname, syslog.LOG_PID, syslog.LOG_DAEMON)
 
     if filename != 'stdio':
       global LogFile
@@ -4266,7 +4336,7 @@ class PageKite(object):
     # Announce that we've started up!
     self.ui.Status('startup', message='Starting up...')
     self.ui.Notify(('Hello! This is %s v%s. %s'
-                    ) % (sys.argv[0].split('/')[-1], APPVER, howtoquit),
+                    ) % (self.progname, APPVER, howtoquit),
                     prefix='>')
     config_report = [('started', sys.argv[0]), ('version', APPVER),
                      ('argv', ' '.join(sys.argv[1:])),
@@ -4362,8 +4432,7 @@ class PageKite(object):
 def Main(pagekite, configure, uiclass=NullUi, progname=None, appver=APPVER):
   crashes = 1
 
-  progname = progname or (sys.argv[0] or 'pagekite.py').split('/')[-1]
-  ui = uiclass(welcome='Welcome to %s version %s!' % (progname, appver))
+  ui = uiclass()
 
   while True:
     pk = pagekite(ui=ui)
@@ -4432,4 +4501,76 @@ def Configure(pk):
 if __name__ == '__main__':
   Main(PageKite, Configure, uiclass=BasicUi)
 
-# vi:ts=2 expandtab
+
+##[ CA Certificates ]##########################################################
+
+CA_CERTS="""
+StartCom Ltd.
+=============
+-----BEGIN CERTIFICATE-----
+MIIFFjCCBH+gAwIBAgIBADANBgkqhkiG9w0BAQQFADCBsDELMAkGA1UEBhMCSUwxDzANBgNVBAgT
+BklzcmFlbDEOMAwGA1UEBxMFRWlsYXQxFjAUBgNVBAoTDVN0YXJ0Q29tIEx0ZC4xGjAYBgNVBAsT
+EUNBIEF1dGhvcml0eSBEZXAuMSkwJwYDVQQDEyBGcmVlIFNTTCBDZXJ0aWZpY2F0aW9uIEF1dGhv
+cml0eTEhMB8GCSqGSIb3DQEJARYSYWRtaW5Ac3RhcnRjb20ub3JnMB4XDTA1MDMxNzE3Mzc0OFoX
+DTM1MDMxMDE3Mzc0OFowgbAxCzAJBgNVBAYTAklMMQ8wDQYDVQQIEwZJc3JhZWwxDjAMBgNVBAcT
+BUVpbGF0MRYwFAYDVQQKEw1TdGFydENvbSBMdGQuMRowGAYDVQQLExFDQSBBdXRob3JpdHkgRGVw
+LjEpMCcGA1UEAxMgRnJlZSBTU0wgQ2VydGlmaWNhdGlvbiBBdXRob3JpdHkxITAfBgkqhkiG9w0B
+CQEWEmFkbWluQHN0YXJ0Y29tLm9yZzCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkCgYEA7YRgACOe
+yEpRKSfeOqE5tWmrCbIvNP1h3D3TsM+x18LEwrHkllbEvqoUDufMOlDIOmKdw6OsWXuO7lUaHEe+
+o5c5s7XvIywI6Nivcy+5yYPo7QAPyHWlLzRMGOh2iCNJitu27Wjaw7ViKUylS7eYtAkUEKD4/mJ2
+IhULpNYILzUCAwEAAaOCAjwwggI4MA8GA1UdEwEB/wQFMAMBAf8wCwYDVR0PBAQDAgHmMB0GA1Ud
+DgQWBBQcicOWzL3+MtUNjIExtpidjShkjTCB3QYDVR0jBIHVMIHSgBQcicOWzL3+MtUNjIExtpid
+jShkjaGBtqSBszCBsDELMAkGA1UEBhMCSUwxDzANBgNVBAgTBklzcmFlbDEOMAwGA1UEBxMFRWls
+YXQxFjAUBgNVBAoTDVN0YXJ0Q29tIEx0ZC4xGjAYBgNVBAsTEUNBIEF1dGhvcml0eSBEZXAuMSkw
+JwYDVQQDEyBGcmVlIFNTTCBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0eTEhMB8GCSqGSIb3DQEJARYS
+YWRtaW5Ac3RhcnRjb20ub3JnggEAMB0GA1UdEQQWMBSBEmFkbWluQHN0YXJ0Y29tLm9yZzAdBgNV
+HRIEFjAUgRJhZG1pbkBzdGFydGNvbS5vcmcwEQYJYIZIAYb4QgEBBAQDAgAHMC8GCWCGSAGG+EIB
+DQQiFiBGcmVlIFNTTCBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0eTAyBglghkgBhvhCAQQEJRYjaHR0
+cDovL2NlcnQuc3RhcnRjb20ub3JnL2NhLWNybC5jcmwwKAYJYIZIAYb4QgECBBsWGWh0dHA6Ly9j
+ZXJ0LnN0YXJ0Y29tLm9yZy8wOQYJYIZIAYb4QgEIBCwWKmh0dHA6Ly9jZXJ0LnN0YXJ0Y29tLm9y
+Zy9pbmRleC5waHA/YXBwPTExMTANBgkqhkiG9w0BAQQFAAOBgQBscSXhnjSRIe/bbL0BCFaPiNhB
+OlP1ct8nV0t2hPdopP7rPwl+KLhX6h/BquL/lp9JmeaylXOWxkjHXo0Hclb4g4+fd68p00UOpO6w
+NnQt8M2YI3s3S9r+UZjEHjQ8iP2ZO1CnwYszx8JSFhKVU2Ui77qLzmLbcCOxgN8aIDjnfg==
+-----END CERTIFICATE-----
+
+StartCom Certification Authority
+================================
+-----BEGIN CERTIFICATE-----
+MIIHyTCCBbGgAwIBAgIBATANBgkqhkiG9w0BAQUFADB9MQswCQYDVQQGEwJJTDEWMBQGA1UEChMN
+U3RhcnRDb20gTHRkLjErMCkGA1UECxMiU2VjdXJlIERpZ2l0YWwgQ2VydGlmaWNhdGUgU2lnbmlu
+ZzEpMCcGA1UEAxMgU3RhcnRDb20gQ2VydGlmaWNhdGlvbiBBdXRob3JpdHkwHhcNMDYwOTE3MTk0
+NjM2WhcNMzYwOTE3MTk0NjM2WjB9MQswCQYDVQQGEwJJTDEWMBQGA1UEChMNU3RhcnRDb20gTHRk
+LjErMCkGA1UECxMiU2VjdXJlIERpZ2l0YWwgQ2VydGlmaWNhdGUgU2lnbmluZzEpMCcGA1UEAxMg
+U3RhcnRDb20gQ2VydGlmaWNhdGlvbiBBdXRob3JpdHkwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAw
+ggIKAoICAQDBiNsJvGxGfHiflXu1M5DycmLWwTYgIiRezul38kMKogZkpMyONvg45iPwbm2xPN1y
+o4UcodM9tDMr0y+v/uqwQVlntsQGfQqedIXWeUyAN3rfOQVSWff0G0ZDpNKFhdLDcfN1YjS6LIp/
+Ho/u7TTQEceWzVI9ujPW3U3eCztKS5/CJi/6tRYccjV3yjxd5srhJosaNnZcAdt0FCX+7bWgiA/d
+eMotHweXMAEtcnn6RtYTKqi5pquDSR3l8u/d5AGOGAqPY1MWhWKpDhk6zLVmpsJrdAfkK+F2PrRt
+2PZE4XNiHzvEvqBTViVsUQn3qqvKv3b9bZvzndu/PWa8DFaqr5hIlTpL36dYUNk4dalb6kMMAv+Z
+6+hsTXBbKWWc3apdzK8BMewM69KN6Oqce+Zu9ydmDBpI125C4z/eIT574Q1w+2OqqGwaVLRcJXrJ
+osmLFqa7LH4XXgVNWG4SHQHuEhANxjJ/GP/89PrNbpHoNkm+Gkhpi8KWTRoSsmkXwQqQ1vp5Iki/
+untp+HDH+no32NgN0nZPV/+Qt+OR0t3vwmC3Zzrd/qqc8NSLf3Iizsafl7b4r4qgEKjZ+xjGtrVc
+UjyJthkqcwEKDwOzEmDyei+B26Nu/yYwl/WL3YlXtq09s68rxbd2AvCl1iuahhQqcvbjM4xdCUsT
+37uMdBNSSwIDAQABo4ICUjCCAk4wDAYDVR0TBAUwAwEB/zALBgNVHQ8EBAMCAa4wHQYDVR0OBBYE
+FE4L7xqkQFulF2mHMMo0aEPQQa7yMGQGA1UdHwRdMFswLKAqoCiGJmh0dHA6Ly9jZXJ0LnN0YXJ0
+Y29tLm9yZy9zZnNjYS1jcmwuY3JsMCugKaAnhiVodHRwOi8vY3JsLnN0YXJ0Y29tLm9yZy9zZnNj
+YS1jcmwuY3JsMIIBXQYDVR0gBIIBVDCCAVAwggFMBgsrBgEEAYG1NwEBATCCATswLwYIKwYBBQUH
+AgEWI2h0dHA6Ly9jZXJ0LnN0YXJ0Y29tLm9yZy9wb2xpY3kucGRmMDUGCCsGAQUFBwIBFilodHRw
+Oi8vY2VydC5zdGFydGNvbS5vcmcvaW50ZXJtZWRpYXRlLnBkZjCB0AYIKwYBBQUHAgIwgcMwJxYg
+U3RhcnQgQ29tbWVyY2lhbCAoU3RhcnRDb20pIEx0ZC4wAwIBARqBl0xpbWl0ZWQgTGlhYmlsaXR5
+LCByZWFkIHRoZSBzZWN0aW9uICpMZWdhbCBMaW1pdGF0aW9ucyogb2YgdGhlIFN0YXJ0Q29tIENl
+cnRpZmljYXRpb24gQXV0aG9yaXR5IFBvbGljeSBhdmFpbGFibGUgYXQgaHR0cDovL2NlcnQuc3Rh
+cnRjb20ub3JnL3BvbGljeS5wZGYwEQYJYIZIAYb4QgEBBAQDAgAHMDgGCWCGSAGG+EIBDQQrFilT
+dGFydENvbSBGcmVlIFNTTCBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0eTANBgkqhkiG9w0BAQUFAAOC
+AgEAFmyZ9GYMNPXQhV59CuzaEE44HF7fpiUFS5Eyweg78T3dRAlbB0mKKctmArexmvclmAk8jhvh
+3TaHK0u7aNM5Zj2gJsfyOZEdUauCe37Vzlrk4gNXcGmXCPleWKYK34wGmkUWFjgKXlf2Ysd6AgXm
+vB618p70qSmD+LIU424oh0TDkBreOKk8rENNZEXO3SipXPJzewT4F+irsfMuXGRuczE6Eri8sxHk
+fY+BUZo7jYn0TZNmezwD7dOaHZrzZVD1oNB1ny+v8OqCQ5j4aZyJecRDjkZy42Q2Eq/3JR44iZB3
+fsNrarnDy0RLrHiQi+fHLB5LEUTINFInzQpdn4XBidUaePKVEFMy3YCEZnXZtWgo+2EuvoSoOMCZ
+EoalHmdkrQYuL6lwhceWD3yJZfWOQ1QOq92lgDmUYMA0yZZwLKMS9R9Ie70cfmu3nZD0Ijuu+Pwq
+yvqCUqDvr0tVk+vBtfAii6w0TiYiBKGHLHVKt+V9E9e4DGTANtLJL4YSjCMJwRuCO3NJo2pXh5Tl
+1njFmUNj403gdy3hZZlyaQQaRwnmDwFWJPsfvw55qVguucQJAX6Vum0ABj6y6koQOdjQK/W/7HW/
+lwLFCRsI3FU34oH7N4RDYiDK51ZLZer+bMEkkyShNOsF/5oirpt9P/FlUQqmMGqz9IgcgA38coro
+g14=
+-----END CERTIFICATE-----
+"""
