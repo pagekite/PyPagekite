@@ -104,6 +104,7 @@ PROTOVER = '0.8'
 APPVER = '0.3.17+github'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
+LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
 MINIDOC = """\
 >>> Welcome to pagekite.py v%s!
 
@@ -246,6 +247,8 @@ MAGIC_PATHS = (MAGIC_PATH, '/Beanstalk~Magic~Beans/0.2')
 SERVICE_PROVIDER = 'PageKite.net'
 SERVICE_DOMAINS = ('pagekite.me', )
 SERVICE_XMLRPC = 'pk:http://pagekite.net/xmlrpc/'
+SERVICE_TOS_URL = 'https://pagekite.net/support/terms/'
+
 SERVICE_XMLRPC = 'http://localhost:8000/xmlrpc/'
 
 OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
@@ -1273,7 +1276,7 @@ class Selectable(object):
                      errno.EDEADLK, errno.EWOULDBLOCK, errno.ENOBUFS,
                      errno.EALREADY)
 
-  def __init__(self, fd=None, address=None, on_port=None, maxread=16000):
+  def __init__(self, fd=None, address=None, on_port=None, maxread=16000, ui=None):
     try:
       self.SetFD(fd or rawsocket(socket.AF_INET6, socket.SOCK_STREAM), six=True)
     except Exception:
@@ -1282,6 +1285,7 @@ class Selectable(object):
     self.on_port = on_port
     self.created = self.bytes_logged = time.time()
     self.dead = False
+    self.ui = ui
 
     # Quota-related stuff
     self.quota = None
@@ -1413,6 +1417,8 @@ class Selectable(object):
       now = time.time()
       self.all_out += self.wrote_bytes
       self.all_in += self.read_bytes
+
+      if self.ui: self.ui.Status('traffic')
 
       global gYamon
       gYamon.vadd("bytes_all", self.wrote_bytes
@@ -1722,8 +1728,8 @@ class Connections(object):
 class LineParser(Selectable):
   """A Selectable which parses the input as lines of text."""
 
-  def __init__(self, fd=None, address=None, on_port=None):
-    Selectable.__init__(self, fd, address, on_port)
+  def __init__(self, fd=None, address=None, on_port=None, ui=None):
+    Selectable.__init__(self, fd, address, on_port, ui=ui)
     self.leftovers = ''
 
   def __html__(self):
@@ -1759,8 +1765,8 @@ SSL_CLIENTHELLO = '\x80'
 class MagicProtocolParser(LineParser):
   """A Selectable which recognizes HTTP, TLS or XMPP preambles."""
 
-  def __init__(self, fd=None, address=None, on_port=None):
-    LineParser.__init__(self, fd, address, on_port)
+  def __init__(self, fd=None, address=None, on_port=None, ui=None):
+    LineParser.__init__(self, fd, address, on_port, ui=ui)
     self.leftovers = ''
     self.might_be_tls = True
     self.is_tls = False
@@ -1866,8 +1872,8 @@ class MagicProtocolParser(LineParser):
 class ChunkParser(Selectable):
   """A Selectable which parses the input as chunks."""
 
-  def __init__(self, fd=None, address=None, on_port=None):
-    Selectable.__init__(self, fd, address, on_port)
+  def __init__(self, fd=None, address=None, on_port=None, ui=None):
+    Selectable.__init__(self, fd, address, on_port, ui=ui)
     self.want_cbytes = 0
     self.want_bytes = 0
     self.compressed = False
@@ -1964,7 +1970,7 @@ class Tunnel(ChunkParser):
   S_PROTOS = 3
 
   def __init__(self, conns):
-    ChunkParser.__init__(self)
+    ChunkParser.__init__(self, ui=conns.config.ui)
 
     # We want to be sure to read the entire chunk at once, including
     # headers to save cycles, so we double the size we're willing to 
@@ -2512,8 +2518,8 @@ class LoopbackTunnel(Tunnel):
 class UserConn(Selectable):
   """A Selectable representing a user's connection."""
   
-  def __init__(self, address):
-    Selectable.__init__(self, address=address)
+  def __init__(self, address, ui=None):
+    Selectable.__init__(self, address=address, ui=ui)
     self.tunnel = None
 
   def __html__(self):
@@ -2536,7 +2542,7 @@ class UserConn(Selectable):
   def _FrontEnd(conn, address, proto, host, on_port, body, conns):
     # This is when an external user connects to a server and requests a
     # web-page.  We have to give it to them!
-    self = UserConn(address)
+    self = UserConn(address, ui=conns.config.ui)
     self.conns = conns
     self.SetConn(conn)
 
@@ -2586,7 +2592,7 @@ class UserConn(Selectable):
 
   def _BackEnd(proto, host, sid, tunnel, on_port, remote_ip=None, remote_port=None):
     # This is when we open a backend connection, because a user asked for it.
-    self = UserConn(None)
+    self = UserConn(None, ui=tunnel.conns.config.ui)
     self.sid = sid
     self.proto = proto
     self.host = host 
@@ -2614,6 +2620,9 @@ class UserConn(Selectable):
     if remote_ip: logInfo.append(('remote_ip', remote_ip))
 
     if not backend or not backend[0]:
+      self.ui.Notify(('%s <=> %s://%s:%s (FAIL: no server)'
+                      ) % (remote_ip or 'unknown', proto, host, on_port),
+                     prefix='?')
       logInfo.append(('err', 'No back-end'))
       self.Log(logInfo)
       return None
@@ -2625,19 +2634,25 @@ class UserConn(Selectable):
       except Exception:
         self.fd.setblocking(1)
 
-      if len(backend) > 1:
-        self.fd.connect(backend)
-      else:
-        self.fd.connect((backend[0], 80))
+      sspec = list(backend)
+      if len(sspec) == 1: sspec.append(80)
+      self.fd.connect(tuple(sspec))
 
       self.fd.setblocking(0)
 
     except socket.error, err:
       logInfo.append(('err', '%s' % err))
+      self.ui.Notify(('%s <=> %s://%s:%s (FAIL: %s:%s is down)'
+                      ) % (remote_ip or 'unknown', proto, host, on_port,
+                           sspec[0], sspec[1]), prefix='!')
       self.Log(logInfo)
       Selectable.Cleanup(self)
       return None
 
+    self.ui.Status('serving')
+    self.ui.Notify(('%s <=> %s//%s:%s (OK: %s:%s)'
+                    ) % (remote_ip or 'unknown', proto, host, on_port,
+                         sspec[0], sspec[1]))
     self.Log(logInfo)
     self.conns.Add(self)
     return self
@@ -2710,7 +2725,7 @@ class UnknownConn(MagicProtocolParser):
   """This class is a connection which we're not sure what is yet."""
 
   def __init__(self, fd, address, on_port, conns):
-    MagicProtocolParser.__init__(self, fd, address, on_port)
+    MagicProtocolParser.__init__(self, fd, address, on_port, ui=conns.config.ui)
     self.peeking = True
     self.parser = HttpParser()
     self.conns = conns
@@ -3038,6 +3053,11 @@ class NullUi(object):
 
   def StartWizard(self, title): pass
   def EndWizard(self): pass
+
+  def Browse(self, url):
+    import webbrowser
+    self.Tell(['Opening %s in your browser...' % url])
+    webbrowser.open(url)
 
   def DefaultOrFail(self, question, default):
     if default is not None: return default
@@ -3918,41 +3938,57 @@ class PageKite(object):
           Goto('end')
 
         elif 'service_signup' in state:
-          try:
-            details = service.signUp(email, register)
-            if details.get('secret', False):
-              service_accounts[email] = details['secret']
-              self.ui.Tell([
-                'Your kite, %s, is live!' % register,
-                '',
-                'NOTE: Your account still needs to be activated. Instructions',
-                'have been mailed to %s, please follow them ASAP. To' % email,
-                'avoid automated abuse, kites on unactivated %s'
-                ' accounts' % self.service_provider,
-                'can only be used for %d minutes.'
-                ' Activation makes them permanent.' % details['timeout'],
-              ])
-              # FIXME: Handle CNAMEs somehow?
-              self.ui.EndWizard()
-              time.sleep(2) # Give the service side a moment to replicate...
-              return (register, details['secret'])
-            else:
-              error = details.get('error', 'unknown')
-              if error == 'domaintaken':
-                self.ui.Tell([('Sorry, that domain (%s) is already taken.'
-                               ) % register], error=True)
-                Goto('abort')
-              elif error == 'pleaselogin':
-                self.ui.Tell(['You already have an account, please log in.'])
-                Goto('service_login_email', back_skips_current=True)
+          ch = self.ui.AskMultipleChoice(['View Software License (AGPLv3)',
+                                          'View PageKite.net Terms of Service',
+                                          'Yes, I accept the license and terms',
+                                          'No, I do not accept.'],
+                                         'Your choice:',
+                                         pre=['Accept the license and terms of service?'],
+                                         default=3, back=False)
+          if ch is False:
+            Back()
+          elif ch == 1:
+            self.ui.Browse(LICENSE_URL)
+          elif ch == 2:
+            self.ui.Browse(SERVICE_TOS_URL)
+          elif ch == 4:
+            Goto('manual_abort')
+          else:
+            try:
+              details = service.signUp(email, register)
+              if details.get('secret', False):
+                service_accounts[email] = details['secret']
+                self.ui.Tell([
+                  'Your kite, %s, is live!' % register,
+                  '',
+                  'NOTE: Your account still needs to be activated. Instructions',
+                  'have been mailed to %s, please follow them ASAP. To' % email,
+                  'avoid automated abuse, kites on unactivated %s'
+                  ' accounts' % self.service_provider,
+                  'can only be used for %d minutes.'
+                  ' Activation makes them permanent.' % details['timeout'],
+                ])
+                # FIXME: Handle CNAMEs somehow?
+                self.ui.EndWizard()
+                time.sleep(2) # Give the service side a moment to replicate...
+                return (register, details['secret'])
               else:
-                self.ui.Tell(['Signup failed! (%s)' % error,
-                              'Please try again later?'], error=True)
-                Goto('abort')
-          except Exception, e:
-            self.ui.Tell(['Signup failed! (%s)' % e,
-                          'Please try again later?'], error=True)
-            Goto('abort')
+                error = details.get('error', 'unknown')
+                if error == 'domaintaken':
+                  self.ui.Tell([('Sorry, that domain (%s) is already taken.'
+                                 ) % register], error=True)
+                  Goto('abort')
+                elif error == 'pleaselogin':
+                  self.ui.Tell(['You already have an account, please log in.'])
+                  Goto('service_login_email', back_skips_current=True)
+                else:
+                  self.ui.Tell(['Signup failed! (%s)' % error,
+                                'Please try again later?'], error=True)
+                  Goto('abort')
+            except Exception, e:
+              self.ui.Tell(['Signup failed! (%s)' % e,
+                            'Please try again later?'], error=True)
+              Goto('abort')
 
         elif 'choose_kite_account' in state:
           choices = service_account_list[:]
