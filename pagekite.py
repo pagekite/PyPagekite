@@ -2999,23 +2999,12 @@ class TunnelManager(threading.Thread):
     while self.keep_running:
 
       # Reconnect if necessary, randomized exponential fallback.
+      problem = False
       if self.pkite.CreateTunnels(self.conns) > 0:
         check_interval += int(random.random()*check_interval)
         if check_interval > 300: check_interval = 300
-
+        problem = True
         time.sleep(1)
-        tunnel_count = len(self.pkite.conns.TunnelServers())
-        tunnel_total = len(self.pkite.servers)
-        if tunnel_count == 0:
-          self.pkite.ui.Status('down',
-                       message='Not connected to any front-ends, will retry...')
-        elif tunnel_count < tunnel_total:
-          self.pkite.ui.Status('flying',
-                    message=('Only connected to %d/%d front-ends, will retry...'
-                             ) % (tunnel_count, tunnel_total))
-        else:
-          self.pkite.ui.Status('flying',
-                               message='DynDNS updates may be incomplete, will retry...')
       else:
         check_interval = 5
 
@@ -3026,6 +3015,19 @@ class TunnelManager(threading.Thread):
         else:
           self.pkite.ui.Status('flying')
           self.PingTunnels(time.time())
+
+      tunnel_count = len(self.pkite.conns.TunnelServers())
+      tunnel_total = len(self.pkite.servers)
+      if tunnel_count == 0:
+        self.pkite.ui.Status('down',
+                       message='Not connected to any front-ends, will retry...')
+      elif tunnel_count < tunnel_total:
+        self.pkite.ui.Status('flying',
+                    message=('Only connected to %d/%d front-ends, will retry...'
+                             ) % (tunnel_count, tunnel_total))
+      elif problem:
+        self.pkite.ui.Status('flying',
+                      message='DynDNS updates may be incomplete, will retry...')
 
       for i in xrange(0, check_interval):
         if self.keep_running: time.sleep(1)
