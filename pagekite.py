@@ -2650,7 +2650,7 @@ class UserConn(Selectable):
       return None
 
     self.ui.Status('serving')
-    self.ui.Notify(('%s <=> %s//%s:%s (OK: %s:%s)'
+    self.ui.Notify(('%s <=> %s://%s:%s (OK: %s:%s)'
                     ) % (remote_ip or 'unknown', proto, host, on_port,
                          sspec[0], sspec[1]))
     self.Log(logInfo)
