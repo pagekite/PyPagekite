@@ -3196,15 +3196,16 @@ class PageKite(object):
         try:
           rv = self.LookupDomainQuota(lookup)
           if rv is None or rv >= 0: return rv
-        except Exception:
-          # Lookup failed, fall through to local test.
-          pass
+        except Exception, e:
+          # Lookup failed, fail open.
+          LogError('Quota lookup failed: %s' % e)
+          return 1337
 
       secret = self.GetBackendData(protoport, domain, BE_SECRET)
       if not secret: secret = self.GetBackendData(proto, domain, BE_SECRET)
       if secret:
         if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
-          return -1
+          return 1234
         else:
           LogError('Invalid signature for: %s (%s)' % (domain, protoport))
           return None
