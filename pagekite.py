@@ -877,7 +877,10 @@ class AuthThread(threading.Thread):
               conn.quota = [quota, requests[quotas.index(quota)], time.time()]
               results.append(('%s-Quota' % prefix, quota))
           elif requests:
-            conn.quota = [0, requests[0], time.time()]
+            if not conn.quota:
+              conn.quota = [None, requests[0], time.time()]
+            else:
+              conn.quota[2] = time.time()
 
         callback(results)
         self.qc.acquire()
@@ -2029,7 +2032,10 @@ class Tunnel(ChunkParser):
 
   def RecheckQuota(self, conns, when=None):
     if when is None: when = time.time()
-    if self.quota and self.quota[1] and (self.quota[2] < when-900):
+    if (self.quota and
+        self.quota[0] is not None and
+        self.quota[1] and
+        (self.quota[2] < when-900)):
       self.quota[2] = when
       LogDebug('Rechecking: %s' % (self.quota, ))
       conns.auth.check([self.quota[1]], self,
@@ -2037,7 +2043,7 @@ class Tunnel(ChunkParser):
 
   def QuotaCallback(self, conns, results):
     # Report new values to the back-end...
-    if self.quota: self.SendQuota()
+    if self.quota and (self.quota[0] >= 0): self.SendQuota()
 
     for r in results:
       if r[0] in ('X-PageKite-OK', 'X-PageKite-Duplicate'):
@@ -3669,14 +3675,14 @@ class PageKite(object):
         except Exception, e:
           # Lookup failed, fail open.
           LogError('Quota lookup failed: %s' % e)
-          return 1337
+          return -2
 
       secret = (self.GetBackendData(protoport, domain) or BE_NONE)[BE_SECRET]
       if not secret:
         secret = (self.GetBackendData(proto, domain) or BE_NONE)[BE_SECRET]
       if secret:
         if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
-          return 1234
+          return -1
         else:
           LogError('Invalid signature for: %s (%s)' % (domain, protoport))
           return None
