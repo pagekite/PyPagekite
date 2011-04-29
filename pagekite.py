@@ -165,8 +165,8 @@ Common Options:
  --nocrashreport        Don't send anonymous crash reports to PageKite.net.
  --tls_default=N        Default name to use for SSL, if SNI and tracking fail.
  --tls_endpoint=N:F     Terminate SSL/TLS for name N, using key/cert from F.
- --defaults             Set some reasonable default setings.
- --errorurl=U  -E U    URL to redirect to when back-ends are not found.
+ --defaults             Set defaults for use with PageKite.net service.
+ --errorurl=U  -E U     URL to redirect to when back-ends are not found.
  --settings             Dump the current settings to STDOUT, formatted as
                        an options file would be.
 
@@ -3419,7 +3419,7 @@ class PageKite(object):
         '#/ Use service default settings',
         'defaults',
         '',
-        '#/ Manual front-ends'
+        '#/ Manual front-ends (optional)'
       ])
       if self.servers_manual:
         for server in self.servers_manual:
@@ -3498,10 +3498,12 @@ class PageKite(object):
       '',
       '#/ Miscellaneous settings',
       (self.logfile   and 'logfile=%s' % self.logfile
-                       or '# logfile=/path/file'),
+                       or '# logfile=/path/to/file'),
       (self.servers_new_only and 'new' or '# new'),
       (self.require_all and 'all' or '# all'),
       (self.no_probes and 'noprobes' or '# noprobes'),
+      (self.crash_report_url and '# nocrashreport' or 'nocrashreport'),
+      'buffers=%s' % self.buffer_max,
       ''
     ])
     config.extend([
@@ -3559,7 +3561,7 @@ class PageKite(object):
     else:
       config.append('# runas=uid:gid')
     config.append(self.pidfile and 'pidfile=%s' % self.pidfile
-                                or '# pidfile=/path/file')
+                                or '# pidfile=/path/to/file')
 
     config.extend([
       '',
