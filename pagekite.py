@@ -3351,21 +3351,22 @@ class PageKite(object):
       self.ca_certs_default = sys.argv[0]
     self.ca_certs = self.ca_certs_default
 
-
-  def PrintSettings(self):
-    print '### Current settings for PageKite v%s. ###' % APPVER    
-    print
-    print '# HTTP control-panel settings:'
-    print (self.ui_sspec and 'httpd=%s:%d' % self.ui_sspec or '#httpd=host:port')
-    print (self.ui_password and 'httppass=%s' % self.ui_password or '#httppass=YOURSECRET')
-    print (self.ui_pemfile and 'pemfile=%s' % self.ui_pemfile or '#pemfile=/path/to/sslcert.pem')
-    print
-    print '# Back-end Options:'
-    print (self.servers_auto and 'frontends=%d:%s:%d' % self.servers_auto or '#frontends=1:frontends.b5p.us:443')
+  def GenerateConfig(self):
+    config = [
+      '####[ Current settings for pagekite.py v%s. ]####' % APPVER,
+      '',
+      '# HTTP control-panel settings:',
+      (self.ui_sspec and 'httpd=%s:%d' % self.ui_sspec or '#httpd=host:port'),
+      (self.ui_password and 'httppass=%s' % self.ui_password or '#httppass=YOURSECRET'),
+      (self.ui_pemfile and 'pemfile=%s' % self.ui_pemfile or '#pemfile=/path/to/sslcert.pem'),
+      '', 
+      '# Back-end Options:',
+      (self.servers_auto and 'frontends=%d:%s:%d' % self.servers_auto or '#frontends=1:frontends.b5p.us:443')
+    ]
     for server in self.servers_manual:
-      print 'frontend=%s' % server
+      config.append('frontend=%s' % server)
     for server in self.fe_certname:
-      print 'fe_certname=%s' % server
+      config.append('fe_certname=%s' % server)
     if self.dyndns:
       provider, args = self.dyndns
       for prov in DYNDNS:
@@ -3374,80 +3375,104 @@ class PageKite(object):
       if 'prov' not in args:
         args['prov'] = provider
       if args['pass']:
-        print 'dyndns=%(user)s:%(pass)s@%(prov)s' % args
+        config.append('dyndns=%(user)s:%(pass)s@%(prov)s' % args)
       elif args['user']:
-        print 'dyndns=%(user)s@%(prov)s' % args
+        config.append('dyndns=%(user)s@%(prov)s' % args)
       else:
-        print 'dyndns=%(prov)s' % args
+        config.append('dyndns=%(prov)s' % args)
     else:
-      print '#dyndns=pagekite.net OR' 
-      print '#dyndns=user:pass@dyndns.org OR' 
-      print '#dyndns=user:pass@no-ip.com' 
+      config.extend([
+        '#dyndns=pagekite.net OR',
+        '#dyndns=user:pass@dyndns.org OR',
+        '#dyndns=user:pass@no-ip.com' 
+      ])
     bprinted = 0
     for bid in self.backends:
       be = self.backends[bid]
       if be[BE_BHOST]:
-        print '%s=%s:%s:%s:%s' % ((be[BE_STATUS] == BE_STATUS_DISABLED
-                                   ) and 'define_backend' or 'backend', bid,
-                                  be[BE_BHOST], be[BE_BPORT], be[BE_SECRET])
+        config.append(('%s=%s:%s:%s:%s'
+                       ) % ((be[BE_STATUS] == BE_STATUS_DISABLED
+                             ) and 'define_backend' or 'backend',
+                            bid, be[BE_BHOST], be[BE_BPORT], be[BE_SECRET]))
         bprinted += 1
     if bprinted == 0:
-      print '#backend=http:YOU.pagekite.me:localhost:80:SECRET'
-      print '#backend=https:YOU.pagekite.me:localhost:443:SECRET'
-      print '#backend=websocket:YOU.pagekite.me:localhost:8080:SECRET'
-    print (self.error_url and ('errorurl=%s' % self.error_url) or '#errorurl=http://host/page/')
-    print (self.servers_new_only and 'new' or '#new')
-    print (self.require_all and 'all' or '#all')
-    print (self.no_probes and 'noprobes' or '#noprobes')
-    print
+      config.extend([
+        '#backend=http:YOU.pagekite.me:localhost:80:SECRET',
+        '#backend=https:YOU.pagekite.me:localhost:443:SECRET',
+        '#backend=websocket:YOU.pagekite.me:localhost:8080:SECRET'
+      ])
+    config.extend([
+      (self.error_url and ('errorurl=%s' % self.error_url) or '#errorurl=http://host/page/'),
+      (self.servers_new_only and 'new' or '#new'),
+      (self.require_all and 'all' or '#all'),
+      (self.no_probes and 'noprobes' or '#noprobes'),
+      ''
+    ])
     eprinted = 0
-    print '# Domains we terminate SSL/TLS for natively, with key/cert-files'
+    config.append('# Domains we terminate SSL/TLS for natively, with key/cert-files')
     for ep in self.tls_endpoints:
-      print 'tls_endpoint=%s:%s' % (ep, self.tls_endpoints[ep][0])
+      config.append('tls_endpoint=%s:%s' % (ep, self.tls_endpoints[ep][0]))
       eprinted += 1
     if eprinted == 0:
-      print '#tls_endpoint=DOMAIN:PEM_FILE'
-    print (self.tls_default and 'tls_default=%s' % self.tls_default or '#tls_default=DOMAIN')
-    print
-    print
-    print '### The following stuff can usually be ignored. ###'
-    print
-    print '# Includes (should usually be at the top of the file)'
-    print '#optfile=/path/to/common/settings'
-    print
-    print '# Front-end Options:'
-    print (self.isfrontend and 'isfrontend' or '#isfrontend')
+      config.append('#tls_endpoint=DOMAIN:PEM_FILE')
+    config.extend([
+      (self.tls_default and 'tls_default=%s' % self.tls_default or '#tls_default=DOMAIN'),
+      '',
+      '',
+      '### The following stuff can usually be ignored. ###',
+      '',
+      '# Includes (should usually be at the top of the file)',
+      '#optfile=/path/to/common/settings',
+      '',
+      '# Front-end Options:',
+      (self.isfrontend and 'isfrontend' or '#isfrontend')
+    ])
     comment = (self.isfrontend and '' or '#')
-    print (self.server_host and '%shost=%s' % (comment, self.server_host) or '#host=machine.domain.com')
-    print '%sports=%s' % (comment, ','.join(['%s' % x for x in self.server_ports] or []))
-    print '%sprotos=%s' % (comment, ','.join(['%s' % x for x in self.server_protos] or []))
+    config.extend([
+      (self.server_host and '%shost=%s' % (comment, self.server_host) or '#host=machine.domain.com'),
+      '%sports=%s' % (comment, ','.join(['%s' % x for x in self.server_ports] or [])),
+      '%sprotos=%s' % (comment, ','.join(['%s' % x for x in self.server_protos] or []))
+    ])
     for pa in self.server_portalias:
-      print 'portalias=%s:%s' % (int(pa), int(self.server_portalias[pa]))
-    print '%srawports=%s' % (comment, ','.join(['%s' % x for x in self.server_raw_ports] or []))
-    print (self.auth_domain and '%sauthdomain=%s' % (comment, self.auth_domain) or '#authdomain=foo.com')
+      config.append('portalias=%s:%s' % (int(pa), int(self.server_portalias[pa])))
+    config.extend([
+      '%srawports=%s' % (comment, ','.join(['%s' % x for x in self.server_raw_ports] or [])),
+      (self.auth_domain and '%sauthdomain=%s' % (comment, self.auth_domain) or '#authdomain=foo.com')
+    ])
     for bid in self.backends:
       be = self.backends[bid]
       if not be[BE_BHOST]:
-        print 'domain=%s:%s' % (bid, be[BE_SECRET])
-    print '#domain=http:*.pagekite.me:SECRET1'
-    print '#domain=http,https,websocket:THEM.pagekite.me:SECRET2'
-
-    print
-    print '# Systems administration settings:'
-    print (self.logfile and 'logfile=%s' % self.logfile or '#logfile=/path/file')
-    print (self.daemonize and 'daemonize' % self.logfile or '#daemonize')
+        config.append('domain=%s:%s' % (bid, be[BE_SECRET]))
+    config.extend([
+      '#domain=http:*.pagekite.me:SECRET1',
+      '#domain=http,https,websocket:THEM.pagekite.me:SECRET2',
+      '',
+      '# Systems administration settings:',
+      (self.logfile and 'logfile=%s' % self.logfile or '#logfile=/path/file'),
+      (self.daemonize and 'daemonize' % self.logfile or '#daemonize')
+    ])
     if self.setuid and self.setgid:
-      print 'runas=%s:%s' % (self.setuid, self.setgid)
+      config.append('runas=%s:%s' % (self.setuid, self.setgid))
     elif self.setuid:
-      print 'runas=%s' % self.setuid
+      config.append('runas=%s' % self.setuid)
     else:
-      print '#runas=uid:gid'
-    print (self.pidfile and 'pidfile=%s' % self.pidfile or '#pidfile=/path/file')
+      config.append('#runas=uid:gid')
+    config.append(self.pidfile and 'pidfile=%s' % self.pidfile or '#pidfile=/path/file')
     if self.ca_certs != self.ca_certs_default:
-      print 'ca_certs=%s' % self.ca_certs
+      config.append('ca_certs=%s' % self.ca_certs)
     else:
-      print '#ca_certs=%s' % self.ca_certs
-    print
+      config.append('#ca_certs=%s' % self.ca_certs)
+
+    config.extend([
+      '',
+      '####[ End of pagekite.py configuration, certs may follow ]####',
+      'END',
+      ''
+    ])
+    return config
+
+  def PrintSettings(self):
+    print '\n'.join(self.GenerateConfig())
 
   def FallDown(self, message, help=True, longhelp=False, noexit=False):
     if self.conns and self.conns.auth: self.conns.auth.quit()
