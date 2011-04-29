@@ -2232,7 +2232,7 @@ class Tunnel(ChunkParser):
                       ('err', 'Rejected'),
                       ('proto', proto),
                       ('domain', domain)])
-            conns.config.ui.Notify(('%s rejected: %s:%s'
+            conns.config.ui.Notify(('%s rejected: %s://%s'
                                     ) % (sname, proto, domain), prefix='!')
 
           for request in parse.Header('X-PageKite-Duplicate'):
@@ -2242,7 +2242,7 @@ class Tunnel(ChunkParser):
                       ('err', 'Duplicate'),
                       ('proto', proto),
                       ('domain', domain)])
-            conns.config.ui.Notify(('%s already has: %s:%s'
+            conns.config.ui.Notify(('%s already has: %s://%s'
                                     ) % (sname, proto, domain), prefix='!')
 
           if not conns.config.disable_zchunks:
@@ -3053,6 +3053,7 @@ class NullUi(object):
   def Welcome(self): pass
   def StartWizard(self, title): pass
   def EndWizard(self): pass
+  def Spacer(self): pass
 
   def Browse(self, url):
     import webbrowser
@@ -3163,6 +3164,9 @@ class BasicUi(NullUi):
     if os.getenv('USERPROFILE'):
       sys.stderr.write('\n<<< press ENTER to continue >>>\n')
       sys.stdin.readline()
+
+  def Spacer(self):
+    sys.stderr.write('\n')
 
   def AskEmail(self, question, default=None, pre=[],
                wizard_hint=False, image=None, back=None):
@@ -3551,8 +3555,17 @@ class PageKite(object):
     print '\n'.join(self.GenerateConfig())
 
   def SaveNewUserConfig(self):
-    print 'Should save new user settings...'
-    sys.exit(1)
+    try:
+      fd = open(self.rcfile, 'w')
+      fd.write('\n'.join(self.GenerateConfig()))
+      fd.close()
+      self.ui.Tell(['Configuration saved to %s!' % self.rcfile])
+      self.ui.Spacer()
+      Log([('saved', 'Configuration saved to %s!' % self.rcfile)])
+    except Exception, e:
+      self.ui.Tell(['ERROR: Could not save to %s: %s' % (self.rcfile, e)])
+      self.ui.Spacer()
+      LogError('Could not save to %s: %s' % (self.rcfile, e))
 
   def FallDown(self, message, help=True, longhelp=False, noexit=False):
     if self.conns and self.conns.auth: self.conns.auth.quit()
@@ -3694,8 +3707,8 @@ class PageKite(object):
     print longhelp and DOC or MINIDOC
     sys.exit(0)
 
-  def ArgToBackendSpecs(self, arg, status=BE_STATUS_UNKNOWN):
-    protos, fe_domain, be_host, be_port, secret = None, None, None, None, ''
+  def ArgToBackendSpecs(self, arg, status=BE_STATUS_UNKNOWN, secret=None):
+    protos, fe_domain, be_host, be_port = None, None, None, None
 
     # Interpret the argument into a specification of what we want.
     parts = arg.split(':')
@@ -4120,7 +4133,8 @@ class PageKite(object):
                 self.ui.EndWizard()
                 time.sleep(2) # Give the service side a moment to replicate...
                 if autoconfigure:
-                  self.backends.update(self.ArgToBackendSpecs(register))
+                  self.backends.update(self.ArgToBackendSpecs(register,
+                                                      secret=details['secret']))
                 return (register, details['secret'])
               else:
                 error = details.get('error', 'unknown')
