@@ -336,6 +336,7 @@ DYNDNS = {
 ##[ Standard imports ]########################################################
 
 import base64
+import cgi
 from cgi import escape as escape_html
 import errno
 import getopt
@@ -783,17 +784,20 @@ def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None):
                          ['<html><body>', message, '</body></html>'])
 
 LOG = []
+LOG_LINE = 0
 LOG_LENGTH = 300
 LOG_THRESHOLD = 256 * 1024
 
 def LogValues(values, testtime=None):
-  words = [('ts', '%x' % (testtime or time.time()))]
+  global LOG_LINE
+  words = [('ts', '%x' % (testtime or time.time())), ('ll', '%x' % LOG_LINE)]
   words.extend([(kv[0], ('%s' % kv[1]).replace('\t', ' ')
                                       .replace('\r', ' ')
                                       .replace('\n', ' ')
                                       .replace('; ', ', ')
                                       .strip()) for kv in values])
   wdict = dict(words)
+  LOG_LINE += 1
   LOG.append(wdict)
   while len(LOG) > LOG_LENGTH: LOG.pop(0)
   return (words, wdict)
@@ -950,16 +954,19 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   MIME_TYPES = {
     'txt': 'text/plain',
+    'shtml': 'text/html',
     'html': 'text/html',
     'htm': 'text/html',
     'css': 'text/css',
     'js': 'application/javascript',
+    'jsonp': 'application/javascript',
     'png': 'image/png',
     'gif': 'image/gif',
     'jpg': 'image/jpeg',
     'jepg': 'image/jpeg',
     'DEFAULT': 'application/octet-stream'
   }
+  TEMPLATE_JSONP = ('window.pkData = %s;')
   TEMPLATE_TEXT = ('%(body)s')
   TEMPLATE_HTML = ('<html><head>\n'
                '<link rel="stylesheet" media="screen, screen"'
@@ -1087,9 +1094,11 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         clength = int(self.headers.get('content-length'))
         posted = cgi.parse_qs(self.rfile.read(clength), 1)
       else:
-        return SimpleXMLRPCServer.SimpleXMLRPCRequestHandler.do_POST(self)
+        return SimpleXMLRPCRequestHandler.do_POST(self)
     except Exception, e:
       Log([('err', 'POST error at %s: %s' % (path, e))])
+      self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
+      return
 
     if not self.performPostAuthChecks(scheme, netloc, path, qs, posted): return
     try:
@@ -1099,7 +1108,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
-  def sendStaticFile(self, path, mimetype):
+  def sendStaticFile(self, path, mimetype, shtml_vars=None):
     try:
       rf = open('jsui/%s' % path, "rb")
     except (IOError, OSError), e:
@@ -1107,9 +1116,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
     self.sendResponse(None, mimetype=mimetype, chunked=True) 
     while True:
-      data = rf.read(16*4096)
+      data = rf.read(32*4096)
       if data == "": break
-      self.sendChunk(data)
+      if shtml_vars:
+        self.sendChunk(data % shtml_vars)
+      else:
+        self.sendChunk(data)
     self.sendEof()
     rf.close()
     return True
@@ -1130,6 +1142,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       'now': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
       'ver': APPVER
     }
+    for key in self.headers.keys(): data['http_'+key.lower()] = self.headers.get(key)
     mimetype = self.getMimeType(path)
 
     if path == '/vars.txt':
@@ -1141,20 +1154,94 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       elif path.endswith('log.html'): data.update(self.html_log(path))
       elif path.endswith('/conns/'):  data.update(self.html_conns())
       elif path.startswith('/pagekite/conn/'): data.update(self.html_conn(path))
+      elif path.endswith('/vars.jsonp'): pass
       else: data.update(self.html_overview())
 
     else:
-      if not self.sendStaticFile(path, mimetype):
+      shtml_vars = None
+      if path.endswith('.shtml'): shtml_vars = data
+      if not self.sendStaticFile(path, mimetype, shtml_vars=shtml_vars):
         self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
       return
 
     if path.endswith('.txt'):
       response = self.TEMPLATE_TEXT % data
+    elif path.endswith('.jsonp'):
+      response = self.TEMPLATE_JSONP % (data, )
     else:
       response = self.TEMPLATE_HTML % data
 
     self.sendResponse(response, mimetype=mimetype, chunked=False)
     self.sendEof()
+
+
+class RemoteControlInterface(object):
+  def __init__(self, pkite, conns, yamon):
+    self.pkite = pkite
+    self.conns = conns
+    self.yamon = yamon
+    self.auth_tokens = {'FIXME': 1}
+
+  def connections(self, auth_token):
+    if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
+    return [{'sid': c.sid,
+             'dead': c.dead,
+             'html': c.__html__()} for c in self.conns.conns]
+
+  def add_kite(self, auth_token, kite_domain, kite_proto):
+    if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
+    pass
+
+  def get_kites(self, auth_token):
+    if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
+    kites = []
+    for bid in self.pkite.backends:
+      proto, domain = bid.split(':')
+      fe_proto = proto.split('-')
+      kite_info = {
+        'id': bid,
+        'domain': domain,
+        'fe_proto': fe_proto[0],
+        'fe_port': (len(fe_proto) > 1) and fe_proto[1] or '',
+        'fe_secret': self.pkite.backends[bid][BE_SECRET],
+        'be_proto': self.pkite.backends[bid][BE_PROTO],
+        'backend': self.pkite.backends[bid][BE_BACKEND],
+        'fe_list': [{'name': fe.server_name,
+                     'tls': fe.using_tls,
+                     'sid': fe.sid} for fe in self.conns.Tunnel(proto, domain)]
+      }
+      kites.append(kite_info)
+    print 'Sending %s' % kites
+    return kites
+
+  def remove_kite(self, auth_token, kite_id):
+    if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
+    if kite_id in self.pkite.backends:
+      del self.pkite.backends[kite_id]
+    return self.get_kites(auth_token)
+     
+  def get_log(self, auth_token):
+    if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
+    return LOG
+
+  def get_log_after(self, auth_token, last_seen, timeout):
+    if auth_token not in self.auth_tokens: raise AuthError('Unauthorized')
+    last_seen = int(last_seen, 16)
+
+    # If our internal LOG_LINE counter is less than the count of the last seen
+    # line at the remote end, then we've restarted and should send everything.
+    if (last_seen == 0) or (LOG_LINE < last_seen): return LOG
+
+    # Else, wait at least one second, AND wait for a new line to be added to
+    # the log (or the timeout to expire).
+    time.sleep(1)
+    last_ll = LOG[-1]['ll']
+    while (timeout > 0) and (LOG[-1]['ll'] == last_ll):
+      time.sleep(1)
+      timeout -= 1
+
+    # Return everything the client hasn't already seen.
+    return [ll for ll in LOG if int(ll['ll'], 16) > last_seen]
 
 
 class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
@@ -1164,10 +1251,6 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     SimpleXMLRPCServer.__init__(self, sspec, handler)
     self.pkite = pkite
     self.conns = conns
-
-    # FIXME: There should be access control on these
-    #self.register_introspection_functions()
-    #self.register_instance(conns)
 
     if ssl_pem_filename:
       ctx = SSL.Context(SSL.SSLv23_METHOD)
@@ -1188,6 +1271,10 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     gYamon.vset('ssl_enabled', self.enable_ssl)
     gYamon.vset('errors', 0)
     gYamon.vset("bytes_all", 0)
+
+    self.register_introspection_functions()
+    self.register_instance(RemoteControlInterface(pkite, conns, gYamon))
+
 
 class HttpUiThread(threading.Thread):
   """Handle HTTP UI in a separate thread."""
@@ -2047,6 +2134,7 @@ class Tunnel(ChunkParser):
     self.rtt = 100000
     self.last_activity = time.time()
     self.last_ping = 0
+    self.using_tls = False
 
   def __html__(self):
     return ('<b>Server name</b>: %s<br>'
@@ -2218,6 +2306,7 @@ class Tunnel(ChunkParser):
         self.fd = SSL_Connect(ctx, self.fd, connected=True, server_side=False,
                               verify_names=self.conns.config.fe_certname)
         LogDebug('TLS connection to %s OK' % server)
+        self.using_tls = commonName
       except SSL.Error, e:
         self.fd = raw_fd
         self.fd.close()
