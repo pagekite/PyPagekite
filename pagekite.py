@@ -857,7 +857,6 @@ class AuthThread(threading.Thread):
             quota = self.conns.config.GetDomainQuota(proto, domain, srand,
                                                      token, sign,
                                                    check_token=(conn.quota is None))
-            quotas.append(quota)
             if not quota:
               results.append(('%s-Invalid' % prefix, what))
             elif self.conns.Tunnel(proto, domain):
@@ -865,6 +864,7 @@ class AuthThread(threading.Thread):
               results.append(('%s-Duplicate' % prefix, what))
             else:
               results.append(('%s-OK' % prefix, what))
+              quotas.append(quota)
 
         results.append(('%s-SessionID' % prefix,
                         '%x:%s' % (now, sha1hex(session))))
@@ -3341,6 +3341,7 @@ class PageKite(object):
     except Exception, e:
       # The above stuff may fail in some cases, e.g. on Android in SL4A.
       self.rcfile = 'pagekite.cfg'
+      self.devnull = '/dev/null'
 
     if not os.path.exists(self.rcfile):
       for rcf in ('pagekite.rc', 'pagekite.cfg'):
