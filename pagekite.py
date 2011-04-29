@@ -1396,6 +1396,8 @@ class Selectable(object):
   def ProcessEof(self):
     if self.read_eof and self.write_eof and not self.write_blocked:
       self.Cleanup()
+      return False
+    return True
 
   def ProcessEofRead(self):
     self.read_eof = True
@@ -2288,9 +2290,10 @@ class Tunnel(ChunkParser):
   def ProcessEofRead(self):
     self.conns.Remove(self)
     self.Cleanup()
+    return True
 
   def ProcessEofWrite(self):
-    self.ProcessEofRead()
+    return self.ProcessEofRead()
 
   def ProcessChunk(self, data):
     try:
@@ -2583,9 +2586,9 @@ class UserConn(Selectable):
   def ProcessTunnelEof(self, read_eof=False, write_eof=False):
     if read_eof and not self.write_eof:
       self.ProcessEofWrite(tell_tunnel=False)
-
     if write_eof and not self.read_eof:
       self.ProcessEofRead(tell_tunnel=False)
+    return True
 
   def ProcessEofRead(self, tell_tunnel=True):
     if tell_tunnel and self.tunnel:
