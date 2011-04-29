@@ -3988,9 +3988,9 @@ class PageKite(object):
     service = self.service_xmlrpc
     if service.startswith('pk:http'):
       return xmlrpclib.ServerProxy(service.replace('pk:http', 'http'),
-                                   PageKiteXmlRpcTransport())
+                                   PageKiteXmlRpcTransport(), None, True)
     else:
-      return xmlrpclib.ServerProxy(self.service_xmlrpc)
+      return xmlrpclib.ServerProxy(self.service_xmlrpc, None, None, True)
 
   def _KiteInfo(self, kitename):
     is_service_domain = kitename and SERVICE_DOMAIN_RE.search(kitename)
@@ -4036,7 +4036,8 @@ class PageKite(object):
       if not back_skips_current: history.append(state[0])
       state[0] = goto
 
-    register = email = None
+    register = is_cname_for or kitename
+    email = None
     while 'end' not in state:
       try:
         if 'use_service_question' in state:
@@ -4178,8 +4179,9 @@ class PageKite(object):
         elif 'choose_kite_account' in state:
           choices = service_account_list[:]
           choices.append('Do not use %s' % self.service_provider)
-          ch = self.ui.AskMultipleChoice('Choose an account for this kite:', 
-                                         choices, 'Register with', default=1)
+          ch = self.ui.AskMultipleChoice(choices, 'Register with',
+                                         pre=['Choose an account for this kite:'], 
+                                         default=1)
           if ch == len(choices):
             Goto('manual_abort')
           else:
@@ -4187,7 +4189,36 @@ class PageKite(object):
             Goto('create_kite')
  
         elif 'create_kite' in state:
-          Goto('abort')
+          secret = service_accounts[account]
+          cfgs = {}
+          result = {}
+          try:
+            if is_cname_for and is_cname_ready:
+              result = service.addCnameKite(account, secret, kitename)
+              cfgs.update(self.ArgToBackendSpecs(kitename, secret=secret))
+            else:
+              result = service.addKite(account, secret, register)
+              cfgs.update(self.ArgToBackendSpecs(register, secret=secret))
+              if is_cname_for == register and 'error' not in result:
+                result.update(service.addCnameKite(account, secret, kitename))
+                cfgs.update(self.ArgToBackendSpecs(kitename, secret=secret))
+
+            if 'error' in result:
+              self.ui.Tell(['Oops, we had a problem: %s' % result['error'],
+                            'Perhaps if you chose a different kite name?'],
+                           error=True)
+              Goto('abort')
+            else:
+              self.ui.Tell(['Success!  Time to fly some kites...', ''])
+              self.ui.EndWizard()
+              time.sleep(2) # Give the service side a moment to replicate...
+              if autoconfigure: self.backends.update(cfgs)
+              return (register or kitename, secret)
+
+          except Exception, e:
+            self.ui.Tell(['Oops! We had a problem: %s' % e,
+                          'Please try again later?'], error=True)
+            Goto('abort')
 
         elif 'manual_abort' in state:
           if self.ui.Tell(['Aborted!',
