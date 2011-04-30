@@ -3172,8 +3172,13 @@ class BasicUi(NullUi):
     self.Welcome()
     banner = '>>> %s' %  title
     self.in_wizard = title
+    self.tries = 200
     sys.stderr.write(('%s%s[CTRL+C = Cancel]\n'
                       ) % (banner, ' ' * (62-len(banner))))
+
+  def Retry(self):
+    self.tries -= 1
+    return self.tries
 
   def EndWizard(self):
     self.in_wizard = None
@@ -3188,12 +3193,13 @@ class BasicUi(NullUi):
   def AskEmail(self, question, default=None, pre=[],
                wizard_hint=False, image=None, back=None):
     self.Welcome(pre)
-    while True:
+    while self.Retry():
       sys.stderr.write(' => %s ' % (question, ))
       answer = sys.stdin.readline().strip()
       if default and answer == '': return default
       if self.EMAIL_RE.match(answer): return answer
       if back is not None and answer == 'back': return back
+    raise Exception('Too many tries')
 
   def AskLogin(self, question, default=None, email=None, pre=None,
                wizard_hint=False, image=None, back=None):
@@ -3214,12 +3220,13 @@ class BasicUi(NullUi):
     yn = ((default is True) and '[Y/n]'
           ) or ((default is False) and '[y/N]'
                 ) or ('[y/n]')
-    while True:
+    while self.Retry():
       sys.stderr.write(' => %s %s ' % (question, yn))
       answer = sys.stdin.readline().strip().lower()
       if default is not None and answer == '': answer = default and 'y' or 'n'
       if back is not None and answer.startswith('b'): return back
       if answer in ('y', 'n'): return (answer == 'y')
+    raise Exception('Too many tries')
 
   def AskKiteName(self, domains, question, pre=[], default=None,
                   wizard_hint=False, image=None, back=None):
@@ -3232,7 +3239,7 @@ class BasicUi(NullUi):
       for domain in domains:
         sys.stderr.write('\n     %s' % domain)
       sys.stderr.write('\n')
-    while True:
+    while self.Retry():
       sys.stderr.write('\n => %s ' % question)
       answer = sys.stdin.readline().strip().lower()
       if back is not None and answer == 'back':
@@ -3248,6 +3255,7 @@ class BasicUi(NullUi):
             if answer and SERVICE_SUBKITE_RE.match(answer):
               return answer+domain
       sys.stderr.write('    (Please only use characters A-Z, 0-9 and _.)')
+    raise Exception('Too many tries')
 
   def AskMultipleChoice(self, choices, question, pre=[], default=None,
                         wizard_hint=False, image=None, back=None):
@@ -3257,7 +3265,7 @@ class BasicUi(NullUi):
       sys.stderr.write(('  %s %d) %s\n'
                         ) % ((default==i+1) and '*' or ' ', i+1, choices[i]))
     sys.stderr.write('\n')
-    while True:
+    while self.Retry():
       d = default and (', default=%d' % default) or ''
       sys.stderr.write(' => %s [1-%d%s] ' % (question, len(choices), d))
       try:
@@ -3267,6 +3275,7 @@ class BasicUi(NullUi):
         if choice > 0 and choice <= len(choices): return choice
       except (ValueError, IndexError):
         pass
+    raise Exception('Too many tries')
 
   def Tell(self, lines, error=False, back=None):
     self.Welcome()
@@ -3988,9 +3997,9 @@ class PageKite(object):
     service = self.service_xmlrpc
     if service.startswith('pk:http'):
       return xmlrpclib.ServerProxy(service.replace('pk:http', 'http'),
-                                   PageKiteXmlRpcTransport(), None, True)
+                                   PageKiteXmlRpcTransport(), None, False)
     else:
-      return xmlrpclib.ServerProxy(self.service_xmlrpc, None, None, True)
+      return xmlrpclib.ServerProxy(self.service_xmlrpc, None, None, False)
 
   def _KiteInfo(self, kitename):
     is_service_domain = kitename and SERVICE_DOMAIN_RE.search(kitename)
@@ -4066,6 +4075,9 @@ class PageKite(object):
             if email and p:
               try:
                 service_accounts[email] = service.getSharedSecret(email, p)
+                # FIXME: Should get the list of preconfigured kites via. RPC
+                #        so we don't try to create something that already
+                #        exists?  Or should the RPC not just not complain?
                 account = email
                 Goto('create_kite')
               except:
@@ -4588,6 +4600,10 @@ class PageKite(object):
       FlushLogMemory()
       raise ConfigError(e)
 
+    # Preserve sane behavior when not run at the console.
+    if not sys.stdout.isatty():
+      Log = LogToFile
+
     # Create log-file
     if self.logfile:
       keep_open = [s.fd.fileno() for s in conns.conns]
@@ -4705,7 +4721,9 @@ def Configure(pk):
 
   pk.Configure(sys.argv[1:])
 
-  if '--clean' not in sys.argv and not pk.rcfiles_loaded:
+  if ('--clean' not in sys.argv and
+      sys.stdout.isatty() and
+      not pk.rcfiles_loaded):
     if pk.backends.keys() or pk.RegisterNewKite(autoconfigure=True):
       pk.SetServiceDefaults()
       if pk.ui.AskYesNo('Save current configuration to %s?' % pk.rcfile,
@@ -4717,7 +4735,10 @@ def Configure(pk):
       
 
 if __name__ == '__main__':
-  Main(PageKite, Configure, uiclass=BasicUi)
+  if sys.stdout.isatty():
+    Main(PageKite, Configure, uiclass=BasicUi)
+  else:
+    Main(PageKite, Configure)
 
 
 ##[ CA Certificates ]##########################################################
