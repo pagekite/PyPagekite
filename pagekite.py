@@ -249,7 +249,7 @@ SERVICE_DOMAINS = ('pagekite.me', )
 SERVICE_XMLRPC = 'pk:http://pagekite.net/xmlrpc/'
 SERVICE_TOS_URL = 'https://pagekite.net/support/terms/'
 
-SERVICE_XMLRPC = 'http://localhost:8000/xmlrpc/'
+SERVICE_XMLRPC = 'pk:http://pagekite.net/xmlrpc/'
 
 OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
