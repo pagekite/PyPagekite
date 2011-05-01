@@ -3160,6 +3160,8 @@ class BasicUi(NullUi):
       sys.stderr.write('\n')
 
   def Welcome(self, pre=None):
+    if self.in_wizard:
+      sys.stderr.write('[H[J%s' % self.in_wizard)
     if self.welcome:
       sys.stderr.write('%s\n' % self.welcome)
       self.welcome = None
@@ -3171,10 +3173,9 @@ class BasicUi(NullUi):
     #sys.stderr.write('[H[J')
     self.Welcome()
     banner = '>>> %s' %  title
-    self.in_wizard = title
+    banner = ('%s%s[CTRL+C = Cancel]\n') % (banner, ' ' * (62-len(banner)))
+    self.in_wizard = banner
     self.tries = 200
-    sys.stderr.write(('%s%s[CTRL+C = Cancel]\n'
-                      ) % (banner, ' ' * (62-len(banner))))
 
   def Retry(self):
     self.tries -= 1
@@ -4133,18 +4134,18 @@ class PageKite(object):
             Back()
 
         elif 'service_signup' in state:
-          ch = self.ui.AskMultipleChoice(['View Software License (AGPLv3).',
+          ch = self.ui.AskMultipleChoice(['Yes, I agree!',
+                                          'View Software License (AGPLv3).',
                                           'View PageKite.net Terms of Service.',
-                                          'Yes, looks good to me!',
-                                          'No, I do not accept.'],
+                                          'No, I do not accept these terms.'],
                                          'Your choice:',
                                          pre=['Do you accept the license and terms of service?'],
-                                         default=3, back=False)
+                                         default=1, back=False)
           if ch is False:
             Back()
-          elif ch == 1:
-            self.ui.Browse(LICENSE_URL)
           elif ch == 2:
+            self.ui.Browse(LICENSE_URL)
+          elif ch == 3:
             self.ui.Browse(SERVICE_TOS_URL)
           elif ch == 4:
             Goto('manual_abort')
@@ -4164,8 +4165,8 @@ class PageKite(object):
                   ' Activation makes them permanent.' % details['timeout'],
                 ])
                 # FIXME: Handle CNAMEs somehow?
-                self.ui.EndWizard()
                 time.sleep(2) # Give the service side a moment to replicate...
+                self.ui.EndWizard()
                 if autoconfigure:
                   self.backends.update(self.ArgToBackendSpecs(register,
                                                       secret=details['secret']))
@@ -4189,8 +4190,9 @@ class PageKite(object):
               Goto('abort')
 
         elif 'choose_kite_account' in state:
+          # FIXME: Make this a yes-no, just use the first account.
           choices = service_account_list[:]
-          choices.append('Do not use %s' % self.service_provider)
+          choices.append('Use another service provider')
           ch = self.ui.AskMultipleChoice(choices, 'Register with',
                                          pre=['Choose an account for this kite:'], 
                                          default=1)
