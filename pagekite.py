@@ -92,7 +92,7 @@
 #    be blocked.
 #
 #  * The HttpUiThread implements a basic HTTP (or HTTPS) server, for basic
-#    monitoring and interactive configuration.
+#    monitoring and static file serving.
 #
 # WARNING: The UI threading code assumes it is running in CPython, where the
 #          GIL makes snooping across the thread-boundary relatively safe, even
@@ -105,26 +105,28 @@ APPVER = '0.3.17+github'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
-MINIDOC = """\
+EXAMPLES = ("""\
+    To make public a webserver running on localhost:
+    $ pagekite.py NAME.pagekite.me                   # local port 80
+    $ pagekite.py NAME.pagekite.me:3000              # local port 3000
+    $ pagekite.py NAME.pagekite.me:builtin           # built-in HTTPD
+
+    To make public HTTP, HTTPS and SSH servers:
+    $ pagekite.py http,https,ssh:NAME.pagekite.me
+""")
+MINIDOC = ("""\
 >>> Welcome to pagekite.py v%s!
 
-    To make public a webserver running on localhost (port 80):
-    $ pagekite.py NAME.pagekite.me
-
-    To make public a webserver running on localhost (port 3000):
-    $ pagekite.py NAME.pagekite.me:3000
-
-    To make public HTTP, HTTPS and SSH servers (standard ports):
-    $ pagekite.py http,https,ssh:NAME.pagekite.me
-
-    To get more detailed instructions:
+%s
+    To sign up with PageKite.net or get advanced instructions:
+    $ pagekite.py --signup
     $ pagekite.py --help
 
     If you don't have an account with http://pagekite.net/, the program
     will offer to help you create one. Just choose whatever name you like
     and if it's available, it will be granted.
-""" % APPVER
-DOC = """\
+""") % (APPVER, EXAMPLES)
+DOC = ("""\
 pagekite.py is Copyright 2010, 2011, the Beanstalks Project ehf. 
      v%s                               http://pagekite.net/
 
@@ -134,8 +136,6 @@ both the front- and back-end. This following protocols are supported:
   HTTP      - HTTP 1.1 only, requires a valid HTTP Host: header
   HTTPS     - Recent versions of TLS only, requires the SNI extension.
   WEBSOCKET - Using the proposed Upgrade: WebSocket method.
-  XMPP      - ...unfinished... (FIXME)
-  SMTP      - ...unfinished... (FIXME)
 
 Other protocols may be proxied by using "raw" back-ends and HTTP CONNECT.
 
@@ -145,15 +145,23 @@ license, see: http://www.gnu.org/licenses/agpl-3.0.html
 
 Usage:
 
-  pagekite.py [options]
+  pagekite.py [options] [shortcuts]
 
 Common Options:
 
- --optfile=X    -o X    Read options from file X. Default is ~/.pagekite.rc.
- --savefile=X   -S X    Read/write options from file X.
+ --clean                Skip loading the default configuration file.
+ --signup               Interactively sign up for PageKite.net service.
+ --defaults             Set defaults for use with PageKite.net service.
+
+ --optfile=X    -o X    Read settings from file X. Default is ~/.pagekite.rc.
+ --savefile=X   -S X    Read/write settings from file X.
+ --settings             Dump the current settings to STDOUT, formatted as
+                        an options file would be.
+
  --httpd=X:P    -H X:P  Enable the HTTP user interface on hostname X, port P.
  --pemfile=X    -P X    Use X as a PEM key for the HTTPS UI.
  --httppass=X   -X X    Require password X to access the UI.
+
  --nozchunks            Disable zlib tunnel compression.
  --sslzlib              Enable zlib compression in OpenSSL.
  --buffers       N      Buffer at most N kB of back-end data before blocking.
@@ -161,14 +169,10 @@ Common Options:
  --daemonize    -Z      Run as a daemon.
  --runas        -U U:G  Set UID:GID after opening our listening sockets.
  --pidfile=P    -I P    Write PID to the named file.
- --clean                Skip loading the default configuration file.              
  --nocrashreport        Don't send anonymous crash reports to PageKite.net.
  --tls_default=N        Default name to use for SSL, if SNI and tracking fail.
  --tls_endpoint=N:F     Terminate SSL/TLS for name N, using key/cert from F.
- --defaults             Set defaults for use with PageKite.net service.
  --errorurl=U  -E U     URL to redirect to when back-ends are not found.
- --settings             Dump the current settings to STDOUT, formatted as
-                       an options file would be.
 
 Front-end Options:
 
@@ -183,62 +187,79 @@ Front-end Options:
  --domain=proto,proto2,pN:domain:secret
                   Accept tunneling requests for the named protocols and
                  specified domain, using the given secret.  A * may be
-               used as a wildcard for subdomains. (FIXME)
+                used as a wildcard for subdomains or protocols.
 
 Back-end Options:
 
- --all          -a      Terminate early if any tunnels fail to register.
+ --backend=proto:kitename:host:port:secret
+                  Configure a back-end service on host:port, using protocol
+                 proto and the given kite name as the public domain. As a
+                special case, if host is 'localhost' and the port is 'builtin',
+               the built-in HTTP server will be used.
+
+ --define_backend=...   Same as --backend, except not enabled by default.
+ --frontends=N:X:P      Choose N front-ends from X (a DNS domain name), port P.
+ --frontend=host:port   Connect to the named front-end server.
+ --fe_certname=N        Connect using SSL, accepting valid certs for domain N.
+ --ca_certs=PATH        Path to your trusted root SSL certificates file.
+
  --dyndns=X     -D X    Register changes with DynDNS provider X.  X can either
                        be simply the name of one of the 'built-in' providers,
                       or a URL format string for ad-hoc updating.
 
- --frontends=N:X:P      Choose N front-ends from X (a DNS domain name), port P.
- --frontend=host:port   Connect to the named front-end server.
+ --all          -a      Terminate early if any tunnels fail to register.
  --new          -N      Don't attempt to connect to the domain's old front-end.           
+ --noprobes             Reject all probes for back-end liveness.
  --socksify=S:P         Connect via SOCKS server S, port P (requires socks.py)
  --torify=S:P           Same as socksify, but more paranoid.
- --noprobes             Reject all probes for back-end liveness.
- --fe_certname=N        Connect using SSL, accepting valid certs for domain N.
- --ca_certs=PATH        Path to your trusted root SSL certificates file.
-
- --backend=proto:domain:host:port:secret
-                  Configure a back-end service on host:port, using
-                 protocol proto and the given domain. As a special
-                case, if host and port are left blank and the proto
-               is HTTP or HTTPS, the built-in server will be used.
 
 About the options file:
 
-The options file contains the same options as are available to the command
-line, with the restriction that there be exactly one "argument" per line.
+    The options file contains the same options as are available to the command
+    line, with the restriction that there be exactly one "argument" per line.
 
-The leading '--' may also be omitted for readability, and for the same reason
-it is recommended to use the long form of the options in the configuration
-file (also, as the short form may not always parse correctly).
+    The leading '--' may also be omitted for readability, and for the same
+    reason it is recommended to use the long form of the options in the
+    configuration file (also, the short form may not always parse correctly).
 
-Blank lines and lines beginning with # (comments) are stripped from the
-options file before it is parsed.  It is perfectly acceptable to have multiple
-options files, and options files can include other options files.
-
+    Blank lines and lines beginning with # (comments) are stripped from the
+    options file before it is parsed.  It is perfectly acceptable to have
+    multiple options files, and options files can include other options files.
 
 Examples:
 
-# Create a config-file with default options, and then edit it.
-pagekite.py --defaults --settings > ~/.pagekite.rc
-vim ~/.pagekite.rc 
+    Create a config-file with default options, and then edit it.
+    $ pagekite.py --defaults --settings > ~/.pagekite.rc
+    $ vim ~/.pagekite.rc
 
-# Run pagekite with the HTTP UI, for interactive configuration.
-pagekite.py --httpd=localhost:8888
-firefox http://localhost:8888/
+    Run the built-in HTTPD.
+    $ pagekite.py --defaults --httpd=localhost:9999
+    $ firefox http://localhost:9999/
 
-# Fly a PageKite on pagekite.net for somedomain.com, and register the new
-# front-ends with the No-IP Dynamic DNS provider.
-pagekite.py \\
-       --frontends=1:frontends.b5p.us:443 \\
-       --dyndns=user:pass@no-ip.com \\
-       --backend=http:somedomain.com:localhost:80:mygreatsecret
+    Fly a PageKite on pagekite.net for somedomain.com, and register the
+    new front-ends with the No-IP Dynamic DNS provider.
+    $ pagekite.py \\
+        --defaults \\
+        --dyndns=user:pass@no-ip.com \\
+        --backend=http:kitename.com:localhost:80:mygreatsecret
 
-""" % APPVER
+Shortcuts:
+
+    A shortcut is simply the name of a kite, optionally prefixed by a
+    protocol specification or followed by a local port number (the format
+    is the same as for --backend= specifications as described above, using
+    colons ':' as delimeters, except components may be omitted).
+
+    When shortcuts are used, all defined back-ends are disabled except for
+    those matching the list of shortcuts.
+
+    If no match is found and the program is run interactively, the user
+    will be prompted and given the option of signing up and/or creating a
+    new kite using the PageKite.net service.
+
+Shortcut examples:
+
+"""+EXAMPLES) % APPVER
 
 MAGIC_PREFIX = '/~:PageKite:~/'
 MAGIC_PATH = '%sv%s' % (MAGIC_PREFIX, PROTOVER)
@@ -252,7 +273,7 @@ SERVICE_TOS_URL = 'https://pagekite.net/support/terms/'
 SERVICE_XMLRPC = 'pk:http://pagekite.net/xmlrpc/'
 
 OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
-OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
+OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport', 'signup',
             'optfile=', 'savefile=', 'signup=', 'help', 'service_xmlrpc=',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'nullui',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
@@ -2233,17 +2254,18 @@ class Tunnel(ChunkParser):
 
         if data and parse:
           sname = self.server_info[self.S_NAME]
-          conns.config.ui.Notify(('%s protocols: %s') % (sname, ', '.join(self.server_info[self.S_PROTOS])))
-          conns.config.ui.Notify(('%s ports: %s') % (sname, ', '.join(self.server_info[self.S_PORTS])))
+          conns.config.ui.Notify('Connected to %s' % sname)
+          conns.config.ui.Notify(' - Protocols: %s' % ', '.join(self.server_info[self.S_PROTOS]))
+          conns.config.ui.Notify(' - Ports: %s' % ', '.join(self.server_info[self.S_PORTS]))
           if 'raw' in self.server_info[self.S_PROTOS]:
-            conns.config.ui.Notify(('%s raw ports: %s') % (sname, ', '.join(self.server_info[self.S_RAW_PORTS])))
+            conns.config.ui.Notify(' - Raw ports: %s' % ', '.join(self.server_info[self.S_RAW_PORTS]))
 
           for quota in parse.Header('X-PageKite-Quota'):
             self.quota = [int(quota), None, None]
             self.Log([('FE', sname), ('quota', quota)])
             qGB = 1024 * 1024
-            conns.config.ui.Notify(('%s reports %.2f GB of quota left.'
-                                    ) % (sname, float(quota) / qGB),
+            conns.config.ui.Notify((' - Quota: %.2f GB of quota left.'
+                                    ) % (float(quota) / qGB),
                                    prefix=(int(quota) < qGB) and '!' or ' ')
 
           for request in parse.Header('X-PageKite-Invalid'):
@@ -2253,8 +2275,8 @@ class Tunnel(ChunkParser):
                       ('err', 'Rejected'),
                       ('proto', proto),
                       ('domain', domain)])
-            conns.config.ui.Notify(('%s rejected: %s://%s'
-                                    ) % (sname, proto, domain), prefix='!')
+            conns.config.ui.Notify(('  Rejected: %s://%s'
+                                    ) % (proto, domain), prefix='!')
 
           for request in parse.Header('X-PageKite-Duplicate'):
             abort = True
@@ -2263,8 +2285,8 @@ class Tunnel(ChunkParser):
                       ('err', 'Duplicate'),
                       ('proto', proto),
                       ('domain', domain)])
-            conns.config.ui.Notify(('%s already has: %s://%s'
-                                    ) % (sname, proto, domain), prefix='!')
+            conns.config.ui.Notify(('  Rejected: %s://%s (duplicate)'
+                                    ) % (proto, domain), prefix='!')
 
           if not conns.config.disable_zchunks:
             for feature in parse.Header('X-PageKite-Features'):
@@ -2420,9 +2442,8 @@ class Tunnel(ChunkParser):
           self.quota[0] = int(parse.Header('Quota')[0])
         else:
           self.quota = [int(parse.Header('Quota')[0]), None, None]
-        self.conns.config.ui.Notify(('%s reports %.2f GB of quota left.'
-                                     ) % (self.server_info[self.S_NAME],
-                                          float(self.quota[0]) / (1024*1024)))
+        self.conns.config.ui.Notify(('Quota update: %.2f GB of quota left.'
+                                     ) % (float(self.quota[0]) / (1024*1024)))
       if parse.Header('PING'): return self.SendPong()
       if parse.Header('ZRST') and not self.ResetZChunks(): return False
       if parse.Header('SPD') and not self.Throttle(parse): return False
@@ -3768,7 +3789,10 @@ class PageKite(object):
       protos, fe_domain, be_port = parts
     elif len(parts) == 2:
       try:
-        fe_domain, be_port = parts[0], int(parts[1])
+        if parts[1] == 'builtin':
+          fe_domain, be_port = parts[0], parts[1]
+        else:
+          fe_domain, be_port = parts[0], int(parts[1])
       except:
         be_port = None
         protos, fe_domain = parts
@@ -3779,6 +3803,11 @@ class PageKite(object):
 
     # Allow http:// as a common typo instead of http:
     fe_domain = fe_domain.replace('/', '').lower()
+
+    # Allow easy referencing of built-in HTTPD
+    if be_port == 'builtin':
+      if not self.ui_sspec: self.ui_sspec = ('localhost', 9999)
+      be_host, be_port = self.ui_sspec
 
     # Specs define what we are searching for...
     specs = []
@@ -4743,11 +4772,9 @@ def Configure(pk):
 
   pk.Configure(sys.argv[1:])
 
-  if ('--clean' not in sys.argv and
-      sys.stdout.isatty() and
-      not pk.rcfiles_loaded):
+  if '--signup' in sys.argv:
     if pk.backends.keys() or pk.RegisterNewKite(autoconfigure=True):
-      pk.SetServiceDefaults()
+      if not pk.rcfiles_loaded: pk.SetServiceDefaults()
       if pk.ui.AskYesNo('Save current configuration to %s?' % pk.rcfile,
                         default=(len(pk.backends.keys()) > 0)):
         pk.SaveNewUserConfig()
