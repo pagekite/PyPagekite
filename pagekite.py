@@ -2528,7 +2528,7 @@ class Tunnel(ChunkParser):
 
         if data and parse:
           sname = self.server_info[self.S_NAME]
-          conns.config.ui.Notify('Connected to %s' % sname)
+          conns.config.ui.Notify('Connecting to %s ...' % sname)
           conns.config.ui.Notify(' - Protocols: %s' % ', '.join(self.server_info[self.S_PROTOS]))
           conns.config.ui.Notify(' - Ports: %s' % ', '.join(self.server_info[self.S_PORTS]))
           if 'raw' in self.server_info[self.S_PROTOS]:
