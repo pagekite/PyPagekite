@@ -110,6 +110,7 @@ EXAMPLES = ("""\
     $ pagekite.py NAME.pagekite.me                   # local port 80
     $ pagekite.py NAME.pagekite.me:3000              # local port 3000
     $ pagekite.py NAME.pagekite.me:built-in          # built-in HTTPD
+    $ pagekite.py NAME.pagekite.me:/path/to/webroot  # built-in HTTPD
 
     To make public HTTP and SSH servers:
     $ pagekite.py http:NAME.pagekite.me ssh:NAME.pagekite.me
@@ -253,9 +254,10 @@ Examples:
 Shortcuts:
 
     A shortcut is simply the name of a kite, optionally prefixed by a
-    protocol specification or followed by a local port number (the format
-    is the same as for --backend= specifications as described above, using
-    colons ':' as delimeters, except components may be omitted).
+    protocol specification, followed by a local port number, or followed
+    by a path to a folder for serving static files from. Protocols,
+    kite names and ports (or folders) are separated by the ':' character
+    (see examples below).
 
     When shortcuts are used, all defined back-ends are disabled except for
     those matching the list of shortcuts.
@@ -321,7 +323,7 @@ BE_STATUS_NO_TUNNEL = 1
 BE_STATUS_DISABLED = -1
 BE_STATUS_UNKNOWN = -2
 
-BE_NONE = (None, None, None, None, None, '', BE_STATUS_UNKNOWN)
+BE_NONE = ('', '', None, None, None, '', BE_STATUS_UNKNOWN)
 
 DYNDNS = {
   'pagekite.net': ('http://up.pagekite.net/'
@@ -1444,6 +1446,8 @@ class HttpUiThread(threading.Thread):
                         handler=handler,
                         ssl_pem_filename=ssl_pem_filename)
     self.httpd.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    self.ui_sspec = pkite.ui_sspec = (self.ui_sspec[0],
+                                      self.httpd.socket.getsockname()[1])
     self.serve = True
 
     global SELECTABLES
@@ -2493,6 +2497,7 @@ class Tunnel(ChunkParser):
     self.backends = backends
     self.require_all = require_all
     self.server_info[self.S_NAME] = server
+    abort = True
     try:
       begin = time.time()
       data, parse = self._Connect(server, conns)
@@ -2538,7 +2543,6 @@ class Tunnel(ChunkParser):
                                    prefix=(int(quota) < qGB) and '!' or ' ')
 
           for request in parse.Header('X-PageKite-Invalid'):
-            abort = True
             proto, domain, srand = request.split(':')
             self.Log([('FE', sname),
                       ('err', 'Rejected'),
@@ -3641,8 +3645,9 @@ class PageKite(object):
     self.setgid = None
     self.ui_request_handler = UiRequestHandler
     self.ui_http_server = UiHttpServer
-    self.ui_sspec = None
     self.ui_httpd = None
+    self.ui_sspec = None
+    self.ui_socket = None
     self.ui_password = None
     self.ui_pemfile = None
     self.ui_webroot = None
@@ -4101,14 +4106,17 @@ class PageKite(object):
     elif len(parts) == 3:
       protos, fe_domain, be_port = parts
     elif len(parts) == 2:
-      try:
-        if parts[1].startswith('built'):
-          fe_domain, be_port = parts[0], parts[1]
-        else:
-          fe_domain, be_port = parts[0], int(parts[1])
-      except:
-        be_port = None
-        protos, fe_domain = parts
+      if parts[1].startswith('built') or ('.' in parts[0] and
+                                          os.path.exists(parts[1])):
+        fe_domain, be_port = parts[0], parts[1]
+        protos = 'http'
+      else:
+        try:
+          fe_domain, be_port = parts[0], '%s' % int(parts[1])
+          protos = 'http'
+        except:
+          be_port = ''
+          protos, fe_domain = parts
     elif len(parts) == 1:
       fe_domain = parts[0]
     else:
@@ -4119,7 +4127,12 @@ class PageKite(object):
 
     # Allow easy referencing of built-in HTTPD
     if be_port.startswith('built'):
-      if not self.ui_sspec: self.ui_sspec = ('localhost', 9999)
+      self.BindUiSspec()
+      be_host, be_port = self.ui_sspec
+    elif os.path.exists(be_port):
+      self.BindUiSspec()
+      self.ui_webroot = be_port
+      protos = protos or 'http'
       be_host, be_port = self.ui_sspec
 
     # Specs define what we are searching for...
@@ -4132,7 +4145,10 @@ class PageKite(object):
           if '-' in proto:
             proto, port = proto.split('-')
           else:
-            port = ''
+            if len(parts) == 1:
+              port = '*'
+            else:
+              port = ''
           specs.append([proto, port, fe_domain, be_host, be_port, secret])
     else:
       specs = [[None, '', fe_domain, be_host, be_port, secret]]
@@ -4146,11 +4162,12 @@ class PageKite(object):
         be = self.backends[bid]
         if fdom and fdom != be[BE_DOMAIN]: continue
         if not sec and be[BE_SECRET]: sec = be[BE_SECRET]
-        if proto and proto != be[BE_PROTO]: continue
-        if bhost and bhost.lower() != be[BE_BHOST]: continue
-        if port and int(port) != be[BE_PORT]: continue
-        if bport and int(bport) != be[BE_BPORT]: continue
+        if proto and (proto != be[BE_PROTO]): continue
+        if bhost and (bhost.lower() != be[BE_BHOST]): continue
+        if bport and (int(bport) != be[BE_BHOST]): continue
+        if port and (port != '*') and (int(port) != be[BE_PORT]): continue
         backends[bid] = be[:]
+        backends[bid][BE_STATUS] = status
         matches += 1
 
       if matches == 0:
@@ -4168,7 +4185,19 @@ class PageKite(object):
 
     return backends
 
+  def BindUiSspec(self):
+    # Create the UI thread
+    if self.ui_httpd:
+      self.ui_httpd.httpd.socket.close()
+    self.ui_sspec = self.ui_sspec or ('localhost', 0)
+    self.ui_httpd = HttpUiThread(self, self.conns,
+                                 handler=self.ui_request_handler,
+                                 server=self.ui_http_server,
+                                 ssl_pem_filename = self.ui_pemfile)
+    return self.ui_sspec
+
   def Configure(self, argv):
+    self.conns = self.conns or Connections(self)
     opts, args = getopt.getopt(argv, OPT_FLAGS, OPT_ARGS)
 
     for opt, arg in opts:
@@ -4202,7 +4231,9 @@ class PageKite(object):
         if len(parts) > 1:
           self.ui_sspec = (host, int(parts[1]))
         else:
-          self.ui_sspec = (host, 80)
+          self.ui_sspec = (host, 0)
+        self.BindUiSspec()
+
       elif opt == '--webroot': self.ui_webroot = arg
 
       elif opt == '--tls_default': self.tls_default = arg
@@ -4928,7 +4959,7 @@ class PageKite(object):
     self.SelectLoop()
 
   def Start(self, howtoquit='CTRL+C = Quit'):
-    conns = self.conns = Connections(self)
+    conns = self.conns = self.conns or Connections(self)
     global Log
 
     # If we are going to spam stdout with ugly crap, then there is no point
@@ -4959,13 +4990,6 @@ class PageKite(object):
         for port in self.server_raw_ports:
           if port != VIRTUAL_PN and port > 0:
             Listener(self.server_host, port, conns, connclass=RawConn)
-
-      # Start the UI thread
-      if self.ui_sspec:
-        self.ui_httpd = HttpUiThread(self, conns,
-                                     handler=self.ui_request_handler,
-                                     server=self.ui_http_server,
-                                     ssl_pem_filename = self.ui_pemfile)
 
       # Create the Tunnel Manager
       self.tunnel_manager = TunnelManager(self, conns)
