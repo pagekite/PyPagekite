@@ -1,12 +1,11 @@
 Version history - highlights
 ============================
 
-v0.4.0  ??
-------
-   - Much improved interactive console user interface and shortcut feature.
-     To disable the interface, use --nullui.
+v0.3.18  2011.05.02
+-------
    - Fixed a file-descriptor leak on front-ends with no local back-ends.
    - Fixed a front-end crash caused by weird HTTP Host: headers.
+   - Fixed a crash in rate-limiting code.
 
 
 v0.3.17  2011.04.20
