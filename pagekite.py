@@ -101,7 +101,7 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.3.17+github'
+APPVER = '0.3.99+github'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -109,7 +109,7 @@ EXAMPLES = ("""\
     To make public a webserver running on localhost:
     $ pagekite.py NAME.pagekite.me                   # local port 80
     $ pagekite.py NAME.pagekite.me:3000              # local port 3000
-    $ pagekite.py NAME.pagekite.me:builtin           # built-in HTTPD
+    $ pagekite.py NAME.pagekite.me:built-in          # built-in HTTPD
 
     To make public HTTP and SSH servers:
     $ pagekite.py http:NAME.pagekite.me ssh:NAME.pagekite.me
@@ -196,8 +196,8 @@ Back-end Options:
  --backend=proto:kitename:host:port:secret
                   Configure a back-end service on host:port, using protocol
                  proto and the given kite name as the public domain. As a
-                special case, if host is 'localhost' and the port is 'builtin',
-               the built-in HTTP server will be used.
+                special case, if host is 'localhost' and the word 'built-in'
+              is used as a port number, pagekite.py's HTTP server will be used.
 
  --define_backend=...   Same as --backend, except not enabled by default.
  --frontends=N:X:P      Choose N front-ends from X (a DNS domain name), port P.
@@ -3783,7 +3783,7 @@ class PageKite(object):
     sys.exit(0)
 
   def ArgToBackendSpecs(self, arg, status=BE_STATUS_UNKNOWN, secret=None):
-    protos, fe_domain, be_host, be_port = None, None, None, None
+    protos, fe_domain, be_host, be_port = '', '', '', ''
 
     # Interpret the argument into a specification of what we want.
     parts = arg.split(':')
@@ -3795,7 +3795,7 @@ class PageKite(object):
       protos, fe_domain, be_port = parts
     elif len(parts) == 2:
       try:
-        if parts[1] == 'builtin':
+        if parts[1].startswith('built'):
           fe_domain, be_port = parts[0], parts[1]
         else:
           fe_domain, be_port = parts[0], int(parts[1])
@@ -3811,7 +3811,7 @@ class PageKite(object):
     fe_domain = fe_domain.replace('/', '').lower()
 
     # Allow easy referencing of built-in HTTPD
-    if be_port == 'builtin':
+    if be_port.startswith('built'):
       if not self.ui_sspec: self.ui_sspec = ('localhost', 9999)
       be_host, be_port = self.ui_sspec
 
