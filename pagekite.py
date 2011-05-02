@@ -111,8 +111,9 @@ EXAMPLES = ("""\
     $ pagekite.py NAME.pagekite.me:3000              # local port 3000
     $ pagekite.py NAME.pagekite.me:builtin           # built-in HTTPD
 
-    To make public HTTP, HTTPS and SSH servers:
-    $ pagekite.py http,https,ssh:NAME.pagekite.me
+    To make public HTTP and SSH servers:
+    $ pagekite.py http:NAME.pagekite.me ssh:NAME.pagekite.me
+    $ pagekite.py http,ssh:NAME.pagekite.me          # The same thing!
 """)
 MINIDOC = ("""\
 >>> Welcome to pagekite.py v%s!
@@ -122,9 +123,10 @@ MINIDOC = ("""\
     $ pagekite.py --signup
     $ pagekite.py --help
 
-    If you don't have an account with http://pagekite.net/, the program
-    will offer to help you create one. Just choose whatever name you like
-    and if it's available, it will be granted.
+    If you request a kite which does not exist in your configuration file,
+    the program will offer to help you sign up with http://pagekite.net/ and
+    create it. Just choose whatever name you like and if it's available, it
+    will be granted.
 """) % (APPVER, EXAMPLES)
 DOC = ("""\
 pagekite.py is Copyright 2010, 2011, the Beanstalks Project ehf. 
@@ -213,22 +215,26 @@ Back-end Options:
  --socksify=S:P         Connect via SOCKS server S, port P (requires socks.py)
  --torify=S:P           Same as socksify, but more paranoid.
 
-About the options file:
+About the configuration file:
 
-    The options file contains the same options as are available to the command
-    line, with the restriction that there be exactly one "argument" per line.
+    The configuration file contains the same options as are available to the
+    command line, with the restriction that there be exactly one "option"
+    per line.
 
     The leading '--' may also be omitted for readability, and for the same
     reason it is recommended to use the long form of the options in the
     configuration file (also, the short form may not always parse correctly).
 
-    Blank lines and lines beginning with # (comments) are stripped from the
-    options file before it is parsed.  It is perfectly acceptable to have
-    multiple options files, and options files can include other options files.
+    Blank lines and lines beginning with # (comments) are treated as comments
+    and are ignored.  It is perfectly acceptable to have multiple configuration
+    files, and configuration files can include other configuration files.
+
+    NOTE: When using -o or --optfile on the command line, it is almost always
+    advisable to use --clean as well, to suppress the default configuration.
 
 Examples:
 
-    Create a config-file with default options, and then edit it.
+    Create a configuration file with default options, and then edit it.
     $ pagekite.py --defaults --settings > ~/.pagekite.rc
     $ vim ~/.pagekite.rc
 
