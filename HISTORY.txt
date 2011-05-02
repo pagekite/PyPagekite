@@ -1,11 +1,10 @@
 Version history - highlights
 ============================
 
-v0.3.18  ??
--------
-   - Much improved console user interface. For backwards compatbility, it is
-     only enabled if you specify a logfile for the old verbose stuff, and
-     never enabled if you use --daemonize. To disable, use --nullui.
+v0.4.0  ??
+------
+   - Much improved interactive console user interface and shortcut feature.
+     To disable the interface, use --nullui.
    - Fixed a file-descriptor leak on front-ends with no local back-ends.
    - Fixed a front-end crash caused by weird HTTP Host: headers.
 
