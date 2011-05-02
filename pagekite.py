@@ -364,7 +364,7 @@ try:
   def SSL_Connect(ctx, sock,
                   server_side=False, accepted=False, connected=False,
                   verify_names=None):
-    LogDebug('TLS is provided by pyOpenSSL')
+    LogInfo('TLS is provided by pyOpenSSL')
     if verify_names:
       def vcb(conn, x509, errno, depth, rc):
         # FIXME: No ALT names, no wildcards ...
@@ -442,7 +442,7 @@ except ImportError:
     def SSL_Connect(ctx, sock,
                     server_side=False, accepted=False, connected=False,
                     verify_names=None):
-      LogDebug('TLS is provided by native Python ssl')
+      LogInfo('TLS is provided by native Python ssl')
       reqs = (verify_names and ssl.CERT_REQUIRED or ssl.CERT_NONE)
       fd = ssl.wrap_socket(sock, keyfile=ctx.privatekey_file, 
                                  certfile=ctx.certchain_file,
@@ -580,7 +580,7 @@ def globalSecret():
         gSecret = newSecret
         LogDebug('Seeded signatures using os.urandom(), hooray!')
       except:
-        LogDebug('WARNING: Seeding signatures with time.time() and random.randint()')
+        LogInfo('WARNING: Seeding signatures with time.time() and random.randint()')
 
   return gSecret
 
@@ -806,6 +806,11 @@ def LogDebug(msg, parms=None):
   if parms: emsg.extend(parms)
   Log(emsg)
 
+def LogInfo(msg, parms=None):
+  emsg = [('info', msg)]
+  if parms: emsg.extend(parms)
+  Log(emsg)
+
 
 # FIXME: This could easily be a pool of threads to let us handle more
 #        than one incoming request at a time.
@@ -842,7 +847,13 @@ class AuthThread(threading.Thread):
         quotas = []
         results = []
         session = '%x:%s:' % (now, globalSecret())
-        for (proto, domain, srand, token, sign, prefix) in requests:
+        for request in requests:
+          try:
+            proto, domain, srand, token, sign, prefix = request
+          except:
+            LogError('Invalid request: %s' % (request, ))
+            continue
+
           what = '%s:%s:%s' % (proto, domain, srand)
           session += what
           if not token or not sign:
@@ -1167,7 +1178,7 @@ class HttpUiThread(threading.Thread):
       except KeyboardInterrupt:
         self.serve = False
       except Exception, e:
-        LogDebug('HTTP UI caught exception: %s' % e)
+        LogInfo('HTTP UI caught exception: %s' % e)
     LogDebug('HttpUiThread: done')
     self.httpd.socket.close()
 
@@ -1205,7 +1216,7 @@ class HttpParser(object):
     self.version, self.code, self.message = line.split()
 
     if not self.version.upper() in HTTP_VERSIONS:
-      LogError('Invalid version: %s' % self.version)
+      LogDebug('Invalid version: %s' % self.version)
       return False
 
     self.state = self.IN_HEADERS
@@ -1215,11 +1226,11 @@ class HttpParser(object):
     self.method, self.path, self.version = line.split()
 
     if not self.method in HTTP_METHODS:
-      LogError('Invalid method: %s' % self.method)
+      LogDebug('Invalid method: %s' % self.method)
       return False
 
     if not self.version.upper() in HTTP_VERSIONS:
-      LogError('Invalid version: %s' % self.version)
+      LogDebug('Invalid version: %s' % self.version)
       return False
 
     self.state = self.IN_HEADERS
@@ -1256,7 +1267,7 @@ class HttpParser(object):
         return self.ParseBody(line)
 
     except ValueError, err:
-      LogError('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
+      LogInfo('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
 
     self.state = self.PARSE_FAILED
     return False
@@ -1416,6 +1427,11 @@ class Selectable(object):
     if self.log_id: values.append(('id', self.log_id))
     LogDebug(message, values)
 
+  def LogInfo(self, message, params=None):
+    values = params or []
+    if self.log_id: values.append(('id', self.log_id))
+    LogInfo(message, values)
+
   def LogTraffic(self, final=False):
     if self.wrote_bytes or self.read_bytes:
       now = time.time()
@@ -1482,7 +1498,7 @@ class Selectable(object):
       try:
         discard += self.fd.recv(eat_bytes - len(discard))
       except socket.error, (errno, msg):
-        self.LogDebug('Error reading (%d/%d) socket: %s (errno=%s)' % (
+        self.LogInfo('Error reading (%d/%d) socket: %s (errno=%s)' % (
                        eat_bytes, self.peeked, msg, errno))
         time.sleep(0.1)
 
@@ -1492,7 +1508,6 @@ class Selectable(object):
 
   def ReadData(self, maxread=None):
     if self.read_eof:
-#     self.LogDebug("Read attempted after EOF!")
       return False
 
     try:
@@ -1517,7 +1532,7 @@ class Selectable(object):
       if errno in self.HARMLESS_ERRNOS:
         return True
       else:
-        self.LogError('Error sending: %s (errno=%s)' % (msg, errno))
+        self.LogInfo('Error reading socket: %s (errno=%s)' % (msg, errno))
         return False
 
     if data is None or data == '':
@@ -1541,7 +1556,7 @@ class Selectable(object):
       flooded = '?'
 
     self.throttle_until += delay
-    self.LogDebug('Throttled until %x (flooded=%s, bps=%s, remote=%s)' % (
+    self.LogInfo('Throttled until %x (flooded=%s, bps=%s, remote=%s)' % (
                     int(self.throttle_until), flooded, max_speed, remote))
     return True
 
@@ -1567,24 +1582,22 @@ class Selectable(object):
         self.write_retry = None
       except IOError, err:
         if err.errno not in self.HARMLESS_ERRNOS:
-          self.LogError('Error sending: %s' % err)
+          self.LogInfo('Error sending: %s' % err)
           self.ProcessEofWrite()
           return False
         else:
-#         self.LogDebug('Problem sending: %s' % err)
           self.write_retry = len(sending)
       except (SSL.WantWriteError, SSL.WantReadError), err:
         self.write_retry = len(sending)
       except socket.error, (errno, msg):
         if errno not in self.HARMLESS_ERRNOS:
-          self.LogError('Error sending: %s (errno=%s)' % (msg, errno))
+          self.LogInfo('Error sending: %s (errno=%s)' % (msg, errno))
           self.ProcessEofWrite()
           return False
         else:
-#         self.LogDebug('Problem sending: %s (errno=%s)' % (msg, errno))
           self.write_retry = len(sending)
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
-        self.LogDebug('Error sending (SSL): %s' % err)
+        self.LogInfo('Error sending (SSL): %s' % err)
         self.ProcessEofWrite()
         return False
 
@@ -1614,7 +1627,7 @@ class Selectable(object):
           zhistory[1] = len(zdata)
         return self.Send(['%xZ%x%s\r\n%s' % (len(sdata), len(zdata), rst, zdata)])
       except zlib.error:
-        LogDebug('Error compressing, resetting ZChunks.')
+        LogError('Error compressing, resetting ZChunks.')
         self.ResetZChunks()
 
     return self.Send(['%x%s\r\n%s' % (len(sdata), rst, sdata)])
@@ -1928,7 +1941,6 @@ class ChunkParser(Selectable):
         return False
 
       if self.want_bytes == 0:
-        LogDebug('ChunkParser::ProcessData: end of chunk')
         return False
 
     process = data[:self.want_bytes]
@@ -2008,7 +2020,7 @@ class Tunnel(ChunkParser):
         for replace in conn.parser.Header(prefix+'-Replace'):
           if replace in self.conns.conns_by_id:
             repl = self.conns.conns_by_id[replace]
-            self.LogDebug('Disconnecting old tunnel: %s' % repl)
+            self.LogInfo('Disconnecting old tunnel: %s' % repl)
             self.conns.Remove(repl)
             repl.Cleanup()
 
@@ -2018,12 +2030,12 @@ class Tunnel(ChunkParser):
           requests.append((proto.lower(), domain.lower(), srand, token, sign,
                            prefix))
       
-    except ValueError, err:
+    except Exception, err:
       self.LogError('Discarding connection: %s' % err)
       return None
 
     except socket.error, err:
-      self.LogError('Discarding connection: %s' % err)
+      self.LogInfo('Discarding connection: %s' % err)
       return None
 
     self.CountAs('backends_live')
@@ -2053,8 +2065,9 @@ class Tunnel(ChunkParser):
 
     self.LogDebug('Ran out of quota? %s' % (results, ))
     return self
+    # FIXME: We should let this run...
 
-    self.LogError('Ran out of quota or account deleted, closing tunnel.')
+    self.LogInfo('Ran out of quota or account deleted, closing tunnel.')
     conns.Remove(self)
     self.Cleanup()
     return None
@@ -2084,7 +2097,7 @@ class Tunnel(ChunkParser):
 
     output.append(HTTP_StartBody())
     if not self.Send(output):
-      conn.LogError('No tunnels configured, closing connection.')
+      conn.LogDebug('No tunnels configured, closing connection.')
       self.Cleanup()
       return None
 
@@ -2100,7 +2113,7 @@ class Tunnel(ChunkParser):
       self.conns.Add(self, alt_id=self.alt_id) 
       return self
     else:
-      conn.LogError('No tunnels configured, closing connection.')
+      conn.LogDebug('No tunnels configured, closing connection.')
       self.Cleanup()
       return None
 
@@ -2274,7 +2287,12 @@ class Tunnel(ChunkParser):
 
         self.rtt = (time.time() - begin)
     
+
     except socket.error, e:
+      return None
+
+    except Exception, e:
+      self.LogError('Server response parsing failed: %s' % e)
       return None
 
     if abort: return None
@@ -2564,7 +2582,7 @@ class UserConn(Selectable):
     self.conns = conns
     self.SetConn(conn)
 
-    if ':' in host: host, port = host.split(':')
+    if ':' in host: host, port = host.split(':', 1)
     self.proto = proto
     self.host = host
 
@@ -2605,7 +2623,8 @@ class UserConn(Selectable):
       # FIXME: Use the tracked data to detect & mitigate abuse?
       return self
     else:
-      self.Log([('err', 'No back-end'), ('on_port', on_port), ('proto', self.proto), ('domain', self.host), ('is', 'FE')])
+      self.LogDebug('No back-end', [('on_port', on_port), ('proto', self.proto),
+                                    ('domain', self.host), ('is', 'FE')])
       return None
 
   def _BackEnd(proto, host, sid, tunnel, on_port, remote_ip=None, remote_port=None):
@@ -2659,7 +2678,7 @@ class UserConn(Selectable):
       self.fd.setblocking(0)
 
     except socket.error, err:
-      logInfo.append(('err', '%s' % err))
+      logInfo.append(('socket_error', '%s' % err))
       self.ui.Notify(('%s <=> %s://%s:%s (FAIL: %s:%s is down)'
                       ) % (remote_ip or 'unknown', proto, host, on_port,
                            sspec[0], sspec[1]), prefix='!')
@@ -2690,7 +2709,6 @@ class UserConn(Selectable):
         else:
           self.fd.shutdown(direction)
     except Exception, e:
-#     self.LogDebug('Shutdown (%s/%s) error: %s' % (direction, self.fd, e))
       pass
 
   def ProcessTunnelEof(self, read_eof=False, write_eof=False):
@@ -3648,7 +3666,6 @@ class PageKite(object):
 
   def LookupDomainQuota(self, lookup):
     if not lookup.endswith('.'): lookup += '.'
-    #LogDebug('Lookup: %s' % lookup)
     ip = socket.gethostbyname(lookup)
 
     # If not an authentication error, quota should be encoded as an IP.
@@ -3665,8 +3682,8 @@ class PageKite(object):
   def GetDomainQuota(self, protoport, domain, srand, token, sign,
                      recurse=True, check_token=True):
     if '-' in protoport:
-      proto, port = protoport.split('-')
       try:
+        proto, port = protoport.split('-', 1)
         if proto == 'raw':
           port_list = self.server_raw_ports
         else:
@@ -3675,24 +3692,24 @@ class PageKite(object):
         porti = int(port)
         if porti in self.server_aliasport: porti = self.server_aliasport[porti]
         if porti not in port_list and VIRTUAL_PN not in port_list:
-          LogError('Unsupported port request: %s (%s:%s)' % (porti, protoport, domain))
+          LogInfo('Unsupported port request: %s (%s:%s)' % (porti, protoport, domain))
           return None
 
       except ValueError:
-        LogError('Invalid port request: %s (%s:%s)' % (port, protoport, domain))
+        LogError('Invalid port request: %s:%s' % (protoport, domain))
         return None
     else:
       proto, port = protoport, None
 
     if proto not in self.server_protos:
-      LogError('Invalid proto request: %s (%s:%s)' % (proto, protoport, domain))
+      LogInfo('Invalid proto request: %s:%s' % (protoport, domain))
       return None
 
     data = '%s:%s:%s' % (protoport, domain, srand)
     if (not token) or (not check_token) or checkSignature(sign=token, payload=data):
       if self.auth_domain:
-        lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
         try:
+          lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
           rv = self.LookupDomainQuota(lookup)
           if rv is None or rv >= 0: return rv
         except Exception, e:
@@ -3710,7 +3727,7 @@ class PageKite(object):
           LogError('Invalid signature for: %s (%s)' % (domain, protoport))
           return None
 
-    LogError('No authentication found for: %s (%s)' % (domain, protoport))
+    LogInfo('No authentication found for: %s (%s)' % (domain, protoport))
     return None
 
   def ConfigureFromFile(self, filename=None):
@@ -4382,7 +4399,7 @@ class PageKite(object):
             connections += 1
           else:
             failures += 1
-            Log([('err', 'Failed to connect'), ('FE', server)])
+            LogInfo('Failed to connect', [('FE', server)])
             self.ui.Notify('Failed to connect to %s' % server, prefix='!')
 
     if self.dyndns:
@@ -4433,10 +4450,10 @@ class PageKite(object):
             if result.startswith('good') or result.startswith('nochg'):
               Log([('dyndns', result), ('data', update)])
             else:
-              LogError('DynDNS update failed: %s' % result, [('data', update)])
+              LogInfo('DynDNS update failed: %s' % result, [('data', update)])
               failures += 1
           except Exception, e:
-            LogError('DynDNS update failed: %s' % e, [('data', update)])
+            LogInfo('DynDNS update failed: %s' % e, [('data', update)])
             failures += 1
       if not self.last_updates:
         self.last_updates = last_updates
@@ -4470,10 +4487,13 @@ class PageKite(object):
 
     if filename != 'stdio':
       global LogFile
-      LogFile = fd = open(filename, "a", 0)
-      os.dup2(fd.fileno(), sys.stdin.fileno())
-      os.dup2(fd.fileno(), sys.stdout.fileno())
-      if not self.ui.WANTS_STDERR: os.dup2(fd.fileno(), sys.stderr.fileno())
+      try:
+        LogFile = fd = open(filename, "a", 0)
+        os.dup2(fd.fileno(), sys.stdin.fileno())
+        os.dup2(fd.fileno(), sys.stdout.fileno())
+        if not self.ui.WANTS_STDERR: os.dup2(fd.fileno(), sys.stderr.fileno())
+      except Exception, e:
+        raise ConfigError('%s' % e)
 
   def Daemonize(self):
     # Fork once...
@@ -4678,7 +4698,7 @@ def Main(pagekite, configure, uiclass=NullUi, progname=None, appver=APPVER):
 
         pk.Start()
 
-      except (ValueError, ConfigError, getopt.GetoptError), msg:
+      except (ConfigError, getopt.GetoptError), msg:
         pk.FallDown(msg)
 
       except KeyboardInterrupt, msg:
