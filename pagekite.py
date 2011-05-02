@@ -388,7 +388,7 @@ if not 'SHUT_RD' in dir(socket):
 SEND_MAX_BYTES = 16 * 1024
 SEND_ALWAYS_BUFFERS = False
 HAVE_SSL = False
-try: 
+try:
   if '--nopyopenssl' in sys.argv:
     raise ImportError('pyOpenSSL disabled')
 
@@ -1038,16 +1038,16 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       self.sendChunk(message)
 
   def checkUsernamePasswordAuth(self, username, password):
-    if self.server.pkite.ui_password: 
-      if password != self.server.pkite.ui_password: 
+    if self.server.pkite.ui_password:
+      if password != self.server.pkite.ui_password:
         raise AuthError("Invalid password")
 
   def checkRequestAuth(self, scheme, netloc, path, qs):
-    if self.server.pkite.ui_password: 
+    if self.server.pkite.ui_password:
       raise AuthError("checkRequestAuth not implemented")
 
   def checkPostAuth(self, scheme, netloc, path, qs, posted):
-    if self.server.pkite.ui_password: 
+    if self.server.pkite.ui_password:
       raise AuthError("checkRequestAuth not implemented")
 
   def performAuthChecks(self, scheme, netloc, path, qs):
@@ -2020,7 +2020,7 @@ class Connections(object):
 
   def Tunnel(self, proto, domain, conn=None):
     tid = '%s:%s' % (proto, domain)
-    if conn is not None: 
+    if conn is not None:
       if tid not in self.tunnels:
         self.tunnels[tid] = []
       self.tunnels[tid].append(conn)
@@ -2517,7 +2517,7 @@ class Tunnel(ChunkParser):
           tokens['%s:%s' % (proto, domain)] = token
           tryagain = True
  
-        if tryagain: 
+        if tryagain:
           begin = time.time()
           data, parse = self._Connect(server, conns, tokens)
 
@@ -4067,7 +4067,7 @@ class PageKite(object):
   def ConfigureFromFile(self, filename=None):
     if not filename: filename = self.rcfile
 
-    if self.rcfile_recursion > 25: 
+    if self.rcfile_recursion > 25:
       raise ConfigError('Nested too deep: %s' % filename)
 
     self.rcfiles_loaded.append(filename)
@@ -4199,7 +4199,7 @@ class PageKite(object):
       elif opt in ('-H', '--httpd'):
         parts = arg.split(':')
         host = parts[0] or 'localhost'
-        if len(parts) > 1: 
+        if len(parts) > 1:
           self.ui_sspec = (host, int(parts[1]))
         else:
           self.ui_sspec = (host, 80)
@@ -4247,7 +4247,7 @@ class PageKite(object):
 
       elif opt in ('-a', '--all'): self.require_all = True
       elif opt in ('-N', '--new'): self.servers_new_only = True
-      elif opt in ('--socksify', '--torify'): 
+      elif opt in ('--socksify', '--torify'):
         try:
           import socks
           (host, port) = arg.split(':')
@@ -4288,7 +4288,7 @@ class PageKite(object):
       elif opt == '--domain':
         protos, domain, secret = arg.split(':')
         if protos in ('*', ''): protos = ','.join(self.server_protos)
-        for proto in protos.split(','): 
+        for proto in protos.split(','):
           bid = '%s:%s' % (proto, domain)
           if bid in self.backends:
             raise ConfigError("Same backend/domain defined twice: %s" % bid)
@@ -4703,7 +4703,7 @@ class PageKite(object):
 
       # First, check for old addresses and always connect to those.
       if not self.servers_new_only:
-        for bid in self.backends: 
+        for bid in self.backends:
           if self.backends[bid][BE_STATUS] != BE_STATUS_DISABLED:
             (proto, bdom) = bid.split(':')
             try:
