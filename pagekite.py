@@ -2270,7 +2270,7 @@ class Tunnel(ChunkParser):
             self.quota = [int(quota), None, None]
             self.Log([('FE', sname), ('quota', quota)])
             qGB = 1024 * 1024
-            conns.config.ui.Notify((' - Quota: %.2f GB of quota left.'
+            conns.config.ui.Notify(('You have %.2f GB of quota left.'
                                     ) % (float(quota) / qGB),
                                    prefix=(int(quota) < qGB) and '!' or ' ')
 
@@ -2448,7 +2448,7 @@ class Tunnel(ChunkParser):
           self.quota[0] = int(parse.Header('Quota')[0])
         else:
           self.quota = [int(parse.Header('Quota')[0]), None, None]
-        self.conns.config.ui.Notify(('Quota update: %.2f GB of quota left.'
+        self.conns.config.ui.Notify(('You have %.2f GB of quota left.'
                                      ) % (float(self.quota[0]) / (1024*1024)))
       if parse.Header('PING'): return self.SendPong()
       if parse.Header('ZRST') and not self.ResetZChunks(): return False
@@ -3428,7 +3428,7 @@ class PageKite(object):
       self.ca_certs_default = sys.argv[0]
     self.ca_certs = self.ca_certs_default
 
-  def SetServiceDefaults(self, check=False):
+  def SetServiceDefaults(self, clobber=True, check=False):
     def_dyndns    = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
     def_frontends = (1, 'frontends.b5p.us', 443)
     def_ca_certs  = sys.argv[0]
@@ -3441,11 +3441,11 @@ class PageKite(object):
               self.ca_certs == def_ca_certs and
               (self.fe_certname == def_fe_certs or not HAVE_SSL))
     else:
-      self.dyndns = def_dyndns
-      self.servers_auto = def_frontends
-      self.error_url = def_error_url
+      self.dyndns = (not clobber and self.dyndns) or def_dyndns
+      self.servers_auto = (not clobber and self.servers_auto) or def_frontends
+      self.error_url = (not clobber and self.error_url) or def_error_url
       self.ca_certs = def_ca_certs
-      if HAVE_SSL: self.fe_certname = def_fe_certs
+      if HAVE_SSL: self.fe_certname.extend(def_fe_certs)
       return True
 
   def GenerateConfig(self):
@@ -4106,6 +4106,7 @@ class PageKite(object):
           ch = self.ui.AskYesNo('Use the %s service?' % self.service_provider,
                                 default=True, back=-1)
           if ch is True:
+            self.SetServiceDefaults(clobber=False)
             if not kitename:
               Goto('service_signup_email')
             elif is_cname_for and is_cname_ready:
@@ -4780,7 +4781,6 @@ def Configure(pk):
 
   if '--signup' in sys.argv:
     if pk.backends.keys() or pk.RegisterNewKite(autoconfigure=True):
-      if not pk.rcfiles_loaded: pk.SetServiceDefaults()
       if pk.ui.AskYesNo('Save current configuration to %s?' % pk.rcfile,
                         default=(len(pk.backends.keys()) > 0)):
         pk.SaveNewUserConfig()
