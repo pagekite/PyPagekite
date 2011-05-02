@@ -3752,7 +3752,6 @@ class PageKite(object):
                          or '# httppass=YOURSECRET'),
       (self.ui_pemfile and 'pemfile=%s' % self.ui_pemfile
                         or '# pemfile=/path/to/sslcert.pem'),
-      '# webroot=/path/to/webroot/omitted/for/security/reasons/',
       (self.ui_webroot and safe and 'webroot=%s' % self.ui_webroot
                                  or '# webroot=/path/to/webroot/'),
       '',
@@ -4336,6 +4335,7 @@ class PageKite(object):
       elif opt == '--buffers': self.buffer_max = int(arg)
       elif opt == '--nocrashreport': self.crash_report_url = None
       elif opt == '--clean': pass
+      elif opt == '--signup': pass
       elif opt == '--nopyopenssl': pass
       elif opt == '--noloop': self.main_loop = False
       elif opt == '--defaults': self.SetServiceDefaults()
