@@ -2814,7 +2814,6 @@ class LoopbackTunnel(Tunnel):
     self.require_all = True
     self.server_info[self.S_NAME] = LOOPBACK[which]
     self.other_end = None
-    self.backend_count = 0
     if which == 'FE':
       for d in backends.keys():
         if backends[d][BE_BHOST]:
@@ -2823,7 +2822,6 @@ class LoopbackTunnel(Tunnel):
           self.Log([('FE', self.server_info[self.S_NAME]),
                     ('proto', proto),
                     ('domain', domain)])
-          self.backend_count += 1
 
   def Cleanup(self):
     other = self.other_end
@@ -2832,15 +2830,8 @@ class LoopbackTunnel(Tunnel):
     Tunnel.Cleanup(self)
 
   def Linkup(self, other):
-    if self.backend_count > 0:
-      self.other_end = other
-      other.other_end = self
-      return True
-    else:
-      LogDebug('Loopback not needed, going away.')
-      other.Cleanup()
-      self.Cleanup()
-      return False
+    self.other_end = other
+    other.other_end = self
 
   def _Loop(conns, backends):
     return LoopbackTunnel(conns, 'FE', backends
@@ -4712,9 +4703,12 @@ class PageKite(object):
 
     # Enable internal loopback
     if self.isfrontend:
+      need_loopback = False
       for be in self.backends.values():
         if be[BE_BHOST]:
-          self.servers.append(LOOPBACK_FE)
+          need_loopback = True
+      if need_loopback:
+        self.servers.append(LOOPBACK_FE)
 
     # Convert the hostnames into IP addresses...
     for server in self.servers_manual:
