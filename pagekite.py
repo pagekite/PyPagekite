@@ -3481,7 +3481,7 @@ class PageKite(object):
     # Enable internal loopback
     if self.isfrontend:
       for be in self.backends.values():
-        if be[BE_BHOST]:
+        if be[BE_BACKEND]:
           self.servers.append(LOOPBACK_FE)
 
     # Convert the hostnames into IP addresses...
