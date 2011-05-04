@@ -3,10 +3,10 @@ Version history - highlights
 
 v0.4.0  ??
 ------
+   - Branched major revision 0.4.x from stable 0.3.x.
    - Much improved interactive console user interface and shortcut feature.
      To disable the interface, use --nullui.
-   - Fixed a file-descriptor leak on front-ends with no local back-ends.
-   - Fixed a front-end crash caused by weird HTTP Host: headers.
+   - Added built-in static HTTP daemon.
 
 
 v0.3.17  2011.04.20
