@@ -3384,7 +3384,7 @@ class NullUi(object):
 
   def __init__(self, welcome=None):
     self.in_wizard = False
-    self.wizard_error = None
+    self.wizard_tell = None
     self.notify_history = {}
     self.status_tag = ''
     self.status_msg = ''
@@ -3401,7 +3401,7 @@ class NullUi(object):
 
   def Browse(self, url):
     import webbrowser
-    self.Tell(['Opening %s in your browser...' % url])
+    self.Tell(['Opening %s in your browser...' % url], error=True)
     webbrowser.open(url)
 
   def DefaultOrFail(self, question, default):
@@ -3513,10 +3513,10 @@ class BasicUi(NullUi):
     if self.welcome:
       sys.stderr.write('%s\n' % self.welcome)
       self.welcome = None
-    if self.in_wizard and self.wizard_error:
+    if self.in_wizard and self.wizard_tell:
       sys.stderr.write('\n')
-      for line in self.wizard_error: sys.stderr.write('!!! %s\n' % line)
-      self.wizard_error = None
+      for line in self.wizard_tell: sys.stderr.write('*** %s\n' % line)
+      self.wizard_tell = None
     if pre:
       sys.stderr.write('\n')
       for line in pre: sys.stderr.write('    %s\n' % line)
@@ -3535,7 +3535,7 @@ class BasicUi(NullUi):
     return self.tries
 
   def EndWizard(self):
-    if self.wizard_error: self.Welcome()
+    if self.wizard_tell: self.Welcome()
     self.in_wizard = None
     sys.stderr.write('\n')
     if os.getenv('USERPROFILE'):
@@ -3635,8 +3635,8 @@ class BasicUi(NullUi):
     raise Exception('Too many tries')
 
   def Tell(self, lines, error=False, back=None):
-    if self.in_wizard and error:
-      self.wizard_error = lines
+    if self.in_wizard:
+      self.wizard_tell = lines
     else:
       self.Welcome()
       for line in lines: sys.stderr.write('    %s\n' % line)
@@ -4661,7 +4661,7 @@ class PageKite(object):
                                  subject=subject)
             Goto('abort')
           else:
-            self.ui.Tell(['Success!  Time to fly some kites...', ''])
+            self.ui.Tell(['Success!  Time to fly some kites...'])
             self.ui.EndWizard()
             time.sleep(2) # Give the service side a moment to replicate...
             if autoconfigure: self.backends.update(cfgs)
