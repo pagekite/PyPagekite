@@ -4269,7 +4269,6 @@ class PageKite(object):
           self.ui_sspec = (host, int(parts[1]))
         else:
           self.ui_sspec = (host, 0)
-        self.BindUiSspec()
 
       elif opt == '--webroot': self.ui_webroot = arg
 
@@ -4697,6 +4696,7 @@ class PageKite(object):
     self.ui.EndWizard()
 
   def CheckConfig(self):
+    if self.ui_sspec: self.BindUiSspec()
     if not self.servers_manual and not self.servers_auto and not self.isfrontend:
       if not self.servers:
         raise ConfigError('Nothing to do!  List some servers, or run me as one.')
