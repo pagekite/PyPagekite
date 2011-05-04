@@ -4900,13 +4900,6 @@ class PageKite(object):
     else:
       Log = LogToFile
 
-    # Try to open the file before we close everything, so errors don't get
-    # squelched.
-    try:
-      open(filename, "a").close()
-    except IOError, e:
-      raise ConfigError('%s' % e)
-
     if filename != 'stdio':
       global LogFile
       try:
