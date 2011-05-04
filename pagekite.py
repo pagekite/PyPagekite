@@ -3606,6 +3606,26 @@ class BasicUi(NullUi):
     if error: sys.stderr.write('\n')
     return True
 
+  def ExplainError(self, error, title, subject=None):
+    if error == 'pleaselogin':
+      self.Tell([title, 'You already have an account, please log in.'
+                 ], error=True)
+    elif error == 'email':
+      self.Tell([title, 'Invalid e-mail address. Please try again?'
+                 ], error=True)
+    elif error == 'honey':
+      self.Tell([title, 'Hmm. Somehow, you triggered the spam-filter.'
+                 ], error=True)
+    elif error in ('domaintaken', 'domain', 'subdomain'):
+      self.Tell([title, 'Sorry, that domain (%s) is unavailable.' % subject
+                 ], error=True)
+    elif error == 'checkfailed':
+      self.Tell([title, 'That domain (%s) is not correctly set up.' % subject
+                 ], error=True)
+    else:
+      self.Tell([title, 'Error code: %s' % error, 'Try again later?'
+                 ], error=True)
+
 
 class PageKite(object):
   """Configuration and master select loop."""
@@ -4565,20 +4585,13 @@ class PageKite(object):
                 return (register, details['secret'])
               else:
                 error = details.get('error', 'unknown')
-                if error == 'domaintaken':
-                  self.ui.Tell([('Sorry, that domain (%s) is already taken.'
-                                 ) % register], error=True)
-                  Goto('abort')
-                elif error == 'pleaselogin':
-                  self.ui.Tell(['You already have an account, please log in.'])
+                self.ui.ExplainError(error, 'Signup failed!', subject=register)
+                if error in ('pleaselogin', 'email'):
                   Goto('service_login_email', back_skips_current=True)
                 else:
-                  self.ui.Tell(['Signup failed! (%s)' % error,
-                                'Please try again later?'], error=True)
                   Goto('abort')
             except Exception, e:
-              self.ui.Tell(['Signup failed! (%s)' % e,
-                            'Please try again later?'], error=True)
+              self.ui.ExplainError('%s' % e, 'Signup failed!', subject=register)
               Goto('abort')
 
         elif 'choose_kite_account' in state:
@@ -4596,23 +4609,27 @@ class PageKite(object):
 
         elif 'create_kite' in state:
           secret = service_accounts[account]
+          subject = None
           cfgs = {}
           result = {}
           try:
             if is_cname_for and is_cname_ready:
+              subject = kitename
               result = service.addCnameKite(account, secret, kitename)
               cfgs.update(self.ArgToBackendSpecs(kitename, secret=secret))
             else:
+              subject = register
               result = service.addKite(account, secret, register)
               cfgs.update(self.ArgToBackendSpecs(register, secret=secret))
               if is_cname_for == register and 'error' not in result:
+                subject = kitename
                 result.update(service.addCnameKite(account, secret, kitename))
                 cfgs.update(self.ArgToBackendSpecs(kitename, secret=secret))
 
             if 'error' in result:
-              self.ui.Tell(['Oops, we had a problem: %s' % result['error'],
-                            'Perhaps if you chose a different kite name?'],
-                           error=True)
+              error = result.get('error', 'unknown')
+              self.ui.ExplainError(error, 'Kite creation failed!',
+                                   subject=subject)
               Goto('abort')
             else:
               self.ui.Tell(['Success!  Time to fly some kites...', ''])
@@ -4622,8 +4639,8 @@ class PageKite(object):
               return (register or kitename, secret)
 
           except Exception, e:
-            self.ui.Tell(['Oops! We had a problem: %s' % e,
-                          'Please try again later?'], error=True)
+            self.ui.ExplainError('%s' % e, 'Kite creation failed!',
+                                 subject=subject)
             Goto('abort')
 
         elif 'manual_abort' in state:
