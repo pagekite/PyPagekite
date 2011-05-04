@@ -3384,6 +3384,7 @@ class NullUi(object):
 
   def __init__(self, welcome=None):
     self.in_wizard = False
+    self.wizard_error = None
     self.notify_history = {}
     self.status_tag = ''
     self.status_msg = ''
@@ -3442,6 +3443,27 @@ class NullUi(object):
 
   def Status(self, tag, message=None): pass
 
+  def ExplainError(self, error, title, subject=None):
+    if error == 'pleaselogin':
+      self.Tell([title, 'You already have an account, please log in.'
+                 ], error=True)
+    elif error == 'email':
+      self.Tell([title, 'Invalid e-mail address. Please try again?'
+                 ], error=True)
+    elif error == 'honey':
+      self.Tell([title, 'Hmm. Somehow, you triggered the spam-filter.'
+                 ], error=True)
+    elif error in ('domaintaken', 'domain', 'subdomain'):
+      self.Tell([title, 'Sorry, that domain (%s) is unavailable.' % subject
+                 ], error=True)
+    elif error == 'checkfailed':
+      self.Tell([title, 'That domain (%s) is not correctly set up.' % subject
+                 ], error=True)
+    else:
+      self.Tell([title, 'Error code: %s' % error, 'Try again later?'
+                 ], error=True)
+
+
 
 class BasicUi(NullUi):
   """Stdio based user interface."""
@@ -3491,9 +3513,14 @@ class BasicUi(NullUi):
     if self.welcome:
       sys.stderr.write('%s\n' % self.welcome)
       self.welcome = None
+    if self.in_wizard and self.wizard_error:
+      sys.stderr.write('\n')
+      for line in self.wizard_error: sys.stderr.write('!!! %s\n' % line)
+      self.wizard_error = None
     if pre:
       sys.stderr.write('\n')
       for line in pre: sys.stderr.write('    %s\n' % line)
+    sys.stderr.write('\n')
 
   def StartWizard(self, title):
     #sys.stderr.write('[H[J')
@@ -3508,6 +3535,7 @@ class BasicUi(NullUi):
     return self.tries
 
   def EndWizard(self):
+    if self.wizard_error: self.Welcome()
     self.in_wizard = None
     sys.stderr.write('\n')
     if os.getenv('USERPROFILE'):
@@ -3518,8 +3546,8 @@ class BasicUi(NullUi):
     sys.stderr.write('\n')
 
   def AskEmail(self, question, default=None, pre=[],
-               wizard_hint=False, image=None, back=None):
-    self.Welcome(pre)
+               wizard_hint=False, image=None, back=None, welcome=True):
+    if welcome: self.Welcome(pre)
     while self.Retry():
       sys.stderr.write(' => %s ' % (question, ))
       answer = sys.stdin.readline().strip()
@@ -3531,10 +3559,13 @@ class BasicUi(NullUi):
   def AskLogin(self, question, default=None, email=None, pre=None,
                wizard_hint=False, image=None, back=None):
     self.Welcome(pre)
+
     def_email, def_pass = default or (email, None)
     sys.stderr.write('    %s\n' % (question, ))
+
     if not email:
-      email = self.AskEmail('Your e-mail:', default=def_email, back=back)
+      email = self.AskEmail('Your e-mail:',
+                            default=def_email, back=back, welcome=False)
       if email == back: return back
 
     import getpass
@@ -3587,7 +3618,6 @@ class BasicUi(NullUi):
   def AskMultipleChoice(self, choices, question, pre=[], default=None,
                         wizard_hint=False, image=None, back=None):
     self.Welcome(pre)
-    sys.stderr.write('\n')
     for i in range(0, len(choices)):
       sys.stderr.write(('  %s %d) %s\n'
                         ) % ((default==i+1) and '*' or ' ', i+1, choices[i]))
@@ -3605,31 +3635,13 @@ class BasicUi(NullUi):
     raise Exception('Too many tries')
 
   def Tell(self, lines, error=False, back=None):
-    self.Welcome()
-    sys.stderr.write('\n')
-    for line in lines: sys.stderr.write('    %s\n' % line)
-    if error: sys.stderr.write('\n')
-    return True
-
-  def ExplainError(self, error, title, subject=None):
-    if error == 'pleaselogin':
-      self.Tell([title, 'You already have an account, please log in.'
-                 ], error=True)
-    elif error == 'email':
-      self.Tell([title, 'Invalid e-mail address. Please try again?'
-                 ], error=True)
-    elif error == 'honey':
-      self.Tell([title, 'Hmm. Somehow, you triggered the spam-filter.'
-                 ], error=True)
-    elif error in ('domaintaken', 'domain', 'subdomain'):
-      self.Tell([title, 'Sorry, that domain (%s) is unavailable.' % subject
-                 ], error=True)
-    elif error == 'checkfailed':
-      self.Tell([title, 'That domain (%s) is not correctly set up.' % subject
-                 ], error=True)
+    if self.in_wizard and error:
+      self.wizard_error = lines
     else:
-      self.Tell([title, 'Error code: %s' % error, 'Try again later?'
-                 ], error=True)
+      self.Welcome()
+      for line in lines: sys.stderr.write('    %s\n' % line)
+      if error: sys.stderr.write('\n')
+      return True
 
 
 class PageKite(object):
@@ -4510,8 +4522,7 @@ class PageKite(object):
                 Goto('create_kite')
               except:
                 email = p = None
-                if not self.ui.Tell(['Login failed! Try again?'], back=False):
-                  Back()
+                self.ui.Tell(['Login failed! Try again?'], error=True)
             if email is False:
               Back()
 
@@ -4601,13 +4612,13 @@ class PageKite(object):
                 return (register, details['secret'])
               else:
                 error = details.get('error', 'unknown')
-                self.ui.ExplainError(error, 'Signup failed!', subject=register)
-                if error in ('pleaselogin', 'email'):
-                  Goto('service_login_email', back_skips_current=True)
-                else:
-                  Goto('abort')
             except Exception, e:
-              self.ui.ExplainError('%s' % e, 'Signup failed!', subject=register)
+              error = '%s' % e
+
+            self.ui.ExplainError(error, 'Signup failed!', subject=register)
+            if error in ('pleaselogin', 'email'):
+              Goto('service_login_email', back_skips_current=True)
+            else:
               Goto('abort')
 
         elif 'choose_kite_account' in state:
@@ -4628,6 +4639,7 @@ class PageKite(object):
           subject = None
           cfgs = {}
           result = {}
+          error = None
           try:
             if is_cname_for and is_cname_ready:
               subject = kitename
@@ -4641,24 +4653,22 @@ class PageKite(object):
                 subject = kitename
                 result.update(service.addCnameKite(account, secret, kitename))
                 cfgs.update(self.ArgToBackendSpecs(kitename, secret=secret))
-
-            if 'error' in result:
-              error = result.get('error', 'unknown')
-              self.ui.ExplainError(error, 'Kite creation failed!',
-                                   subject=subject)
-              Goto('abort')
-            else:
-              self.ui.Tell(['Success!  Time to fly some kites...', ''])
-              self.ui.EndWizard()
-              time.sleep(2) # Give the service side a moment to replicate...
-              if autoconfigure: self.backends.update(cfgs)
-              self.added_kites = True
-              return (register or kitename, secret)
-
+            error = result.get('error', None)
           except Exception, e:
-            self.ui.ExplainError('%s' % e, 'Kite creation failed!',
+            error = '%s' % e
+
+          if error:
+            self.ui.ExplainError(error, 'Kite creation failed!',
                                  subject=subject)
             Goto('abort')
+          else:
+            self.ui.Tell(['Success!  Time to fly some kites...', ''])
+            self.ui.EndWizard()
+            time.sleep(2) # Give the service side a moment to replicate...
+            if autoconfigure: self.backends.update(cfgs)
+            self.added_kites = True
+            return (register or kitename, secret)
+
 
         elif 'manual_abort' in state:
           if self.ui.Tell(['Aborted!',
