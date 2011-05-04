@@ -307,10 +307,21 @@ try:
 except ImportError:
   pass
 
+
+# Backwards compatibility for old Pythons.
 if not 'SHUT_RD' in dir(socket):
   socket.SHUT_RD = 0
   socket.SHUT_WR = 1
   socket.SHUT_RDWR = 2
+
+try:
+  sorted([1, 2, 3])
+except:
+  def sorted(l):
+    tmp = l[:]
+    tmp.sort()
+    return tmp
+
 
 # SSL/TLS strategy: prefer pyOpenSSL, as it comes with built-in Context
 # objects. If that fails, look for Python 2.6+ native ssl support and 
