@@ -157,7 +157,10 @@ Common Options:
  --defaults             Set defaults for use with PageKite.net service.
 
  --optfile=X    -o X    Read settings from file X. Default is ~/.pagekite.rc.
- --savefile=X   -S X    Read/write settings from file X.
+ --savefile=X   -S X    Saved settings will be written to file X.
+ --autosave             Enable auto-saving.
+ --noautosave           Disable auto-saving.
+ --save                 Save this configuration.
  --settings             Dump the current settings to STDOUT, formatted as
                         an options file would be.
 
@@ -284,11 +287,12 @@ SERVICE_XMLRPC = 'pk:http://pagekite.net/xmlrpc/'
 OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'signup', 'nullui', 'help',
-            'optfile=', 'savefile=', 'service_xmlrpc=',
-            'controlpanel', 'controlpass',
+            'optfile=', 'savefile=', 'autosave', 'noautosave',
+            'save',' settings',
+            'service_xmlrpc=', 'controlpanel', 'controlpass',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webroot=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
-            'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
+            'isfrontend', 'noisfrontend', 'defaults', 'domain=',
             'authdomain=', 'register=', 'host=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
             'tls_default=', 'tls_endpoint=', 'fe_certname=', 'ca_certs=',
@@ -3384,6 +3388,7 @@ class NullUi(object):
     self.status_tag = ''
     self.status_msg = ''
     self.welcome = welcome
+    self.tries = 200
     self.Splash()
 
   def Splash(self): pass
@@ -3692,6 +3697,9 @@ class PageKite(object):
     self.rcfile_recursion = 0
     self.rcfiles_loaded = []
     self.savefile = None
+    self.autosave = 0
+    self.save = 0
+    self.added_kites = False
     self.ui = ui or NullUi()
 
     # Searching for our configuration file!  We prefer the documented
@@ -3776,7 +3784,7 @@ class PageKite(object):
         '#/ Manual front-ends (optional)'
       ])
       if self.servers_manual:
-        for server in self.servers_manual:
+        for server in sorted(self.servers_manual):
           config.append('frontend=%s' % server)
       else:
         config.append('# frontend=hostname:port')
@@ -3788,7 +3796,7 @@ class PageKite(object):
                             or '#frontends=1:frontends.b5p.us:443')
       ])
       if self.servers_manual:
-        for server in self.servers_manual:
+        for server in sorted(self.servers_manual):
           config.append('frontend=%s' % server)
       else:
         config.append('# frontend=hostname:port')
@@ -3800,7 +3808,7 @@ class PageKite(object):
         config.append('# ca_certs=%s' % self.ca_certs)
       if self.dyndns:
         provider, args = self.dyndns
-        for prov in DYNDNS:
+        for prov in sorted(DYNDNS.keys()):
           if DYNDNS[prov] == provider and prov != 'beanstalks.net':
             args['prov'] = prov
         if 'prov' not in args:
@@ -3830,7 +3838,7 @@ class PageKite(object):
       '#',
     ])
     bprinted = 0
-    for bid in self.backends:
+    for bid in sorted(self.backends.keys()):
       be = self.backends[bid]
       if be[BE_BHOST]:
         config.append(('%s=%s:%s:%s:%s'
@@ -3865,9 +3873,9 @@ class PageKite(object):
       '###[ The following stuff can usually be ignored. ]###',
       '',
       '#/ Save-files are never configured automatically for security reasons.',
-      '# savefile=/path/to/savefile',
       (self.savefile and safe and 'savefile=%s' % self.savefile
                                or '# savefile=/path/to/savefile'),
+      (self.autosave and 'autosave' or '# autosave'),
       '',
       '#/ Front-end Options:',
       (self.isfrontend and 'isfrontend' or '# isfrontend')
@@ -3876,17 +3884,17 @@ class PageKite(object):
     config.extend([
       (self.server_host and '%shost=%s' % (comment, self.server_host)
                          or '# host=machine.domain.com'),
-      '%sports=%s' % (comment, ','.join(['%s' % x for x in self.server_ports] or [])),
-      '%sprotos=%s' % (comment, ','.join(['%s' % x for x in self.server_protos] or []))
+      '%sports=%s' % (comment, ','.join(['%s' % x for x in sorted(self.server_ports)] or [])),
+      '%sprotos=%s' % (comment, ','.join(['%s' % x for x in sorted(self.server_protos)] or []))
     ])
     for pa in self.server_portalias:
       config.append('portalias=%s:%s' % (int(pa), int(self.server_portalias[pa])))
     config.extend([
-      '%srawports=%s' % (comment, ','.join(['%s' % x for x in self.server_raw_ports] or [])),
+      '%srawports=%s' % (comment, ','.join(['%s' % x for x in sorted(self.server_raw_ports)] or [])),
       (self.auth_domain and '%sauthdomain=%s' % (comment, self.auth_domain)
                          or '# authdomain=foo.com')
     ])
-    for bid in self.backends:
+    for bid in sorted(self.backends.keys()):
       be = self.backends[bid]
       if not be[BE_BHOST]:
         config.append('domain=%s:%s' % (bid, be[BE_SECRET]))
@@ -3897,7 +3905,7 @@ class PageKite(object):
     ])
     eprinted = 0
     config.append('#/ Domains we terminate SSL/TLS for natively, with key/cert-files')
-    for ep in self.tls_endpoints:
+    for ep in sorted(self.tls_endpoints.keys()):
       config.append('tls_endpoint=%s:%s' % (ep, self.tls_endpoints[ep][0]))
       eprinted += 1
     if eprinted == 0:
@@ -3951,18 +3959,19 @@ class PageKite(object):
   def PrintSettings(self, safe=False):
     print '\n'.join(self.GenerateConfig(safe=safe))
 
-  def SaveNewUserConfig(self):
+  def SaveUserConfig(self):
+    self.savefile = self.savefile or self.rcfile
     try:
-      fd = open(self.rcfile, 'w')
-      fd.write('\n'.join(self.GenerateConfig()))
+      fd = open(self.savefile, 'w')
+      fd.write('\n'.join(self.GenerateConfig(safe=True)))
       fd.close()
-      self.ui.Tell(['Configuration saved to %s!' % self.rcfile])
+      self.ui.Tell(['Configuration saved to: %s' % self.savefile])
       self.ui.Spacer()
-      Log([('saved', 'Configuration saved to %s!' % self.rcfile)])
+      Log([('saved', 'Configuration saved to: %s' % self.savefile)])
     except Exception, e:
-      self.ui.Tell(['ERROR: Could not save to %s: %s' % (self.rcfile, e)])
+      self.ui.Tell(['ERROR: Could not save to %s: %s' % (self.savefile, e)])
       self.ui.Spacer()
-      LogError('Could not save to %s: %s' % (self.rcfile, e))
+      LogError('Could not save to %s: %s' % (self.savefile, e))
 
   def FallDown(self, message, help=True, longhelp=False, noexit=False):
     if self.conns and self.conns.auth: self.conns.auth.quit()
@@ -4211,11 +4220,17 @@ class PageKite(object):
     opts, args = getopt.getopt(argv, OPT_FLAGS, OPT_ARGS)
 
     for opt, arg in opts:
-      if opt in ('-o', '--optfile'): self.ConfigureFromFile(arg)
+      if opt in ('-o', '--optfile'):
+        self.ConfigureFromFile(arg)
       elif opt in ('-S', '--savefile'):
         if self.savefile: raise ConfigError('Multiple save-files!')
-        self.ConfigureFromFile(arg)
         self.savefile = arg
+      elif opt == '--autosave':
+        self.autosave = True
+      elif opt == '--noautosave':
+        self.autosave = False
+      elif opt == '--save':
+        self.save = True
 
       elif opt in ('-I', '--pidfile'): self.pidfile = arg
       elif opt in ('-L', '--logfile'): self.logfile = arg
@@ -4350,10 +4365,7 @@ class PageKite(object):
       elif opt == '--nopyopenssl': pass
       elif opt == '--noloop': self.main_loop = False
       elif opt == '--defaults': self.SetServiceDefaults()
-      elif opt == '--settings':
-        self.PrintSettings(safe=True)
-        sys.exit(0)
-
+      elif opt == '--settings': pass
       elif opt == '--help':
         self.HelpAndExit(longhelp=True)
 
@@ -4446,7 +4458,10 @@ class PageKite(object):
     service_account_list = service_accounts.keys()
 
     if service_account_list:
-      state = ['choose_kite_account']
+      if kitename:
+        state = ['choose_kite_account']
+      else:
+        state = ['manual_abort']
     else:
       state = ['use_service_question']
     history = []
@@ -4582,6 +4597,7 @@ class PageKite(object):
                 if autoconfigure:
                   self.backends.update(self.ArgToBackendSpecs(register,
                                                       secret=details['secret']))
+                self.added_kites = True
                 return (register, details['secret'])
               else:
                 error = details.get('error', 'unknown')
@@ -4636,6 +4652,7 @@ class PageKite(object):
               self.ui.EndWizard()
               time.sleep(2) # Give the service side a moment to replicate...
               if autoconfigure: self.backends.update(cfgs)
+              self.added_kites = True
               return (register or kitename, secret)
 
           except Exception, e:
@@ -5131,14 +5148,23 @@ def Configure(pk):
 
   pk.Configure(sys.argv[1:])
 
-  if '--signup' in sys.argv:
-    if pk.backends.keys() or pk.RegisterNewKite(autoconfigure=True):
-      if pk.ui.AskYesNo('Save current configuration to %s?' % pk.rcfile,
-                        default=(len(pk.backends.keys()) > 0)):
-        pk.SaveNewUserConfig()
-      pk.servers_new_only = True
-  else:
-    pk.CheckConfig()
+  if '--settings' in sys.argv:
+    pk.PrintSettings(safe=True)
+    sys.exit(0)
+
+  if '--signup' in sys.argv and not pk.backends.keys():
+    pk.RegisterNewKite(autoconfigure=True)
+
+  pk.CheckConfig()
+
+  if pk.added_kites:
+    if (pk.autosave or pk.save or
+        pk.ui.AskYesNo('Save current configuration to %s?' % pk.rcfile,
+                       default=(len(pk.backends.keys()) > 0))):
+      pk.SaveUserConfig()
+    pk.servers_new_only = True
+  elif pk.save:
+    pk.SaveUserConfig()
 
 
 if __name__ == '__main__':
