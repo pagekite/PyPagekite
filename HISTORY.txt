@@ -1,7 +1,7 @@
 Version history - highlights
 ============================
 
-v0.4.0  ??
+v0.4.1   2011.05.05
 ------
    - Branched major revision 0.4.x from stable 0.3.x.
    - Much improved interactive console user interface and shortcut feature.
