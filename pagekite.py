@@ -1596,7 +1596,9 @@ class Selectable(object):
                      errno.EDEADLK, errno.EWOULDBLOCK, errno.ENOBUFS,
                      errno.EALREADY)
 
-  def __init__(self, fd=None, address=None, on_port=None, maxread=16000, ui=None):
+  def __init__(self, fd=None, address=None, on_port=None, maxread=16000,
+                     ui=None, tracked=True):
+    self.fd = None
     try:
       self.SetFD(fd or rawsocket(socket.AF_INET6, socket.SOCK_STREAM), six=True)
     except Exception:
@@ -1648,7 +1650,7 @@ class Selectable(object):
     if SELECTABLES is not None:
       old = selectable_id-150
       if old in SELECTABLES: del SELECTABLES[old]
-      SELECTABLES[selectable_id] = self
+      if tracked: SELECTABLES[selectable_id] = self
 
     global gYamon
     self.countas = 'selectables_live'
@@ -1656,6 +1658,7 @@ class Selectable(object):
     gYamon.vadd('selectables', 1)
 
   def CountAs(self, what):
+    global gYamon
     gYamon.vadd(self.countas, -1)
     self.countas = what
     gYamon.vadd(self.countas, 1)
@@ -1701,6 +1704,8 @@ class Selectable(object):
     self.zw = zlib.compressobj(level)
 
   def SetFD(self, fd, six=False):
+    if self.fd:
+      self.fd.close()
     self.fd = fd
     self.fd.setblocking(0)
     try:
@@ -1764,15 +1769,16 @@ class Selectable(object):
     elif final:
       self.Log([('eof', '1')])
 
-  def Cleanup(self):
+  def Cleanup(self, close=True):
     global buffered_bytes
     buffered_bytes -= len(self.write_blocked)
-    self.write_blocked = ''
+    self.write_blocked = self.peeked = self.zw = ''
 
     if not self.dead:
       self.dead = True
-      if self.fd: self.fd.close()
-      self.LogTraffic(final=True)
+      if close:
+        if self.fd: self.fd.close()
+        self.LogTraffic(final=True)
       self.CountAs('selectables_dead')
 
   def ProcessData(self, data):
@@ -1781,7 +1787,6 @@ class Selectable(object):
 
   def ProcessEof(self):
     if self.read_eof and self.write_eof and not self.write_blocked:
-      self.Cleanup()
       return False
     return True
 
@@ -2052,15 +2057,17 @@ class Connections(object):
 class LineParser(Selectable):
   """A Selectable which parses the input as lines of text."""
 
-  def __init__(self, fd=None, address=None, on_port=None, ui=None):
-    Selectable.__init__(self, fd, address, on_port, ui=ui)
+  def __init__(self, fd=None, address=None, on_port=None,
+                     ui=None, tracked=True):
+    Selectable.__init__(self, fd, address, on_port, ui=ui, tracked=tracked)
     self.leftovers = ''
 
   def __html__(self):
     return Selectable.__html__(self)
 
-  def Cleanup(self):
-    Selectable.Cleanup(self)
+  def Cleanup(self, close=True):
+    self.leftovers = ''
+    Selectable.Cleanup(self, close=close)
 
   def ProcessData(self, data):
     lines = (self.leftovers+data).splitlines(True)
@@ -2090,7 +2097,7 @@ class MagicProtocolParser(LineParser):
   """A Selectable which recognizes HTTP, TLS or XMPP preambles."""
 
   def __init__(self, fd=None, address=None, on_port=None, ui=None):
-    LineParser.__init__(self, fd, address, on_port, ui=ui)
+    LineParser.__init__(self, fd, address, on_port, ui=ui, tracked=False)
     self.leftovers = ''
     self.might_be_tls = True
     self.is_tls = False
@@ -2209,8 +2216,9 @@ class ChunkParser(Selectable):
   def __html__(self):
     return Selectable.__html__(self)
 
-  def Cleanup(self):
-    Selectable.Cleanup(self)
+  def Cleanup(self, close=True):
+    self.zr = self.chunk = self.header = None
+    Selectable.Cleanup(self, close=close)
 
   def ProcessData(self, data):
     if self.peeking:
@@ -2339,10 +2347,12 @@ class Tunnel(ChunkParser):
 
     except Exception, err:
       self.LogError('Discarding connection: %s' % err)
+      self.Cleanup()
       return None
 
     except socket.error, err:
       self.LogInfo('Discarding connection: %s' % err)
+      self.Cleanup()
       return None
 
     self.CountAs('backends_live')
@@ -2598,10 +2608,12 @@ class Tunnel(ChunkParser):
 
 
     except socket.error, e:
+      self.Cleanup()
       return None
 
     except Exception, e:
       self.LogError('Server response parsing failed: %s' % e)
+      self.Cleanup()
       return None
 
     if abort: return None
@@ -2659,9 +2671,10 @@ class Tunnel(ChunkParser):
     if sid in self.zhistory:
       del self.zhistory[sid]
 
-  def Cleanup(self):
+  def Cleanup(self, close=True):
     for sid in self.users.keys(): self.CloseStream(sid)
-    ChunkParser.Cleanup(self)
+    self.conns = self.users = self.zhistory = self.backends = None
+    ChunkParser.Cleanup(self, close=close)
 
   def ResetRemoteZChunks(self):
     return self.SendChunked('NOOP: 1\r\nZRST: 1\r\n\r\n!', compress=False)
@@ -2706,7 +2719,7 @@ class Tunnel(ChunkParser):
 
   # If a tunnel goes down, we just go down hard and kill all our connections.
   def ProcessEofRead(self):
-    self.conns.Remove(self)
+    if self.conns: self.conns.Remove(self)
     self.Cleanup()
     return True
 
@@ -2837,11 +2850,11 @@ class LoopbackTunnel(Tunnel):
                     ('proto', proto),
                     ('domain', domain)])
 
-  def Cleanup(self):
+  def Cleanup(self, close=True):
     other = self.other_end
     self.other_end = None
     if other and other.other_end: other.Cleanup()
-    Tunnel.Cleanup(self)
+    Tunnel.Cleanup(self, close=close)
 
   def Linkup(self, other):
     self.other_end = other
@@ -2863,6 +2876,7 @@ class UserConn(Selectable):
   def __init__(self, address, ui=None):
     Selectable.__init__(self, address=address, ui=ui)
     self.tunnel = None
+    self.conns = None
 
   def __html__(self):
     return ('<b>Tunnel</b>: <a href="/conn/%s">%s</a><br>'
@@ -2871,15 +2885,17 @@ class UserConn(Selectable):
                      Selectable.__html__(self))
 
   def CloseTunnel(self, tunnel_closed=False):
-    self.ProcessTunnelEof(read_eof=True, write_eof=True)
     if self.tunnel and not tunnel_closed:
+      self.ProcessTunnelEof(read_eof=True, write_eof=True)
       self.tunnel.CloseStream(self.sid, stream_closed=True)
     self.tunnel = None
 
-  def Cleanup(self):
+  def Cleanup(self, close=True):
     self.CloseTunnel()
-    self.conns.Remove(self)
-    Selectable.Cleanup(self)
+    if self.conns:
+      self.conns.Remove(self)
+      self.conns = None
+    Selectable.Cleanup(self, close=close)
 
   def _FrontEnd(conn, address, proto, host, on_port, body, conns):
     # This is when an external user connects to a server and requests a
@@ -2932,6 +2948,7 @@ class UserConn(Selectable):
     else:
       self.LogDebug('No back-end', [('on_port', on_port), ('proto', self.proto),
                                     ('domain', self.host), ('is', 'FE')])
+      self.Cleanup(close=False)
       return None
 
   def _BackEnd(proto, host, sid, tunnel, on_port,
@@ -2978,6 +2995,7 @@ class UserConn(Selectable):
     if not backend:
       logInfo.append(('err', 'No back-end'))
       self.Log(logInfo)
+      self.Cleanup(self)
       return None
 
     try:
@@ -2999,7 +3017,7 @@ class UserConn(Selectable):
                       ) % (remote_ip or 'unknown', proto, host, on_port,
                            sspec[0], sspec[1]), prefix='!')
       self.Log(logInfo)
-      Selectable.Cleanup(self)
+      self.Cleanup(self)
       return None
 
     self.ui.Status('serving')
@@ -3087,6 +3105,11 @@ class UnknownConn(MagicProtocolParser):
     self.host = None
     self.proto = None
 
+  def Cleanup(self, close=True):
+    if self.conns: self.conns.Remove(self)
+    self.conns = self.parser = None
+    MagicProtocolParser.Cleanup(self, close=close)
+
   def __str__(self):
     return '%s (%s/%s:%s)' % (MagicProtocolParser.__str__(self),
                               (self.proto or '?'),
@@ -3151,7 +3174,8 @@ class UnknownConn(MagicProtocolParser):
         except ValueError:
           pass
 
-    if not done and self.parser.method == 'POST' and self.parser.path in MAGIC_PATHS:
+    if (not done and self.parser.method == 'POST'
+                 and self.parser.path in MAGIC_PATHS):
       # FIXME: DEPRECATE: Make this go away!
       if Tunnel.FrontEnd(self, lines, self.conns) is None: return False
       done = True
@@ -3201,13 +3225,7 @@ class UnknownConn(MagicProtocolParser):
         return False
 
     # We are done!
-    self.dead = True
-    self.conns.Remove(self)
-
-    # Break any circular references we might have
-    self.parser = None
-    self.conns = None
-
+    self.Cleanup(close=False)
     return True
 
   def ProcessTls(self, data, domain=None):
@@ -3243,12 +3261,7 @@ class UnknownConn(MagicProtocolParser):
         return False
 
     # We are done!
-    self.dead = True
-    self.conns.Remove(self)
-
-    # Break any circular references we might have
-    self.parser = None
-    self.conns = None
+    self.Cleanup(close=False)
     return True
 
   def ProcessRaw(self, data, domain):
@@ -3258,12 +3271,7 @@ class UnknownConn(MagicProtocolParser):
       return False
 
     # We are done!
-    self.dead = True
-    self.conns.Remove(self)
-
-    # Break any circular references we might have
-    self.parser = None
-    self.conns = None
+    self.Cleanup(close=False)
     return True
 
 
