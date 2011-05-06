@@ -3782,7 +3782,7 @@ class PageKite(object):
     def_dyndns    = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
     def_frontends = (1, 'frontends.b5p.us', 443)
     def_ca_certs  = sys.argv[0]
-    def_fe_certs  = ['frontends.b5p.us', 'b5p.us', 'pagekite.net']
+    def_fe_certs  = ['b5p.us', 'frontends.b5p.us', 'pagekite.net']
     def_error_url = 'https://pagekite.net/offline/?'
     if check:
       return (self.dyndns == def_dyndns and
@@ -3795,7 +3795,11 @@ class PageKite(object):
       self.servers_auto = (not clobber and self.servers_auto) or def_frontends
       self.error_url = (not clobber and self.error_url) or def_error_url
       self.ca_certs = def_ca_certs
-      if HAVE_SSL: self.fe_certname.extend(def_fe_certs)
+      if HAVE_SSL:
+        for cert in def_fe_certs:
+          if cert not in self.fe_certname:
+            self.fe_certname.append(cert)
+        self.fe_certname.sort()
       return True
 
   def GenerateConfig(self, safe=False):
@@ -3845,7 +3849,7 @@ class PageKite(object):
           config.append('frontend=%s' % server)
       else:
         config.append('# frontend=hostname:port')
-      for server in self.fe_certname:
+      for server in sorted(self.fe_certname):
         config.append('fe_certname=%s' % server)
       if self.ca_certs != self.ca_certs_default:
         config.append('ca_certs=%s' % self.ca_certs)
@@ -4368,7 +4372,10 @@ class PageKite(object):
           socks.wrapmodule(urllib)      # Make DynDNS updates go via tor
 
       elif opt == '--ca_certs': self.ca_certs = arg
-      elif opt == '--fe_certname': self.fe_certname.append(arg.lower())
+      elif opt == '--fe_certname':
+        cert = arg.lower()
+        if cert not in self.fe_certname: self.fe_certname.append(cert)
+        self.fe_certname.sort()
       elif opt == '--service_xmlrpc': self.service_xmlrpc = arg
       elif opt == '--frontend': self.servers_manual.append(arg)
       elif opt == '--frontends':
