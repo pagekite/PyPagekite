@@ -2552,7 +2552,7 @@ class Tunnel(ChunkParser):
 
         if data and parse:
           sname = self.server_info[self.S_NAME]
-          conns.config.ui.Notify('Connecting to %s ...' % sname)
+          conns.config.ui.Notify('Connecting to front-end %s ...' % sname)
           conns.config.ui.Notify(' - Protocols: %s' % ', '.join(self.server_info[self.S_PROTOS]))
           conns.config.ui.Notify(' - Ports: %s' % ', '.join(self.server_info[self.S_PORTS]))
           if 'raw' in self.server_info[self.S_PROTOS]:
@@ -2572,7 +2572,7 @@ class Tunnel(ChunkParser):
                       ('err', 'Rejected'),
                       ('proto', proto),
                       ('domain', domain)])
-            conns.config.ui.Notify(('  Rejected: %s://%s'
+            conns.config.ui.Notify(('REJECTED: %s:%s (invalid or out of quota)'
                                     ) % (proto, domain), prefix='!')
 
           for request in parse.Header('X-PageKite-Duplicate'):
@@ -2582,7 +2582,7 @@ class Tunnel(ChunkParser):
                       ('err', 'Duplicate'),
                       ('proto', proto),
                       ('domain', domain)])
-            conns.config.ui.Notify(('  Rejected: %s://%s (duplicate)'
+            conns.config.ui.Notify(('REJECTED: %s:%s (duplicate)'
                                     ) % (proto, domain), prefix='!')
 
           if not conns.config.disable_zchunks:
@@ -2596,12 +2596,13 @@ class Tunnel(ChunkParser):
             self.Log([('FE', sname),
                       ('proto', proto),
                       ('domain', domain)])
-            if '-' in proto:
+            if False:
+             if '-' in proto:
               proto, port = proto.split('-')
-              conns.config.ui.Notify(('%s is front-end for: %s://%s:%s'
+              conns.config.ui.Notify(('%s is front-end for: %s:%s:%s'
                                       ) % (sname, proto, domain, port))
-            else:
-              conns.config.ui.Notify(('%s is front-end for: %s://%s'
+             else:
+              conns.config.ui.Notify(('%s is front-end for: %s:%s'
                                       ) % (sname, proto, domain))
 
         self.rtt = (time.time() - begin)
@@ -3357,6 +3358,7 @@ class TunnelManager(threading.Thread):
   def run(self):
     check_interval = 5
     self.keep_running = True
+    self.explained = False
     while self.keep_running:
 
       # Reconnect if necessary, randomized exponential fallback.
@@ -3375,6 +3377,21 @@ class TunnelManager(threading.Thread):
           # FIXME: Front-ends should close dead back-end tunnels.
         else:
           self.pkite.ui.Status('flying')
+          for be in self.pkite.backends.values():
+            if be[BE_STATUS] != BE_STATUS_DISABLED:
+              port = be[BE_PORT]
+              proto = be[BE_PROTO]
+              proxied = (proto == 'raw') and ' (HTTP proxied)' or ''
+              if proto == 'raw' and port in ('22', 22): proto = 'ssh'
+              # FIXME: If the remote front-end does auto-SSL, then report
+              #        the https:// protocol instead!
+              self.pkite.ui.Notify(('Flying %s:%s as %s://%s%s/%s'
+                                    ) % (be[BE_BHOST], be[BE_BPORT],
+                                         proto, be[BE_DOMAIN],
+                                         port and (':%s' % port) or '',
+                                         proxied),
+                                    prefix='~<>')
+
           self.PingTunnels(time.time())
 
       tunnel_count = len(self.pkite.conns and
@@ -3505,7 +3522,7 @@ class BasicUi(NullUi):
     message = '%s' % message
     if message not in self.notify_history:
       self.notify_history[message] = now
-      msg = '\r%s %s%s%s\n' % (prefix * 3, message,
+      msg = '\r%s %s%s%s\n' % ((prefix * 3)[0:3], message,
                                ' ' * (75-len(message)-len(alignright)),
                                alignright)
       sys.stderr.write(msg)
@@ -3517,10 +3534,10 @@ class BasicUi(NullUi):
     if not self.in_wizard:
       if message:
         message = '%s' % message
-        msg = '\r<<< pagekite.py [%s]%s %s%s\r' % (tag, ' ' * (8-len(tag)),
+        msg = '\r << pagekite.py [%s]%s %s%s\r' % (tag, ' ' * (8-len(tag)),
                                                message, ' ' * (52-len(message)))
       else:
-        msg = '\r<<< pagekite.py [%s]%s\r' % (tag, ' ' * (8-len(tag)))
+        msg = '\r << pagekite.py [%s]%s\r' % (tag, ' ' * (8-len(tag)))
       sys.stderr.write(msg)
     if tag == 'exiting':
       sys.stderr.write('\n')
@@ -4889,7 +4906,7 @@ class PageKite(object):
       for update in updates:
         if update not in last_updates:
           try:
-            self.ui.Status('dyndns', message='Updating Dynamic DNS records')
+            self.ui.Status('dyndns', message='Updating DNS...')
             result = ''.join(urllib.urlopen(updates[update]).readlines())
             self.last_updates.append(update)
             if result.startswith('good') or result.startswith('nochg'):
