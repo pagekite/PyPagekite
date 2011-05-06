@@ -1,6 +1,11 @@
 Version history - highlights
 ============================
 
+v0.3.20  ??
+-------
+   - Fixed more file-descriptor leaks
+
+
 v0.3.19  2011.05.03
 v0.3.18
 -------
