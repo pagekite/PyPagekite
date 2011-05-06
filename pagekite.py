@@ -3463,7 +3463,7 @@ class NullUi(object):
 
   def ExplainError(self, error, title, subject=None):
     if error == 'pleaselogin':
-      self.Tell([title, 'You already have an account, please log in.'
+      self.Tell([title, 'You already have an account. Log in to continue.'
                  ], error=True)
     elif error == 'email':
       self.Tell([title, 'Invalid e-mail address. Please try again?'
@@ -4632,8 +4632,13 @@ class PageKite(object):
             except Exception, e:
               error = '%s' % e
 
-            self.ui.ExplainError(error, 'Signup failed!', subject=register)
-            if error in ('pleaselogin', 'email'):
+            if error == 'pleaselogin':
+              self.ui.ExplainError(error,
+                                   '%s log-in required.' % self.service_provider,
+                                   subject=register)
+              Goto('service_login_email', back_skips_current=True)
+            elif error == 'email':
+              self.ui.ExplainError(error, 'Signup failed!', subject=register)
               Goto('service_login_email', back_skips_current=True)
             else:
               Goto('abort')
