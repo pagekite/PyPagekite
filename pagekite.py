@@ -1870,7 +1870,7 @@ class Selectable(object):
                     int(self.throttle_until), flooded, max_speed, remote))
     return True
 
-  def Send(self, data, try_flush=False, bail_out=False):
+  def Send(self, data, try_flush=False):
     global buffered_bytes
     buffered_bytes -= len(self.write_blocked)
 
@@ -1928,7 +1928,6 @@ class Selectable(object):
     if zhistory and (zhistory[0] < zhistory[1]): compress = False
 
     sdata = ''.join(data)
-#   print '>> %s\n%s\n' % (self, sdata[:80])
     if self.zw and compress:
       try:
         zdata = self.zw.compress(sdata) + self.zw.flush(zlib.Z_SYNC_FLUSH)
@@ -3069,8 +3068,8 @@ class UserConn(Selectable):
     self.write_eof = True
     return self.ProcessEof()
 
-  def Send(self, data, try_flush=False, bail_out=False):
-    rv = Selectable.Send(self, data, try_flush=try_flush, bail_out=bail_out)
+  def Send(self, data, try_flush=False):
+    rv = Selectable.Send(self, data, try_flush=try_flush)
     if self.write_eof and not self.write_blocked:
       self.Shutdown(socket.SHUT_WR)
     return rv
@@ -3284,10 +3283,9 @@ class RawConn(Selectable):
     domain = conns.LastIpDomain(address[0])
     if domain and UserConn.FrontEnd(self, address, 'raw', domain, on_port,
                                     [], conns):
-      pass
+      self.Cleanup(close=False)
     else:
-      fd.close()
-
+      self.Cleanup()
 
 
 class Listener(Selectable):
