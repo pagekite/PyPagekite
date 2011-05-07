@@ -1439,6 +1439,7 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
 
     global gYamon
     gYamon = YamonD(sspec)
+    gYamon.vset('started', int(time.time()))
     gYamon.vset('version', APPVER)
     gYamon.vset('ssl_enabled', self.enable_ssl)
     gYamon.vset('errors', 0)
