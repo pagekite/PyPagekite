@@ -1279,6 +1279,7 @@ class Selectable(object):
     self.zreset = False
 
     # Logging
+    self.logged = []
     global selectable_id
     selectable_id += 1
     self.sid = selectable_id
@@ -1324,19 +1325,24 @@ class Selectable(object):
       sock = ('x.x.x.x', 'x')
 
     return ('<b>Outgoing ZChunks</b>: %s<br>'
+            '<b>Buffered bytes</b>: %s<br>'
             '<b>Remote address</b>: %s<br>'
             '<b>Local address</b>: %s<br>'
             '<b>Bytes in / out</b>: %s / %s<br>'
             '<b>Created</b>: %s<br>'
             '<b>Status</b>: %s<br>'
+            '<br>'
+            '<b>Logged</b>: <ul>%s</ul><br>'
             '\n') % (self.zw and ('level %d' % self.zlevel) or 'off',
+                     len(self.write_blocked),
                      self.dead and '-' or (obfuIp(peer[0]), peer[1]),
                      self.dead and '-' or (obfuIp(sock[0]), sock[1]),
                      fmt_size(self.all_in + self.read_bytes),
                      fmt_size(self.all_out + self.wrote_bytes),
                      time.strftime('%Y-%m-%d %H:%M:%S',
                                    time.localtime(self.created)),
-                     self.dead and 'dead' or 'alive')
+                     self.dead and 'dead' or 'alive',
+                     ''.join(['<li>%s' % (l, ) for l in self.logged]))
 
   def ResetZChunks(self):
     if self.zw:
@@ -1370,21 +1376,25 @@ class Selectable(object):
   def Log(self, values):
     if self.log_id: values.append(('id', self.log_id))
     Log(values)
+    self.logged.append(('', values))
 
   def LogError(self, error, params=None):
     values = params or []
     if self.log_id: values.append(('id', self.log_id))
     LogError(error, values)
+    self.logged.append((error, values))
 
   def LogDebug(self, message, params=None):
     values = params or []
     if self.log_id: values.append(('id', self.log_id))
     LogDebug(message, values)
+    self.logged.append((message, values))
 
   def LogInfo(self, message, params=None):
     values = params or []
     if self.log_id: values.append(('id', self.log_id))
     LogInfo(message, values)
+    self.logged.append((message, values))
 
   def LogTraffic(self, final=False):
     if self.wrote_bytes or self.read_bytes:
@@ -2493,13 +2503,16 @@ class UserConn(Selectable):
  
   def CloseTunnel(self, tunnel_closed=False):
     if self.tunnel and not tunnel_closed:
+      if not self.read_eof or not self.write_eof:
+        self.tunnel.SendStreamEof(self.sid, write_eof=True, read_eof=True)
       self.tunnel.CloseStream(self.sid, stream_closed=True)
-      self.ProcessTunnelEof(read_eof=True, write_eof=True)
+    self.ProcessTunnelEof(read_eof=True, write_eof=True)
     self.tunnel = None
 
   def Cleanup(self, close=True):
+    if close:
+      self.CloseTunnel()
     Selectable.Cleanup(self, close=close)
-    self.CloseTunnel()
     if self.conns:
       self.conns.Remove(self)
       self.conns = None
