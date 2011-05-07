@@ -207,7 +207,7 @@ Examples:
 pagekite.py --defaults --settings > ~/.pagekite.rc
 vim ~/.pagekite.rc 
 
-# Run pagekite with the HTTP UI, for interactive configuration.
+# Run pagekite with the HTTP UI, for browsing state over the web.
 pagekite.py --httpd=localhost:8888
 firefox http://localhost:8888/
 
