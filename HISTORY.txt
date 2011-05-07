@@ -12,6 +12,7 @@ v0.3.18
    - Fixed a file-descriptor leak on front-ends with no local back-ends.
    - Fixed a front-end crash caused by weird HTTP Host: headers.
    - Fixed a crash in rate-limiting code.
+   - NOTE: v0.4.1 was forked here, so the history forks as well.
 
 
 v0.3.17  2011.04.20
