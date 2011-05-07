@@ -76,14 +76,14 @@
 #    be created as a FrontEnd, which will find the right tunnel and send
 #    traffic to the back-end PageKite process, where a BackEnd UserConn
 #    will be created to connect to the actual HTTP server.
-# 
+#
 #  * The Tunnel object represents one end of a PageKite tunnel and is also
 #    created either as a FrontEnd or BackEnd, depending on which end it is.
 #    Tunnels handle multiplexing and demultiplexing all the traffic for
 #    a given back-end so multiple requests can share a single TCP/IP
 #    connection.
 #
-# Although most of the work done by pagekite.py happens in an event-loop 
+# Although most of the work done by pagekite.py happens in an event-loop
 # on a single thread, there are some exceptions:
 #
 #  * The AuthThread handles checking whether an incoming tunnel request is
@@ -1417,10 +1417,13 @@ class Selectable(object):
 
     if not self.dead:
       self.dead = True
-      if close:
-        if self.fd: self.fd.close()
-        self.LogTraffic(final=True)
       self.CountAs('selectables_dead')
+
+    if close:
+      if self.fd:
+        self.fd.close()
+        self.fd = None
+      self.LogTraffic(final=True)
 
   def ProcessData(self, data):
     self.LogError('Selectable::ProcessData: Should be overridden!')
@@ -1428,6 +1431,7 @@ class Selectable(object):
 
   def ProcessEof(self):
     if self.read_eof and self.write_eof and not self.write_blocked:
+      self.Cleanup()
       return False
     return True
 
@@ -1664,7 +1668,7 @@ class Connections(object):
         evil.append(s)
     for s in evil:
       LogDebug('Removing broken Selectable: %s' % s)
-      self.conns.remove(s) 
+      self.Remove(s)
 
   def Connection(self, fd):
     for conn in self.conns:
@@ -1705,8 +1709,8 @@ class LineParser(Selectable):
     return Selectable.__html__(self)
 
   def Cleanup(self, close=True):
-    self.leftovers = ''
     Selectable.Cleanup(self, close=close)
+    self.leftovers = ''
 
   def ProcessData(self, data):
     lines = (self.leftovers+data).splitlines(True)
@@ -1855,8 +1859,8 @@ class ChunkParser(Selectable):
     return Selectable.__html__(self)
 
   def Cleanup(self, close=True):
-    self.zr = self.chunk = self.header = None
     Selectable.Cleanup(self, close=close)
+    self.zr = self.chunk = self.header = None
 
   def ProcessData(self, data):
     if self.peeking:
@@ -2282,9 +2286,11 @@ class Tunnel(ChunkParser):
       del self.zhistory[sid]
 
   def Cleanup(self, close=True):
-    for sid in self.users.keys(): self.CloseStream(sid)
-    self.conns = self.users = self.zhistory = self.backends = None
+    if self.users:
+      for sid in self.users.keys(): self.CloseStream(sid)
     ChunkParser.Cleanup(self, close=close)
+    self.conns = None
+    self.users = self.zhistory = self.backends = {}
 
   def ResetRemoteZChunks(self):
     return self.SendChunked('NOOP: 1\r\nZRST: 1\r\n\r\n!', compress=False)
@@ -2451,10 +2457,10 @@ class LoopbackTunnel(Tunnel):
                     ('domain', domain)])
 
   def Cleanup(self, close=True):
+    Tunnel.Cleanup(self, close=close)
     other = self.other_end
     self.other_end = None
     if other and other.other_end: other.Cleanup()
-    Tunnel.Cleanup(self, close=close)
 
   def Linkup(self, other):
     self.other_end = other
@@ -2486,16 +2492,16 @@ class UserConn(Selectable):
  
   def CloseTunnel(self, tunnel_closed=False):
     if self.tunnel and not tunnel_closed:
-      self.ProcessTunnelEof(read_eof=True, write_eof=True)
       self.tunnel.CloseStream(self.sid, stream_closed=True)
+      self.ProcessTunnelEof(read_eof=True, write_eof=True)
     self.tunnel = None
 
   def Cleanup(self, close=True):
+    Selectable.Cleanup(self, close=close)
     self.CloseTunnel()
     if self.conns:
       self.conns.Remove(self)
       self.conns = None
-    Selectable.Cleanup(self, close=close)
 
   def _FrontEnd(conn, address, proto, host, on_port, body, conns):
     # This is when an external user connects to a server and requests a
@@ -2582,7 +2588,7 @@ class UserConn(Selectable):
     if not backend:
       logInfo.append(('err', 'No back-end'))
       self.Log(logInfo)
-      self.Cleanup(self)
+      self.Cleanup()
       return None
 
     try:
@@ -2603,7 +2609,7 @@ class UserConn(Selectable):
     except socket.error, err:
       logInfo.append(('socket_error', '%s' % err))
       self.Log(logInfo)
-      self.Cleanup(self)
+      self.Cleanup()
       return None
 
     self.Log(logInfo)
@@ -2689,8 +2695,8 @@ class UnknownConn(MagicProtocolParser):
 
   def Cleanup(self, close=True):
     if self.conns: self.conns.Remove(self)
-    self.conns = self.parser = None
     MagicProtocolParser.Cleanup(self, close=close)
+    self.conns = self.parser = None
 
   def __str__(self):
     return '%s (%s/%s:%s)' % (MagicProtocolParser.__str__(self),
