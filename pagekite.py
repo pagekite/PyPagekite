@@ -3302,6 +3302,9 @@ class PageKite(object):
   def Configure(self, argv):
     opts, args = getopt.getopt(argv, OPT_FLAGS, OPT_ARGS) 
 
+    # Complain about crap on the command-line.
+    if args: raise ConfigError("Unknown arguments: %s" % args)
+
     for opt, arg in opts:
       if opt in ('-o', '--optfile'): self.ConfigureFromFile(arg) 
       elif opt in ('-S', '--savefile'):
