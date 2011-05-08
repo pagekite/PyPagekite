@@ -3844,7 +3844,6 @@ class PageKite(object):
                                  or '# webroot=/path/to/webroot/'),
       '',
     ]
-
     if self.SetServiceDefaults(check=True):
       config.extend([
         '#/ Use service default settings',
@@ -3984,7 +3983,7 @@ class PageKite(object):
                          or '# tls_default=DOMAIN'),
       '',
       '#/ Systems administration settings:',
-      (self.daemonize and 'daemonize' % self.logfile
+      (self.daemonize and 'daemonize'
                        or '# daemonize')
     ])
     if self.setuid and self.setgid:
