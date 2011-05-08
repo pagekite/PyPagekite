@@ -4,6 +4,7 @@ Version history - highlights
 v0.3.20  ??
 -------
    - Fixed more file-descriptor leaks
+   - Fixed a bug in initial handshake when front-end was using python's SSL.
 
 
 v0.3.19  2011.05.03
