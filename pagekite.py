@@ -299,7 +299,9 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'backend=', 'define_backend=',
             'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
-            'buffers=', 'noprobes']
+            'buffers=', 'noprobes', 'debugio',]
+
+DEBUG_IO = False
 
 AUTH_ERRORS           = '255.255.255.'
 AUTH_ERR_USER_UNKNOWN = '.0'
@@ -897,6 +899,7 @@ class AuthThread(threading.Thread):
       now = int(time.time())
       if self.jobs:
         (requests, conn, callback) = self.jobs.pop(0)
+        if DEBUG_IO: print '=== AUTH REQUESTS\n%s\n===' % requests
         self.qc.release()
 
         quotas = []
@@ -948,6 +951,7 @@ class AuthThread(threading.Thread):
             else:
               conn.quota[2] = time.time()
 
+        if DEBUG_IO: print '=== AUTH RESULTS\n%s\n===' % results
         callback(results)
         self.qc.acquire()
       else:
@@ -1840,8 +1844,10 @@ class Selectable(object):
       if self.peeking:
         data = self.fd.recv(maxread, socket.MSG_PEEK)
         self.peeked = len(data)
+        if DEBUG_IO: print '<== IN (peeked)\n%s\n===' % data
       else:
         data = self.fd.recv(maxread)
+        if DEBUG_IO: print '<== IN\n%s\n===' % data
     except (SSL.WantReadError, SSL.WantWriteError), err:
       return True
     except IOError, err:
@@ -1903,6 +1909,7 @@ class Selectable(object):
     if sending:
       try:
         sent_bytes = self.fd.send(sending[:(self.write_retry or SEND_MAX_BYTES)])
+        if DEBUG_IO: print '==> OUT\n%s\n===' % sending[:sent_bytes]
         self.wrote_bytes += sent_bytes
         self.write_retry = None
       except IOError, err:
@@ -1958,7 +1965,7 @@ class Selectable(object):
 
   def Flush(self, loops=50, wait=False):
     while loops != 0 and len(self.write_blocked) > 0 and self.Send([],
-                                                           try_flush=True):
+                                                                try_flush=True):
       if wait and len(self.write_blocked) > 0: time.sleep(0.1)
       loops -= 1
 
@@ -2371,7 +2378,7 @@ class Tunnel(ChunkParser):
 
     self.CountAs('backends_live')
     self.SetConn(conn)
-    conns.auth.check(requests, conn, lambda r: self.AuthCallback(conn, r))
+    conns.auth.check(requests[:], conn, lambda r: self.AuthCallback(conn, r))
 
     return self
 
@@ -2427,8 +2434,8 @@ class Tunnel(ChunkParser):
       output.append('%s: %s\r\n' % r)
 
     output.append(HTTP_StartBody())
-    if not self.Send(output):
-      conn.LogDebug('No tunnels configured, closing connection.')
+    if not self.Send(output, try_flush=True):
+      conn.LogDebug('No tunnels configured, closing connection (send failed).')
       self.Cleanup()
       return None
 
@@ -2487,7 +2494,8 @@ class Tunnel(ChunkParser):
     if self.conns.config.fe_certname:
       # We can't set the SNI directly from Python, so we use CONNECT instead
       commonName = self.conns.config.fe_certname[0].split('/')[0]
-      if (not self.Send(['CONNECT %s:443 HTTP/1.0\r\n\r\n' % commonName])
+      if (not self.Send(['CONNECT %s:443 HTTP/1.0\r\n\r\n' % commonName],
+                        try_flush=True)
           or not self.Flush(wait=True)):
         return None, None
 
@@ -2517,7 +2525,7 @@ class Tunnel(ChunkParser):
                                          conns.config.backends,
                                        tokens,
                                      nozchunks=conns.config.disable_zchunks,
-                                    replace=replace_sessionid))
+                                    replace=replace_sessionid), try_flush=True)
         or not self.Flush(wait=True)):
       return None, None
 
@@ -4428,6 +4436,9 @@ class PageKite(object):
       elif opt == '--nozchunks': self.disable_zchunks = True
       elif opt == '--nullui': self.ui = NullUi()
       elif opt == '--sslzlib': self.enable_sslzlib = True
+      elif opt == '--debugio':
+        global DEBUG_IO
+        DEBUG_IO = True
       elif opt == '--buffers': self.buffer_max = int(arg)
       elif opt == '--nocrashreport': self.crash_report_url = None
       elif opt == '--clean': pass
@@ -5120,6 +5131,9 @@ class PageKite(object):
     # Daemonize!
     if self.daemonize:
       self.Daemonize()
+
+    # Create global secret
+    globalSecret()
 
     # Create PID file
     if self.pidfile:
