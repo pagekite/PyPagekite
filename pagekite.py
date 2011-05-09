@@ -2091,7 +2091,7 @@ class Tunnel(ChunkParser):
     while not data.endswith('\r\n\r\n') and not data.endswith('\n\n'):
       try:
         buf = self.fd.recv(4096)
-      except Exception:
+      except:
         # This is sloppy, but the back-end will just connect somewhere else
         # instead, so laziness here should be fine.
         buf = None
@@ -2556,9 +2556,10 @@ class UserConn(Selectable):
       chunk_headers = [('RIP', self.address[0]), ('RPort', self.address[1])]
 
     if tunnels: self.tunnel = tunnels[0]
-    if self.tunnel and self.tunnel.SendData(self, ''.join(body),
-                                            host=host, proto=proto, port=on_port,
-                                            chunk_headers=chunk_headers):
+    if (self.tunnel and self.tunnel.SendData(self, ''.join(body), host=host,
+                                             proto=proto, port=on_port,
+                                             chunk_headers=chunk_headers)
+                    and self.conns):
       self.Log([('domain', self.host), ('on_port', on_port), ('proto', self.proto), ('is', 'FE')])
       self.conns.Add(self)
       self.conns.TrackIP(address[0], host)
