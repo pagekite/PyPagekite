@@ -1051,7 +1051,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       if length:
         self.send_header('Content-Length', length)
       elif not chunked:
-        self.send_header('Content-Length', len(message))
+        self.send_header('Content-Length', len(message or ''))
 
     self.sendStdHdrs(header_list=header_list, mimetype=mimetype)
     if message and not self.suppress_body:
@@ -1162,9 +1162,15 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
           mimetype = 'text/html'
           full_path = ipath
           break
-      if not full_path.endswith('.shtml'): shtml_vars = None
-      rf = open(full_path, "rb")
-      rf_stat = os.fstat(rf.fileno())
+      if os.path.isdir(full_path):
+        mimetype = 'text/html'
+        rf_size = rf = None
+        rf_stat = os.stat(full_path)
+      else:
+        if not full_path.endswith('.shtml'): shtml_vars = None
+        rf = open(full_path, "rb")
+        rf_stat = os.fstat(rf.fileno())
+        rf_size = rf_stat.st_size
     except (IOError, OSError), e:
       return False
 
@@ -1187,20 +1193,25 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     # FIXME: Support ranges for resuming aborted transfers.
 
     self.sendResponse(None, mimetype=mimetype,
-                            length=rf_stat.st_size,
+                            length=rf_size,
                             chunked=(shtml_vars is not None),
                             header_list=headers)
 
     chunk_size = (shtml_vars and 1024 or 16) * 1024
-    while not self.suppress_body:
-      data = rf.read(chunk_size)
-      if data == "": break
-      if shtml_vars:
-        self.sendChunk(data % shtml_vars)
-      else:
-        self.sendChunk(data)
+    if rf:
+      while not self.suppress_body:
+        data = rf.read(chunk_size)
+        if data == "": break
+        if shtml_vars:
+          self.sendChunk(data % shtml_vars)
+        else:
+          self.sendChunk(data)
+      rf.close()
+    elif shtml_vars and not self.suppress_body:
+      shtml_vars['title'] = '//%s%s' % (shtml_vars['http_host'], path)
+      shtml_vars['body'] = '<p><i>Directory listings disabled and</i> index.html <i>not found.</i></p>'
+      self.sendChunk(self.TEMPLATE_HTML % shtml_vars)
     self.sendEof()
-    rf.close()
     return True
 
   def getMimeType(self, path):
