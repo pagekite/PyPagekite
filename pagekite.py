@@ -5099,6 +5099,12 @@ class PageKite(object):
       self.ui.Notify('SECURITY WARNING: No SSL support was found, tunnels are insecure!', prefix='!')
       self.ui.Notify('Please install either pyOpenSSL or python-ssl.',  prefix='!')
 
+    # Create global secret
+    self.ui.Status('startup', message='Collecting entropy for a secure secret...')
+    LogInfo('Collecting entropy for a secure secret.')
+    globalSecret()
+    self.ui.Status('startup', message='Starting up...')
+
     try:
       # Set up our listeners if we are a server.
       if self.isfrontend:
@@ -5142,9 +5148,6 @@ class PageKite(object):
     # Daemonize!
     if self.daemonize:
       self.Daemonize()
-
-    # Create global secret
-    globalSecret()
 
     # Create PID file
     if self.pidfile:
@@ -5235,7 +5238,7 @@ def Configure(pk):
     print '%s' % APPVER
     sys.exit(0)
 
-  if '--clean' not in sys.argv:
+  if '--clean' not in sys.argv and '--help' not in sys.argv:
     if os.path.exists(pk.rcfile): pk.ConfigureFromFile()
 
   pk.Configure(sys.argv[1:])
