@@ -321,6 +321,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'buffers=', 'noprobes', 'debugio',]
 
 DEBUG_IO = False
+DEFAULT_CHARSET = 'utf-8'
 
 AUTH_ERRORS           = '255.255.255.'
 AUTH_ERR_USER_UNKNOWN = '.0'
@@ -749,6 +750,8 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
   return ''.join(req)
 
 def HTTP_ResponseHeader(code, title, mimetype='text/html'):
+  if mimetype.startswith('text/') and ';' not in mimetype:
+    mimetype += ('; charset=%s' % DEFAULT_CHARSET)
   return ('HTTP/1.1 %s %s\r\nContent-Type: %s\r\nPragma: no-cache\r\n'
           'Expires: 0\r\nCache-Control: no-store\r\nConnection: close'
           '\r\n') % (code, title, mimetype)
@@ -1048,7 +1051,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   def log_message(self, format, *args):
     Log([('uireq', format % args)])
 
-  def sendStdHdrs(self, header_list=[], cachectrl='private', mimetype='text/html'):
+  def sendStdHdrs(self, header_list=[], cachectrl='private',
+                                        mimetype='text/html'):
+    if mimetype.startswith('text/') and ';' not in mimetype:
+      mimetype += ('; charset=%s' % DEFAULT_CHARSET)
     self.send_header('Cache-Control', cachectrl)
     self.send_header('Content-Type', mimetype)
     for header in header_list:
