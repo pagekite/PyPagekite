@@ -1,9 +1,12 @@
 Version history - highlights
 ============================
 
-v0.4.2   ??
+v0.4.2   2011.05.13
 ------
-   - Fixed file descriptor leaks
+   - Fixed some file descriptor leaks
+   - Added name-based virtual server and virtual file tree to built in HTTPD.
+   - Revamped the command-line short-cuts to follow the common Unix
+     'action source source ... destination' pattern.
 
 
 v0.4.1   2011.05.05
