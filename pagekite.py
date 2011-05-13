@@ -274,6 +274,19 @@ Shortcuts:
     This may cause problems if you have many files and folders by that
     name, but that should be relatively rare. :-)
 
+Shortcuts, file sharing and security:
+
+    Note that for security reasons, when you use shortcuts, full paths
+    will not be exposed directly to the web, but most of the path will
+    instead be replaced with a string of semi-random characters.
+
+    For this reason, sharing ./*.html will result in very different paths
+    from sharing *.html or /home/user/*.html.
+
+    This should make it more difficult for hackers to guess the paths to
+    shared files or derive information about your local filesystem from
+    the paths exposed to the web.
+
 Shortcut examples:
 
 """+EXAMPLES) % APPVER
@@ -293,9 +306,10 @@ OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'signup', 'nullui', 'help',
             'optfile=', 'savefile=', 'autosave', 'noautosave',
-            'save',' settings',
+            'save', 'settings',
             'service_xmlrpc=', 'controlpanel', 'controlpass',
-            'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webroot=',
+            'httpd=', 'pemfile=', 'httppass=', 'errorurl=',
+            'webroot=', 'webpath=', 'webindexes=', 'webaccess=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'defaults', 'domain=',
             'authdomain=', 'register=', 'host=',
@@ -319,6 +333,17 @@ LOOPBACK_HN = 'loopback'
 LOOPBACK_FE = LOOPBACK_HN + ':1'
 LOOPBACK_BE = LOOPBACK_HN + ':2'
 LOOPBACK = {'FE': LOOPBACK_FE, 'BE': LOOPBACK_BE}
+
+WEB_POLICY_DEFAULT = 'default'
+WEB_POLICY_PUBLIC = 'public'
+WEB_POLICY_PRIVATE = 'private'
+WEB_POLICY_OTP = 'otp'
+WEB_POLICIES = (WEB_POLICY_DEFAULT, WEB_POLICY_PUBLIC,
+                WEB_POLICY_PRIVATE, WEB_POLICY_OTP)
+
+WEB_INDEX_ON = 'on'
+WEB_INDEX_OFF = 'off'
+WEB_INDEXTYPES = (WEB_INDEX_ON, WEB_INDEX_OFF)
 
 BE_PROTO = 0
 BE_PORT = 1
@@ -1156,11 +1181,43 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
-  def sendStaticFile(self, path, mimetype, shtml_vars=None):
+  def sendStaticFile(self, http_host, path, mimetype, shtml_vars=None):
     try:
       if path.find('..') >= 0: raise IOError("Evil")
-      # FIXME: What about dynamic path mappings?
-      full_path = '%s/%s' % (self.server.pkite.ui_webroot, path)
+
+      paths = self.server.pkite.ui_paths
+      def_paths = paths.get('*', {})
+      if ':' not in http_host: http_host += ':80'
+      host_paths = paths.get(http_host.replace(':', '/'), {})
+      path_parts = path.split('/')
+      path_rest = []
+      full_path = ''
+      while len(path_parts) > 0 and not full_path:
+        pf = '/'.join(path_parts)
+        pd = pf+'/'
+        m = None
+        if   pf in host_paths: m = host_paths[pf]
+        elif pd in host_paths: m = host_paths[pd]
+        elif pf in def_paths: m = def_paths[pf]
+        elif pd in def_paths: m = def_paths[pd]
+        if m:
+          policy = m[0]
+          full_path = os.path.join(m[1], *path_rest)
+        else:
+          path_rest.insert(0, path_parts.pop())
+
+      if not full_path:
+        policy = self.server.pkite.ui_access_policy
+        full_path = '%s/%s' % (self.server.pkite.ui_webroot, path)
+
+      if os.path.isdir(full_path) and not path.endswith('/'):
+        self.sendResponse('\n', code=302, msg='Moved', header_list=[
+                            ('Location', '%s/' % path)
+                          ])
+        return True
+
+      # FIXME: Check policy!
+
       for index in ('index.htm', 'index.html', 'index.shtml'):
         ipath = os.path.join(full_path, index)
         if os.path.exists(ipath):
@@ -1252,6 +1309,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
     data['method'] = data.get('http_x-pagekite-proto', 'http').lower()
 
+    http_host = data.get('http_host', 'unknown')
     if 'http_cookie' in data:
       cookies = Cookie.SimpleCookie(data['http_cookie'])
     else:
@@ -1292,7 +1350,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         return
 
       if path == '/_pagekite/':
-        if not self.sendStaticFile('/control.shtml', 'text/html', shtml_vars=data):
+        if not self.sendStaticFile(http_host, '/control.shtml', 'text/html',
+                                   shtml_vars=data):
           self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
         return
       elif path.startswith('/_pagekite/add_kite/'):
@@ -1310,7 +1369,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         self.sendResponse('<h1>Not found</h1>\n', code=403, msg='Missing')
         return
     else:
-      if not self.sendStaticFile(path, data['mimetype'], shtml_vars=data):
+      if not self.sendStaticFile(http_host, path, data['mimetype'],
+                                 shtml_vars=data):
         self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
       return
 
@@ -3422,18 +3482,25 @@ class TunnelManager(threading.Thread):
           self.pkite.ui.Status('flying')
           for be in self.pkite.backends.values():
             if be[BE_STATUS] != BE_STATUS_DISABLED:
+              domain = be[BE_DOMAIN]
               port = be[BE_PORT]
               proto = be[BE_PROTO]
-              proxied = (proto == 'raw') and ' (HTTP proxied)' or ''
+              prox = (proto == 'raw') and ' (HTTP proxied)' or ''
               if proto == 'raw' and port in ('22', 22): proto = 'ssh'
               # FIXME: If the remote front-end does auto-SSL, then report
               #        the https:// protocol instead!
-              self.pkite.ui.Notify(('Flying %s:%s as %s://%s%s/%s'
-                                    ) % (be[BE_BHOST], be[BE_BPORT],
-                                         proto, be[BE_DOMAIN],
-                                         port and (':%s' % port) or '',
-                                         proxied),
+              url = '%s://%s%s' % (proto, domain, port and (':%s' % port) or '')
+              self.pkite.ui.Notify(('Flying %s:%s as %s/%s'
+                                    ) % (be[BE_BHOST], be[BE_BPORT], url, prox),
                                     prefix='~<>')
+              domainp = '%s/%s' % (domain, port or '80')
+              if (self.pkite.ui_sspec and
+                  domainp in self.pkite.ui_paths and
+                  be[BE_BHOST] == self.pkite.ui_sspec[0] and
+                  be[BE_BPORT] == self.pkite.ui_sspec[1]):
+                dpaths = self.pkite.ui_paths[domainp]
+                for dp in sorted(dpaths.keys()):
+                  self.pkite.ui.Notify(' - %s%s' % (url, dp))
 
           self.PingTunnels(time.time())
 
@@ -3757,6 +3824,9 @@ class PageKite(object):
     self.ui_password = None
     self.ui_pemfile = None
     self.ui_webroot = None
+    self.ui_access_policy = WEB_POLICY_PUBLIC
+    self.ui_index_policy = WEB_INDEX_ON
+    self.ui_paths = {}
     self.disable_zchunks = False
     self.enable_sslzlib = False
     self.buffer_max = 1024
@@ -3858,7 +3928,7 @@ class PageKite(object):
       '# when including external configuration files with optfile=.',
       '#',
       '',
-      '#/ HTTP control-panel settings',
+      '#/ Built-in HTTPD settings',
       (self.ui_sspec and 'httpd=%s:%d' % self.ui_sspec
                       or '# httpd=host:port'),
       (self.ui_password and 'httppass=%s' % self.ui_password
@@ -3867,8 +3937,15 @@ class PageKite(object):
                         or '# pemfile=/path/to/sslcert.pem'),
       (self.ui_webroot and safe and 'webroot=%s' % self.ui_webroot
                                  or '# webroot=/path/to/webroot/'),
-      '',
+      '%sebaccess=%s' % (self.ui_sspec and 'w' or '# w', self.ui_access_policy),
+      '%sebindexes=%s' % (self.ui_sspec and 'w' or '# w', self.ui_index_policy),
     ]
+    for http_host in sorted(self.ui_paths.keys()):
+      for path in sorted(self.ui_paths[http_host].keys()):
+        p = self.ui_paths[http_host][path]
+        config.append('webpath=%s:%s:%s:%s' % (http_host, path, p[0], p[1]))
+    config.append('')
+
     if self.SetServiceDefaults(check=True):
       config.extend([
         '#/ Use service default settings',
@@ -4351,7 +4428,32 @@ class PageKite(object):
         else:
           self.ui_sspec = (host, 0)
 
-      elif opt == '--webroot': self.ui_webroot = arg
+      elif opt == '--webroot':
+        self.ui_webroot = arg
+      elif opt == '--webaccess':
+        self.ui_access_policy = arg.lower()
+        if self.ui_access_policy not in WEB_POLICIES:
+          raise ConfigError('Policy must be one of: %s' % WEB_POLICIES)
+      elif opt == '--webindexes':
+        self.ui_index_policy = arg.lower()
+        if self.ui_index_policy not in WEB_INDEXTYPES:
+          raise ConfigError('Index policy must be one of: %s' % WEB_POLICIES)
+      elif opt == '--webpath':
+        host, path, policy, fpath = arg.split(':', 3)
+
+        # Defaults...
+        path = path or fpath
+        host = host or '*'
+        policy = policy or WEB_POLICY_DEFAULT
+
+        if policy not in WEB_POLICIES:
+          raise ConfigError('Policy must be one of: %s' % WEB_POLICIES)
+        elif os.path.isdir(fpath):
+          if not path.endswith('/'): path += '/'
+
+        hosti = self.ui_paths.get(host, {})
+        hosti[path] = (policy or 'public', fpath)
+        self.ui_paths[host] = hosti
 
       elif opt == '--tls_default': self.tls_default = arg
       elif opt == '--tls_endpoint':
@@ -4482,6 +4584,7 @@ class PageKite(object):
     # Handle the user-friendly argument stuff and simple registration.
 
     just_these_backends = {}
+    just_these_webpaths = {}
     argsets = []
     while 'AND' in args:
       argsets.append(args[0:args.index('AND')])
@@ -4491,17 +4594,24 @@ class PageKite(object):
 
     for args in argsets:
       fe_spec = args.pop()
+      if os.path.exists(fe_spec):
+        raise ConfigError('Is a local file: %s' % fe_spec)
+
+      be_paths = []
       if len(args) == 0:
         be_spec = ''
       elif len(args) == 1:
-        be_spec = args[0]
+        if os.path.exists(args[0]):
+          be_paths = [args[0]]
+          be_spec = 'builtin'
+        else:
+          be_spec = args[0]
       else:
-        raise ConfigError("Sharing files doesn't work yet, sorry!")
+        be_spec = 'builtin'
+        be_paths = args[:]
 
       if be_spec == '':
         be = None
-      elif os.path.exists(be_spec):
-        be = [be_spec]
       else:
         be = be_spec.split(':')
         if len(be) > 2:
@@ -4520,9 +4630,45 @@ class PageKite(object):
       elif len(fe) == 1 and be:
         fe = ['http', fe[0]]
 
+      for f in be_paths:
+        if not os.path.exists(f):
+          raise ConfigError('File or directory not found: %s' % f)
+
       spec = ':'.join(fe)
       if be: spec += ':' + ':'.join(be)
-      just_these_backends.update(self.ArgToBackendSpecs(spec))
+      specs = self.ArgToBackendSpecs(spec)
+      just_these_backends.update(specs)
+
+      if be_paths:
+        # Here we map the list of files/directories into a bunch of web-paths.
+        # If a path contains any information about the local directory
+        # structure, we obfuscate all the path information, using a method
+        # that should be very hard to guess, but stable.
+        spec = specs[specs.keys()[0]]
+        http_host = '%s/%s' % (spec[BE_DOMAIN], spec[BE_PORT] or '80')
+        rand_seed = '%s:%x' % (specs[specs.keys()[0]][BE_SECRET],
+                               time.time()/(24*3600))
+        host_paths = just_these_webpaths.get(http_host, {})
+        for path in be_paths:
+          if (os.path.isdir(path) and
+              not path.startswith('.') and
+              not path.startswith('/')):
+            webpath = path
+            if not webpath.endswith('/'): webpath += '/'
+          elif '/' in path:
+            if path.endswith('/'): path = path[0:-1]
+            webpath = '/%s/%s' % (sha1hex(rand_seed+os.path.dirname(path))[0:8],
+                                 os.path.basename(path))
+          elif path == '.':
+            webpath = '/' 
+          else:
+            webpath = path
+          if webpath.endswith('/.'):
+            webpath = webpath[:-2]
+          if not webpath.startswith('/'):
+            webpath = '/'+path
+          host_paths[webpath] = (WEB_POLICY_DEFAULT, path)
+        just_these_webpaths[http_host] = host_paths
 
     need_registration = {}
     for be in just_these_backends.values():
@@ -4550,6 +4696,8 @@ class PageKite(object):
     if just_these_backends.keys():
       for be in self.backends.values(): be[BE_STATUS] = BE_STATUS_DISABLED
       self.backends.update(just_these_backends)
+      if just_these_webpaths.keys():
+        self.ui_paths = just_these_webpaths
 
     return self
 
