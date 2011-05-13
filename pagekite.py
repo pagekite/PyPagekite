@@ -106,15 +106,16 @@ AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
 EXAMPLES = ("""\
-    To make public a webserver running on localhost:
-    $ pagekite.py NAME.pagekite.me                   # local port 80
-    $ pagekite.py NAME.pagekite.me:3000              # local port 3000
-    $ pagekite.py NAME.pagekite.me:built-in          # built-in HTTPD
-    $ pagekite.py NAME.pagekite.me:/path/to/webroot  # built-in HTTPD
+    Basic usage, gives http://localhost:80/ a public name:
+    $ pagekite.py NAME.pagekite.me
 
-    To make public HTTP and SSH servers:
-    $ pagekite.py http:NAME.pagekite.me ssh:NAME.pagekite.me
-    $ pagekite.py http,ssh:NAME.pagekite.me          # The same thing!
+    To expose specific folders, files or use alternate local ports:
+    $ pagekite.py /path/to/webroot NAME.pagekite.me   # built-in HTTPD
+    $ pagekite.py *.html           NAME.pagekite.me   # built-in HTTPD
+    $ pagekite.py 3000             NAME.pagekite.me   # http://localhost:3000/
+
+    To expose multiple local servers (SSH and HTTP):
+    $ pagekite.py ssh://NAME.pagekite.me AND 3000 http://NAME.pagekite.me
 """)
 MINIDOC = ("""\
 >>> Welcome to pagekite.py v%s!
@@ -256,18 +257,22 @@ Examples:
 
 Shortcuts:
 
-    A shortcut is simply the name of a kite, optionally prefixed by a
-    protocol specification, followed by a local port number, or followed
-    by a path to a folder for serving static files from. Protocols,
-    kite names and ports (or folders) are separated by the ':' character
-    (see examples below).
+    A shortcut is simply the name of a kite following a list of zero or
+    more 'things' to expose using that name.  Pagekite knows how to expose
+    either servers running on localhost ports or directories and files
+    using the built-in HTTP server.  If no list of things to expose is
+    provided, the defaults for that kite are read from the configuration
+    file or http://localhost:80/ used as a last-resort default.
 
-    When shortcuts are used, all defined back-ends are disabled except for
-    those matching the list of shortcuts.
-
-    If no match is found and the program is run interactively, the user
+    If a kite name is requested which does not already exist in the
+    configuration file and program is run interactively, the user
     will be prompted and given the option of signing up and/or creating a
     new kite using the PageKite.net service.
+
+    Multiple short-cuts can be specified on a single command-line,
+    separated by the word 'AND' (note capital letters are required).
+    This may cause problems if you have many files and folders by that
+    name, but that should be relatively rare. :-)
 
 Shortcut examples:
 
@@ -4477,9 +4482,47 @@ class PageKite(object):
     # Handle the user-friendly argument stuff and simple registration.
 
     just_these_backends = {}
-    for arg in args:
-      if not arg.startswith('-'):
-        just_these_backends.update(self.ArgToBackendSpecs(arg))
+    argsets = []
+    while 'AND' in args:
+      argsets.append(args[0:args.index('AND')])
+      args[0:args.index('AND')+1] = []
+    if args:
+      argsets.append(args)
+
+    for args in argsets:
+      fe_spec = args.pop()
+      if len(args) == 0:
+        be_spec = ''
+      elif len(args) == 1:
+        be_spec = args[0]
+      else:
+        raise ConfigError("Sharing files doesn't work yet, sorry!")
+
+      if be_spec == '':
+        be = None
+      elif os.path.exists(be_spec):
+        be = [be_spec]
+      else:
+        be = be_spec.split(':')
+        if len(be) > 2:
+          raise ConfigError('Bad back-end definition: %s' % be_spec)
+        if len(be) < 2:
+          be = ['localhost', be[0]]
+
+      fe = fe_spec.replace('/', '').split(':')
+      if len(fe) == 3:
+        fe = ['%s-%s' % (fe[0], fe[2]), fe[1]]
+      elif len(fe) == 2:
+        try:
+          fe = ['http-%s' % int(fe[1]), fe[0]]
+        except ValueError:
+          pass
+      elif len(fe) == 1 and be:
+        fe = ['http', fe[0]]
+
+      spec = ':'.join(fe)
+      if be: spec += ':' + ':'.join(be)
+      just_these_backends.update(self.ArgToBackendSpecs(spec))
 
     need_registration = {}
     for be in just_these_backends.values():
