@@ -4666,7 +4666,7 @@ class PageKite(object):
               not os.path.isabs(path)):
             webpath = path
             if not webpath.endswith('/'): webpath += '/'
-          elif (phead and ptail) or ('/' in path):
+          elif (phead and ptail) or ('/' in path) or os.path.isabs(path):
             if path.endswith('/'): path = path[0:-1]
             webpath = '/%s/%s' % (sha1hex(rand_seed+os.path.dirname(path))[0:8],
                                   os.path.basename(path))
