@@ -1189,6 +1189,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def sendStaticFile(self, http_host, path, mimetype, shtml_vars=None):
     try:
+      path = urllib.unquote(path)
       if path.find('..') >= 0: raise IOError("Evil")
 
       paths = self.server.pkite.ui_paths
@@ -4448,7 +4449,7 @@ class PageKite(object):
         host, path, policy, fpath = arg.split(':', 3)
 
         # Defaults...
-        path = path or fpath
+        path = path or os.path.normpath(fpath)
         host = host or '*'
         policy = policy or WEB_POLICY_DEFAULT
 
@@ -4458,7 +4459,7 @@ class PageKite(object):
           if not path.endswith('/'): path += '/'
 
         hosti = self.ui_paths.get(host, {})
-        hosti[path] = (policy or 'public', fpath)
+        hosti[path] = (policy or 'public', os.path.realpath(fpath))
         self.ui_paths[host] = hosti
 
       elif opt == '--tls_default': self.tls_default = arg
@@ -4656,6 +4657,7 @@ class PageKite(object):
                                time.time()/(24*3600))
         host_paths = just_these_webpaths.get(http_host, {})
         for path in be_paths:
+          path = os.path.normpath(path)
           if (os.path.isdir(path) and
               not path.startswith('.') and
               not path.startswith('/')):
@@ -4664,7 +4666,7 @@ class PageKite(object):
           elif '/' in path:
             if path.endswith('/'): path = path[0:-1]
             webpath = '/%s/%s' % (sha1hex(rand_seed+os.path.dirname(path))[0:8],
-                                 os.path.basename(path))
+                                  os.path.basename(path))
           elif path == '.':
             webpath = '/' 
           else:
@@ -4673,7 +4675,7 @@ class PageKite(object):
             webpath = webpath[:-2]
           if not webpath.startswith('/'):
             webpath = '/'+path
-          host_paths[webpath] = (WEB_POLICY_DEFAULT, path)
+          host_paths[webpath] = (WEB_POLICY_DEFAULT, os.path.realpath(path))
         just_these_webpaths[http_host] = host_paths
 
     need_registration = {}
