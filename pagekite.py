@@ -3693,7 +3693,7 @@ class BasicUi(NullUi):
     if self.wizard_tell: self.Welcome()
     self.in_wizard = None
     sys.stderr.write('\n')
-    if os.getenv('USERPROFILE'):
+    if os.getenv('USERPROFILE') or os.getenv('HOMEDRIVE'):
       sys.stderr.write('\n<<< press ENTER to continue >>>\n')
       sys.stdin.readline()
 
@@ -3876,13 +3876,13 @@ class PageKite(object):
     # 'standard' locations, but if nothing is found there and something local
     # exists, use that instead.
     try:
-      if os.getenv('USERPROFILE'):
+      if os.getenv('USERPROFILE') or os.getenv('HOMEDRIVE'):
         # Windows
-        self.rcfile = os.path.join(os.getenv('USERPROFILE'), 'pagekite.cfg')
+        self.rcfile = os.path.join(os.expanduser('~'), 'pagekite.cfg')
         self.devnull = 'nul'
       else:
         # Everything else
-        self.rcfile = os.path.join(os.getenv('HOME'), '.pagekite.rc')
+        self.rcfile = os.expanduser('~/.pagekite.rc')
         self.devnull = '/dev/null'
 
     except Exception, e:
@@ -4462,7 +4462,7 @@ class PageKite(object):
           if not path.endswith('/'): path += '/'
 
         hosti = self.ui_paths.get(host, {})
-        hosti[path] = (policy or 'public', os.path.realpath(fpath))
+        hosti[path] = (policy or 'public', os.path.abspath(fpath))
         self.ui_paths[host] = hosti
 
       elif opt == '--tls_default': self.tls_default = arg
@@ -4660,13 +4660,13 @@ class PageKite(object):
                                time.time()/(24*3600))
         host_paths = just_these_webpaths.get(http_host, {})
         for path in be_paths:
-          path = os.path.normpath(path)
+          phead, ptail = os.path.split(path)
           if (os.path.isdir(path) and
               not path.startswith('.') and
-              not path.startswith('/')):
+              not os.path.isabs(path)):
             webpath = path
             if not webpath.endswith('/'): webpath += '/'
-          elif '/' in path:
+          elif (phead and ptail) or ('/' in path):
             if path.endswith('/'): path = path[0:-1]
             webpath = '/%s/%s' % (sha1hex(rand_seed+os.path.dirname(path))[0:8],
                                   os.path.basename(path))
@@ -4678,7 +4678,7 @@ class PageKite(object):
             webpath = webpath[:-2]
           if not webpath.startswith('/'):
             webpath = '/'+path
-          host_paths[webpath] = (WEB_POLICY_DEFAULT, os.path.realpath(path))
+          host_paths[webpath] = (WEB_POLICY_DEFAULT, os.path.abspath(path))
         just_these_webpaths[http_host] = host_paths
 
     need_registration = {}
