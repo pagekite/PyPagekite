@@ -3620,6 +3620,10 @@ class NullUi(object):
 class BasicUi(NullUi):
   """Stdio based user interface."""
 
+  CLEAR = '\033[H\033[J'
+  BOLD = '\033[1m'
+  NORM = '\033[0m'
+
   WANTS_STDERR = True
   EMAIL_RE = re.compile(r'^[a-z0-9!#$%&\'\*\+\/=?^_`{|}~-]+'
                          '(?:\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'
@@ -3661,21 +3665,20 @@ class BasicUi(NullUi):
 
   def Welcome(self, pre=None):
     if self.in_wizard:
-      sys.stderr.write('[H[J%s' % self.in_wizard)
+      sys.stderr.write('%s%s%s' % (self.CLEAR, self.BOLD, self.in_wizard))
     if self.welcome:
-      sys.stderr.write('%s\n' % self.welcome)
+      sys.stderr.write('%s\r%s\n' % (self.NORM, self.welcome))
       self.welcome = None
     if self.in_wizard and self.wizard_tell:
-      sys.stderr.write('\n')
+      sys.stderr.write('\n%s\r' % self.NORM)
       for line in self.wizard_tell: sys.stderr.write('*** %s\n' % line)
       self.wizard_tell = None
     if pre:
-      sys.stderr.write('\n')
+      sys.stderr.write('\n%s\r' % self.NORM)
       for line in pre: sys.stderr.write('    %s\n' % line)
-    sys.stderr.write('\n')
+    sys.stderr.write('\n%s\r' % self.NORM)
 
   def StartWizard(self, title):
-    #sys.stderr.write('[H[J')
     self.Welcome()
     banner = '>>> %s' %  title
     banner = ('%s%s[CTRL+C = Cancel]\n') % (banner, ' ' * (62-len(banner)))
