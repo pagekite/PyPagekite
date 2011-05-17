@@ -342,9 +342,10 @@ WEB_POLICY_OTP = 'otp'
 WEB_POLICIES = (WEB_POLICY_DEFAULT, WEB_POLICY_PUBLIC,
                 WEB_POLICY_PRIVATE, WEB_POLICY_OTP)
 
+WEB_INDEX_ALL = 'all'
 WEB_INDEX_ON = 'on'
 WEB_INDEX_OFF = 'off'
-WEB_INDEXTYPES = (WEB_INDEX_ON, WEB_INDEX_OFF)
+WEB_INDEXTYPES = (WEB_INDEX_ALL, WEB_INDEX_ON, WEB_INDEX_OFF)
 
 BE_PROTO = 0
 BE_PORT = 1
@@ -380,6 +381,7 @@ DYNDNS = {
 import base64
 import cgi
 from cgi import escape as escape_html
+import datetime
 import errno
 import getopt
 import os
@@ -1009,18 +1011,50 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   # Make all paths/endpoints legal, we interpret them below.
   rpc_paths = ( )
 
+  E403 = { 'code': '403', 'msg': 'Missing', 'mimetype': 'text/html',
+           'title': '403 Not found',
+           'body': '<p>File or directory not found. Sorry!</p>' }
+  E404 = { 'code': '404', 'msg': 'Not found', 'mimetype': 'text/html',
+           'title': '404 Not found',
+           'body': '<p>File or directory not found. Sorry!</p>' }
+
   MIME_TYPES = {
-    'txt': 'text/plain',
-    'shtml': 'text/html',
-    'html': 'text/html',
-    'htm': 'text/html',
+    '3gp': 'video/3gpp',            'aac': 'audio/aac',
+    'atom': 'application/atom+xml', 'avi': 'video/avi',
+    'bmp': 'image/bmp',             'bz2': 'application/x-bzip2',
+    'c': 'text/plain',              'cpp': 'text/plain',
     'css': 'text/css',
+    'conf': 'text/plain',           'cfg': 'text/plain',
+    'dtd': 'application/xml-dtd',   'doc': 'application/msword',
+    'gif': 'image/gif',             'gz': 'application/x-gzip',
+    'h': 'text/plain',              'hpp': 'text/plain',
+    'htm': 'text/html',             'html': 'text/html',
+    'hqx': 'application/mac-binhex40',
+    'java': 'text/plain',           'jar': 'application/java-archive',
+    'jpg': 'image/jpeg',            'jpeg': 'image/jpeg',
     'js': 'application/javascript',
-    'jsonp': 'application/javascript',
-    'png': 'image/png',
-    'gif': 'image/gif',
-    'jpg': 'image/jpeg',
-    'jepg': 'image/jpeg',
+    'json': 'application/json',     'jsonp': 'application/javascript',
+    'log': 'text/plain',
+    'md': 'text/plain',            'midi': 'audio/x-midi',
+    'mov': 'video/quicktime',      'mpeg': 'video/mpeg',
+    'mp2': 'audio/mpeg',           'mp3': 'audio/mpeg',
+    'm4v': 'video/mp4',            'mp4': 'video/mp4',
+    'm4a': 'audio/mp4',
+    'ogg': 'audio/vorbis',
+    'pdf': 'application/pdf',      'ps': 'application/postscript',
+    'pl': 'text/plain',            'png': 'image/png',
+    'ppt': 'application/vnd.ms-powerpoint',
+    'py': 'text/plain',            'pyw': 'text/plain',
+    'pk-shtml': 'text/html',       'pk-js': 'application/javascript',
+    'rc': 'text/plain',            'rtf': 'application/rtf',
+    'rss': 'application/rss+xml',  'sgml': 'text/sgml',
+    'sh': 'text/plain',            'shtml': 'text/plain',
+    'svg': 'image/svg+xml',        'swf': 'application/x-shockwave-flash',
+    'tar': 'application/x-tar',    'tgz': 'application/x-tar',
+    'tiff': 'image/tiff',          'txt': 'text/plain',
+    'wav': 'audio/wav',
+    'xml': 'application/xml',      'xls': 'application/vnd.ms-excel',
+    'zip': 'application/zip',
     'DEFAULT': 'application/octet-stream'
   }
   TEMPLATE_RAW = ('%(body)s')
@@ -1225,7 +1259,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
       # FIXME: Check policy!
 
-      for index in ('index.htm', 'index.html', 'index.shtml'):
+      for index in ('index.pk-shtml', 'index.htm', 'index.html'):
         ipath = os.path.join(full_path, index)
         if os.path.exists(ipath):
           mimetype = 'text/html'
@@ -1236,7 +1270,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         rf_size = rf = None
         rf_stat = os.stat(full_path)
       else:
-        if not full_path.endswith('.shtml'): shtml_vars = None
+        if not (full_path.endswith('.pk-shtml') or
+                full_path.endswith('.pk-js')): shtml_vars = None
         rf = open(full_path, "rb")
         rf_stat = os.fstat(rf.fileno())
         rf_size = rf_stat.st_size
@@ -1277,8 +1312,54 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
           self.sendChunk(data)
       rf.close()
     elif shtml_vars and not self.suppress_body:
+      if self.server.pkite.ui_index_policy in (WEB_INDEX_ON, WEB_INDEX_ALL):
+        files = sorted(os.listdir(full_path))
+        if self.server.pkite.ui_index_policy != WEB_INDEX_ALL:
+          files = [f for f in files if not f.startswith('.')]
+        fhtml = ['<table>']
+        if files:
+          for fn in files:
+            fpath = os.path.join(full_path, fn)
+            fmimetype = self.getMimeType(fn)
+            fsize = os.path.getsize(fpath)
+            ops = [ ]
+            if os.path.isdir(fpath):
+              fclass = ['dir']
+              fn += '/'
+            else:
+              fclass = ['file']
+              ops.append('download')
+              if (fmimetype.startswith('text/') or
+                  (fmimetype == 'application/octet-stream' and fsize < 512000)):
+                ops.append('view')
+            (unused, ext) = os.path.splitext(fn)
+            if ext:
+              fclass.append(ext.replace('.', 'ext_'))
+            fclass.append('mime_%s' % fmimetype.replace('/', '_'))
+
+            qfn = urllib.quote(fn)
+            ophtml = ', '.join([('<a class="%s" href="%s?%s=/%s">%s</a>'
+                                 ) % (op, qfn, op, qfn, op)
+                                for op in sorted(ops)])
+            fhtml.append(('<tr class="%s">'
+                           '<td class="ops">%s</td>'
+                           '<td class="size">%s</td>'
+                           '<td class="mtime">%s</td>'
+                           '<td class="name"><a href="%s">%s</a></td>'
+                          '</tr>'
+                         ) % (' '.join(fclass),
+                               ophtml, fsize,
+                               str(datetime.datetime.fromtimestamp(
+                                                 int(os.path.getmtime(fpath)))),
+                               qfn, fn.replace('<', '&lt;'),
+                             ))
+        else:
+          fhtml.append('<tr><td><i>empty</i></td></tr>')
+        fhtml.append('</table>')
+        shtml_vars['body'] = ''.join(fhtml)
+      else:
+        shtml_vars['body'] = '<p><i>Directory listings disabled and</i> index.html <i>not found.</i></p>'
       shtml_vars['title'] = '//%s%s' % (shtml_vars['http_host'], path)
-      shtml_vars['body'] = '<p><i>Directory listings disabled and</i> index.html <i>not found.</i></p>'
       self.sendChunk(self.TEMPLATE_HTML % shtml_vars)
     self.sendEof()
     return True
@@ -1314,6 +1395,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     for key in self.headers.keys():
       data['http_'+key.lower()] = self.headers.get(key)
 
+    if 'download' in qs:
+      data['mimetype'] = 'application/octet-stream'
+      # Would be nice to set Content-Disposition too.
+    elif 'view' in qs:
+      data['mimetype'] = 'text/plain'
+
     data['method'] = data.get('http_x-pagekite-proto', 'http').lower()
 
     http_host = data.get('http_host', 'unknown')
@@ -1346,10 +1433,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                             ('Set-Cookie', 'pkite_token=%s; path=/' % token),
                             ('Location', location)
                           ])
+        return
       else:
         LogDebug("Invalid token, %s != %s" % (token, self.server.secret))
-        self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
-      return
+        data.update(self.E404)
 
     elif path.startswith('/_pagekite/'):
       if not ('pkite_token' in cookies and cookies['pkite_token'].value == self.server.secret):
@@ -1373,13 +1460,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         data.update({'mimetype': 'application/octet-stream',
                      'body': '\r\n'.join(self.server.pkite.GenerateConfig())})
       else:
-        self.sendResponse('<h1>Not found</h1>\n', code=403, msg='Missing')
-        return
+        data.update(self.E403)
     else:
-      if not self.sendStaticFile(http_host, path, data['mimetype'],
-                                 shtml_vars=data):
-        self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
-      return
+      if self.sendStaticFile(http_host, path, data['mimetype'],
+                             shtml_vars=data):
+        return
+      data.update(self.E404)
 
     if data['mimetype'] in ('application/octet-stream', 'text/plain'):
       response = self.TEMPLATE_RAW % data
@@ -3878,11 +3964,11 @@ class PageKite(object):
     try:
       if os.getenv('USERPROFILE') or os.getenv('HOMEDRIVE'):
         # Windows
-        self.rcfile = os.path.join(os.expanduser('~'), 'pagekite.cfg')
+        self.rcfile = os.path.join(os.path.expanduser('~'), 'pagekite.cfg')
         self.devnull = 'nul'
       else:
         # Everything else
-        self.rcfile = os.expanduser('~/.pagekite.rc')
+        self.rcfile = os.path.join(os.path.expanduser('~'), '.pagekite.rc')
         self.devnull = '/dev/null'
 
     except Exception, e:
@@ -4671,7 +4757,7 @@ class PageKite(object):
             webpath = '/%s/%s' % (sha1hex(rand_seed+os.path.dirname(path))[0:8],
                                   os.path.basename(path))
           elif path == '.':
-            webpath = '/' 
+            webpath = '/'
           else:
             webpath = path
           if webpath.endswith('/.'):
