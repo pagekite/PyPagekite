@@ -3,16 +3,18 @@
 ## General ##
 
    * Add signaling so auto-SSL https:// urls can be reported in UI.
-   * Change CLI syntax to:
-      * pagekite.py [folder|port|host:port] proto://dest:port 
+   * Add signaling to report versions to the front-ends.
+   * Add signaling to report available upgrades to the back-ends.
+   * Auto-upgrades!
 
 
 ## Built-in HTTPD ##
 
-   * Add mapping of host->webroot
-   * Add directory listings
-   * Add basic photo albums
-   * Add basic access controls
+   * Tweak access controls a bit more
+   * Create javascript for making directory listings prettier
+     * Add basic photo albums
+     * Add feature to thumbnail/preview/re-encode images/audio/video
+   * Allow uploading, somehow
 
 
 ## Packaging ##
