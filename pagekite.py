@@ -3355,7 +3355,7 @@ class PageKite(object):
 
     for opt, arg in opts:
       if opt in ('-o', '--optfile'): self.ConfigureFromFile(arg) 
-      if opt == '--reloadfile':
+      elif opt == '--reloadfile':
         self.ConfigureFromFile(arg)
         self.reloadfile = arg
       elif opt in ('-S', '--savefile'):
