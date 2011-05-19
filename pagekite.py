@@ -25,23 +25,16 @@
 #  - Make multi-process, use the FD-over-socket trick? Threads=>GIL=>bleh
 #  - Add QoS and bandwidth shaping
 #  - Add a scheduler for deferred/periodic processing.
-#  - Create a derivative BaseHTTPServer which doesn't actually listen()
-#    on a real socket, but instead communicates with the tunnel directly.
 #  - Replace string concatenation ops with lists of buffers.
 #
 # Protocols:
 #  - Make tunnel creation more stubborn (try multiple ports etc.)
 #  - Add XMPP and incoming SMTP support.
-#  - Tor entry point support? Is current SSL enough?
-#  - Replace current tunnel auth scheme with SSL certificates.
+#  - Replace/augment current tunnel auth scheme with SSL certificates.
 #
 # User interface:
 #  - Enable (re)configuration from within HTTP UI.
 #  - More human readable console output?
-#
-# Security:
-#  - Add same-origin cookie enforcement to front-end. Or is that pointless
-#    due to Javascript side-channels?
 #
 # Bugs?
 #  - Front-ends should time-out dead back-ends.
@@ -105,7 +98,7 @@ APPVER = '0.3.19+github'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 DOC = """\
-pagekite.py is Copyright 2010, 2011, the Beanstalks Project ehf. 
+pagekite.py is Copyright 2010, 2011, the Beanstalks Project ehf.
      v%s                               http://pagekite.net/
 
 This the reference implementation of the PageKite tunneling protocol,
@@ -142,7 +135,7 @@ Common Options:
  --daemonize    -Z      Run as a daemon.
  --runas        -U U:G  Set UID:GID after opening our listening sockets.
  --pidfile=P    -I P    Write PID to the named file.
- --clean                Skip loading the default configuration file.              
+ --clean                Skip loading the default configuration file.
  --nocrashreport        Don't send anonymous crash reports to PageKite.net.
  --tls_default=N        Default name to use for SSL, if SNI and tracking fail.
  --tls_endpoint=N:F     Terminate SSL/TLS for name N, using key/cert from F.
@@ -206,7 +199,7 @@ Examples:
 
 # Create a config-file with default options, and then edit it.
 pagekite.py --defaults --settings > ~/.pagekite.rc
-vim ~/.pagekite.rc 
+vim ~/.pagekite.rc
 
 # Run pagekite with the HTTP UI, for browsing state over the web.
 pagekite.py --httpd=localhost:8888
@@ -333,7 +326,7 @@ except:
 # when the user tries to enable anything SSL-related.
 SEND_MAX_BYTES = 16 * 1024
 SEND_ALWAYS_BUFFERS = False
-try: 
+try:
   if '--nopyopenssl' in sys.argv:
     raise ImportError('pyOpenSSL disabled')
 
@@ -384,7 +377,7 @@ except ImportError:
       class ZeroReturnError(Exception): pass
       class Context(object):
         def __init__(self, method):
-          self.method = method 
+          self.method = method
           self.privatekey_file = None
           self.certchain_file = None
           self.ca_certs = None
