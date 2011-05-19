@@ -25,23 +25,16 @@
 #  - Make multi-process, use the FD-over-socket trick? Threads=>GIL=>bleh
 #  - Add QoS and bandwidth shaping
 #  - Add a scheduler for deferred/periodic processing.
-#  - Create a derivative BaseHTTPServer which doesn't actually listen()
-#    on a real socket, but instead communicates with the tunnel directly.
 #  - Replace string concatenation ops with lists of buffers.
 #
 # Protocols:
 #  - Make tunnel creation more stubborn (try multiple ports etc.)
 #  - Add XMPP and incoming SMTP support.
-#  - Tor entry point support? Is current SSL enough?
-#  - Replace current tunnel auth scheme with SSL certificates.
+#  - Replace/augment current tunnel auth scheme with SSL certificates.
 #
 # User interface:
 #  - Enable (re)configuration from within HTTP UI.
 #  - More human readable console output?
-#
-# Security:
-#  - Add same-origin cookie enforcement to front-end. Or is that pointless
-#    due to Javascript side-channels?
 #
 # Bugs?
 #  - Front-ends should time-out dead back-ends.
