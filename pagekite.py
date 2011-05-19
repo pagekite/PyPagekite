@@ -2116,6 +2116,7 @@ class Tunnel(ChunkParser):
         return None
       data += buf
       self.read_bytes += len(buf)
+    if DEBUG_IO: print '<== IN (headers)\n%s\n===' % data
     return data
 
   def _Connect(self, server, conns, tokens=None):
