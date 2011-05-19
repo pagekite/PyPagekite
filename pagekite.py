@@ -3236,19 +3236,24 @@ class PageKite(object):
   def LookupDomainQuota(self, lookup):
     if not lookup.endswith('.'): lookup += '.'
     (hn, al, ips) = socket.gethostbyname_ex(domain)
-    ip = ips[0]
-    # FIXME: Extract better auth error hints from the CNAME, if possible.
+
+    # Extract auth error hints from domain name, if we got a CNAME reply.
+    if al:
+      error = hn.split('.')[0]
+    else:
+      error = None
 
     # If not an authentication error, quota should be encoded as an IP.
+    ip = ips[0]
     if not ip.startswith(AUTH_ERRORS):
       o = [int(x) for x in ip.split('.')]
-      return (((o[0]*256 + o[1])*256 + o[2])*256 + o[3])
+      return ((((o[0]*256 + o[1])*256 + o[2])*256 + o[3]), None)
   
     # Errors on real errors are final.
-    if not ip.endswith(AUTH_ERR_USER_UNKNOWN): return None
+    if not ip.endswith(AUTH_ERR_USER_UNKNOWN): return (None, error)
 
     # User unknown, fall through to local test.
-    return -1 
+    return (-1, error)
 
   def GetDomainQuota(self, protoport, domain, srand, token, sign,
                      recurse=True, check_token=True):
@@ -3282,8 +3287,8 @@ class PageKite(object):
       if self.auth_domain:
         try:
           lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
-          rv = self.LookupDomainQuota(lookup)
-          if rv is None or rv >= 0: return rv
+          (rv, auth_error_type) = self.LookupDomainQuota(lookup)
+          if rv is None or rv >= 0: return (rv, auth_error_type)
         except Exception, e:
           # Lookup failed, fail open.
           LogError('Quota lookup failed: %s' % e)
