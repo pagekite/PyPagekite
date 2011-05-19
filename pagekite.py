@@ -784,6 +784,14 @@ class AuthThread(threading.Thread):
 
   def run(self):
     self.keep_running = True
+    while self.keep_running:
+      try:
+        self._run()
+      except Exception, e:
+        LogError('AuthThread died: %s' % e)
+        time.sleep(5)
+
+  def _run(self):
     self.qc.acquire()
     while self.keep_running:
       now = int(time.time())
@@ -2975,8 +2983,16 @@ class TunnelManager(threading.Thread):
     self.keep_running = False
 
   def run(self):
-    check_interval = 5
     self.keep_running = True
+    while self.keep_running:
+      try:
+        self._run()
+      except Exception, e:
+        LogError('TunnelManager died: %s' % e)
+        time.sleep(5)
+
+  def _run(self):
+    check_interval = 5
     while self.keep_running:
 
       # Reconnect if necessary, randomized exponential fallback.
