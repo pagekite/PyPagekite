@@ -159,6 +159,7 @@ Common Options:
 
  --optfile=X    -o X    Read settings from file X. Default is ~/.pagekite.rc.
  --savefile=X   -S X    Saved settings will be written to file X.
+ --reloadfile=X         Re-read settings from X on SIGHUP.
  --autosave             Enable auto-saving.
  --noautosave           Disable auto-saving.
  --save                 Save this configuration.
@@ -305,14 +306,16 @@ SERVICE_XMLRPC = 'pk:http://pagekite.net/xmlrpc/'
 OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'signup', 'nullui', 'help',
-            'optfile=', 'savefile=', 'autosave', 'noautosave',
+            'optfile=', 'savefile=', 'reloadfile=', 'autosave', 'noautosave',
             'save', 'settings',
             'service_xmlrpc=', 'controlpanel', 'controlpass',
+            'optfile=', 'savefile=',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=',
             'webroot=', 'webpath=', 'webindexes=', 'webaccess=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
-            'isfrontend', 'noisfrontend', 'defaults', 'domain=',
-            'authdomain=', 'register=', 'host=',
+            'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
+            'authdomain=', 'authhelpurl=', 'register=', 'host=',
+            'noupgradeinfo', 'upgradeinfo=', 'motd=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
             'tls_default=', 'tls_endpoint=', 'fe_certname=', 'ca_certs=',
             'backend=', 'define_backend=',
@@ -720,7 +723,8 @@ class AuthError(Exception):
 
 def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
                          tls=False, testtoken=None, replace=None):
-  req = ['CONNECT PageKite:1 HTTP/1.0\r\n']
+  req = ['CONNECT PageKite:1 HTTP/1.0\r\n',
+         'X-PageKite-Version: %s\r\n' % APPVER]
 
   if not nozchunks: req.append('X-PageKite-Features: ZChunks\r\n')
   if replace: req.append('X-PageKite-Replace: %s\r\n' % replace)
@@ -958,11 +962,13 @@ class AuthThread(threading.Thread):
           else:
             # This is a bit lame, but we only check the token if the quota
             # for this connection has never been verified.
-            quota = self.conns.config.GetDomainQuota(proto, domain, srand,
-                                                     token, sign,
-                                                   check_token=(conn.quota is None))
+            (quota, reason) = self.conns.config.GetDomainQuota(proto,
+                                                    domain, srand, token, sign,
+                                               check_token=(conn.quota is None))
             if not quota:
               results.append(('%s-Invalid' % prefix, what))
+              results.append(('%s-Invalid-Why' % prefix,
+                              '%s;%s' % (what, reason)))
             elif self.conns.Tunnel(proto, domain):
               # FIXME: Allow multiple backends?
               results.append(('%s-Duplicate' % prefix, what))
@@ -972,6 +978,10 @@ class AuthThread(threading.Thread):
 
         results.append(('%s-SessionID' % prefix,
                         '%x:%s' % (now, sha1hex(session))))
+        if self.conns.config.motd:
+          results.append(('%s-MOTD' % prefix, self.conns.config.motd))
+        for upgrade in self.conns.config.upgrade_info:
+          results.append(('%s-Upgrade' % prefix, ';'.join(upgrade)))
 
         if quotas:
           nz_quotas = [q for q in quotas if q and q > 0]
@@ -2757,11 +2767,19 @@ class Tunnel(ChunkParser):
                                     ) % (float(quota) / qGB),
                                    prefix=(int(quota) < qGB) and '!' or ' ')
 
+          invalid_reasons = {}
+          for request in parse.Header('X-PageKite-Invalid-Why'):
+            # This is future-compatible, in that we can add more fields later.
+            details = request.split(';')
+            invalid_reasons[details[0]] = details[1]
+
           for request in parse.Header('X-PageKite-Invalid'):
             proto, domain, srand = request.split(':')
+            reason = invalid_reasons.get(request, 'unknown')
             self.Log([('FE', sname),
                       ('err', 'Rejected'),
                       ('proto', proto),
+                      ('reason', reason),
                       ('domain', domain)])
             conns.config.ui.Notify(('REJECTED: %s:%s (invalid or out of quota)'
                                     ) % (proto, domain), prefix='!')
@@ -3892,7 +3910,10 @@ class PageKite(object):
     self.progname = ((sys.argv[0] or 'pagekite.py').split('/')[-1]
                                                    .split('\\')[-1])
     self.isfrontend = False
+    self.motd = None
+    self.upgrade_info = []
     self.auth_domain = None
+    self.auth_help_url = None
     self.server_host = ''
     self.server_ports = [80]
     self.server_raw_ports = []
@@ -3954,6 +3975,7 @@ class PageKite(object):
     self.rcfiles_loaded = []
     self.savefile = None
     self.autosave = 0
+    self.reloadfile = None
     self.save = 0
     self.added_kites = False
     self.ui = ui or NullUi()
@@ -4290,7 +4312,9 @@ class PageKite(object):
 
   def LookupDomainQuota(self, lookup):
     if not lookup.endswith('.'): lookup += '.'
-    ip = socket.gethostbyname(lookup)
+    (hn, al, ips) = socket.gethostbyname_ex(domain)
+    ip = ips[0]
+    # FIXME: Extract better auth error hints from the CNAME, if possible.
 
     # If not an authentication error, quota should be encoded as an IP.
     if not ip.startswith(AUTH_ERRORS):
@@ -4317,19 +4341,20 @@ class PageKite(object):
         if porti in self.server_aliasport: porti = self.server_aliasport[porti]
         if porti not in port_list and VIRTUAL_PN not in port_list:
           LogInfo('Unsupported port request: %s (%s:%s)' % (porti, protoport, domain))
-          return None
+          return (None, 'port')
 
       except ValueError:
         LogError('Invalid port request: %s:%s' % (protoport, domain))
-        return None
+        return (None, 'port')
     else:
       proto, port = protoport, None
 
     if proto not in self.server_protos:
       LogInfo('Invalid proto request: %s:%s' % (protoport, domain))
-      return None
+      return (None, 'proto')
 
     data = '%s:%s:%s' % (protoport, domain, srand)
+    auth_error_type = None
     if (not token) or (not check_token) or checkSignature(sign=token, payload=data):
       if self.auth_domain:
         try:
@@ -4339,20 +4364,20 @@ class PageKite(object):
         except Exception, e:
           # Lookup failed, fail open.
           LogError('Quota lookup failed: %s' % e)
-          return -2
+          return (-2, None)
 
       secret = (self.GetBackendData(protoport, domain) or BE_NONE)[BE_SECRET]
       if not secret:
         secret = (self.GetBackendData(proto, domain) or BE_NONE)[BE_SECRET]
       if secret:
         if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
-          return -1
+          return (-1, None)
         else:
           LogError('Invalid signature for: %s (%s)' % (domain, protoport))
-          return None
+          return (None, auth_error_type or 'signature')
 
     LogInfo('No authentication found for: %s (%s)' % (domain, protoport))
-    return None
+    return (None, auth_error_type or 'auth')
 
   def ConfigureFromFile(self, filename=None):
     if not filename: filename = self.rcfile
@@ -4488,6 +4513,9 @@ class PageKite(object):
     for opt, arg in opts:
       if opt in ('-o', '--optfile'):
         self.ConfigureFromFile(arg)
+      elif opt == '--reloadfile':
+        self.ConfigureFromFile(arg)
+        self.reloadfile = arg
       elif opt in ('-S', '--savefile'):
         if self.savefile: raise ConfigError('Multiple save-files!')
         self.savefile = arg
@@ -4586,6 +4614,12 @@ class PageKite(object):
         self.server_raw_ports = [(x == VIRTUAL_PN and x or int(x)) for x in arg.split(',')]
       elif opt in ('-h', '--host'): self.server_host = arg
       elif opt in ('-A', '--authdomain'): self.auth_domain = arg
+      elif opt == '--authhelpurl': self.auth_help_url = arg
+      elif opt == '--motd': self.motd = arg
+      elif opt == '--noupgradeinfo': self.upgrade_info = []
+      elif opt == '--upgradeinfo':
+        version, tag, md5, human_url, file_url = arg.split(';')
+        self.upgrade_info.append((version, tag, md5, human_url, file_url))
       elif opt in ('-f', '--isfrontend'):
         self.isfrontend = True
         global LOG_THRESHOLD
@@ -5420,15 +5454,23 @@ class PageKite(object):
       keep_open = [s.fd.fileno() for s in conns.conns]
       if self.ui_httpd: keep_open.append(self.ui_httpd.httpd.socket.fileno())
       self.LogTo(self.logfile, dont_close=keep_open)
+
+    # Flush in-memory log, if necessary
+    FlushLogMemory()
+
+    # Set up SIGHUP handler.
+    if self.logfile or self.reloadfile:
       try:
         import signal
         def reopen(x,y):
-          self.LogTo(self.logfile, close_all=False)
-          LogDebug('SIGHUP received, reopening: %s' % self.logfile)
+          if self.logfile:
+            self.LogTo(self.logfile, close_all=False)
+            LogDebug('SIGHUP received, reopening: %s' % self.logfile)
+          if self.reloadfile:
+            self.ConfigureFromFile(self.reloadfile)
         signal.signal(signal.SIGHUP, reopen)
       except Exception:
-        LogError('Warning: configure signal handler failed, logrotate will not work.')
-    FlushLogMemory()
+        LogError('Warning: signal handler unavailable, logrotate will not work.')
 
     # Disable compression in OpenSSL
     if not self.enable_sslzlib:
