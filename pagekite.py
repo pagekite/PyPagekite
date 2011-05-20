@@ -2001,6 +2001,12 @@ class Tunnel(ChunkParser):
         for feature in conn.parser.Header(prefix+'-Features'):
           if feature == 'ZChunks': self.EnableZChunks(level=1)
 
+        # Track which versions we see in the wild.
+        version = 'old'
+        for v in conn.parser.Header(prefix+'-Version'): version = v
+        global gYamon
+        gYamon.vadd('version-%s' % version, 1, wrap=10000000)
+
         for replace in conn.parser.Header(prefix+'-Replace'):
           if replace in self.conns.conns_by_id:
             repl = self.conns.conns_by_id[replace]
