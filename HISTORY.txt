@@ -3,8 +3,12 @@ Version history - highlights
 
 v0.3.20  ??
 -------
-   - Fixed more file-descriptor leaks
+   - Fixed more file-descriptor leaks.
    - Fixed a bug in initial handshake when front-end was using python's SSL.
+   - Fixed infinite recursion bug in loopback tunnels.
+   - Made auxillary threads handle exceptions more gracefully.
+   - Made connection hand-shake more verbose (prep. better error reporting).
+   - Added --debugio flag for low-level debugging.
 
 
 v0.3.19  2011.05.03
