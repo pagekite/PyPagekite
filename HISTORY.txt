@@ -7,6 +7,13 @@ v0.4.2   2011.05.13
    - Added name-based virtual server and virtual file tree to built in HTTPD.
    - Revamped the command-line short-cuts to follow the common Unix
      'action source source ... destination' pattern.
+   - Back-ported from 0.3.20:
+      - Fixed more file-descriptor leaks.
+      - Fixed a bug in initial handshake when front-end was using python's SSL.
+      - Fixed infinite recursion bug in loopback tunnels.
+      - Made auxillary threads handle exceptions more gracefully.
+      - Made connection hand-shake more verbose (prep. better error reporting).
+      - Added --debugio flag for low-level debugging.
 
 
 v0.4.1   2011.05.05
