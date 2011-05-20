@@ -2529,12 +2529,13 @@ class UserConn(Selectable):
                      Selectable.__html__(self))
  
   def CloseTunnel(self, tunnel_closed=False):
-    if self.tunnel and not tunnel_closed:
-      if not self.read_eof or not self.write_eof:
-        self.tunnel.SendStreamEof(self.sid, write_eof=True, read_eof=True)
-      self.tunnel.CloseStream(self.sid, stream_closed=True)
-    self.ProcessTunnelEof(read_eof=True, write_eof=True)
+    tunnel = self.tunnel
     self.tunnel = None
+    if tunnel and not tunnel_closed:
+      if not self.read_eof or not self.write_eof:
+        tunnel.SendStreamEof(self.sid, write_eof=True, read_eof=True)
+      tunnel.CloseStream(self.sid, stream_closed=True)
+    self.ProcessTunnelEof(read_eof=True, write_eof=True)
 
   def Cleanup(self, close=True):
     if close:
