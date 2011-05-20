@@ -2049,10 +2049,6 @@ class Tunnel(ChunkParser):
       if r[0] in ('X-PageKite-OK', 'X-PageKite-Duplicate'):
         return self
 
-    self.LogDebug('Ran out of quota? %s' % (results, ))
-    return self
-    # FIXME: We should let this run...
-
     self.LogInfo('Ran out of quota or account deleted, closing tunnel.')
     conns.Remove(self)
     self.Cleanup()
