@@ -3522,7 +3522,9 @@ class Listener(Selectable):
     self.fd.bind((host, port))
     self.fd.listen(backlog)
     self.fd.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
     self.Log([('listen', '%s:%s' % (host, port))])
+    conns.config.ui.Notify(' - Listening on %s:%s' % (host or '*', port))
 
     self.connclass = connclass
     self.port = port
@@ -3606,6 +3608,16 @@ class TunnelManager(threading.Thread):
         if self.pkite.isfrontend:
           self.CheckTunnelQuotas(time.time())
           # FIXME: Front-ends should close dead back-end tunnels.
+          for tid in self.conns.tunnels:
+            proto, domain = tid.split(':')
+            if '-' in proto:
+              proto, port = proto.split('-')
+            else:
+              port = ''
+            self.pkite.ui.Notify(('Flying: %s://%s%s/'
+                                  ) % (proto, domain, port and ':'+port or ''),
+                                 prefix='~<>')
+
         else:
           self.pkite.ui.Status('flying')
           for be in self.pkite.backends.values():
@@ -3613,10 +3625,17 @@ class TunnelManager(threading.Thread):
               domain = be[BE_DOMAIN]
               port = be[BE_PORT]
               proto = be[BE_PROTO]
+
+              # Do we have auto-SSL at the front-end?
+              protoport = (port and ('%s-%s' % (proto, port)) or proto)
+              tunnels = self.conns.Tunnel(protoport, domain)
+              if proto == 'http' and tunnels:
+                proto = 'https'
+                for t in tunnels:
+                  if (protoport, domain) not in t.remote_ssl: proto = 'http'
+
               prox = (proto == 'raw') and ' (HTTP proxied)' or ''
               if proto == 'raw' and port in ('22', 22): proto = 'ssh'
-              # FIXME: If the remote front-end does auto-SSL, then report
-              #        the https:// protocol instead!
               url = '%s://%s%s' % (proto, domain, port and (':%s' % port) or '')
               self.pkite.ui.Notify(('Flying %s:%s as %s/%s'
                                     ) % (be[BE_BHOST], be[BE_BPORT], url, prox),
@@ -3636,7 +3655,10 @@ class TunnelManager(threading.Thread):
                          self.pkite.conns.TunnelServers() or [])
       tunnel_total = len(self.pkite.servers)
       if tunnel_count == 0:
-        self.pkite.ui.Status('down',
+        if self.pkite.isfrontend:
+          self.pkite.ui.Status('idle', message='Waiting for back-ends.')
+        else:
+          self.pkite.ui.Status('down',
                        message='Not connected to any front-ends, will retry...')
       elif tunnel_count < tunnel_total:
         self.pkite.ui.Status('flying',
@@ -5462,6 +5484,7 @@ class PageKite(object):
     try:
       # Set up our listeners if we are a server.
       if self.isfrontend:
+        self.ui.Notify('This is a PageKite front-end server.')
         for port in self.server_ports:
           Listener(self.server_host, port, conns)
         for port in self.server_raw_ports:
