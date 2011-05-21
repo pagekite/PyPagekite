@@ -834,8 +834,8 @@ class AuthThread(threading.Thread):
             else:
               results.append(('%s-OK' % prefix, what))
               quotas.append(quota)
-              if (domain in self.conns.config.tls_endpoints and
-                  proto.startswith('http')):
+              if (proto.startswith('http') and
+                  self.conns.config.GetTlsEndpointCtx(domain)):
                 results.append(('%s-SSL-OK' % prefix, what))
 
         results.append(('%s-SessionID' % prefix,
@@ -2809,7 +2809,8 @@ class UnknownConn(MagicProtocolParser):
               self.Send(HTTP_ConnectOK())
               return self.ProcessTls(''.join(lines), chost)
 
-          if cport in self.conns.config.server_raw_ports or VIRTUAL_PN in self.conns.config.server_raw_ports:
+          if (cport in self.conns.config.server_raw_ports or
+              VIRTUAL_PN in self.conns.config.server_raw_ports):
             if (('raw'+sid1) in tunnels) or (('raw'+sid2) in tunnels):
               (self.on_port, self.host) = (cport, chost)
               self.parser = HttpParser()
