@@ -976,7 +976,8 @@ class AuthThread(threading.Thread):
             else:
               results.append(('%s-OK' % prefix, what))
               quotas.append(quota)
-              if domain in self.conns.config.tls_endpoints and proto == 'http':
+              if (domain in self.conns.config.tls_endpoints and
+                  proto.startswith('http')):
                 results.append(('%s-SSL-OK' % prefix, what))
 
         results.append(('%s-SessionID' % prefix,
@@ -2515,6 +2516,7 @@ class Tunnel(ChunkParser):
     self.server_info = ['x.x.x.x:x', [], [], []]
     self.conns = conns
     self.users = {}
+    self.remote_ssl = {}
     self.zhistory = {}
     self.backends = {}
     self.rtt = 100000
@@ -2804,21 +2806,20 @@ class Tunnel(ChunkParser):
             for feature in parse.Header('X-PageKite-Features'):
               if feature == 'ZChunks': self.EnableZChunks(level=9)
 
+          ssl_available = {}
+          for request in parse.Header('X-PageKite-SSL-OK'):
+            ssl_available[request] = True
+
           for request in parse.Header('X-PageKite-OK'):
             abort = False
             proto, domain, srand = request.split(':')
             conns.Tunnel(proto, domain, self)
+            if request in ssl_available:
+              self.remote_ssl[(proto, domain)] = True
             self.Log([('FE', sname),
                       ('proto', proto),
+                      ('ssl', (request in ssl_available)),
                       ('domain', domain)])
-            if False:
-             if '-' in proto:
-              proto, port = proto.split('-')
-              conns.config.ui.Notify(('%s is front-end for: %s:%s:%s'
-                                      ) % (sname, proto, domain, port))
-             else:
-              conns.config.ui.Notify(('%s is front-end for: %s:%s'
-                                      ) % (sname, proto, domain))
 
         self.rtt = (time.time() - begin)
 
@@ -4341,7 +4342,7 @@ class PageKite(object):
     if not ip.startswith(AUTH_ERRORS):
       o = [int(x) for x in ip.split('.')]
       return ((((o[0]*256 + o[1])*256 + o[2])*256 + o[3]), None)
-  
+
     # Errors on real errors are final.
     if not ip.endswith(AUTH_ERR_USER_UNKNOWN): return (None, error)
 
