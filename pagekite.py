@@ -3267,6 +3267,7 @@ class PageKite(object):
 
   def LookupDomainQuota(self, lookup):
     if not lookup.endswith('.'): lookup += '.'
+    if DEBUG_IO: print '=== AUTH LOOKUP\n%s\n===' % lookup
     (hn, al, ips) = socket.gethostbyname_ex(lookup)
 
     # Extract auth error hints from domain name, if we got a CNAME reply.
