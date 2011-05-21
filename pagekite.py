@@ -3203,7 +3203,7 @@ class UserConn(Selectable):
     if remote_ip: logInfo.append(('remote_ip', remote_ip))
 
     if not backend or not backend[0]:
-      self.ui.Notify(('%s <=> %s://%s:%s (FAIL: no server)'
+      self.ui.Notify(('%s < %s://%s:%s (FAIL: no server)'
                       ) % (remote_ip or 'unknown', proto, host, on_port),
                      prefix='?')
 
@@ -3234,17 +3234,18 @@ class UserConn(Selectable):
 
     except socket.error, err:
       logInfo.append(('socket_error', '%s' % err))
-      self.ui.Notify(('%s <=> %s://%s:%s (FAIL: %s:%s is down)'
+      self.ui.Notify(('%s < %s://%s:%s (FAIL: %s:%s is down)'
                       ) % (remote_ip or 'unknown', proto, host, on_port,
                            sspec[0], sspec[1]), prefix='!')
       self.Log(logInfo)
       self.Cleanup()
       return None
 
+    sspec = (sspec[0], sspec[1])
+    be_name = (sspec == self.conns.config.ui_sspec) and 'builtin' or ('%s:%s' % sspec)
     self.ui.Status('serving')
-    self.ui.Notify(('%s <=> %s://%s:%s (OK: %s:%s)'
-                    ) % (remote_ip or 'unknown', proto, host, on_port,
-                         sspec[0], sspec[1]))
+    self.ui.Notify(('%s < %s://%s:%s (%s)'
+                    ) % (remote_ip or 'unknown', proto, host, on_port, be_name))
     self.Log(logInfo)
     self.conns.Add(self)
     return self
