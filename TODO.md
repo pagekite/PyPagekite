@@ -2,8 +2,6 @@
 
 ## General ##
 
-   * Add signaling so auto-SSL https:// urls can be reported in UI.
-   * Add signaling to report versions to the front-ends.
    * Add signaling to report available upgrades to the back-ends.
    * Auto-upgrades!
 
