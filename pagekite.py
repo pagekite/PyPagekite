@@ -834,6 +834,8 @@ class AuthThread(threading.Thread):
             else:
               results.append(('%s-OK' % prefix, what))
               quotas.append(quota)
+              if domain in self.conns.config.tls_endpoints and proto == 'http':
+                results.append(('%s-SSL-OK' % prefix, what))
 
         results.append(('%s-SessionID' % prefix,
                         '%x:%s' % (now, sha1hex(session))))
