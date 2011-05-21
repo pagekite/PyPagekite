@@ -357,7 +357,7 @@ BE_STATUS_NO_TUNNEL = 1
 BE_STATUS_DISABLED = -1
 BE_STATUS_UNKNOWN = -2
 
-BE_NONE = ('', '', None, None, None, '', BE_STATUS_UNKNOWN)
+BE_NONE = ['', '', None, None, None, '', BE_STATUS_UNKNOWN]
 
 DYNDNS = {
   'pagekite.net': ('http://up.pagekite.net/'
@@ -4511,8 +4511,14 @@ class PageKite(object):
         else:
           bid = '%s:%s' % (proto, fdom)
 
-        backends[bid] = [proto, port and int(port) or '', fdom,
-                         bhost.lower(), int(bport), sec, status]
+        backends[bid] = BE_NONE[:]
+        backends[bid][BE_PROTO] = proto
+        backends[bid][BE_PORT] = port and int(port) or ''
+        backends[bid][BE_DOMAIN] = fdom
+        backends[bid][BE_BHOST] = bhost.lower()
+        backends[bid][BE_BPORT] = int(bport)
+        backends[bid][BE_SECRET] = sec
+        backends[bid][BE_STATUS] = status
 
     return backends
 
@@ -4696,8 +4702,11 @@ class PageKite(object):
           bid = '%s:%s' % (proto, domain)
           if bid in self.backends:
             raise ConfigError("Same backend/domain defined twice: %s" % bid)
-          self.backends[bid] = [proto, None, domain, None, None, secret,
-                                BE_STATUS_UNKNOWN]
+          self.backends[bid] = BE_NONE[:]
+          self.backends[bid][BE_PROTO] = proto
+          self.backends[bid][BE_DOMAIN] = domain
+          self.backends[bid][BE_SECRET] = secret
+          self.backends[bid][BE_STATUS] = BE_STATUS_UNKNOWN
 
       elif opt == '--noprobes': self.no_probes = True
       elif opt == '--nofrontend': self.isfrontend = False
