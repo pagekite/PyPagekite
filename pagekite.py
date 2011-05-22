@@ -1201,6 +1201,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                                     qs, None)
     except Exception, e:
       Log([('err', 'GET error at %s: %s' % (path, e))])
+      if DEBUG_IO: print '=== ERROR\n%s\n===' % traceback.format_exc()
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
   def do_HEAD(self):
@@ -1274,7 +1275,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
       if not full_path:
         policy = pkite.ui_access_policy
-        root_path = pkite.ui_webroot
+        root_path = pkite.ui_webroot or '/dev/null'
         full_path = '%s/%s' % (root_path, path)
 
       if os.path.isdir(full_path) and not path.endswith('/'):
