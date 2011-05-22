@@ -120,9 +120,7 @@ MINIDOC = ("""\
 
     If you request a kite which does not exist in your configuration file,
     the program will offer to help you sign up with http://pagekite.net/ and
-    create it. Just choose whatever name you like and if it's available, it
-    will be granted.
-""") % (APPVER, EXAMPLES)
+    create it. Pick a name, any name!""") % (APPVER, EXAMPLES)
 DOC = ("""\
 pagekite.py is Copyright 2010, 2011, the Beanstalks Project ehf.
      v%s                               http://pagekite.net/
@@ -3870,7 +3868,7 @@ class BasicUi(NullUi):
     if self.wizard_tell: self.Welcome()
     self.in_wizard = None
     sys.stderr.write('\n')
-    if os.getenv('USERPROFILE') or os.getenv('HOMEDRIVE'):
+    if sys.platform == 'win32':
       sys.stderr.write('\n<<< press ENTER to continue >>>\n')
       sys.stdin.readline()
 
@@ -4058,8 +4056,7 @@ class PageKite(object):
     # 'standard' locations, but if nothing is found there and something local
     # exists, use that instead.
     try:
-      if os.getenv('USERPROFILE') or os.getenv('HOMEDRIVE'):
-        # Windows
+      if sys.platform == 'win32':
         self.rcfile = os.path.join(os.path.expanduser('~'), 'pagekite.cfg')
         self.devnull = 'nul'
       else:
@@ -4342,7 +4339,7 @@ class PageKite(object):
     self.conns = self.ui_httpd = self.tunnel_manager = None
     if help or longhelp:
       print longhelp and DOC or MINIDOC
-      print '*****'
+      print '***'
     else:
       self.ui.Status('exiting', message=(message or 'Good-bye!'))
     if message: print 'Error: %s' % message
@@ -5669,8 +5666,9 @@ def Configure(pk):
     pk.PrintSettings(safe=True)
     sys.exit(0)
 
-  if '--signup' in sys.argv and not pk.backends.keys():
-    pk.RegisterNewKite(autoconfigure=True)
+  if not pk.backends.keys():
+    if '--signup' in sys.argv or sys.platform == 'win32':
+      pk.RegisterNewKite(autoconfigure=True)
 
   pk.CheckConfig()
 
