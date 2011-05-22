@@ -5500,6 +5500,7 @@ class PageKite(object):
                     ) % (self.progname, APPVER),
                     prefix='>', alignright='[%s]' % howtoquit)
     config_report = [('started', sys.argv[0]), ('version', APPVER),
+                     ('platform', sys.platform),
                      ('argv', ' '.join(sys.argv[1:])),
                      ('ca_certs', self.ca_certs)]
     for optf in self.rcfiles_loaded: config_report.append(('optfile', optf))
@@ -5635,6 +5636,8 @@ def Main(pagekite, configure, uiclass=NullUi, progname=None, appver=APPVER):
           print 'Submitting crash report to %s' % pk.crash_report_url
           LogDebug(''.join(urllib.urlopen(pk.crash_report_url,
                                           urllib.urlencode({
+                                            'platform': sys.platform,
+                                            'appver': APPVER,
                                             'crash': traceback.format_exc()
                                           })).readlines()))
         except Exception, e:
