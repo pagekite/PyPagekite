@@ -304,7 +304,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'service_xmlrpc=', 'controlpanel', 'controlpass',
             'optfile=', 'savefile=',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=',
-            'webroot=', 'webpath=', 'webindexes=', 'webaccess=',
+            'webroot=', 'webpath=', 'webindexes=', 'webaccess=', 'webmagic=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'authhelpurl=', 'register=', 'host=',
@@ -1068,14 +1068,14 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     'tiff': 'image/tiff',          'txt': 'text/plain',
     'wav': 'audio/wav',
     'xml': 'application/xml',      'xls': 'application/vnd.ms-excel',
-    'zip': 'application/zip',
+    'xrdf': 'application/xrds+xml','zip': 'application/zip',
     'DEFAULT': 'application/octet-stream'
   }
   TEMPLATE_RAW = ('%(body)s')
   TEMPLATE_JSONP = ('window.pkData = %s;')
   TEMPLATE_HTML = ('<html><head>\n'
                '<link rel="stylesheet" media="screen, screen"'
-                ' href="http://pagekite.net/css/pagekite.css"'
+                ' href="%(method)s://pagekite.net/css/pagekite.css"'
                 ' type="text/css" title="Default stylesheet" />\n'
                '<title>%(title)s - %(prog)s v%(ver)s</title>\n'
               '</head><body>\n'
@@ -1235,18 +1235,28 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
+  def openCGI(self, full_path, http_host, path, shtml_vars):
+    self.sendResponse(None, mimetype='text/html', chunked=True)
+    os.putenv('GATEWAY_INTERFACE', '1.1')
+    os.putenv('AUTH', '')
+    os.putenv('CONTENT_LENGTH', 0)
+    # FIXME: Implement CGI/1.1 ... ugh.
+    return open("/dev/null", "rb")
+
   def sendStaticFile(self, http_host, path, mimetype, shtml_vars=None):
+    pkite = self.server.pkite
     try:
       path = urllib.unquote(path)
       if path.find('..') >= 0: raise IOError("Evil")
 
-      paths = self.server.pkite.ui_paths
+      paths = pkite.ui_paths
       def_paths = paths.get('*', {})
       if ':' not in http_host: http_host += ':80'
       host_paths = paths.get(http_host.replace(':', '/'), {})
       path_parts = path.split('/')
       path_rest = []
       full_path = ''
+      root_path = ''
       while len(path_parts) > 0 and not full_path:
         pf = '/'.join(path_parts)
         pd = pf+'/'
@@ -1257,13 +1267,15 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         elif pd in def_paths: m = def_paths[pd]
         if m:
           policy = m[0]
-          full_path = os.path.join(m[1], *path_rest)
+          root_path = m[1]
+          full_path = os.path.join(root_path, *path_rest)
         else:
           path_rest.insert(0, path_parts.pop())
 
       if not full_path:
-        policy = self.server.pkite.ui_access_policy
-        full_path = '%s/%s' % (self.server.pkite.ui_webroot, path)
+        policy = pkite.ui_access_policy
+        root_path = pkite.ui_webroot
+        full_path = '%s/%s' % (root_path, path)
 
       if os.path.isdir(full_path) and not path.endswith('/'):
         self.sendResponse('\n', code=302, msg='Moved', header_list=[
@@ -1271,21 +1283,33 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                           ])
         return True
 
-      # FIXME: Check policy!
+      is_shtml, is_cgi, is_dir = False, False, False
+      indexes = ['index.pk-shtml', 'index.htm', 'index.html']
+      dynamic_suffixes = ['.pk-shtml', '.pk-js']
+      cgi_suffixes = []
+      if os.path.exists(os.path.join(root_path, pkite.ui_magic_file)):
+        indexes[0:0] = ['index.cgi']
+        cgi_suffixes.append('.cgi')
+        # FIXME: Actually parse magic file...
 
-      for index in ('index.pk-shtml', 'index.htm', 'index.html'):
+      for index in indexes:
         ipath = os.path.join(full_path, index)
         if os.path.exists(ipath):
           mimetype = 'text/html'
           full_path = ipath
           break
+
       if os.path.isdir(full_path):
         mimetype = 'text/html'
         rf_size = rf = None
         rf_stat = os.stat(full_path)
+        is_dir = True
       else:
-        if not (full_path.endswith('.pk-shtml') or
-                full_path.endswith('.pk-js')): shtml_vars = None
+        for s in dynamic_suffixes:
+          if full_path.endswith(s): is_shtml = True
+        for s in cgi_suffixes:
+          if full_path.endswith(s): is_cgi = True
+        if not is_shtml and not is_cgi: shtml_vars = None
         rf = open(full_path, "rb")
         rf_stat = os.fstat(rf.fileno())
         rf_size = rf_stat.st_size
@@ -1293,7 +1317,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       return False
 
     headers = [ ]
-    if not shtml_vars:
+    if not (is_dir or is_shtml or is_cgi):
       # ETags for static content: we trust the file-system.
       etag = sha1hex(':'.join(['%s' % s for s in [full_path, rf_stat.st_mode,
                                    rf_stat.st_ino, rf_stat.st_dev,
@@ -1308,23 +1332,28 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       else:
         headers.append(('ETag', etag))
 
-    # FIXME: Support ranges for resuming aborted transfers.
+      # FIXME: Support ranges for resuming aborted transfers?
 
-    self.sendResponse(None, mimetype=mimetype,
-                            length=rf_size,
-                            chunked=(shtml_vars is not None),
-                            header_list=headers)
+    if is_cgi:
+      self.chunked = True
+      rf = self.openCGI(full_path, http_host, path, shtml_vars)
+    else:
+      self.sendResponse(None, mimetype=mimetype,
+                              length=rf_size,
+                              chunked=(shtml_vars is not None),
+                              header_list=headers)
 
-    chunk_size = (shtml_vars and 1024 or 16) * 1024
+    chunk_size = (is_shtml and 1024 or 16) * 1024
     if rf:
       while not self.suppress_body:
         data = rf.read(chunk_size)
         if data == "": break
-        if shtml_vars:
+        if is_shtml and shtml_vars:
           self.sendChunk(data % shtml_vars)
         else:
           self.sendChunk(data)
       rf.close()
+
     elif shtml_vars and not self.suppress_body:
       if self.server.pkite.ui_index_policy in (WEB_INDEX_ON, WEB_INDEX_ALL):
         files = sorted(os.listdir(full_path))
@@ -1400,6 +1429,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       'mimetype': self.getMimeType(path),
       'hostname': socket.gethostname() or 'Your Computer',
       'http_host': 'unknown',
+      'query_string': query,
       'code': 200,
       'body': '',
       'msg': 'OK',
@@ -3983,6 +4013,7 @@ class PageKite(object):
     self.ui_webroot = None
     self.ui_access_policy = WEB_POLICY_PUBLIC
     self.ui_index_policy = WEB_INDEX_ON
+    self.ui_magic_file = '.pagekite.magic'
     self.ui_paths = {}
     self.disable_zchunks = False
     self.enable_sslzlib = False
@@ -4610,10 +4641,11 @@ class PageKite(object):
         self.ui_access_policy = arg.lower()
         if self.ui_access_policy not in WEB_POLICIES:
           raise ConfigError('Policy must be one of: %s' % WEB_POLICIES)
+      elif opt == '--webmagic': self.ui_magic_file = arg
       elif opt == '--webindexes':
         self.ui_index_policy = arg.lower()
         if self.ui_index_policy not in WEB_INDEXTYPES:
-          raise ConfigError('Index policy must be one of: %s' % WEB_POLICIES)
+          raise ConfigError('Index policy must be one of: %s' % WEB_INDEXTYPES)
       elif opt == '--webpath':
         host, path, policy, fpath = arg.split(':', 3)
 
