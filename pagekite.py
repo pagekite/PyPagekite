@@ -1108,7 +1108,7 @@ class UiHttpServer(SimpleXMLRPCServer):
     gYamon = YamonD(sspec)
     gYamon.vset('started', int(time.time()))
     gYamon.vset('version', APPVER)
-    gYamon.vset('ssl_enabled', self.enable_ssl)
+    gYamon.vset('httpd_ssl_enabled', self.enable_ssl)
     gYamon.vset('errors', 0)
     gYamon.vset("bytes_all", 0)
 
