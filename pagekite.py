@@ -3868,7 +3868,7 @@ class BasicUi(NullUi):
     if self.wizard_tell: self.Welcome()
     self.in_wizard = None
     sys.stderr.write('\n')
-    if sys.platform == 'win32':
+    if sys.platform in ('win32', 'os2', 'os2emx'):
       sys.stderr.write('\n<<< press ENTER to continue >>>\n')
       sys.stdin.readline()
 
@@ -4056,7 +4056,7 @@ class PageKite(object):
     # 'standard' locations, but if nothing is found there and something local
     # exists, use that instead.
     try:
-      if sys.platform == 'win32':
+      if sys.platform in ('win32', 'os2', 'os2emx'):
         self.rcfile = os.path.join(os.path.expanduser('~'), 'pagekite.cfg')
         self.devnull = 'nul'
       else:
@@ -5667,7 +5667,7 @@ def Configure(pk):
     sys.exit(0)
 
   if not pk.backends.keys():
-    if '--signup' in sys.argv or sys.platform == 'win32':
+    if '--signup' in sys.argv or sys.platform in ('win32', 'os2', 'os2emx'):
       pk.RegisterNewKite(autoconfigure=True)
 
   pk.CheckConfig()
