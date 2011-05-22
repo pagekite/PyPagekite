@@ -2315,7 +2315,7 @@ class Tunnel(ChunkParser):
     return self.SendChunked(sending, zhistory=self.zhistory[sid])
 
   def SendStreamEof(self, sid, write_eof=False, read_eof=False):
-    return self.SendChunked('SID: %s\nEOF: %s%s\r\n\r\nBye!' % (sid,
+    return self.SendChunked('SID: %s\r\nEOF: 1%s%s\r\n\r\nBye!' % (sid,
                             (write_eof or not read_eof) and 'W' or '',
                             (read_eof or not write_eof) and 'R' or ''))
 
@@ -2698,19 +2698,21 @@ class UserConn(Selectable):
     return True
 
   def ProcessEofRead(self, tell_tunnel=True):
+    self.read_eof = True
+    self.Shutdown(socket.SHUT_RD)
+
     if tell_tunnel and self.tunnel:
       self.tunnel.SendStreamEof(self.sid, read_eof=True)
 
-    self.Shutdown(socket.SHUT_RD)
-    self.read_eof = True
     return self.ProcessEof()
 
   def ProcessEofWrite(self, tell_tunnel=True):
+    self.write_eof = True
+    if not self.write_blocked: self.Shutdown(socket.SHUT_WR)
+
     if tell_tunnel and self.tunnel:
       self.tunnel.SendStreamEof(self.sid, write_eof=True)
 
-    if not self.write_blocked: self.Shutdown(socket.SHUT_WR)
-    self.write_eof = True
     return self.ProcessEof()
 
   def Send(self, data, try_flush=False):
