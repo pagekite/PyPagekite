@@ -3,6 +3,7 @@ Version history - highlights
 
 v0.4.3   ??
 ------
+   - UI is more friendly on Windows and in OS X transient windows.
    - UI now gives useful feedback in front-end mode as well.
    - UI now reports https:// URLs when they are available.
    - Back-ported from 0.3.20:
