@@ -3072,7 +3072,7 @@ class Tunnel(ChunkParser):
               if not conn:
                 if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
                                           HTTP_Unavailable('be', proto, host,
-                                                           frame_url=self.conns.config.error_url) )):
+                                       frame_url=self.conns.config.error_url))):
                   return False
               elif rIp:
                 add_headers = ('\nX-Forwarded-For: %s\r\n'
@@ -3080,9 +3080,10 @@ class Tunnel(ChunkParser):
                                'X-PageKite-Proto: %s\r\n'
                                ) % (rIp, port,
                                     # FIXME: Checking for port == 443 is wrong!
-                                    (rTLS or (int(port) == 443)) and 'https' or 'http')
-                req, rest = re.sub(r'(?mi)^x-forwarded-for', 'X-Old-Forwarded-For', data
-                                   ).split('\n', 1)
+                                    ((rTLS or (int(port) == 443)) and 'https'
+                                                                   or 'http'))
+                req, rest = re.sub(r'(?mi)^x-forwarded-for',
+                                   'X-Old-Forwarded-For', data).split('\n', 1)
                 data = ''.join([req, add_headers, rest])
           if conn:
             self.users[sid] = conn
