@@ -3270,7 +3270,7 @@ class UserConn(Selectable):
     if not backend:
       logInfo.append(('err', 'No back-end'))
       self.Log(logInfo)
-      self.Cleanup()
+      self.Cleanup(close=False)
       return None
 
     try:
@@ -3293,7 +3293,7 @@ class UserConn(Selectable):
                            sspec[0], sspec[1]),
                      prefix='!', color=self.ui.YELLOW)
       self.Log(logInfo)
-      self.Cleanup()
+      self.Cleanup(close=False)
       return None
 
     sspec = (sspec[0], sspec[1])
