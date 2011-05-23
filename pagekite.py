@@ -2645,7 +2645,7 @@ class UserConn(Selectable):
     if not backend:
       logInfo.append(('err', 'No back-end'))
       self.Log(logInfo)
-      self.Cleanup()
+      self.Cleanup(close=False)
       return None
 
     try:
@@ -2666,7 +2666,7 @@ class UserConn(Selectable):
     except socket.error, err:
       logInfo.append(('socket_error', '%s' % err))
       self.Log(logInfo)
-      self.Cleanup()
+      self.Cleanup(close=False)
       return None
 
     self.Log(logInfo)
