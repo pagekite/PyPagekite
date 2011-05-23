@@ -3795,15 +3795,22 @@ class NullUi(object):
 class BasicUi(NullUi):
   """Stdio based user interface."""
 
-  CLEAR = '\033[H\033[J'
-  BOLD = '\033[1m'
-  NORM = '\033[0m'
-
   WANTS_STDERR = True
   EMAIL_RE = re.compile(r'^[a-z0-9!#$%&\'\*\+\/=?^_`{|}~-]+'
                          '(?:\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'
                          '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
                          '(?:[a-zA-Z]{2,4}|museum)$')
+
+  def __init__(self, welcome=None):
+    NullUi.__init__(self)
+    if sys.platform in ('win32', 'os2', 'os2emx'):
+      self.CLEAR = '\n\n'
+      self.BOLD = ''
+      self.NORM = ''
+    else:
+      self.CLEAR = '\033[H\033[J'
+      self.BOLD = '\033[1m'
+      self.NORM = '\033[0m'
 
   def Notify(self, message, prefix=' ', popup=False, now=None, alignright=''):
     now = now or time.time()
