@@ -911,7 +911,7 @@ def LogInfo(msg, parms=None):
 class AuthThread(threading.Thread):
   """Handle authentication work in a separate thread."""
 
-  daemon = True
+  #daemon = True
 
   def __init__(self, conns):
     threading.Thread.__init__(self)
