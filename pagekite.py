@@ -4331,9 +4331,9 @@ class PageKite(object):
       fd = open(self.savefile, 'w')
       fd.write('\n'.join(self.GenerateConfig(safe=True)))
       fd.close()
-      self.ui.Tell(['Configuration saved to: %s' % self.savefile])
+      self.ui.Tell(['Settings saved to: %s' % self.savefile])
       self.ui.Spacer()
-      Log([('saved', 'Configuration saved to: %s' % self.savefile)])
+      Log([('saved', 'Settings saved to: %s' % self.savefile)])
     except Exception, e:
       self.ui.Tell(['ERROR: Could not save to %s: %s' % (self.savefile, e)])
       self.ui.Spacer()
@@ -5675,8 +5675,11 @@ def Configure(pk):
     sys.exit(0)
 
   if not pk.backends.keys():
-    if '--signup' in sys.argv or sys.platform in ('win32', 'os2', 'os2emx'):
+    friendly_mode = sys.platform in ('win32', 'os2', 'os2emx',
+                                     'darwin', 'darwin1', 'darwin2')
+    if '--signup' in sys.argv or friendly_mode:
       pk.RegisterNewKite(autoconfigure=True)
+    if friendly_mode: pk.save = True
 
   pk.CheckConfig()
 
