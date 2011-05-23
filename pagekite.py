@@ -5092,12 +5092,10 @@ class PageKite(object):
                 self.ui.Tell([
                   'Your kite, %s, is live!' % register,
                   '',
-                  'NOTE: Your account still needs to be activated. Instructions',
-                  'have been mailed to %s, please follow them ASAP. To' % email,
-                  'avoid automated abuse, kites on unactivated %s'
-                  ' accounts' % self.service_provider,
-                  'can only be used for %d minutes.'
-                  ' Activation makes them permanent.' % details['timeout'],
+                  'IMPORTANT NOTE:',
+                  'An activation link has been mailed to: %s' % email,
+                  'Unverified accounts are deactivated after '
+                  '%s minutes.' % details['timeout'],
                 ])
                 # FIXME: Handle CNAMEs somehow?
                 time.sleep(2) # Give the service side a moment to replicate...
@@ -5684,7 +5682,7 @@ def Configure(pk):
 
   if pk.added_kites:
     if (pk.autosave or pk.save or
-        pk.ui.AskYesNo('Save current configuration to %s?' % pk.rcfile,
+        pk.ui.AskYesNo('Save settings to %s?' % pk.rcfile,
                        default=(len(pk.backends.keys()) > 0))):
       pk.SaveUserConfig()
     pk.servers_new_only = True
