@@ -650,9 +650,9 @@ def globalSecret():
   global gSecret
   if not gSecret:
     # This always works...
-    gSecret = '%8.8x%8.8x%8.8x' % (random.randint(0, 0x7FFFFFFE),
-                                   time.time(),
-                                   random.randint(0, 0x7FFFFFFE))
+    gSecret = '%8.8x%s%8.8x' % (random.randint(0, 0x7FFFFFFE),
+                                time.time(),
+                                random.randint(0, 0x7FFFFFFE))
 
     # Next, see if we can augment that with some real randomness.
     try:
@@ -2804,11 +2804,15 @@ class Tunnel(ChunkParser):
 
         if data and parse:
           sname = self.server_info[self.S_NAME]
-          conns.config.ui.Notify('Connecting to front-end %s ...' % sname)
-          conns.config.ui.Notify(' - Protocols: %s' % ', '.join(self.server_info[self.S_PROTOS]))
-          conns.config.ui.Notify(' - Ports: %s' % ', '.join(self.server_info[self.S_PORTS]))
+          conns.config.ui.Notify('Connecting to front-end %s ...' % sname,
+                                 color=conns.config.ui.GREY)
+          conns.config.ui.Notify(' - Protocols: %s' % ', '.join(self.server_info[self.S_PROTOS]),
+                                 color=conns.config.ui.GREY)
+          conns.config.ui.Notify(' - Ports: %s' % ', '.join(self.server_info[self.S_PORTS]),
+                                 color=conns.config.ui.GREY)
           if 'raw' in self.server_info[self.S_PROTOS]:
-            conns.config.ui.Notify(' - Raw ports: %s' % ', '.join(self.server_info[self.S_RAW_PORTS]))
+            conns.config.ui.Notify(' - Raw ports: %s' % ', '.join(self.server_info[self.S_RAW_PORTS]),
+                                   color=conns.config.ui.GREY)
 
           for quota in parse.Header('X-PageKite-Quota'):
             self.quota = [int(quota), None, None]
@@ -2816,7 +2820,8 @@ class Tunnel(ChunkParser):
             qGB = 1024 * 1024
             conns.config.ui.Notify(('You have %.2f GB of quota left.'
                                     ) % (float(quota) / qGB),
-                                   prefix=(int(quota) < qGB) and '!' or ' ')
+                                   prefix=(int(quota) < qGB) and '!' or ' ',
+                                   color=conns.config.ui.MAGENTA)
 
           invalid_reasons = {}
           for request in parse.Header('X-PageKite-Invalid-Why'):
@@ -2833,7 +2838,8 @@ class Tunnel(ChunkParser):
                       ('reason', reason),
                       ('domain', domain)])
             conns.config.ui.Notify(('REJECTED: %s:%s (invalid or out of quota)'
-                                    ) % (proto, domain), prefix='!')
+                                    ) % (proto, domain),
+                                   prefix='!', color=conns.config.ui.RED)
 
           for request in parse.Header('X-PageKite-Duplicate'):
             abort = True
@@ -2843,7 +2849,8 @@ class Tunnel(ChunkParser):
                       ('proto', proto),
                       ('domain', domain)])
             conns.config.ui.Notify(('REJECTED: %s:%s (duplicate)'
-                                    ) % (proto, domain), prefix='!')
+                                    ) % (proto, domain),
+                                   prefix='!', color=conns.config.ui.YELLOW)
 
           if not conns.config.disable_zchunks:
             for feature in parse.Header('X-PageKite-Features'):
@@ -3664,12 +3671,13 @@ class TunnelManager(threading.Thread):
               port = ''
             self.pkite.ui.Notify(('Flying: %s://%s%s/'
                                   ) % (proto, domain, port and ':'+port or ''),
-                                 prefix='~<>', color=self.pkite.ui.WHITE)
+                                 prefix='~<>', color=self.pkite.ui.CYAN)
 
         else:
           self.pkite.ui.Status('flying')
-          for be in self.pkite.backends.values():
-            if be[BE_STATUS] not in BE_INACTIVE:
+          for tid in self.conns.tunnels:
+            be = self.pkite.backends.get(tid)
+            if be and be[BE_STATUS] not in BE_INACTIVE:
               domain = be[BE_DOMAIN]
               port = be[BE_PORT]
               proto = be[BE_PROTO]
@@ -3687,7 +3695,7 @@ class TunnelManager(threading.Thread):
               url = '%s://%s%s' % (proto, domain, port and (':%s' % port) or '')
               self.pkite.ui.Notify(('Flying %s:%s as %s/%s'
                                     ) % (be[BE_BHOST], be[BE_BPORT], url, prox),
-                                    prefix='~<>', color=self.pkite.ui.WHITE)
+                                    prefix='~<>', color=self.pkite.ui.CYAN)
               domainp = '%s/%s' % (domain, port or '80')
               if (self.pkite.ui_sspec and
                   domainp in self.pkite.ui_paths and
@@ -3695,7 +3703,8 @@ class TunnelManager(threading.Thread):
                   be[BE_BPORT] == self.pkite.ui_sspec[1]):
                 dpaths = self.pkite.ui_paths[domainp]
                 for dp in sorted(dpaths.keys()):
-                  self.pkite.ui.Notify(' - %s%s' % (url, dp))
+                  self.pkite.ui.Notify(' - %s%s' % (url, dp),
+                                       color=self.pkite.ui.BLUE)
 
           self.PingTunnels(time.time())
 
@@ -3728,21 +3737,23 @@ class NullUi(object):
   def __init__(self, welcome=None):
     if sys.platform in ('win32', 'os2', 'os2emx'):
       self.CLEAR = '\n\n'
-      self.NORM = ''
-      self.WHITE = ''
-      self.GREEN = ''
-      self.YELLOW = ''
-      self.RED = ''
+      self.NORM = self.WHITE = self.GREY = self.GREEN = self.YELLOW = ''
+      self.BLUE = self.RED = self.MAGENTA = self.CYAN = ''
     else:
       self.CLEAR = '\033[H\033[J'
       self.NORM = '\033[0m'
       self.WHITE = '\033[1m'
+      self.GREY = '\033[30;1m'
       self.RED = '\033[31;1m'
       self.GREEN = '\033[32;1m'
       self.YELLOW = '\033[33;1m'
+      self.BLUE = '\033[34;1m'
+      self.MAGENTA = '\033[35;1m'
+      self.CYAN = '\033[36;1m'
 
     self.in_wizard = False
     self.wizard_tell = None
+    self.last_tick = 0
     self.notify_history = {}
     self.status_tag = ''
     self.status_col = self.NORM
@@ -3836,7 +3847,7 @@ class BasicUi(NullUi):
 
   def Notify(self, message, prefix=' ',
              popup=False, color=None, now=None, alignright=''):
-    now = now or time.time()
+    now = int(now or time.time())
     color = color or self.NORM
 
     # We suppress duplicates that are either new or still on the screen.
@@ -3848,6 +3859,18 @@ class BasicUi(NullUi):
 
     message = '%s' % message
     if message not in self.notify_history:
+
+      # Display the time now and then.
+      if (not alignright and
+          (now >= (self.last_tick + 60)) and
+          (len(message) < 68)):
+        try:
+          self.last_tick = now
+          d = datetime.datetime.fromtimestamp(now)
+          alignright = '[%2.2d:%2.2d]' % (d.hour, d.minute)
+        except:
+          pass # Fails on Python 2.2
+
       self.notify_history[message] = now
       msg = '\r%s %s%s%s%s%s\n' % ((prefix * 3)[0:3], color, message, self.NORM,
                                    ' ' * (75-len(message)-len(alignright)),
@@ -5574,7 +5597,7 @@ class PageKite(object):
     self.ui.Status('startup', message='Starting up...')
     self.ui.Notify(('Hello! This is %s v%s.'
                     ) % (self.progname, APPVER),
-                    prefix='>', color=self.ui.WHITE,
+                    prefix='>', color=self.ui.GREEN,
                     alignright='[%s]' % howtoquit)
     config_report = [('started', sys.argv[0]), ('version', APPVER),
                      ('platform', sys.platform),
