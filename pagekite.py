@@ -4970,11 +4970,15 @@ class PageKite(object):
       if self.kite_add:
         self.backends.update(just_these_backends)
       elif self.kite_remove:
-        for be in just_these_backends:
-          del self.backends[be]
+        for bid in just_these_backends:
+          be = self.backends[bid]
+          if be[BE_PROTO] == 'http':
+            http_host = '%s/%s' % (be[BE_DOMAIN], be[BE_PORT] or '80')
+            if http_host in self.ui_paths: del self.ui_paths[http_host]
+          del self.backends[bid]
       elif self.kite_disable:
-        for be in just_these_backends:
-          self.backends[be][BE_STATUS] = BE_STATUS_DISABLED
+        for bid in just_these_backends:
+          self.backends[bid][BE_STATUS] = BE_STATUS_DISABLED
       elif self.kite_only:
         for be in self.backends.values(): be[BE_STATUS] = BE_STATUS_DISABLED
         self.backends.update(just_these_backends)
@@ -4986,9 +4990,7 @@ class PageKite(object):
                                               or BE_STATUS_DISABLED)
         self.backends.update(just_these_backends)
 
-      # FIXME: UGH.
-      if just_these_webpaths.keys():
-        self.ui_paths = just_these_webpaths
+      self.ui_paths.update(just_these_webpaths)
 
     return self
 
