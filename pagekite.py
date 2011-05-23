@@ -4849,10 +4849,15 @@ class PageKite(object):
         be_spec = 'builtin'
         be_paths = args[:]
 
+      be_proto = 'http' # A sane default...
       if be_spec == '':
         be = None
       else:
-        be = be_spec.split(':')
+        be = be_spec.replace('/', '').split(':')
+        if be[0].lower() in ('http', 'https', 'ssh'):
+          be_proto = be.pop(0)
+          if len(be) < 2:
+            be.append({'http': '80', 'https': '443', 'ssh': '22'}[be_proto])
         if len(be) > 2:
           raise ConfigError('Bad back-end definition: %s' % be_spec)
         if len(be) < 2:
@@ -4863,11 +4868,11 @@ class PageKite(object):
         fe = ['%s-%s' % (fe[0], fe[2]), fe[1]]
       elif len(fe) == 2:
         try:
-          fe = ['http-%s' % int(fe[1]), fe[0]]
+          fe = ['%s-%s' % (be_proto, int(fe[1])), fe[0]]
         except ValueError:
           pass
       elif len(fe) == 1 and be:
-        fe = ['http', fe[0]]
+        fe = [be_proto, fe[0]]
 
       for f in be_paths:
         if not os.path.exists(f):
