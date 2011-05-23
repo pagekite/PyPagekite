@@ -3012,7 +3012,8 @@ class Tunnel(ChunkParser):
         else:
           self.quota = [int(parse.Header('Quota')[0]), None, None]
         self.conns.config.ui.Notify(('You have %.2f GB of quota left.'
-                                     ) % (float(self.quota[0]) / (1024*1024)))
+                                     ) % (float(self.quota[0]) / (1024*1024)),
+                                    color=self.conns.config.ui.MAGENTA)
       if parse.Header('PING'): return self.SendPong()
       if parse.Header('ZRST') and not self.ResetZChunks(): return False
       if parse.Header('SPD') and not self.Throttle(parse): return False
@@ -3258,7 +3259,7 @@ class UserConn(Selectable):
     if not backend or not backend[0]:
       self.ui.Notify(('%s < %s://%s:%s (FAIL: no server)'
                       ) % (remote_ip or 'unknown', proto, host, on_port),
-                     prefix='?')
+                     prefix='?', color=self.ui.YELLOW)
 
     # FIXME: Do access control interception HERE.
     #        Non-HTTP protocols will just get rejected if they don't match,
@@ -3289,7 +3290,8 @@ class UserConn(Selectable):
       logInfo.append(('socket_error', '%s' % err))
       self.ui.Notify(('%s < %s://%s:%s (FAIL: %s:%s is down)'
                       ) % (remote_ip or 'unknown', proto, host, on_port,
-                           sspec[0], sspec[1]), prefix='!')
+                           sspec[0], sspec[1]),
+                     prefix='!', color=self.ui.YELLOW)
       self.Log(logInfo)
       self.Cleanup()
       return None
@@ -5415,7 +5417,8 @@ class PageKite(object):
           else:
             failures += 1
             LogInfo('Failed to connect', [('FE', server)])
-            self.ui.Notify('Failed to connect to %s' % server, prefix='!')
+            self.ui.Notify('Failed to connect to %s' % server,
+                           prefix='!', color=self.ui.YELLOW)
 
     if self.dyndns:
       updates = {}
@@ -5607,8 +5610,10 @@ class PageKite(object):
     Log(config_report)
 
     if not HAVE_SSL:
-      self.ui.Notify('SECURITY WARNING: No SSL support was found, tunnels are insecure!', prefix='!')
-      self.ui.Notify('Please install either pyOpenSSL or python-ssl.',  prefix='!')
+      self.ui.Notify('SECURITY WARNING: No SSL support was found, tunnels are insecure!',
+                     prefix='!', color=self.ui.WHITE)
+      self.ui.Notify('Please install either pyOpenSSL or python-ssl.',
+                     prefix='!', color=self.ui.WHITE)
 
     # Create global secret
     self.ui.Status('startup', message='Collecting entropy for a secure secret...')
