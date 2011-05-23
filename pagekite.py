@@ -3662,7 +3662,7 @@ class TunnelManager(threading.Thread):
               port = ''
             self.pkite.ui.Notify(('Flying: %s://%s%s/'
                                   ) % (proto, domain, port and ':'+port or ''),
-                                 prefix='~<>')
+                                 prefix='~<>', color=self.pkite.ui.WHITE)
 
         else:
           self.pkite.ui.Status('flying')
@@ -3685,7 +3685,7 @@ class TunnelManager(threading.Thread):
               url = '%s://%s%s' % (proto, domain, port and (':%s' % port) or '')
               self.pkite.ui.Notify(('Flying %s:%s as %s/%s'
                                     ) % (be[BE_BHOST], be[BE_BPORT], url, prox),
-                                    prefix='~<>')
+                                    prefix='~<>', color=self.pkite.ui.WHITE)
               domainp = '%s/%s' % (domain, port or '80')
               if (self.pkite.ui_sspec and
                   domainp in self.pkite.ui_paths and
@@ -3704,14 +3704,14 @@ class TunnelManager(threading.Thread):
         if self.pkite.isfrontend:
           self.pkite.ui.Status('idle', message='Waiting for back-ends.')
         else:
-          self.pkite.ui.Status('down',
+          self.pkite.ui.Status('down', color=self.pkite.ui.RED,
                        message='Not connected to any front-ends, will retry...')
       elif tunnel_count < tunnel_total:
-        self.pkite.ui.Status('flying',
+        self.pkite.ui.Status('flying', color=self.pkite.ui.YELLOW,
                     message=('Only connected to %d/%d front-ends, will retry...'
                              ) % (tunnel_count, tunnel_total))
       elif problem:
-        self.pkite.ui.Status('flying',
+        self.pkite.ui.Status('flying', color=self.pkite.ui.YELLOW,
                       message='DynDNS updates may be incomplete, will retry...')
 
       for i in xrange(0, check_interval):
@@ -3724,10 +3724,26 @@ class NullUi(object):
   WANTS_STDERR = False
 
   def __init__(self, welcome=None):
+    if sys.platform in ('win32', 'os2', 'os2emx'):
+      self.CLEAR = '\n\n'
+      self.NORM = ''
+      self.WHITE = ''
+      self.GREEN = ''
+      self.YELLOW = ''
+      self.RED = ''
+    else:
+      self.CLEAR = '\033[H\033[J'
+      self.NORM = '\033[0m'
+      self.WHITE = '\033[1m'
+      self.RED = '\033[31;1m'
+      self.GREEN = '\033[32;1m'
+      self.YELLOW = '\033[33;1m'
+
     self.in_wizard = False
     self.wizard_tell = None
     self.notify_history = {}
     self.status_tag = ''
+    self.status_col = self.NORM
     self.status_msg = ''
     self.welcome = welcome
     self.tries = 200
@@ -3777,12 +3793,13 @@ class NullUi(object):
       Log(['message', ' '.join(lines)])
       return True
 
-  def Notify(self, message, prefix=' ', popup=False, now=None, alignright=''):
+  def Notify(self, message, prefix=' ',
+             popup=False, color=None, now=None, alignright=''):
     if popup: Log([('info', '%s%s%s' % (message,
                                         alignright and ' ' or '',
                                         alignright))])
 
-  def Status(self, tag, message=None): pass
+  def Status(self, tag, message=None, color=None): pass
 
   def ExplainError(self, error, title, subject=None):
     if error == 'pleaselogin':
@@ -3815,19 +3832,10 @@ class BasicUi(NullUi):
                          '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
                          '(?:[a-zA-Z]{2,4}|museum)$')
 
-  def __init__(self, welcome=None):
-    NullUi.__init__(self)
-    if sys.platform in ('win32', 'os2', 'os2emx'):
-      self.CLEAR = '\n\n'
-      self.BOLD = ''
-      self.NORM = ''
-    else:
-      self.CLEAR = '\033[H\033[J'
-      self.BOLD = '\033[1m'
-      self.NORM = '\033[0m'
-
-  def Notify(self, message, prefix=' ', popup=False, now=None, alignright=''):
+  def Notify(self, message, prefix=' ',
+             popup=False, color=None, now=None, alignright=''):
     now = now or time.time()
+    color = color or self.NORM
 
     # We suppress duplicates that are either new or still on the screen.
     keys = self.notify_history.keys()
@@ -3839,29 +3847,28 @@ class BasicUi(NullUi):
     message = '%s' % message
     if message not in self.notify_history:
       self.notify_history[message] = now
-      msg = '\r%s %s%s%s\n' % ((prefix * 3)[0:3], message,
-                               ' ' * (75-len(message)-len(alignright)),
-                               alignright)
+      msg = '\r%s %s%s%s%s%s\n' % ((prefix * 3)[0:3], color, message, self.NORM,
+                                   ' ' * (75-len(message)-len(alignright)),
+                                   alignright)
       sys.stderr.write(msg)
       self.Status(self.status_tag, self.status_msg)
 
-  def Status(self, tag, message=None):
+  def Status(self, tag, message=None, color=None):
     self.status_tag = tag
+    self.status_col = color or self.status_col or self.NORM
     self.status_msg = '%s' % (message or self.status_msg)
     if not self.in_wizard:
-      if message:
-        message = '%s' % message
-        msg = '\r << pagekite.py [%s]%s %s%s\r' % (tag, ' ' * (8-len(tag)),
-                                               message, ' ' * (52-len(message)))
-      else:
-        msg = '\r << pagekite.py [%s]%s\r' % (tag, ' ' * (8-len(tag)))
+      message = self.status_msg
+      msg = ('\r << pagekite.py [%s]%s %s%s%s\r%s'
+             ) % (tag, ' ' * (8-len(tag)),
+                  self.status_col, message, ' ' * (52-len(message)), self.NORM)
       sys.stderr.write(msg)
     if tag == 'exiting':
       sys.stderr.write('\n')
 
   def Welcome(self, pre=None):
     if self.in_wizard:
-      sys.stderr.write('%s%s%s' % (self.CLEAR, self.BOLD, self.in_wizard))
+      sys.stderr.write('%s%s%s' % (self.CLEAR, self.WHITE, self.in_wizard))
     if self.welcome:
       sys.stderr.write('%s\r%s\n' % (self.NORM, self.welcome))
       self.welcome = None
@@ -5336,7 +5343,8 @@ class PageKite(object):
         if server == LOOPBACK_FE:
           LoopbackTunnel.Loop(conns, self.backends)
         else:
-          self.ui.Status('connect', message='Connecting to front-end: %s' % server)
+          self.ui.Status('connect', color=self.ui.YELLOW,
+                         message='Connecting to front-end: %s' % server)
           if Tunnel.BackEnd(server, self.backends, self.require_all, conns):
             Log([('connect', server)])
             connections += 1
@@ -5387,7 +5395,8 @@ class PageKite(object):
       for update in updates:
         if update not in last_updates:
           try:
-            self.ui.Status('dyndns', message='Updating DNS...')
+            self.ui.Status('dyndns', color=self.ui.YELLOW,
+                                     message='Updating DNS...')
             result = ''.join(urllib.urlopen(updates[update]).readlines())
             self.last_updates.append(update)
             if result.startswith('good') or result.startswith('nochg'):
@@ -5402,7 +5411,8 @@ class PageKite(object):
         self.last_updates = last_updates
 
     if not failures:
-      self.ui.Status('active', message='Kites are flying and all is well.')
+      self.ui.Status('active', color=self.ui.GREEN,
+                               message='Kites are flying and all is well.')
 
     return failures
 
@@ -5523,7 +5533,8 @@ class PageKite(object):
     self.ui.Status('startup', message='Starting up...')
     self.ui.Notify(('Hello! This is %s v%s.'
                     ) % (self.progname, APPVER),
-                    prefix='>', alignright='[%s]' % howtoquit)
+                    prefix='>', color=self.ui.WHITE,
+                    alignright='[%s]' % howtoquit)
     config_report = [('started', sys.argv[0]), ('version', APPVER),
                      ('platform', sys.platform),
                      ('argv', ' '.join(sys.argv[1:])),
