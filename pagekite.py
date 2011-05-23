@@ -296,9 +296,9 @@ SERVICE_XMLRPC = 'pk:http://pagekite.net/xmlrpc/'
 
 OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
-            'signup', 'nullui', 'help',
+            'nullui', 'help', 'settings',
             'optfile=', 'savefile=', 'reloadfile=', 'autosave', 'noautosave',
-            'save', 'settings',
+            'signup', 'add', 'only', 'disable', 'remove', 'save',
             'service_xmlrpc=', 'controlpanel', 'controlpass',
             'optfile=', 'savefile=',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=',
@@ -354,6 +354,8 @@ BE_STATUS_BE_FAIL = 2
 BE_STATUS_NO_TUNNEL = 1
 BE_STATUS_DISABLED = -1
 BE_STATUS_UNKNOWN = -2
+BE_STATUS_DISABLE_ONCE = -3
+BE_INACTIVE = (BE_STATUS_DISABLED, BE_STATUS_DISABLE_ONCE)
 
 BE_NONE = ['', '', None, None, None, '', BE_STATUS_UNKNOWN]
 
@@ -729,7 +731,7 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
   tokens = tokens or {}
   for d in backends.keys():
     if (backends[d][BE_BHOST] and
-        backends[d][BE_STATUS] != BE_STATUS_DISABLED):
+        backends[d][BE_STATUS] not in BE_INACTIVE):
 
       # A stable (for replay on challenge) but unguessable salt.
       my_token = sha1hex(globalSecret() + server + backends[d][BE_SECRET]
@@ -3667,7 +3669,7 @@ class TunnelManager(threading.Thread):
         else:
           self.pkite.ui.Status('flying')
           for be in self.pkite.backends.values():
-            if be[BE_STATUS] != BE_STATUS_DISABLED:
+            if be[BE_STATUS] not in BE_INACTIVE:
               domain = be[BE_DOMAIN]
               port = be[BE_PORT]
               proto = be[BE_PROTO]
@@ -4076,9 +4078,14 @@ class PageKite(object):
     self.savefile = None
     self.autosave = 0
     self.reloadfile = None
-    self.save = 0
     self.added_kites = False
     self.ui = ui or NullUi()
+
+    self.save = 0
+    self.kite_add = False
+    self.kite_only = False
+    self.kite_disable = False
+    self.kite_remove = False
 
     # Searching for our configuration file!  We prefer the documented
     # 'standard' locations, but if nothing is found there and something local
@@ -4388,7 +4395,7 @@ class PageKite(object):
   def GetBackendData(self, proto, domain, recurse=True):
     backend = '%s:%s' % (proto.lower(), domain.lower())
     if backend in self.backends:
-      if BE_STATUS_DISABLED != self.backends[backend][BE_STATUS]:
+      if self.backends[backend][BE_STATUS] not in BE_INACTIVE:
         return self.backends[backend]
 
     if recurse:
@@ -4637,6 +4644,20 @@ class PageKite(object):
         self.autosave = False
       elif opt == '--save':
         self.save = True
+      elif opt == '--only':
+        self.kite_only = True
+        if self.kite_remove or self.kite_add:
+          raise ConfigError('--add, --only and --remove do not go together.')
+      elif opt == '--add':
+        self.save = self.kite_add = True
+        if self.kite_remove or self.kite_only:
+          raise ConfigError('--add, --only and --remove do not go together.')
+      elif opt == '--remove':
+        self.save = self.kite_remove = True
+        if self.kite_add or self.kite_only:
+          raise ConfigError('--add, --only and --remove do not go together.')
+      elif opt == '--disable':
+        self.kite_disable = True
 
       elif opt in ('-I', '--pidfile'): self.pidfile = arg
       elif opt in ('-L', '--logfile'): self.logfile = arg
@@ -4946,8 +4967,26 @@ class PageKite(object):
             del just_these_backends[bid]
 
     if just_these_backends.keys():
-      for be in self.backends.values(): be[BE_STATUS] = BE_STATUS_DISABLED
-      self.backends.update(just_these_backends)
+      if self.kite_add:
+        self.backends.update(just_these_backends)
+      elif self.kite_remove:
+        for be in just_these_backends:
+          del self.backends[be]
+      elif self.kite_disable:
+        for be in just_these_backends:
+          self.backends[be][BE_STATUS] = BE_STATUS_DISABLED
+      elif self.kite_only:
+        for be in self.backends.values(): be[BE_STATUS] = BE_STATUS_DISABLED
+        self.backends.update(just_these_backends)
+      else:
+        # Nothing explictly requested: 'only' behavior with a twist;
+        # If kites are new, don't make disables persist on save.
+        for be in self.backends.values():
+          be[BE_STATUS] = (need_registration and BE_STATUS_DISABLE_ONCE
+                                              or BE_STATUS_DISABLED)
+        self.backends.update(just_these_backends)
+
+      # FIXME: UGH.
       if just_these_webpaths.keys():
         self.ui_paths = just_these_webpaths
 
