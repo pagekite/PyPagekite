@@ -375,7 +375,6 @@ DYNDNS = {
 import base64
 import cgi
 from cgi import escape as escape_html
-import datetime
 import errno
 import getopt
 import os
@@ -417,6 +416,12 @@ if not 'SHUT_RD' in dir(socket):
   socket.SHUT_RD = 0
   socket.SHUT_WR = 1
   socket.SHUT_RDWR = 2
+
+try:
+  import datetime
+  ts_to_date = datetime.datetime.fromtimestamp
+except ImportError:
+  ts_to_date = str
 
 try:
   sorted([1, 2, 3])
@@ -649,9 +654,9 @@ def globalSecret():
 
     # Next, see if we can augment that with some real randomness.
     try:
-      newSecret = sha1hex(open('/dev/random').read(16) + gSecret)
+      newSecret = sha1hex(open('/dev/urandom').read(16) + gSecret)
       gSecret = newSecret
-      LogDebug('Seeded signatures using /dev/random, hooray!')
+      LogDebug('Seeded signatures using /dev/urandom, hooray!')
     except:
       try:
         newSecret = sha1hex(os.urandom(64) + gSecret)
@@ -903,6 +908,8 @@ def LogInfo(msg, parms=None):
 #        than one incoming request at a time.
 class AuthThread(threading.Thread):
   """Handle authentication work in a separate thread."""
+
+  daemon = True
 
   def __init__(self, conns):
     threading.Thread.__init__(self)
@@ -1391,8 +1398,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                           '</tr>'
                          ) % (' '.join(fclass),
                                ophtml, fsize,
-                               str(datetime.datetime.fromtimestamp(
-                                                 int(os.path.getmtime(fpath)))),
+                               str(ts_to_date(int(os.path.getmtime(fpath)))),
                                qfn, fn.replace('<', '&lt;'),
                              ))
         else:
@@ -1491,6 +1497,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                                    shtml_vars=data):
           self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
         return
+      elif path.startswith('/_pagekite/quitquitquit/'):
+        self.sendResponse('<h1>Kaboom</h1>\n', code=500, msg='Asplode')
+        self.wfile.flush()
+        os._exit(2)
       elif path.startswith('/_pagekite/add_kite/'):
         data.update(self.add_kite(path, qs))
       elif path.endswith('/pagekite.rc'):
@@ -1667,6 +1677,8 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
 
 class HttpUiThread(threading.Thread):
   """Handle HTTP UI in a separate thread."""
+
+  daemon = True
 
   def __init__(self, pkite, conns,
                server=UiHttpServer, handler=UiRequestHandler,
@@ -3583,6 +3595,8 @@ class Listener(Selectable):
 
 class TunnelManager(threading.Thread):
   """Create new tunnels as necessary or kill idle ones."""
+
+  daemon = True
 
   def __init__(self, pkite, conns):
     threading.Thread.__init__(self)
