@@ -4076,7 +4076,8 @@ class PageKite(object):
       self.rcfile = 'pagekite.cfg'
       self.devnull = '/dev/null'
 
-    if not os.path.exists(self.rcfile):
+    # Disabled for now, let's see who complains. (FIXME)
+    if False and not os.path.exists(self.rcfile):
       for rcf in ('pagekite.rc', 'pagekite.cfg'):
         prog_rcf = os.path.join(os.path.dirname(sys.argv[0]), rcf)
         if os.path.exists(prog_rcf): self.rcfile = prog_rcf
