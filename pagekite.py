@@ -1529,7 +1529,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         return
 
       if path == '/_pagekite/':
-        if not self.sendStaticPath('/control.shtml', 'text/html',
+        if not self.sendStaticPath('%s/control.pk-shtml' % console, 'text/html',
                                    shtml_vars=data):
           self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
         return
@@ -4845,7 +4845,7 @@ class PageKite(object):
       elif opt == '--be_config':
         host, key, val = arg.split(':', 2)
         hostc = self.be_config.get(host, {})
-        hostc[key] = val
+        hostc[key] = {'True': True, 'False': False, 'None': None}.get(val, val)
         self.be_config[host] = hostc
 
       elif opt == '--domain':
