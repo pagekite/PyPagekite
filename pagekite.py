@@ -1149,18 +1149,31 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     if message and not self.suppress_body:
       self.sendChunk(message)
 
+  def needPassword(self):
+    if self.server.pkite.ui_password: return True
+    userkeys = [k for k in self.host_config.keys() if k.startswith('user/')]
+    return userkeys
+
   def checkUsernamePasswordAuth(self, username, password):
-    if self.server.pkite.ui_password:
-      if password != self.server.pkite.ui_password:
-        raise AuthError("Invalid password")
+    userkey = 'user/%s' % username
+    if userkey in self.host_config:
+      if self.host_config[userkey] == password:
+        return
+
+    if (self.server.pkite.ui_password and
+        password == self.server.pkite.ui_password):
+      return
+
+    if self.needPassword():
+      raise AuthError("Invalid password")
 
   def checkRequestAuth(self, scheme, netloc, path, qs):
-    if self.server.pkite.ui_password:
+    if self.needPassword():
       raise AuthError("checkRequestAuth not implemented")
 
   def checkPostAuth(self, scheme, netloc, path, qs, posted):
-    if self.server.pkite.ui_password:
-      raise AuthError("checkRequestAuth not implemented")
+    if self.needPassword():
+      raise AuthError("checkPostAuth not implemented")
 
   def performAuthChecks(self, scheme, netloc, path, qs):
     try:
@@ -1200,9 +1213,18 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   def do_DELETE(self): self.do_UNSUPPORTED()
   def do_PUT(self): self.do_UNSUPPORTED()
 
+  def getHostInfo(self):
+    self.http_host = http_host = self.headers.get('HOST',
+                                            self.headers.get('host', 'unknown'))
+    self.host_config = self.server.pkite.ui_config.get((':' in http_host
+                                                           and http_host
+                                                            or http_host+':80'
+                                                        ).replace(':', '/'), {})
+
   def do_GET(self):
     (scheme, netloc, path, params, query, frag) = urlparse(self.path)
     qs = parse_qs(query)
+    self.getHostInfo()
     if not self.performAuthChecks(scheme, netloc, path, qs): return
     try:
       return self.handleHttpRequest(scheme, netloc, path, params, query, frag,
@@ -1219,6 +1241,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   def do_POST(self):
     (scheme, netloc, path, params, query, frag) = urlparse(self.path)
     qs = parse_qs(query)
+    self.getHostInfo()
+
     if not self.performAuthChecks(scheme, netloc, path, qs): return
 
     posted = None
@@ -1229,7 +1253,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       elif ctype == 'application/x-www-form-urlencoded':
         clength = int(self.headers.get('content-length'))
         posted = cgi.parse_qs(self.rfile.read(clength), 1)
-      else:
+      elif self.host_config.get('xmlrpc', False):
         return SimpleXMLRPCRequestHandler.do_POST(self)
     except Exception, e:
       Log([('err', 'POST error at %s: %s' % (path, e))])
@@ -1244,7 +1268,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
-  def openCGI(self, full_path, http_host, path, shtml_vars):
+  def openCGI(self, full_path, path, shtml_vars):
     self.sendResponse(None, mimetype='text/html', chunked=True)
     os.putenv('GATEWAY_INTERFACE', '1.1')
     os.putenv('AUTH', '')
@@ -1252,9 +1276,9 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     # FIXME: Implement CGI/1.1 ... ugh.
     return open("/dev/null", "rb")
 
-  def renderIndex(self, host_config, full_path):
+  def renderIndex(self, full_path):
     files = sorted(os.listdir(full_path))
-    if host_config.get('indexes') != WEB_INDEX_ALL:
+    if self.host_config.get('indexes') != WEB_INDEX_ALL:
       files = [f for f in files if not f.startswith('.')]
     fhtml = ['<table>']
     if files:
@@ -1297,7 +1321,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     fhtml.append('</table>')
     return ''.join(fhtml)
 
-  def sendStaticPath(self, http_host, path, mimetype, shtml_vars=None):
+  def sendStaticPath(self, path, mimetype, shtml_vars=None):
     pkite = self.server.pkite
     try:
       path = urllib.unquote(path)
@@ -1305,9 +1329,9 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
       paths = pkite.ui_paths
       def_paths = paths.get('*', {})
+      http_host = self.http_host
       if ':' not in http_host: http_host += ':80'
       host_paths = paths.get(http_host.replace(':', '/'), {})
-      host_config = pkite.ui_config.get(http_host.replace(':', '/'), {})
       path_parts = path.split('/')
       path_rest = []
       full_path = ''
@@ -1340,12 +1364,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       indexes = ['index.html', 'index.htm']
 
       dynamic_suffixes = []
-      if host_config.get('pk-shtml'):
+      if self.host_config.get('pk-shtml'):
         indexes[0:0] = ['index.pk-shtml']
         dynamic_suffixes = ['.pk-shtml', '.pk-js']
 
       cgi_suffixes = []
-      if host_config.get('cgi'):
+      if self.host_config.get('cgi'):
         indexes[0:0] = ['index.cgi']
         cgi_suffixes.append('.cgi')
 
@@ -1393,7 +1417,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
     if is_cgi:
       self.chunked = True
-      rf = self.openCGI(full_path, http_host, path, shtml_vars)
+      rf = self.openCGI(full_path, path, shtml_vars)
     else:
       self.sendResponse(None, mimetype=mimetype,
                               length=rf_size,
@@ -1413,8 +1437,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
     elif shtml_vars and not self.suppress_body:
       shtml_vars['title'] = '//%s%s' % (shtml_vars['http_host'], path)
-      if host_config.get('indexes') in (True, WEB_INDEX_ON, WEB_INDEX_ALL):
-        shtml_vars['body'] = self.renderIndex(host_config, full_path)
+      if self.host_config.get('indexes') in (True, WEB_INDEX_ON, WEB_INDEX_ALL):
+        shtml_vars['body'] = self.renderIndex(full_path)
       else:
         shtml_vars['body'] = ('<p><i>Directory listings disabled and</i> '
                               'index.html <i>not found.</i></p>')
@@ -1444,7 +1468,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       'prog': self.server.pkite.progname,
       'mimetype': self.getMimeType(path),
       'hostname': socket.gethostname() or 'Your Computer',
-      'http_host': 'unknown',
+      'http_host': self.http_host,
       'query_string': query,
       'code': 200,
       'body': '',
@@ -1463,17 +1487,19 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
     data['method'] = data.get('http_x-pagekite-proto', 'http').lower()
 
-    http_host = data.get('http_host', 'unknown')
     if 'http_cookie' in data:
       cookies = Cookie.SimpleCookie(data['http_cookie'])
     else:
       cookies = {}
 
-    if path == '/vars.txt':
+    # Do we expose the built-in console?
+    console = self.host_config.get('console', False)
+
+    if path == self.host_config.get('yamon', False):
       global gYamon
       data['body'] = gYamon.render_vars_text()
 
-    elif path.startswith('/_pagekite/logout/'):
+    elif console and path.startswith('/_pagekite/logout/'):
       parts = path.split('/')
       location = parts[3] or ('%s://%s/' % (data['method'], data['http_host']))
       self.sendResponse('\n', code=302, msg='Moved', header_list=[
@@ -1482,7 +1508,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                         ])
       return
 
-    elif path.startswith('/_pagekite/login/'):
+    elif console and path.startswith('/_pagekite/login/'):
       parts = path.split('/', 4)
       token = parts[3]
       location = parts[4] or ('%s://%s/_pagekite/' % (data['method'],
@@ -1498,13 +1524,13 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         LogDebug("Invalid token, %s != %s" % (token, self.server.secret))
         data.update(self.E404)
 
-    elif path.startswith('/_pagekite/'):
+    elif console and path.startswith('/_pagekite/'):
       if not ('pkite_token' in cookies and cookies['pkite_token'].value == self.server.secret):
         self.sendResponse('<h1>Forbidden</h1>\n', code=403, msg='Forbidden')
         return
 
       if path == '/_pagekite/':
-        if not self.sendStaticPath(http_host, '/control.shtml', 'text/html',
+        if not self.sendStaticPath('/control.shtml', 'text/html',
                                    shtml_vars=data):
           self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
         return
@@ -1526,8 +1552,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       else:
         data.update(self.E403)
     else:
-      if self.sendStaticPath(http_host, path, data['mimetype'],
-                             shtml_vars=data):
+      if self.sendStaticPath(path, data['mimetype'], shtml_vars=data):
         return
       data.update(self.E404)
 
