@@ -103,9 +103,9 @@ EXAMPLES = ("""\
     $ pagekite.py NAME.pagekite.me
 
     To expose specific folders, files or use alternate local ports:
-    $ pagekite.py /path/to/webroot NAME.pagekite.me   # built-in HTTPD
-    $ pagekite.py *.html           NAME.pagekite.me   # built-in HTTPD
-    $ pagekite.py 3000             NAME.pagekite.me   # http://localhost:3000/
+    $ pagekite.py +indexes /a/path/  NAME.pagekite.me   # built-in HTTPD
+    $ pagekite.py *.html             NAME.pagekite.me   # built-in HTTPD
+    $ pagekite.py 3000               NAME.pagekite.me   # http://localhost:3000/
 
     To expose multiple local servers (SSH and HTTP):
     $ pagekite.py ssh://NAME.pagekite.me AND 3000 http://NAME.pagekite.me
@@ -158,7 +158,6 @@ Common Options:
                         an options file would be.
 
  --httpd=X:P    -H X:P  Enable the HTTP user interface on hostname X, port P.
- --webroot=X            Directory to serve as root of built-in HTTPD.
  --pemfile=X    -P X    Use X as a PEM key for the HTTPS UI.
  --httppass=X   -X X    Require password X to access the UI.
 
@@ -302,7 +301,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'service_xmlrpc=', 'controlpanel', 'controlpass',
             'optfile=', 'savefile=',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=',
-            'webroot=', 'webpath=', 'webindexes=', 'webaccess=', 'webmagic=',
+            'webpath=', 'webconfig=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'authhelpurl=', 'register=', 'host=',
@@ -312,7 +311,9 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'backend=', 'define_backend=',
             'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
-            'buffers=', 'noprobes', 'debugio',]
+            'buffers=', 'noprobes', 'debugio',
+            # DEPRECATED:
+            'webroot=', 'webaccess=', 'webindexes=']
 
 DEBUG_IO = False
 DEFAULT_CHARSET = 'utf-8'
@@ -1261,6 +1262,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       def_paths = paths.get('*', {})
       if ':' not in http_host: http_host += ':80'
       host_paths = paths.get(http_host.replace(':', '/'), {})
+      host_config = pkite.ui_config.get(http_host.replace(':', '/'), {})
       path_parts = path.split('/')
       path_rest = []
       full_path = ''
@@ -1281,9 +1283,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
           path_rest.insert(0, path_parts.pop())
 
       if not full_path:
-        policy = pkite.ui_access_policy
-        root_path = pkite.ui_webroot or '/dev/null'
-        full_path = '%s/%s' % (root_path, path)
+        return False
 
       if os.path.isdir(full_path) and not path.endswith('/'):
         self.sendResponse('\n', code=302, msg='Moved', header_list=[
@@ -1363,9 +1363,9 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       rf.close()
 
     elif shtml_vars and not self.suppress_body:
-      if self.server.pkite.ui_index_policy in (WEB_INDEX_ON, WEB_INDEX_ALL):
+      if host_config.get('indexes', '') in (True, WEB_INDEX_ON, WEB_INDEX_ALL):
         files = sorted(os.listdir(full_path))
-        if self.server.pkite.ui_index_policy != WEB_INDEX_ALL:
+        if host_config.get('indexes', '') != WEB_INDEX_ALL:
           files = [f for f in files if not f.startswith('.')]
         fhtml = ['<table>']
         if files:
@@ -4067,11 +4067,9 @@ class PageKite(object):
     self.ui_socket = None
     self.ui_password = None
     self.ui_pemfile = None
-    self.ui_webroot = None
-    self.ui_access_policy = WEB_POLICY_PUBLIC
-    self.ui_index_policy = WEB_INDEX_ON
     self.ui_magic_file = '.pagekite.magic'
     self.ui_paths = {}
+    self.ui_config = {}
     self.disable_zchunks = False
     self.enable_sslzlib = False
     self.buffer_max = 1024
@@ -4186,15 +4184,15 @@ class PageKite(object):
                          or '# httppass=YOURSECRET'),
       (self.ui_pemfile and 'pemfile=%s' % self.ui_pemfile
                         or '# pemfile=/path/to/sslcert.pem'),
-      (self.ui_webroot and safe and 'webroot=%s' % self.ui_webroot
-                                 or '# webroot=/path/to/webroot/'),
-      '%sebaccess=%s' % (self.ui_sspec and 'w' or '# w', self.ui_access_policy),
-      '%sebindexes=%s' % (self.ui_sspec and 'w' or '# w', self.ui_index_policy),
     ]
     for http_host in sorted(self.ui_paths.keys()):
       for path in sorted(self.ui_paths[http_host].keys()):
         p = self.ui_paths[http_host][path]
         config.append('webpath=%s:%s:%s:%s' % (http_host, path, p[0], p[1]))
+    for http_host in sorted(self.ui_config.keys()):
+      for key in sorted(self.ui_config[http_host].keys()):
+        config.append('webconfig=%s:%s:%s' % (http_host, key,
+                                              self.ui_config[http_host][key]))
     config.append('')
 
     if self.SetServiceDefaults(check=True):
@@ -4578,11 +4576,6 @@ class PageKite(object):
     if be_port.startswith('built'):
       self.BindUiSspec()
       be_host, be_port = self.ui_sspec
-    elif os.path.exists(be_port):
-      self.BindUiSspec()
-      self.ui_webroot = be_port
-      protos = protos or 'http'
-      be_host, be_port = self.ui_sspec
 
     # Specs define what we are searching for...
     specs = []
@@ -4711,17 +4704,11 @@ class PageKite(object):
         else:
           self.ui_sspec = (host, 0)
 
-      elif opt == '--webroot':
-        self.ui_webroot = arg
-      elif opt == '--webaccess':
-        self.ui_access_policy = arg.lower()
-        if self.ui_access_policy not in WEB_POLICIES:
-          raise ConfigError('Policy must be one of: %s' % WEB_POLICIES)
-      elif opt == '--webmagic': self.ui_magic_file = arg
-      elif opt == '--webindexes':
-        self.ui_index_policy = arg.lower()
-        if self.ui_index_policy not in WEB_INDEXTYPES:
-          raise ConfigError('Index policy must be one of: %s' % WEB_INDEXTYPES)
+      elif opt == '--webconfig':
+        host, key, val = arg.split(':', 2)
+        hostc = self.ui_config.get(host, {})
+        hostc[key] = val
+        self.ui_config[host] = hostc
       elif opt == '--webpath':
         host, path, policy, fpath = arg.split(':', 3)
 
@@ -4853,12 +4840,10 @@ class PageKite(object):
         DEBUG_IO = True
       elif opt == '--buffers': self.buffer_max = int(arg)
       elif opt == '--nocrashreport': self.crash_report_url = None
-      elif opt == '--clean': pass
-      elif opt == '--signup': pass
-      elif opt == '--nopyopenssl': pass
       elif opt == '--noloop': self.main_loop = False
       elif opt == '--defaults': self.SetServiceDefaults()
-      elif opt == '--settings': pass
+      elif opt in ('--clean', '--signup', '--nopyopenssl', '--settings'): pass
+      elif opt in ('--webaccess', '--webindexes', '--webroot'): pass
       elif opt == '--help':
         self.HelpAndExit(longhelp=True)
 
@@ -4878,6 +4863,7 @@ class PageKite(object):
 
     just_these_backends = {}
     just_these_webpaths = {}
+    just_these_webconfigs = {}
     argsets = []
     while 'AND' in args:
       argsets.append(args[0:args.index('AND')])
@@ -4890,18 +4876,21 @@ class PageKite(object):
       if os.path.exists(fe_spec):
         raise ConfigError('Is a local file: %s' % fe_spec)
 
+      be_config = []
       be_paths = []
       if len(args) == 0:
         be_spec = ''
       elif len(args) == 1:
-        if os.path.exists(args[0]):
-          be_paths = [args[0]]
+        if os.path.exists(args[0]) or args[0].startswith('+'):
+          be_paths = [p for p in [args[0]] if not p.startswith('+')]
+          be_config = [p for p in [args[0]] if p.startswith('+')]
           be_spec = 'builtin'
         else:
           be_spec = args[0]
       else:
         be_spec = 'builtin'
-        be_paths = args[:]
+        be_paths = [p for p in args if not p.startswith('+')]
+        be_config = [p for p in args if p.startswith('+')]
 
       be_proto = 'http' # A sane default...
       if be_spec == '':
@@ -4937,13 +4926,28 @@ class PageKite(object):
       specs = self.ArgToBackendSpecs(spec)
       just_these_backends.update(specs)
 
+      spec = specs[specs.keys()[0]]
+      http_host = '%s/%s' % (spec[BE_DOMAIN], spec[BE_PORT] or '80')
+      if be_config:
+        # Map the +foo=bar values to per-site config settings.
+        host_config = just_these_webconfigs.get(http_host, {})
+        for cfg in be_config:
+          if '=' in cfg:
+            key, val = cfg[1:].split('=', 1)
+          elif cfg.startswith('+no'):
+            key, val = cfg[3:], False
+          else:
+            key, val = cfg[1:], True
+          if ':' in key:
+            raise ConfigError('Please do not use : in web config keys.')
+          host_config[key] = val
+        just_these_webconfigs[http_host] = host_config
+
       if be_paths:
         # Here we map the list of files/directories into a bunch of web-paths.
         # If a path contains any information about the local directory
         # structure, we obfuscate all the path information, using a method
         # that should be very hard to guess, but stable.
-        spec = specs[specs.keys()[0]]
-        http_host = '%s/%s' % (spec[BE_DOMAIN], spec[BE_PORT] or '80')
         rand_seed = '%s:%x' % (specs[specs.keys()[0]][BE_SECRET],
                                time.time()/(24*3600))
         host_paths = just_these_webpaths.get(http_host, {})
@@ -5001,6 +5005,7 @@ class PageKite(object):
           if be[BE_PROTO] == 'http':
             http_host = '%s/%s' % (be[BE_DOMAIN], be[BE_PORT] or '80')
             if http_host in self.ui_paths: del self.ui_paths[http_host]
+            if http_host in self.ui_config: del self.ui_config[http_host]
           del self.backends[bid]
       elif self.kite_disable:
         for bid in just_these_backends:
@@ -5017,6 +5022,7 @@ class PageKite(object):
         self.backends.update(just_these_backends)
 
       self.ui_paths.update(just_these_webpaths)
+      self.ui_config.update(just_these_webconfigs)
 
     return self
 
