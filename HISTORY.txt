@@ -9,6 +9,7 @@ v0.4.3   ??
    - UI now reports https:// URLs when they are available.
    - Added --add, --only, --remove and --disable for manipulating your
      kite configuration from the command-line.
+   - HTTP Basic Auth can now be required for any HTTP back-end.
    - Back-ported from 0.3.20:
       - Fixed more file-descriptor leaks.
       - Fixed a bug in initial handshake when front-end was using python's SSL.

@@ -823,8 +823,11 @@ def HTTP_GoodBeConnection():
       headers=[HTTP_Header('X-PageKite-Status', 'OK')],
       mimetype='image/gif')
 
-def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None):
-  code, status = 503, 'Unavailable'
+def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None,
+                     code=503, status='Unavailable', headers=None):
+  if code == 401:
+    headers = headers or []
+    headers.append(HTTP_Header('WWW-Authenticate', 'Basic realm=PageKite'))
   message = ''.join(['<h1>Sorry! (', where, ')</h1>',
                      '<p>The ', proto.upper(),' <a href="', WWWHOME, '">',
                      '<i>PageKite</i></a> for <b>', domain,
@@ -837,10 +840,11 @@ def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None):
                          ['<html><frameset cols="*">',
                           '<frame target="_top" src="', frame_url, '" />',
                           '<noframes>', message, '</noframes>',
-                          '</frameset></html>'])
+                          '</frameset></html>'], headers=headers)
   else:
     return HTTP_Response(code, status,
-                         ['<html><body>', message, '</body></html>'])
+                         ['<html><body>', message, '</body></html>'],
+                         headers=headers)
 
 LOG = []
 LOG_LINE = 0
@@ -3102,10 +3106,16 @@ class Tunnel(ChunkParser):
             conn = UserConn.BackEnd(proto, host, sid, self, port,
                                     remote_ip=rIp, remote_port=rPort, data=data)
             if proto in ('http', 'websocket'):
-              if not conn:
+              if conn is None:
                 if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
                                           HTTP_Unavailable('be', proto, host,
                                        frame_url=self.conns.config.error_url))):
+                  return False
+              elif not conn:
+                if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
+                                          HTTP_Unavailable('be', proto, host,
+                                       frame_url=self.conns.config.error_url,
+                                      code=401))):
                   return False
               elif rIp:
                 add_headers = ('\nX-Forwarded-For: %s\r\n'
@@ -3269,6 +3279,7 @@ class UserConn(Selectable):
     self.host = host
     self.conns = tunnel.conns
     self.tunnel = tunnel
+    failure = None
 
     # Try and find the right back-end. We prefer proto/port specifications
     # first, then the just the proto. If the protocol is WebSocket and no
@@ -3278,9 +3289,9 @@ class UserConn(Selectable):
     if proto == 'probe': protos = ['http']
     if proto == 'websocket': protos.append('http')
     for p in protos:
-      if not backend: backend = self.conns.config.GetBackendServer('%s-%s' % (p, on_port), host)
-      if not backend: backend = self.conns.config.GetBackendServer(p, host)
-      if not backend: backend = self.conns.config.GetBackendServer(p, CATCHALL_HN)
+      if not backend: backend, be = self.conns.config.GetBackendServer('%s-%s' % (p, on_port), host)
+      if not backend: backend, be = self.conns.config.GetBackendServer(p, host)
+      if not backend: backend, be = self.conns.config.GetBackendServer(p, CATCHALL_HN)
 
     logInfo = [
       ('on_port', on_port),
@@ -3291,21 +3302,58 @@ class UserConn(Selectable):
     if remote_ip: logInfo.append(('remote_ip', remote_ip))
 
     if not backend or not backend[0]:
-      self.ui.Notify(('%s < %s://%s:%s (FAIL: no server)'
+      self.ui.Notify(('%s - %s://%s:%s (FAIL: no server)'
                       ) % (remote_ip or 'unknown', proto, host, on_port),
                      prefix='?', color=self.ui.YELLOW)
+    else:
+      http_host = '%s/%s' % (be[BE_DOMAIN], be[BE_PORT] or '80')
+      host_config = self.conns.config.be_config.get(http_host, {})
 
-    # FIXME: Do access control interception HERE.
-    #        Non-HTTP protocols will just get rejected if they don't match,
-    #        for HTTP we will do a captive portal kind of thing.
-    #        For HTTP we are guaranteed to have the initial HTTP request in
-    #        `data`, so we should be able to parse that for cookies etc.
+      # Access control interception: check remote IP addresses first.
+      ip_keys = [k for k in host_config if k.startswith('ip/')]
+      if ip_keys:
+        k1 = 'ip/%s' % remote_ip
+        k2 = '.'.join(k1.split('.')[:-1])
+        if not (k1 in host_config or k2 in host_config):
+          self.ui.Notify(('%s - %s://%s:%s (IP ACCESS DENIED)'
+                          ) % (remote_ip or 'unknown', proto, host, on_port),
+                         prefix='!', color=self.ui.YELLOW)
+          logInfo.append(('forbidden-ip', '%s' % remote_ip))
+          backend = None
+
+      # Access control interception: check for HTTP Basic authentication.
+      user_keys = [k for k in host_config if k.startswith('user/')]
+      if user_keys:
+        user, pwd, fail = None, None, True
+        if proto in ('websocket', 'http'):
+          parse = HttpParser(lines=data.splitlines())
+          auth = parse.Header('Authorization')
+          try:
+            (how, ab64) = auth[0].split()
+            if how.lower() == 'basic':
+              user, pwd = base64.b64decode(ab64).split(':')
+          except:
+            user = auth
+
+          user_key = 'user/%s' % user
+          if user and user_key in host_config:
+            if host_config[user_key] == pwd:
+              fail = False
+
+        if fail:
+          if DEBUG_IO: print '=== REQUEST\n%s\n===' % data
+          self.ui.Notify(('%s - %s://%s:%s (USER ACCESS DENIED)'
+                          ) % (remote_ip or 'unknown', proto, host, on_port),
+                         prefix='!', color=self.ui.YELLOW)
+          logInfo.append(('forbidden-user', '%s' % user))
+          backend = None
+          failure = ''
 
     if not backend:
       logInfo.append(('err', 'No back-end'))
       self.Log(logInfo)
       self.Cleanup(close=False)
-      return None
+      return failure
 
     try:
       self.SetFD(rawsocket(socket.AF_INET, socket.SOCK_STREAM))
@@ -3322,7 +3370,7 @@ class UserConn(Selectable):
 
     except socket.error, err:
       logInfo.append(('socket_error', '%s' % err))
-      self.ui.Notify(('%s < %s://%s:%s (FAIL: %s:%s is down)'
+      self.ui.Notify(('%s - %s://%s:%s (FAIL: %s:%s is down)'
                       ) % (remote_ip or 'unknown', proto, host, on_port,
                            sspec[0], sspec[1]),
                      prefix='!', color=self.ui.YELLOW)
@@ -4467,8 +4515,8 @@ class PageKite(object):
   def GetBackendServer(self, proto, domain, recurse=True):
     backend = self.GetBackendData(proto, domain) or BE_NONE
     bhost, bport = (backend[BE_BHOST], backend[BE_BPORT])
-    if bhost == '-' or not bhost: return None
-    return (bhost, bport)
+    if bhost == '-' or not bhost: return None, None
+    return (bhost, bport), backend
 
   def IsSignatureValid(self, sign, secret, proto, domain, srand, token):
     return checkSignature(sign=sign, secret=secret,
