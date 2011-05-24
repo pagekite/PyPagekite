@@ -300,15 +300,14 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'signup', 'add', 'only', 'disable', 'remove', 'save',
             'service_xmlrpc=', 'controlpanel', 'controlpass',
             'optfile=', 'savefile=',
-            'httpd=', 'pemfile=', 'httppass=', 'errorurl=',
-            'webpath=', 'webconfig=',
+            'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webpath=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'authhelpurl=', 'register=', 'host=',
             'noupgradeinfo', 'upgradeinfo=', 'motd=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
             'tls_default=', 'tls_endpoint=', 'fe_certname=', 'ca_certs=',
-            'backend=', 'define_backend=',
+            'backend=', 'define_backend=', 'be_config=',
             'frontend=', 'frontends=', 'torify=', 'socksify=',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes', 'debugio',
@@ -1216,7 +1215,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   def getHostInfo(self):
     self.http_host = http_host = self.headers.get('HOST',
                                             self.headers.get('host', 'unknown'))
-    self.host_config = self.server.pkite.ui_config.get((':' in http_host
+    self.host_config = self.server.pkite.be_config.get((':' in http_host
                                                            and http_host
                                                             or http_host+':80'
                                                         ).replace(':', '/'), {})
@@ -4103,7 +4102,7 @@ class PageKite(object):
     self.ui_pemfile = None
     self.ui_magic_file = '.pagekite.magic'
     self.ui_paths = {}
-    self.ui_config = {}
+    self.be_config = {}
     self.disable_zchunks = False
     self.enable_sslzlib = False
     self.buffer_max = 1024
@@ -4223,10 +4222,6 @@ class PageKite(object):
       for path in sorted(self.ui_paths[http_host].keys()):
         p = self.ui_paths[http_host][path]
         config.append('webpath=%s:%s:%s:%s' % (http_host, path, p[0], p[1]))
-    for http_host in sorted(self.ui_config.keys()):
-      for key in sorted(self.ui_config[http_host].keys()):
-        config.append('webconfig=%s:%s:%s' % (http_host, key,
-                                              self.ui_config[http_host][key]))
     config.append('')
 
     if self.SetServiceDefaults(check=True):
@@ -4301,6 +4296,10 @@ class PageKite(object):
         bprinted += 1
     if bprinted == 0:
       config.append('# backend=http:YOU.pagekite.me:localhost:80:SECRET')
+    for http_host in sorted(self.be_config.keys()):
+      for key in sorted(self.be_config[http_host].keys()):
+        config.append('be_config=%s:%s:%s' % (http_host, key,
+                                              self.be_config[http_host][key]))
     config.extend([
       '#',
       '#/ More examples...',
@@ -4738,11 +4737,6 @@ class PageKite(object):
         else:
           self.ui_sspec = (host, 0)
 
-      elif opt == '--webconfig':
-        host, key, val = arg.split(':', 2)
-        hostc = self.ui_config.get(host, {})
-        hostc[key] = val
-        self.ui_config[host] = hostc
       elif opt == '--webpath':
         host, path, policy, fpath = arg.split(':', 3)
 
@@ -4848,6 +4842,11 @@ class PageKite(object):
           if bid in self.backends:
             raise ConfigError("Same backend/domain defined twice: %s" % bid)
         self.backends.update(bes)
+      elif opt == '--be_config':
+        host, key, val = arg.split(':', 2)
+        hostc = self.be_config.get(host, {})
+        hostc[key] = val
+        self.be_config[host] = hostc
 
       elif opt == '--domain':
         protos, domain, secret = arg.split(':')
@@ -4897,7 +4896,7 @@ class PageKite(object):
 
     just_these_backends = {}
     just_these_webpaths = {}
-    just_these_webconfigs = {}
+    just_these_be_configs = {}
     argsets = []
     while 'AND' in args:
       argsets.append(args[0:args.index('AND')])
@@ -4910,21 +4909,20 @@ class PageKite(object):
       if os.path.exists(fe_spec):
         raise ConfigError('Is a local file: %s' % fe_spec)
 
-      be_config = []
       be_paths = []
+      be_config = [p for p in args if p.startswith('+')]
+      args = [p for p in args if not p.startswith('+')]
       if len(args) == 0:
         be_spec = ''
       elif len(args) == 1:
         if os.path.exists(args[0]) or args[0].startswith('+'):
-          be_paths = [p for p in [args[0]] if not p.startswith('+')]
-          be_config = [p for p in [args[0]] if p.startswith('+')]
+          be_paths = [args[0]]
           be_spec = 'builtin'
         else:
           be_spec = args[0]
       else:
         be_spec = 'builtin'
-        be_paths = [p for p in args if not p.startswith('+')]
-        be_config = [p for p in args if p.startswith('+')]
+        be_paths = args[:]
 
       be_proto = 'http' # A sane default...
       if be_spec == '':
@@ -4964,7 +4962,7 @@ class PageKite(object):
       http_host = '%s/%s' % (spec[BE_DOMAIN], spec[BE_PORT] or '80')
       if be_config:
         # Map the +foo=bar values to per-site config settings.
-        host_config = just_these_webconfigs.get(http_host, {})
+        host_config = just_these_be_configs.get(http_host, {})
         for cfg in be_config:
           if '=' in cfg:
             key, val = cfg[1:].split('=', 1)
@@ -4975,7 +4973,7 @@ class PageKite(object):
           if ':' in key:
             raise ConfigError('Please do not use : in web config keys.')
           host_config[key] = val
-        just_these_webconfigs[http_host] = host_config
+        just_these_be_configs[http_host] = host_config
 
       if be_paths:
         # Here we map the list of files/directories into a bunch of web-paths.
@@ -5045,7 +5043,7 @@ class PageKite(object):
           if be[BE_PROTO] == 'http':
             http_host = '%s/%s' % (be[BE_DOMAIN], be[BE_PORT] or '80')
             if http_host in self.ui_paths: del self.ui_paths[http_host]
-            if http_host in self.ui_config: del self.ui_config[http_host]
+            if http_host in self.be_config: del self.be_config[http_host]
           del self.backends[bid]
       elif self.kite_disable:
         for bid in just_these_backends:
@@ -5062,7 +5060,7 @@ class PageKite(object):
         self.backends.update(just_these_backends)
 
       self.ui_paths.update(just_these_webpaths)
-      self.ui_config.update(just_these_webconfigs)
+      self.be_config.update(just_these_be_configs)
 
     return self
 
