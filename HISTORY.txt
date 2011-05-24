@@ -3,9 +3,12 @@ Version history - highlights
 
 v0.4.3   ??
 ------
+   - UI is more colorful!
    - UI is more friendly on Windows and in OS X transient windows.
    - UI now gives useful feedback in front-end mode as well.
    - UI now reports https:// URLs when they are available.
+   - Added --add, --only, --remove and --disable for manipulating your
+     kite configuration from the command-line.
    - Back-ported from 0.3.20:
       - Fixed more file-descriptor leaks.
       - Fixed a bug in initial handshake when front-end was using python's SSL.
