@@ -1252,7 +1252,52 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     # FIXME: Implement CGI/1.1 ... ugh.
     return open("/dev/null", "rb")
 
-  def sendStaticFile(self, http_host, path, mimetype, shtml_vars=None):
+  def renderIndex(self, host_config, full_path):
+    files = sorted(os.listdir(full_path))
+    if host_config.get('indexes') != WEB_INDEX_ALL:
+      files = [f for f in files if not f.startswith('.')]
+    fhtml = ['<table>']
+    if files:
+      for fn in files:
+        fpath = os.path.join(full_path, fn)
+        fmimetype = self.getMimeType(fn)
+        fsize = os.path.getsize(fpath)
+        ops = [ ]
+        if os.path.isdir(fpath):
+          fclass = ['dir']
+          fn += '/'
+        else:
+          fclass = ['file']
+          ops.append('download')
+          if (fmimetype.startswith('text/') or
+              (fmimetype == 'application/octet-stream' and fsize < 512000)):
+            ops.append('view')
+        (unused, ext) = os.path.splitext(fn)
+        if ext:
+          fclass.append(ext.replace('.', 'ext_'))
+        fclass.append('mime_%s' % fmimetype.replace('/', '_'))
+
+        qfn = urllib.quote(fn)
+        ophtml = ', '.join([('<a class="%s" href="%s?%s=/%s">%s</a>'
+                             ) % (op, qfn, op, qfn, op)
+                            for op in sorted(ops)])
+        fhtml.append(('<tr class="%s">'
+                       '<td class="ops">%s</td>'
+                       '<td class="size">%s</td>'
+                       '<td class="mtime">%s</td>'
+                       '<td class="name"><a href="%s">%s</a></td>'
+                      '</tr>'
+                      ) % (' '.join(fclass),
+                           ophtml, fsize,
+                           str(ts_to_date(int(os.path.getmtime(fpath)))),
+                           qfn, fn.replace('<', '&lt;'),
+                      ))
+    else:
+      fhtml.append('<tr><td><i>empty</i></td></tr>')
+    fhtml.append('</table>')
+    return ''.join(fhtml)
+
+  def sendStaticPath(self, http_host, path, mimetype, shtml_vars=None):
     pkite = self.server.pkite
     try:
       path = urllib.unquote(path)
@@ -1292,13 +1337,17 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         return True
 
       is_shtml, is_cgi, is_dir = False, False, False
-      indexes = ['index.pk-shtml', 'index.htm', 'index.html']
-      dynamic_suffixes = ['.pk-shtml', '.pk-js']
+      indexes = ['index.html', 'index.htm']
+
+      dynamic_suffixes = []
+      if host_config.get('pk-shtml'):
+        indexes[0:0] = ['index.pk-shtml']
+        dynamic_suffixes = ['.pk-shtml', '.pk-js']
+
       cgi_suffixes = []
-      if os.path.exists(os.path.join(root_path, pkite.ui_magic_file)):
+      if host_config.get('cgi'):
         indexes[0:0] = ['index.cgi']
         cgi_suffixes.append('.cgi')
-        # FIXME: Actually parse magic file...
 
       for index in indexes:
         ipath = os.path.join(full_path, index)
@@ -1363,54 +1412,14 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       rf.close()
 
     elif shtml_vars and not self.suppress_body:
-      if host_config.get('indexes', '') in (True, WEB_INDEX_ON, WEB_INDEX_ALL):
-        files = sorted(os.listdir(full_path))
-        if host_config.get('indexes', '') != WEB_INDEX_ALL:
-          files = [f for f in files if not f.startswith('.')]
-        fhtml = ['<table>']
-        if files:
-          for fn in files:
-            fpath = os.path.join(full_path, fn)
-            fmimetype = self.getMimeType(fn)
-            fsize = os.path.getsize(fpath)
-            ops = [ ]
-            if os.path.isdir(fpath):
-              fclass = ['dir']
-              fn += '/'
-            else:
-              fclass = ['file']
-              ops.append('download')
-              if (fmimetype.startswith('text/') or
-                  (fmimetype == 'application/octet-stream' and fsize < 512000)):
-                ops.append('view')
-            (unused, ext) = os.path.splitext(fn)
-            if ext:
-              fclass.append(ext.replace('.', 'ext_'))
-            fclass.append('mime_%s' % fmimetype.replace('/', '_'))
-
-            qfn = urllib.quote(fn)
-            ophtml = ', '.join([('<a class="%s" href="%s?%s=/%s">%s</a>'
-                                 ) % (op, qfn, op, qfn, op)
-                                for op in sorted(ops)])
-            fhtml.append(('<tr class="%s">'
-                           '<td class="ops">%s</td>'
-                           '<td class="size">%s</td>'
-                           '<td class="mtime">%s</td>'
-                           '<td class="name"><a href="%s">%s</a></td>'
-                          '</tr>'
-                         ) % (' '.join(fclass),
-                               ophtml, fsize,
-                               str(ts_to_date(int(os.path.getmtime(fpath)))),
-                               qfn, fn.replace('<', '&lt;'),
-                             ))
-        else:
-          fhtml.append('<tr><td><i>empty</i></td></tr>')
-        fhtml.append('</table>')
-        shtml_vars['body'] = ''.join(fhtml)
-      else:
-        shtml_vars['body'] = '<p><i>Directory listings disabled and</i> index.html <i>not found.</i></p>'
       shtml_vars['title'] = '//%s%s' % (shtml_vars['http_host'], path)
+      if host_config.get('indexes') in (True, WEB_INDEX_ON, WEB_INDEX_ALL):
+        shtml_vars['body'] = self.renderIndex(host_config, full_path)
+      else:
+        shtml_vars['body'] = ('<p><i>Directory listings disabled and</i> '
+                              'index.html <i>not found.</i></p>')
       self.sendChunk(self.TEMPLATE_HTML % shtml_vars)
+
     self.sendEof()
     return True
 
@@ -1495,7 +1504,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         return
 
       if path == '/_pagekite/':
-        if not self.sendStaticFile(http_host, '/control.shtml', 'text/html',
+        if not self.sendStaticPath(http_host, '/control.shtml', 'text/html',
                                    shtml_vars=data):
           self.sendResponse('<h1>Not found</h1>\n', code=404, msg='Missing')
         return
@@ -1517,7 +1526,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       else:
         data.update(self.E403)
     else:
-      if self.sendStaticFile(http_host, path, data['mimetype'],
+      if self.sendStaticPath(http_host, path, data['mimetype'],
                              shtml_vars=data):
         return
       data.update(self.E404)
