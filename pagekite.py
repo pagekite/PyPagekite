@@ -4960,11 +4960,16 @@ class PageKite(object):
         rand_seed = '%s:%x' % (specs[specs.keys()[0]][BE_SECRET],
                                time.time()/(24*3600))
         host_paths = just_these_webpaths.get(http_host, {})
+        first = True
         for path in be_paths:
           phead, ptail = os.path.split(path)
-          if (os.path.isdir(path) and
-              not path.startswith('.') and
-              not os.path.isabs(path)):
+          if (first and
+              os.path.isdir(path) and
+              '+noroot' not in be_config):
+            webpath = '/'
+          elif (os.path.isdir(path) and
+                not path.startswith('.') and
+                not os.path.isabs(path)):
             webpath = path
             if not webpath.endswith('/'): webpath += '/'
           elif (phead and ptail) or ('/' in path) or os.path.isabs(path):
@@ -4980,6 +4985,7 @@ class PageKite(object):
           if not webpath.startswith('/'):
             webpath = '/'+path
           host_paths[webpath] = (WEB_POLICY_DEFAULT, os.path.abspath(path))
+          first = False
         just_these_webpaths[http_host] = host_paths
 
     need_registration = {}
