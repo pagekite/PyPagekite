@@ -103,9 +103,9 @@ EXAMPLES = ("""\
     $ pagekite.py NAME.pagekite.me
 
     To expose specific folders, files or use alternate local ports:
-    $ pagekite.py +indexes /a/path/  NAME.pagekite.me   # built-in HTTPD
-    $ pagekite.py *.html             NAME.pagekite.me   # built-in HTTPD
-    $ pagekite.py 3000               NAME.pagekite.me   # http://localhost:3000/
+    $ pagekite.py +indexes /a/path/ NAME.pagekite.me   # built-in HTTPD
+    $ pagekite.py *.html            NAME.pagekite.me   # built-in HTTPD
+    $ pagekite.py 3000              NAME.pagekite.me   # http://localhost:3000/
 
     To expose multiple local servers (SSH and HTTP):
     $ pagekite.py ssh://NAME.pagekite.me AND 3000 http://NAME.pagekite.me
