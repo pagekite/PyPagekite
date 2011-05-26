@@ -1,9 +1,10 @@
 Version history - highlights
 ============================
 
-v0.3.21  ??
+v0.3.21  2011.05.26
 -------
    - More LoopBack problems and file-descriptor leak fixes.
+   - Fixed buglet where back-end error page was suppressed.
 
 
 v0.3.20  2011.05.21
