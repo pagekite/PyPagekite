@@ -297,7 +297,7 @@ OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'nullui', 'help', 'settings',
             'optfile=', 'savefile=', 'reloadfile=', 'autosave', 'noautosave',
-            'signup', 'add', 'only', 'disable', 'remove', 'save',
+            'signup', 'list', 'add', 'only', 'disable', 'remove', 'save',
             'service_xmlrpc=', 'controlpanel', 'controlpass',
             'optfile=', 'savefile=',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webpath=',
@@ -4054,7 +4054,6 @@ class BasicUi(NullUi):
   def EndWizard(self):
     if self.wizard_tell: self.Welcome()
     self.in_wizard = None
-    sys.stderr.write('\n')
     if sys.platform in ('win32', 'os2', 'os2emx'):
       sys.stderr.write('\n<<< press ENTER to continue >>>\n')
       sys.stdin.readline()
@@ -4506,6 +4505,32 @@ class PageKite(object):
                               '%s:%s' % self.ui_sspec,
                               self.LoginPath(goto))
 
+  def ListKites(self):
+    self.ui.welcome = '>>> ' + self.ui.WHITE + 'Your kites:' + self.ui.NORM
+    message = []
+    for bid in sorted(self.backends.keys()):
+      be = self.backends[bid]
+      be_be = (be[BE_BHOST], be[BE_BPORT])
+      backend = (be_be == self.ui_sspec) and 'builtin' or '%s:%s' % be_be
+      if '-' in be[BE_PROTO]:
+        fe_proto, fe_port = be[BE_PROTO].split('-', 1)
+      else:
+        fe_proto, fe_port = be[BE_PROTO], ''
+
+      frontend = '%s://%s%s%s' % (fe_proto, be[BE_DOMAIN],
+                                  fe_port and ':' or '', fe_port)
+
+      if be[BE_STATUS] == BE_STATUS_DISABLED:
+        color = self.ui.GREY
+        status = '(disabled)'
+      else:
+        color = self.ui.NORM
+        status = (fe_proto == 'raw') and '(HTTP proxied)' or ''
+      message.append(''.join([color, backend, ' ' * (19-len(backend)),
+                              frontend, ' ' * (42-len(frontend)), status]))
+    message.append(self.ui.NORM)
+    self.ui.Tell(message)
+
   def PrintSettings(self, safe=False):
     print '\n'.join(self.GenerateConfig(safe=safe))
 
@@ -4808,6 +4833,7 @@ class PageKite(object):
           raise ConfigError('--add, --only and --remove do not go together.')
       elif opt == '--disable':
         self.kite_disable = True
+      elif opt == '--list': pass
 
       elif opt in ('-I', '--pidfile'): self.pidfile = arg
       elif opt in ('-L', '--logfile'): self.logfile = arg
@@ -5398,7 +5424,7 @@ class PageKite(object):
                                  subject=subject)
             Goto('abort')
           else:
-            self.ui.Tell(['Success!  Time to fly some kites...'])
+            self.ui.Tell(['Success!'])
             self.ui.EndWizard()
             time.sleep(2) # Give the service side a moment to replicate...
             if autoconfigure: self.backends.update(cfgs)
@@ -5934,6 +5960,10 @@ def Configure(pk):
     pk.servers_new_only = True
   elif pk.save:
     pk.SaveUserConfig()
+
+  if '--list' in sys.argv or pk.kite_add or pk.kite_remove:
+    pk.ListKites()
+    sys.exit(0)
 
 
 if __name__ == '__main__':
