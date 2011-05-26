@@ -2,8 +2,8 @@
 
 ## General ##
 
-   * Add signaling to report available upgrades to the back-ends.
-   * Auto-upgrades!
+   * Add UI to report available upgrades at the back-end.
+   * Auto-upgrades?
 
 
 ## Built-in HTTPD ##
@@ -13,6 +13,7 @@
      * Add basic photo albums
      * Add feature to thumbnail/preview/re-encode images/audio/video
    * Allow uploading, somehow
+   * Allow access controls based on OpenID/Twitter/Facebook ?
 
 
 ## Packaging ##
