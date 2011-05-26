@@ -1257,7 +1257,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         clength = int(self.headers.get('content-length'))
         posted = cgi.parse_qs(self.rfile.read(clength), 1)
       elif self.host_config.get('xmlrpc', False):
-        return SimpleXMLRPCRequestHandler.do_POST(self)
+        # We wrap the XMLRPC request handler in _BEGIN/_END in order to
+        # expose the request environment to the RPC functions.
+        RCI = self.server.RCI
+        return RCI._END(SimpleXMLRPCRequestHandler.do_POST(RCI._BEGIN(self)))
     except Exception, e:
       Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
@@ -1585,15 +1588,32 @@ class RemoteControlInterface(object):
     self.yamon = yamon
     self.modified = False
 
+    self.lock = threading.Lock()
+    self.request = None
+
     # For now, nobody gets ACL_WRITE
     self.auth_tokens = {httpd.secret: self.ACL_READ}
 
     # Channels are in-memory logs which can be tailed over XML-RPC.
     # Javascript apps can create these for implementing chat etc.
-    self.channels = {'LOG': {'access': self.ACL_READ, 'data': LOG}}
+    self.channels = {'LOG': {'access': self.ACL_READ,
+                             'tokens': self.auth_tokens,
+                             'data': LOG}}
+
+  def _BEGIN(self, request_object):
+    self.lock.acquire()
+    self.request = request_object
+    return request_object
+
+  def _END(self, rv=None):
+    if self.request:
+      self.request = None
+      self.lock.release()
+    return rv
 
   def connections(self, auth_token):
-    if self.ACL_READ not in self.auth_tokens.get(auth_token, self.ACL_OPEN):
+    if (not self.request.host_config.get('console', False) or
+        self.ACL_READ not in self.auth_tokens.get(auth_token, self.ACL_OPEN)):
       raise AuthError('Unauthorized')
 
     return [{'sid': c.sid,
@@ -1601,12 +1621,14 @@ class RemoteControlInterface(object):
              'html': c.__html__()} for c in self.conns.conns]
 
   def add_kite(self, auth_token, kite_domain, kite_proto):
-    if self.ACL_WRITE not in self.auth_tokens.get(auth_token, self.ACL_OPEN):
+    if (not self.request.host_config.get('console', False) or
+        self.ACL_WRITE not in self.auth_tokens.get(auth_token, self.ACL_OPEN)):
       raise AuthError('Unauthorized')
     pass
 
   def get_kites(self, auth_token):
-    if self.ACL_READ not in self.auth_tokens.get(auth_token, self.ACL_OPEN):
+    if (not self.request.host_config.get('console', False) or
+        self.ACL_READ not in self.auth_tokens.get(auth_token, self.ACL_OPEN)):
       raise AuthError('Unauthorized')
 
     kites = []
@@ -1633,12 +1655,14 @@ class RemoteControlInterface(object):
                fe_port, fe_domain,
                be_port, be_domain,
                shared_secret):
-    if self.ACL_WRITE not in self.auth_tokens.get(auth_token, self.ACL_OPEN):
+    if (not self.request.host_config.get('console', False) or
+        self.ACL_WRITE not in self.auth_tokens.get(auth_token, self.ACL_OPEN)):
       raise AuthError('Unauthorized')
     # FIXME
 
   def remove_kite(self, auth_token, kite_id):
-    if self.ACL_WRITE not in self.auth_tokens.get(auth_token, self.ACL_OPEN):
+    if (not self.request.host_config.get('console', False) or
+        self.ACL_WRITE not in self.auth_tokens.get(auth_token, self.ACL_OPEN)):
       raise AuthError('Unauthorized')
 
     if kite_id in self.pkite.backends:
@@ -1647,27 +1671,52 @@ class RemoteControlInterface(object):
       self.modified = True
     return self.get_kites(auth_token)
 
-  def get_channel(self, auth_token, channel):
-    req = self.channels.get(channel, {}).get('access', self.ACL_WRITE)
-    if req not in self.auth_tokens.get(auth_token, self.ACL_OPEN):
+  def mk_channel(self, auth_token, channel):
+    if not self.request.host_config.get('channels', False):
       raise AuthError('Unauthorized')
 
-    return self.channels.get(channel, {}).get('data', [])
+    chid = '%s/%s' % (self.request.http_host, channel)
+    if chid in self.channels:
+      raise Error('Exists')
+    else:
+      self.channels[chid] = {'access': self.ACL_WRITE,
+                             'tokens': {auth_token: self.ACL_WRITE},
+                             'data': []}
+      return self.append_channel(auth_token, channel, {'created': channel})
+
+  def get_channel(self, auth_token, channel):
+    if not self.request.host_config.get('channels', False):
+      raise AuthError('Unauthorized')
+
+    chan = self.channels.get('%s/%s' % (self.request.http_host, channel),
+                             self.channels.get(channel, {}))
+    req = chan.get('access', self.ACL_WRITE)
+    if req not in chan.get('tokens', self.auth_tokens).get(auth_token,
+                                                           self.ACL_OPEN):
+      raise AuthError('Unauthorized')
+
+    return chan.get('data', [])
+
+  def append_channel(self, auth_token, channel, values):
+    data = self.get_channel(auth_token, channel)
+    global LOG_LINE
+    values.update({'ts': '%x' % time.time(), 'll': '%x' % LOG_LINE})
+    LOG_LINE += 1
+    data.append(values)
+    return values
 
   def get_channel_after(self, auth_token, channel, last_seen, timeout):
-    chan = self.channels.get(channel, {})
-    req = chan.get('access', self.ACL_OPEN)
-    if req not in self.auth_tokens.get(auth_token, self.ACL_WRITE):
-      raise AuthError('Unauthorized')
-
+    data = self.get_channel(auth_token, channel)
     last_seen = int(last_seen, 16)
-    data = chan.get('data', [])
 
-    # If our internal LOG_LINE counter is less than the count of the last seen
     # line at the remote end, then we've restarted and should send everything.
     if (last_seen == 0) or (LOG_LINE < last_seen): return data
     # FIXME: LOG_LINE global for all channels?  Is that suck?
 
+    # We are about to get sleepy, so release our environment lock.
+    self._END()
+
+    # If our internal LOG_LINE counter is less than the count of the last seen
     # Else, wait at least one second, AND wait for a new line to be added to
     # the log (or the timeout to expire).
     time.sleep(1)
@@ -1710,8 +1759,9 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     gYamon.vset('errors', 0)
     gYamon.vset("bytes_all", 0)
 
+    self.RCI = RemoteControlInterface(self, pkite, conns, gYamon)
     self.register_introspection_functions()
-    self.register_instance(RemoteControlInterface(self, pkite, conns, gYamon))
+    self.register_instance(self.RCI)
 
 
 class HttpUiThread(threading.Thread):
