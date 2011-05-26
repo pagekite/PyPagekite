@@ -4820,19 +4820,21 @@ class PageKite(object):
       elif opt == '--save':
         self.save = True
       elif opt == '--only':
-        self.kite_only = True
-        if self.kite_remove or self.kite_add:
-          raise ConfigError('--add, --only and --remove do not go together.')
+        self.save = self.kite_only = True
+        if self.kite_remove or self.kite_add or self.kite_disable:
+          raise ConfigError('One change at a time please!')
       elif opt == '--add':
         self.save = self.kite_add = True
-        if self.kite_remove or self.kite_only:
-          raise ConfigError('--add, --only and --remove do not go together.')
+        if self.kite_remove or self.kite_only or self.kite_disable:
+          raise ConfigError('One change at a time please!')
       elif opt == '--remove':
         self.save = self.kite_remove = True
-        if self.kite_add or self.kite_only:
-          raise ConfigError('--add, --only and --remove do not go together.')
+        if self.kite_add or self.kite_only or self.kite_disable:
+          raise ConfigError('One change at a time please!')
       elif opt == '--disable':
-        self.kite_disable = True
+        self.save = self.kite_disable = True
+        if self.kite_add or self.kite_only or self.kite_remove:
+          raise ConfigError('One change at a time please!')
       elif opt == '--list': pass
 
       elif opt in ('-I', '--pidfile'): self.pidfile = arg
@@ -5961,7 +5963,8 @@ def Configure(pk):
   elif pk.save:
     pk.SaveUserConfig()
 
-  if '--list' in sys.argv or pk.kite_add or pk.kite_remove:
+  if ('--list' in sys.argv or
+      pk.kite_add or pk.kite_remove or pk.kite_only or pk.kite_disable):
     pk.ListKites()
     sys.exit(0)
 
