@@ -8,6 +8,7 @@
 
 ## Built-in HTTPD ##
 
+   * Add XML-RPC CNAME creation method
    * Tweak access controls a bit more
    * Create javascript for making directory listings prettier
      * Add basic photo albums
