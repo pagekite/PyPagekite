@@ -5031,13 +5031,15 @@ class PageKite(object):
       argsets.append(args)
 
     for args in argsets:
+      # Extract the config options first...
+      be_config = [p for p in args if p.startswith('+')]
+      args = [p for p in args if not p.startswith('+')]
+
       fe_spec = args.pop()
       if os.path.exists(fe_spec):
         raise ConfigError('Is a local file: %s' % fe_spec)
 
       be_paths = []
-      be_config = [p for p in args if p.startswith('+')]
-      args = [p for p in args if not p.startswith('+')]
       if len(args) == 0:
         be_spec = ''
       elif len(args) == 1:
