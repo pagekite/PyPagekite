@@ -1217,8 +1217,11 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   def do_PUT(self): self.do_UNSUPPORTED()
 
   def getHostInfo(self):
-    self.http_host = http_host = self.headers.get('HOST',
-                                            self.headers.get('host', 'unknown'))
+    http_host = self.headers.get('HOST', self.headers.get('host', 'unknown'))
+    if http_host == 'unknown' or http_host.startswith('localhost:'):
+      http_host = sorted(self.server.pkite.be_config.keys()
+                         )[0].replace('/', ':')
+    self.http_host = http_host
     self.host_config = self.server.pkite.be_config.get((':' in http_host
                                                            and http_host
                                                             or http_host+':80'
