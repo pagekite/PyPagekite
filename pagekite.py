@@ -1154,11 +1154,11 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def needPassword(self):
     if self.server.pkite.ui_password: return True
-    userkeys = [k for k in self.host_config.keys() if k.startswith('user/')]
+    userkeys = [k for k in self.host_config.keys() if k.startswith('password/')]
     return userkeys
 
   def checkUsernamePasswordAuth(self, username, password):
-    userkey = 'user/%s' % username
+    userkey = 'password/%s' % username
     if userkey in self.host_config:
       if self.host_config[userkey] == password:
         return
@@ -3178,6 +3178,14 @@ class Tunnel(ChunkParser):
                                     # FIXME: Checking for port == 443 is wrong!
                                     ((rTLS or (int(port) == 443)) and 'https'
                                                                    or 'http'))
+                rewritehost = conn.config.get('rewritehost', False)
+                if rewritehost:
+                  if rewritehost is True:
+                    rewritehost = conn.backend[BE_BHOST]
+                  for hdr in ('host', 'connection', 'keep-alive'):
+                    data = re.sub(r'(?mi)^'+hdr, 'X-Old-'+hdr, data)
+                  add_headers += ('Connection: close\r\n'
+                                  'Host: %s\r\n') % rewritehost
                 req, rest = re.sub(r'(?mi)^x-forwarded-for',
                                    'X-Old-Forwarded-For', data).split('\n', 1)
                 data = ''.join([req, add_headers, rest])
@@ -3244,6 +3252,8 @@ class UserConn(Selectable):
     Selectable.__init__(self, address=address, ui=ui)
     self.tunnel = None
     self.conns = None
+    self.backend = BE_NONE[:]
+    self.config = {}
 
   def __html__(self):
     return ('<b>Tunnel</b>: <a href="/conn/%s">%s</a><br>'
@@ -3266,7 +3276,7 @@ class UserConn(Selectable):
     Selectable.Cleanup(self, close=close)
     if self.conns:
       self.conns.Remove(self)
-      self.conns = None
+      self.backend = self.config = self.conns = None
 
   def _FrontEnd(conn, address, proto, host, on_port, body, conns):
     # This is when an external user connects to a server and requests a
@@ -3360,7 +3370,8 @@ class UserConn(Selectable):
                      prefix='?', color=self.ui.YELLOW)
     else:
       http_host = '%s/%s' % (be[BE_DOMAIN], be[BE_PORT] or '80')
-      host_config = self.conns.config.be_config.get(http_host, {})
+      self.backend = be
+      self.config = host_config = self.conns.config.be_config.get(http_host, {})
 
       # Access control interception: check remote IP addresses first.
       ip_keys = [k for k in host_config if k.startswith('ip/')]
@@ -3375,7 +3386,7 @@ class UserConn(Selectable):
           backend = None
 
       # Access control interception: check for HTTP Basic authentication.
-      user_keys = [k for k in host_config if k.startswith('user/')]
+      user_keys = [k for k in host_config if k.startswith('password/')]
       if user_keys:
         user, pwd, fail = None, None, True
         if proto in ('websocket', 'http'):
@@ -3388,7 +3399,7 @@ class UserConn(Selectable):
           except:
             user = auth
 
-          user_key = 'user/%s' % user
+          user_key = 'password/%s' % user
           if user and user_key in host_config:
             if host_config[user_key] == pwd:
               fail = False
@@ -4973,6 +4984,7 @@ class PageKite(object):
         self.backends.update(bes)
       elif opt == '--be_config':
         host, key, val = arg.split(':', 2)
+        if key.startswith('user/'): key = key.replace('user/', 'password/')
         hostc = self.be_config.get(host, {})
         hostc[key] = {'True': True, 'False': False, 'None': None}.get(val, val)
         self.be_config[host] = hostc
@@ -5103,6 +5115,7 @@ class PageKite(object):
             key, val = cfg[1:], True
           if ':' in key:
             raise ConfigError('Please do not use : in web config keys.')
+          if key.startswith('user/'): key = key.replace('user/', 'password/')
           host_config[key] = val
         just_these_be_configs[http_host] = host_config
 

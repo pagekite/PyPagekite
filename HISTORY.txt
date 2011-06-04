@@ -3,6 +3,11 @@ Version history - highlights
 
 v0.4.4   ??
 ------
+   - Host options:
+      - Added +rewritehost
+      - Renamed +user/ to +password/
+      - Allow +options after the domain name
+   - Made the built-in HTTPD reply to http://localhost:port/ requests.
 
 
 v0.4.3   2011.05.26
