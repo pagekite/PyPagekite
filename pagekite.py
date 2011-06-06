@@ -265,19 +265,6 @@ Shortcuts:
     This may cause problems if you have many files and folders by that
     name, but that should be relatively rare. :-)
 
-Shortcuts, file sharing and security:
-
-    Note that for security reasons, when you use shortcuts, full paths
-    will not be exposed directly to the web, but most of the path will
-    instead be replaced with a string of semi-random characters.
-
-    For this reason, sharing ./*.html will result in very different paths
-    from sharing *.html or /home/user/*.html.
-
-    This should make it more difficult for hackers to guess the paths to
-    shared files or derive information about your local filesystem from
-    the paths exposed to the web.
-
 Shortcut examples:
 
 """+EXAMPLES) % APPVER
