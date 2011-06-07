@@ -375,6 +375,7 @@ rawsocket = socket.socket
 
 import struct
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -383,6 +384,7 @@ import xmlrpclib
 import zlib
 
 import SocketServer
+from CGIHTTPServer import CGIHTTPRequestHandler
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 import Cookie
 
@@ -1018,6 +1020,31 @@ def fmt_size(count):
   return '%dB' % count
 
 
+class CGIWrapper(CGIHTTPRequestHandler):
+  def __init__(self, request, path_cgi, path_dir, rest):
+    self.path = path_cgi
+    self.cgi_info = (path_dir, rest)
+    self.request = request
+    self.server = request.server
+    self.command = request.command
+    self.headers = request.headers
+    self.client_address = ('unknown', 0)
+    self.rfile = request.rfile
+    self.wfile = tempfile.TemporaryFile()
+
+  def send_response(self, code, message):
+    self.wfile.write('X-Response-Code: %s\r\n' % code)
+    self.wfile.write('X-Response-Message: %s\r\n' % message)
+
+  def send_error(self, code, message):
+    return self.send_response(code, message)
+
+  def Run(self):
+    self.run_cgi()
+    self.wfile.seek(0)
+    return self.wfile
+
+
 class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   # Make all paths/endpoints legal, we interpret them below.
@@ -1109,10 +1136,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def sendChunk(self, chunk):
     if self.chunked:
+      if DEBUG_IO: print '<== SENDING CHUNK ===\n%s\n' % chunk
       self.wfile.write('%x\r\n' % len(chunk))
       self.wfile.write(chunk)
       self.wfile.write('\r\n')
     else:
+      if DEBUG_IO: print '<== SENDING ===\n%s\n' % chunk
       self.wfile.write(chunk)
 
   def sendEof(self):
@@ -1214,10 +1243,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                                                             or http_host+':80'
                                                         ).replace(':', '/'), {})
 
-  def do_GET(self):
+  def do_GET(self, command='GET'):
     (scheme, netloc, path, params, query, frag) = urlparse(self.path)
     qs = parse_qs(query)
     self.getHostInfo()
+    self.post_data = None
+    self.command = command
     if not self.performAuthChecks(scheme, netloc, path, qs): return
     try:
       return self.handleHttpRequest(scheme, netloc, path, params, query, frag,
@@ -1229,31 +1260,52 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def do_HEAD(self):
     self.suppress_body = True
-    self.do_GET()
+    self.do_GET(command='HEAD')
 
-  def do_POST(self):
+  def do_POST(self, command='POST'):
     (scheme, netloc, path, params, query, frag) = urlparse(self.path)
     qs = parse_qs(query)
     self.getHostInfo()
+    self.command = command
 
     if not self.performAuthChecks(scheme, netloc, path, qs): return
 
     posted = None
+    self.post_data = tempfile.TemporaryFile()
+    self.old_rfile = self.rfile
     try:
+      # First, buffer the POST data to a file...
+      clength = cleft = int(self.headers.get('content-length'))
+      while cleft > 0:
+        rbytes = min(64*1024, cleft)
+        self.post_data.write(self.rfile.read(rbytes))
+        cleft -= rbytes
+
+      # Juggle things so the buffering is invisble.
+      self.post_data.seek(0)
+      self.rfile = self.post_data
+
       ctype, pdict = cgi.parse_header(self.headers.get('content-type'))
       if ctype == 'multipart/form-data':
+        self.post_data.seek(0)
         posted = cgi.parse_multipart(self.rfile, pdict)
       elif ctype == 'application/x-www-form-urlencoded':
-        clength = int(self.headers.get('content-length'))
+        if clength >= 50*1024*1024:
+          raise Exception(("Refusing to parse giant posted query "
+                           "string (%s bytes).") % clength)
         posted = cgi.parse_qs(self.rfile.read(clength), 1)
       elif self.host_config.get('xmlrpc', False):
         # We wrap the XMLRPC request handler in _BEGIN/_END in order to
         # expose the request environment to the RPC functions.
         RCI = self.server.RCI
         return RCI._END(SimpleXMLRPCRequestHandler.do_POST(RCI._BEGIN(self)))
+
+      self.post_data.seek(0)
     except Exception, e:
       Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
+      self.rfile = self.old_rfile
+      self.post_data = None
       return
 
     if not self.performPostAuthChecks(scheme, netloc, path, qs, posted): return
@@ -1264,13 +1316,41 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
+    self.rfile = self.old_rfile
+    self.post_data = None
+
   def openCGI(self, full_path, path, shtml_vars):
-    self.sendResponse(None, mimetype='text/html', chunked=True)
-    os.putenv('GATEWAY_INTERFACE', '1.1')
-    os.putenv('AUTH', '')
-    os.putenv('CONTENT_LENGTH', 0)
-    # FIXME: Implement CGI/1.1 ... ugh.
-    return open("/dev/null", "rb")
+    cgi_file = CGIWrapper(self, full_path, path, '').Run()
+    lines = cgi_file.read(32*1024).splitlines(True)
+    if '\r\n' in lines: lines = lines[0:lines.index('\r\n')+1]
+    elif '\n' in lines: lines = lines[0:lines.index('\n')+1]
+    else:
+      raise Exception('Could not find end of headers in %s' % full_path)
+
+    header_list = []
+    response_code = 200
+    response_message = 'OK'
+    response_mimetype = 'text/html'
+    for line in lines[:-1]:
+      key, val = line.strip().split(': ', 1)
+      if key == 'X-Response-Code':
+        response_code = val
+      elif key == 'X-Response-Message':
+        response_message = val
+      elif key.lower() == 'content-type':
+        response_mimetype = val
+      elif key.lower() == 'location':
+        response_code = 302
+        header_list.append((key, val))
+      else:
+        header_list.append((key, val))
+
+    self.sendResponse(None, code=response_code,
+                            msg=response_message,
+                            mimetype=response_mimetype,
+                            chunked=True, header_list=header_list)
+    cgi_file.seek(sum([len(l) for l in lines]))
+    return cgi_file
 
   def renderIndex(self, full_path):
     files = sorted(os.listdir(full_path))
@@ -1365,9 +1445,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         dynamic_suffixes = ['.pk-shtml', '.pk-js']
 
       cgi_suffixes = []
-      if self.host_config.get('cgi'):
-        indexes[0:0] = ['index.cgi']
-        cgi_suffixes.append('.cgi')
+      cgi_config = self.host_config.get('cgi', False)
+      if cgi_config:
+        if cgi_config == True: cgi_config = 'cgi'
+        for suffix in cgi_config.split(','):
+          indexes[0:0] = ['index.%s' % suffix]
+          cgi_suffixes.append('.%s' % suffix)
 
       for index in indexes:
         ipath = os.path.join(full_path, index)
@@ -1727,6 +1810,9 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     self.pkite = pkite
     self.conns = conns
     self.secret = pkite.ConfigSecret()
+
+    self.server_name = sspec[0]
+    self.server_port = sspec[1]
 
     if ssl_pem_filename:
       ctx = SSL.Context(SSL.SSLv23_METHOD)
