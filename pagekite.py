@@ -1021,9 +1021,10 @@ def fmt_size(count):
 
 
 class CGIWrapper(CGIHTTPRequestHandler):
-  def __init__(self, request, path_cgi, path_dir, rest):
+  def __init__(self, request, path_cgi):
     self.path = path_cgi
-    self.cgi_info = (path_dir, rest)
+    self.cgi_info = (os.path.dirname(path_cgi),
+                     os.path.basename(path_cgi))
     self.request = request
     self.server = request.server
     self.command = request.command
@@ -1031,6 +1032,8 @@ class CGIWrapper(CGIHTTPRequestHandler):
     self.client_address = ('unknown', 0)
     self.rfile = request.rfile
     self.wfile = tempfile.TemporaryFile()
+
+  def translate_path(self, path): return path
 
   def send_response(self, code, message):
     self.wfile.write('X-Response-Code: %s\r\n' % code)
@@ -1235,6 +1238,13 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   def getHostInfo(self):
     http_host = self.headers.get('HOST', self.headers.get('host', 'unknown'))
     if http_host == 'unknown' or http_host.startswith('localhost:'):
+      http_host = None
+      for bid in sorted(self.server.pkite.backends.keys()):
+        be = self.server.pkite.backends[bid]
+        if (be[BE_BPORT] == self.server.pkite.ui_sspec[1] and
+            be[BE_STATUS] not in BE_INACTIVE):
+          http_host = '%s:%s' % (be[BE_DOMAIN], be[BE_PORT] or 80)
+    if not http_host:
       http_host = sorted(self.server.pkite.be_config.keys()
                          )[0].replace('/', ':')
     self.http_host = http_host
@@ -1320,12 +1330,11 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     self.post_data = None
 
   def openCGI(self, full_path, path, shtml_vars):
-    cgi_file = CGIWrapper(self, full_path, path, '').Run()
+    cgi_file = CGIWrapper(self, full_path).Run()
     lines = cgi_file.read(32*1024).splitlines(True)
     if '\r\n' in lines: lines = lines[0:lines.index('\r\n')+1]
     elif '\n' in lines: lines = lines[0:lines.index('\n')+1]
-    else:
-      raise Exception('Could not find end of headers in %s' % full_path)
+    else: lines.append('')
 
     header_list = []
     response_code = 200
