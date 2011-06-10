@@ -4551,7 +4551,7 @@ class PageKite(object):
       '#/ Front-end Options:',
       (self.isfrontend and 'isfrontend' or '# isfrontend')
     ])
-    comment = (self.isfrontend and '' or '# ')
+    comment = ((not self.isfrontend) and '# ' or '')
     config.extend([
       (self.server_host and '%shost=%s' % (comment, self.server_host)
                          or '# host=machine.domain.com'),
@@ -4561,7 +4561,8 @@ class PageKite(object):
     for pa in self.server_portalias:
       config.append('portalias=%s:%s' % (int(pa), int(self.server_portalias[pa])))
     config.extend([
-      '%srawports=%s' % (comment, ','.join(['%s' % x for x in sorted(self.server_raw_ports)] or [])),
+      '%srawports=%s' % (comment or (not self.server_raw_ports) and '# ' or '',
+                         ','.join(['%s' % x for x in sorted(self.server_raw_ports)] or [])),
       (self.auth_domain and '%sauthdomain=%s' % (comment, self.auth_domain)
                          or '# authdomain=foo.com')
     ])
