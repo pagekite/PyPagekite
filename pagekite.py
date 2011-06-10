@@ -1361,21 +1361,27 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     cgi_file.seek(sum([len(l) for l in lines]))
     return cgi_file
 
-  def renderIndex(self, full_path):
-    files = sorted(os.listdir(full_path))
+  def renderIndex(self, full_path, files=None):
+    files = files or [(f, os.path.join(full_path, f))
+                      for f in sorted(os.listdir(full_path))]
+
+    # Remove dot-files
     if self.host_config.get('indexes') != WEB_INDEX_ALL:
-      files = [f for f in files if not f.startswith('.')]
+      files = [f for f in files if not f[0].startswith('.')]
+
     fhtml = ['<table>']
     if files:
-      for fn in files:
-        fpath = os.path.join(full_path, fn)
+      for (fn, fpath) in files:
         fmimetype = self.getMimeType(fn)
-        fsize = os.path.getsize(fpath)
+        fsize = os.path.getsize(fpath) or ''
         ops = [ ]
         if os.path.isdir(fpath):
           fclass = ['dir']
-          fn += '/'
+          if not fn.endswith('/'): fn += '/'
+          qfn = urllib.quote(fn)
         else:
+          qfn = urllib.quote(fn)
+          fn = os.path.basename(fn)
           fclass = ['file']
           ops.append('download')
           if (fmimetype.startswith('text/') or
@@ -1386,20 +1392,19 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
           fclass.append(ext.replace('.', 'ext_'))
         fclass.append('mime_%s' % fmimetype.replace('/', '_'))
 
-        qfn = urllib.quote(fn)
         ophtml = ', '.join([('<a class="%s" href="%s?%s=/%s">%s</a>'
                              ) % (op, qfn, op, qfn, op)
                             for op in sorted(ops)])
+        mtime = full_path and int(os.path.getmtime(fpath)) or time.time()
         fhtml.append(('<tr class="%s">'
                        '<td class="ops">%s</td>'
                        '<td class="size">%s</td>'
                        '<td class="mtime">%s</td>'
                        '<td class="name"><a href="%s">%s</a></td>'
                       '</tr>'
-                      ) % (' '.join(fclass),
-                           ophtml, fsize,
-                           str(ts_to_date(int(os.path.getmtime(fpath)))),
-                           qfn, fn.replace('<', '&lt;'),
+                      ) % (' '.join(fclass), ophtml, fsize,
+                           str(ts_to_date(mtime)), qfn,
+                           fn.replace('<', '&lt;'),
                       ))
     else:
       fhtml.append('<tr><td><i>empty</i></td></tr>')
@@ -1408,6 +1413,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def sendStaticPath(self, path, mimetype, shtml_vars=None):
     pkite = self.server.pkite
+    is_shtml, is_cgi, is_dir = False, False, False
+    index_list = None
     try:
       path = urllib.unquote(path)
       if path.find('..') >= 0: raise IOError("Evil")
@@ -1436,16 +1443,31 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         else:
           path_rest.insert(0, path_parts.pop())
 
-      if not full_path:
-        return False
+      if full_path:
+        is_dir = os.path.isdir(full_path)
+      else:
+        if not self.host_config.get('indexes', False): return False
+        if self.host_config.get('hide', False): return False
 
-      if os.path.isdir(full_path) and not path.endswith('/'):
+        # Generate pseudo-index
+        ipath = path
+        if not ipath.endswith('/'): ipath += '/'
+        plen = len(ipath)
+        index_list = [(p[plen:], host_paths[p][1]) for p
+                                                   in sorted(host_paths.keys())
+                                                   if p.startswith(ipath)]
+        if not index_list: return False
+
+        full_path = ''
+        mimetype = 'text/html'
+        is_dir = True
+
+      if is_dir and not path.endswith('/'):
         self.sendResponse('\n', code=302, msg='Moved', header_list=[
                             ('Location', '%s/' % path)
                           ])
         return True
 
-      is_shtml, is_cgi, is_dir = False, False, False
       indexes = ['index.html', 'index.htm']
 
       dynamic_suffixes = []
@@ -1466,22 +1488,26 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         if os.path.exists(ipath):
           mimetype = 'text/html'
           full_path = ipath
+          is_dir = False
           break
 
-      if os.path.isdir(full_path):
-        mimetype = 'text/html'
-        rf_size = rf = None
-        rf_stat = os.stat(full_path)
-        is_dir = True
+      if full_path:
+        if is_dir:
+          mimetype = 'text/html'
+          rf_size = rf = None
+          rf_stat = os.stat(full_path)
+        else:
+          for s in dynamic_suffixes:
+            if full_path.endswith(s): is_shtml = True
+          for s in cgi_suffixes:
+            if full_path.endswith(s): is_cgi = True
+          if not is_shtml and not is_cgi: shtml_vars = None
+          rf = open(full_path, "rb")
+          rf_stat = os.fstat(rf.fileno())
+          rf_size = rf_stat.st_size
       else:
-        for s in dynamic_suffixes:
-          if full_path.endswith(s): is_shtml = True
-        for s in cgi_suffixes:
-          if full_path.endswith(s): is_cgi = True
-        if not is_shtml and not is_cgi: shtml_vars = None
-        rf = open(full_path, "rb")
-        rf_stat = os.fstat(rf.fileno())
-        rf_size = rf_stat.st_size
+        rf = rf_stat = None
+        rf_size = 0
     except (IOError, OSError), e:
       return False
 
@@ -1526,7 +1552,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     elif shtml_vars and not self.suppress_body:
       shtml_vars['title'] = '//%s%s' % (shtml_vars['http_host'], path)
       if self.host_config.get('indexes') in (True, WEB_INDEX_ON, WEB_INDEX_ALL):
-        shtml_vars['body'] = self.renderIndex(full_path)
+        shtml_vars['body'] = self.renderIndex(full_path, files=index_list)
       else:
         shtml_vars['body'] = ('<p><i>Directory listings disabled and</i> '
                               'index.html <i>not found.</i></p>')
@@ -5137,6 +5163,7 @@ class PageKite(object):
         raise ConfigError('Is a local file: %s' % fe_spec)
 
       be_paths = []
+      be_path_prefix = ''
       if len(args) == 0:
         be_spec = ''
       elif len(args) == 1:
@@ -5162,6 +5189,12 @@ class PageKite(object):
           raise ConfigError('Bad back-end definition: %s' % be_spec)
         if len(be) < 2:
           be = ['localhost', be[0]]
+
+      # Extract the path prefix from the fe_spec
+      fe_urlp = fe_spec.split('/', 3)
+      if len(fe_urlp) == 4:
+        fe_spec = '/'.join(fe_urlp[:3])
+        be_path_prefix = '/' + fe_urlp[3]
 
       fe = fe_spec.replace('/', '').split(':')
       if len(fe) == 3:
@@ -5202,38 +5235,39 @@ class PageKite(object):
         just_these_be_configs[http_host] = host_config
 
       if be_paths:
-        # Here we map the list of files/directories into a bunch of web-paths.
-        # If a path contains any information about the local directory
-        # structure, we obfuscate all the path information, using a method
-        # that should be very hard to guess, but stable.
-        rand_seed = '%s:%x' % (specs[specs.keys()[0]][BE_SECRET],
-                               time.time()/(24*3600))
         host_paths = just_these_webpaths.get(http_host, {})
-        first = True
+        host_config = just_these_be_configs.get(http_host, {})
+        rand_seed = '%s:%x' % (specs[specs.keys()[0]][BE_SECRET],
+                               time.time()/3600)
+
+        first = (len(host_paths.keys()) == 0) or be_path_prefix
+        paranoid = host_config.get('hide', False)
+        set_root = host_config.get('root', True)
+        if len(be_paths) == 1:
+          skip = 0
+        else:
+          skip = len(os.path.commonprefix(be_paths))
+
         for path in be_paths:
           phead, ptail = os.path.split(path)
-          if (first and
-              os.path.isdir(path) and
-              '+noroot' not in be_config):
-            webpath = '/'
+          if paranoid:
+            if path.endswith('/'): path = path[0:-1]
+            webpath = '%s/%s' % (sha1hex(rand_seed+os.path.dirname(path))[0:9],
+                                  os.path.basename(path))
+          elif (first and set_root and os.path.isdir(path)):
+            webpath = ''
           elif (os.path.isdir(path) and
                 not path.startswith('.') and
                 not os.path.isabs(path)):
-            webpath = path
-            if not webpath.endswith('/'): webpath += '/'
-          elif (phead and ptail) or ('/' in path) or os.path.isabs(path):
-            if path.endswith('/'): path = path[0:-1]
-            webpath = '/%s/%s' % (sha1hex(rand_seed+os.path.dirname(path))[0:8],
-                                  os.path.basename(path))
+            webpath = path[skip:] + '/'
           elif path == '.':
-            webpath = '/'
+            webpath = ''
           else:
-            webpath = path
-          if webpath.endswith('/.'):
+            webpath = path[skip:]
+          while webpath.endswith('/.'):
             webpath = webpath[:-2]
-          if not webpath.startswith('/'):
-            webpath = '/'+path
-          host_paths[webpath] = (WEB_POLICY_DEFAULT, os.path.abspath(path))
+          host_paths[(be_path_prefix + '/' + webpath).replace('//', '/')
+                     ] = (WEB_POLICY_DEFAULT, os.path.abspath(path))
           first = False
         just_these_webpaths[http_host] = host_paths
 
