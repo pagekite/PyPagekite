@@ -2,18 +2,17 @@
 
 ## General ##
 
+   * 0.4/launch: Add UI to report time/conn quota problems.
+
    * Add UI to report available upgrades at the back-end.
    * Auto-upgrades?
 
 
 ## Built-in HTTPD ##
 
-   * Get rid of the nasty obfuscated paths.
-   * Instead add an HTTP username/password by default?
+   * 0.4/launch: Add XML-RPC CNAME creation method
 
-   * Add XML-RPC CNAME creation method
-   * Tweak access controls a bit more
-   * Create javascript for making directory listings prettier
+   * 0.4: Create javascript for making directory listings prettier
      * Add basic photo albums
      * Add feature to thumbnail/preview/re-encode images/audio/video
 
