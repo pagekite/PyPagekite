@@ -5168,7 +5168,11 @@ class PageKite(object):
       if len(args) == 0:
         be_spec = ''
       elif len(args) == 1:
-        if os.path.exists(args[0]) or args[0].startswith('+'):
+        if '*' in args[0] or '?' in args[0]:
+          if sys.platform in ('win32', 'os2', 'os2emx'):
+            be_paths = [args[0]]
+            be_spec = 'builtin'
+        elif os.path.exists(args[0]):
           be_paths = [args[0]]
           be_spec = 'builtin'
         else:
@@ -5207,6 +5211,14 @@ class PageKite(object):
           pass
       elif len(fe) == 1 and be:
         fe = [be_proto, fe[0]]
+
+      # Do our own globbing on Windows
+      if sys.platform in ('win32', 'os2', 'os2emx'):
+        import glob
+        new_paths = []
+        for p in be_paths:
+          new_paths.extend(glob.glob(p))
+        be_paths = new_paths
 
       for f in be_paths:
         if not os.path.exists(f):
