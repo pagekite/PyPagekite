@@ -147,6 +147,7 @@ Common Options:
  --clean                Skip loading the default configuration file.
  --signup               Interactively sign up for PageKite.net service.
  --defaults             Set defaults for use with PageKite.net service.
+ --local=ports          Configure for local serving only (no remote front-end)
 
  --optfile=X    -o X    Read settings from file X. Default is ~/.pagekite.rc.
  --savefile=X   -S X    Saved settings will be written to file X.
@@ -289,7 +290,8 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'optfile=', 'savefile=',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webpath=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
-            'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
+            'isfrontend', 'noisfrontend', 'settings',
+            'defaults', 'local=', 'domain=',
             'authdomain=', 'authhelpurl=', 'register=', 'host=',
             'noupgradeinfo', 'upgradeinfo=', 'motd=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
@@ -3929,7 +3931,7 @@ class TunnelManager(threading.Thread):
                                   ) % (proto, domain, port and ':'+port or ''),
                                  prefix='~<>', color=self.pkite.ui.CYAN)
 
-        else:
+        if len(self.pkite.backends.keys()):
           self.pkite.ui.Status('flying')
           for tid in self.conns.tunnels:
             be = self.pkite.backends.get(tid)
@@ -4393,6 +4395,13 @@ class PageKite(object):
     if not os.path.exists(self.ca_certs_default):
       self.ca_certs_default = sys.argv[0]
     self.ca_certs = self.ca_certs_default
+
+  def SetLocalSettings(self, ports):
+    self.isfrontend = True
+    self.servers_auto = None
+    self.servers_manual = []
+    self.server_ports = ports
+    self.backends = self.ArgToBackendSpecs('http:localhost:localhost:builtin:-')
 
   def SetServiceDefaults(self, clobber=True, check=False):
     def_dyndns    = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
@@ -5124,6 +5133,9 @@ class PageKite(object):
       elif opt == '--buffers': self.buffer_max = int(arg)
       elif opt == '--nocrashreport': self.crash_report_url = None
       elif opt == '--noloop': self.main_loop = False
+      elif opt == '--local':
+        self.SetLocalSettings([int(p) for p in arg.split(',')])
+        if not 'localhost' in args: args.append('localhost')
       elif opt == '--defaults': self.SetServiceDefaults()
       elif opt in ('--clean', '--signup', '--nopyopenssl', '--settings'): pass
       elif opt in ('--webaccess', '--webindexes', '--webroot'): pass
