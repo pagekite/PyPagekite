@@ -5259,7 +5259,7 @@ class PageKite(object):
         if len(be_paths) == 1:
           skip = 0
         else:
-          skip = len(os.path.commonprefix(be_paths))
+          skip = len(os.path.dirname(os.path.commonprefix(be_paths)+'X'))
 
         for path in be_paths:
           phead, ptail = os.path.split(path)
