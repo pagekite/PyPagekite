@@ -210,6 +210,7 @@ Back-end Options:
  --all          -a      Terminate early if any tunnels fail to register.
  --new          -N      Don't attempt to connect to the domain's old front-end.
  --noprobes             Reject all probes for back-end liveness.
+ --proxy=T:S:P          Connect using a chain of proxies (requires socks.py)
  --socksify=S:P         Connect via SOCKS server S, port P (requires socks.py)
  --torify=S:P           Same as socksify, but more paranoid.
 
@@ -295,9 +296,10 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'authdomain=', 'authhelpurl=', 'register=', 'host=',
             'noupgradeinfo', 'upgradeinfo=', 'motd=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
-            'tls_default=', 'tls_endpoint=', 'fe_certname=', 'ca_certs=',
+            'tls_default=', 'tls_endpoint=',
+            'fe_certname=', 'jakenoia', 'ca_certs=',
             'backend=', 'define_backend=', 'be_config=',
-            'frontend=', 'frontends=', 'torify=', 'socksify=',
+            'frontend=', 'frontends=', 'torify=', 'socksify=', 'proxy=',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes', 'debugio',
             # DEPRECATED:
@@ -368,6 +370,7 @@ import cgi
 from cgi import escape as escape_html
 import errno
 import getopt
+import httplib
 import os
 import random
 import re
@@ -451,6 +454,7 @@ try:
         cNameDigest = '%s/%s' % (commonName, x509.digest('sha1').replace(':','').lower())
         if (commonName in verify_names) or (cNameDigest in verify_names):
           LogDebug('Cert OK: %s' % (cNameDigest))
+          # FIXME: Short-circuit evaluation is vulnerable to timing attacks.
           return True
         return False
       ctx.set_verify(SSL.VERIFY_PEER | SSL.VERIFY_FAIL_IF_NO_PEER_CERT, vcb)
@@ -497,6 +501,7 @@ except ImportError:
       cert = fd.getpeercert()
       certhash = sha1hex(fd.getpeercert(binary_form=True))
       if not cert: return None
+      # FIXME: Short-circuit evaluation is vulnerable to timing attacks.
       for field in cert['subject']:
         if field[0][0].lower() == 'commonname':
           name = field[0][1].lower()
@@ -549,6 +554,7 @@ except ImportError:
 
 
 if HAVE_SSL:
+  # Enable the HTTPS wrapper for our XML-RPC requests.
   class PageKiteXmlRpcTransport(xmlrpclib.SafeTransport):
     """Treat the XML-RPC host as a HTTP proxy for itself (SNI workaround)"""
     def make_connection(self, host):
@@ -608,6 +614,21 @@ except ImportError:
   def sha1hex(data):
     return sha.new(data).hexdigest().lower()
 
+try:
+  import socks
+  # Enable system proxies & auto-SSL for any connections to pagekite.net
+  socks.DEBUG = True
+  socks.usesystemdefaults()
+  if HAVE_SSL:
+    def_hop = socks.parseproxy('default')
+    ssl_hop = socks.parseproxy('ssl:pagekite.net:443')
+    for dest in ('pagekite.net', 'up.pagekite.net', 'up.b5p.us'):
+      socks.setdefaultproxy(*def_hop, dest=dest)
+      socks.setdefaultproxy(*ssl_hop, dest=dest, append=True)
+  socks.wrapmodule(sys.modules[__name__])
+except ImportError:
+  pass
+
 
 # YamonD is a part of PageKite.net's internal monitoring systems. It's not
 # required, so if you don't have it, the mock makes things Just Work.
@@ -647,7 +668,7 @@ def globalSecret():
 
     # Next, see if we can augment that with some real randomness.
     try:
-      newSecret = sha1hex(open('/dev/urandom').read(16) + gSecret)
+      newSecret = sha1hex(open('/dev/urandom').read(64) + gSecret)
       gSecret = newSecret
       LogDebug('Seeded signatures using /dev/urandom, hooray!')
     except:
@@ -2392,7 +2413,9 @@ class Selectable(object):
   def Flush(self, loops=50, wait=False):
     while loops != 0 and len(self.write_blocked) > 0 and self.Send([],
                                                                 try_flush=True):
-      if wait and len(self.write_blocked) > 0: time.sleep(0.1)
+      if wait and len(self.write_blocked) > 0:
+        time.sleep(0.1)
+      LogDebug('Flushing...')
       loops -= 1
 
     if self.write_blocked: return False
@@ -2904,8 +2927,9 @@ class Tunnel(ChunkParser):
   def _Connect(self, server, conns, tokens=None):
     if self.fd: self.fd.close()
 
-    if conns.config.socks_server:
+    if conns.config.proxy_server:
       import socks
+      socks.DEBUG = DEBUG_IO or socks.DEBUG
       sock = socks.socksocket()
       self.SetFD(sock)
     else:
@@ -2921,20 +2945,38 @@ class Tunnel(ChunkParser):
     else:
       self.fd.connect((server, 443))
 
+    if self.conns.config.fe_anon_tls_wrap:
+      # Wrap it twice, because we don't like being blocked.
+      try:
+        self.fd.setblocking(1)
+        raw_fd = self.fd
+        ctx = SSL.Context(SSL.TLSv1_METHOD)
+        self.fd = SSL_Connect(ctx, self.fd, connected=True, server_side=False)
+        LogDebug('Anon TLS wrapper to %s OK' % server)
+      except SSL.Error, e:
+        self.fd = raw_fd
+        self.fd.close()
+        LogError('SSL handshake failed: probably a bad cert (%s)' % e)
+        return None, None
+
     if self.conns.config.fe_certname:
+      LogDebug('HTTP CONNECT start')
       # We can't set the SNI directly from Python, so we use CONNECT instead
       commonName = self.conns.config.fe_certname[0].split('/')[0]
       if (not self.Send(['CONNECT %s:443 HTTP/1.0\r\n\r\n' % commonName],
                         try_flush=True)
           or not self.Flush(wait=True)):
+        LogError('CONNECT failed, could not send/flush request.')
         return None, None
+      LogDebug('HTTP CONNECT sent')
 
       data = self._RecvHttpHeaders()
       if data is None or not data.startswith(HTTP_ConnectOK().strip()):
-        LogError('CONNECT failed, could not initiate TLS.')
+        LogError('CONNECT failed, could not establish HTTP Proxy conn.')
         self.fd.close()
         return None, None
 
+      LogDebug('HTTP CONNECT ok')
       try:
         self.fd.setblocking(1)
         raw_fd = self.fd
@@ -4305,6 +4347,7 @@ class PageKite(object):
     self.tls_default = None
     self.tls_endpoints = {}
     self.fe_certname = []
+    self.fe_anon_tls_wrap = False
 
     self.service_provider = SERVICE_PROVIDER
     self.service_xmlrpc = SERVICE_XMLRPC
@@ -4332,7 +4375,7 @@ class PageKite(object):
     self.tunnel_manager = None
     self.client_mode = 0
 
-    self.socks_server = None
+    self.proxy_server = None
     self.require_all = False
     self.no_probes = False
     self.servers = []
@@ -5060,27 +5103,40 @@ class PageKite(object):
 
       elif opt in ('-a', '--all'): self.require_all = True
       elif opt in ('-N', '--new'): self.servers_new_only = True
-      elif opt in ('--socksify', '--torify'):
+      elif opt in ('--proxy', '--socksify', '--torify'):
         try:
           import socks
+        except Exception, e:
+          raise ConfigError("Please install SocksiPy: "
+                            " https://github.com/PageKite/PySocksipyChain/")
+
+        if opt == '--proxy':
+          for proxy in arg.split(','):
+            socks.setdefaultproxy(*socks.parseproxy(proxy), append=True)
+        else:
           (host, port) = arg.split(':')
           socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, host, int(port))
-          self.socks_server = (host, port)
-          # This increases the odds of unrelated requests getting lumped
-          # together in the tunnel, which makes traffic analysis harder.
-          global SEND_ALWAYS_BUFFERS
-          SEND_ALWAYS_BUFFERS = True
-        except Exception, e:
-          raise ConfigError("Please instally SocksiPy: "
-                            " http://code.google.com/p/socksipy-branch/")
+
+        if not self.proxy_server:
+          # Make DynDNS updates go via the proxy.
+          socks.wrapmodule(urllib)
+          self.proxy_server = arg
+        else:
+          self.proxy_server += ',' + arg
 
         if opt == '--torify':
           self.servers_new_only = True  # Disable initial DNS lookups (leaks)
           self.servers_no_ping = True   # Disable front-end pings
           self.crash_report_url = None  # Disable crash reports
-          socks.wrapmodule(urllib)      # Make DynDNS updates go via tor
+
+          # This increases the odds of unrelated requests getting lumped
+          # together in the tunnel, which makes traffic analysis harder.
+          global SEND_ALWAYS_BUFFERS
+          SEND_ALWAYS_BUFFERS = True
 
       elif opt == '--ca_certs': self.ca_certs = arg
+      elif opt == '--jakenoia':
+        self.fe_anon_tls_wrap = True
       elif opt == '--fe_certname':
         cert = arg.lower()
         if cert not in self.fe_certname: self.fe_certname.append(cert)
