@@ -3729,8 +3729,16 @@ class UnknownConn(MagicProtocolParser):
           sid2 = '-%s:%s' % (cport, chost)
           tunnels = self.conns.tunnels
 
-          # These allow explicit CONNECTs to direct https or raw backends.
+          # These allow explicit CONNECTs to direct http(s) or raw backends.
           # If no match is found, we fall through to default HTTP processing.
+
+          if cport in (80, 8080):
+            if (('http'+sid1) in tunnels) or (
+                ('http'+sid2) in tunnels):
+              (self.on_port, self.host) = (cport, chost)
+              self.parser = HttpParser()
+              self.Send(HTTP_ConnectOK())
+              return True
 
           if cport == 443:
             if (('https'+sid1) in tunnels) or (
