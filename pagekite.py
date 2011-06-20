@@ -553,28 +553,6 @@ except ImportError:
           raise ConfigError('Neither pyOpenSSL nor python 2.6+ ssl modules found!')
 
 
-if HAVE_SSL:
-  # Enable the HTTPS wrapper for our XML-RPC requests.
-  class PageKiteXmlRpcTransport(xmlrpclib.SafeTransport):
-    """Treat the XML-RPC host as a HTTP proxy for itself (SNI workaround)"""
-    def make_connection(self, host):
-      # FIXME: This is insecure by default, certs are unchecked.
-      conn = xmlrpclib.SafeTransport.make_connection(self, host)
-      try:
-        # FIXME: This stuff will probably fail or be a no-op before Python 2.6,
-        # making our connections unreliable. :-(  We need a more robust hack.
-        host, extra_headers, x509 = self.get_host_info(host)
-        conn._conn._tunnel_host = host
-        conn._conn._tunnel_port = 443
-        conn._conn._tunnel_headers = {}
-      except:
-        LogError('Warning, failed to configure HTTP tunnel for %s' % host)
-      return conn
-
-else:
-  class PageKiteXmlRpcTransport(xmlrpclib.Transport): pass
-
-
 def DisableSSLCompression():
   # Hack to disable compression in OpenSSL and reduce memory usage *lots*.
   # Source:
@@ -616,18 +594,42 @@ except ImportError:
 
 try:
   import socks
-  # Enable system proxies & auto-SSL for any connections to pagekite.net
-  socks.DEBUG = True
+  # Enable system proxies
+  # This will all fail if we don't have PySocksipyChain available.
   socks.usesystemdefaults()
+  socks.wrapmodule(sys.modules[__name__])
+
   if HAVE_SSL:
+    # Secure connections to pagekite.net in SSL tunnels.
     def_hop = socks.parseproxy('default')
     ssl_hop = socks.parseproxy('ssl:pagekite.net:443')
+    http_hop = socks.parseproxy('http')
     for dest in ('pagekite.net', 'up.pagekite.net', 'up.b5p.us'):
       socks.setdefaultproxy(*def_hop, dest=dest)
       socks.setdefaultproxy(*ssl_hop, dest=dest, append=True)
-  socks.wrapmodule(sys.modules[__name__])
-except ImportError:
-  pass
+      socks.setdefaultproxy(*http_hop, dest=dest, append=True)
+
+  class PageKiteXmlRpcTransport(xmlrpclib.Transport): pass
+except:
+  if HAVE_SSL:
+    # Enable the HTTPS wrapper for our XML-RPC requests.
+    class PageKiteXmlRpcTransport(xmlrpclib.SafeTransport):
+      """Treat the XML-RPC host as a HTTP proxy for itself (SNI workaround)"""
+      def make_connection(self, host):
+        # FIXME: This is insecure by default, certs are unchecked.
+        conn = xmlrpclib.SafeTransport.make_connection(self, host)
+        try:
+          # FIXME: This stuff will probably fail or be a no-op before Python 2.6,
+          # making our connections unreliable. :-(  We need a more robust hack.
+          host, extra_headers, x509 = self.get_host_info(host)
+          conn._conn._tunnel_host = host
+          conn._conn._tunnel_port = 443
+          conn._conn._tunnel_headers = {}
+        except:
+          LogError('Warning, failed to configure HTTP tunnel for %s' % host)
+        return conn
+  else:
+    class PageKiteXmlRpcTransport(xmlrpclib.Transport): pass
 
 
 # YamonD is a part of PageKite.net's internal monitoring systems. It's not
