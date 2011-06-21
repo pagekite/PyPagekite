@@ -3480,6 +3480,10 @@ class UserConn(Selectable):
     ]
     if remote_ip: logInfo.append(('remote_ip', remote_ip))
 
+    # Strip off useless IPv6 prefix, if this is an IPv4 address.
+    if remote_ip.startswith('::ffff:') and ':' not in remote_ip[7:]:
+      remote_ip = remote_ip[7:]
+
     if not backend or not backend[0]:
       self.ui.Notify(('%s - %s://%s:%s (FAIL: no server)'
                       ) % (remote_ip or 'unknown', proto, host, on_port),
