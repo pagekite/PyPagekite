@@ -16,4 +16,4 @@ socks.py: ../PySocksipyChain/socks.py
 tools: scripts/combine.py Makefile
 
 clean:
-	rm -f pagekite-0.4.py socks.py *.pyc */*.pyc
+	rm -f pagekite-0.*.py socks.py *.pyc */*.pyc
