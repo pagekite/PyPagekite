@@ -1,31 +1,65 @@
 #!/usr/bin/python
+#
+# This is a poor-man's executable builder, for embedding dependencies into
+# our pagekite.py file until we have proper packaging.
+#
 import os, sys
 
+pydata = { }
 data =  { }
 order = [ ]
 for filename in sys.argv[1:]:
-  fd = open(filename, 'r')
-  bn = os.path.basename(filename).replace('.py', '')
+  if filename.endswith('/__init__.py'):
+    bn = os.path.basename(os.path.dirname(filename))
+  else:
+    bn = os.path.basename(filename).replace('.py', '')
+
   order.append(bn)
-  data[bn] = [l.replace('\n', '').replace('\r', '') for l in fd.readlines()]
+
+  fd = open(filename, 'r')
+  lines = [l.replace('\n', '').replace('\r', '') for l in fd.readlines()]
   fd.close() 
 
-print """#!/usr/bin/python'
-# This is a compilation of multiple Python files. Search for the string
-# 'MODULE' to examine individual parts.
+  if filename.endswith('.py') or filename.endswith('.pyw'):
+    pydata[bn] = lines
+  else:
+    data[bn] = lines
+
+print """#!/usr/bin/python
+#
+# NOTE: This is a compilation of multiple Python files.
+#       See below for details on individual segments.
+#
+import sys, imp
+
 """
 
-first = order.pop(0)
 for mn in order:
-  print '##[ MODULE: %s ]%s' % (mn, '#' * (65-len(mn)))
-  print
-  print 'class %s(object):' % mn
-  for line in data[mn]:
-    print ' %s' % line
-  print
+  if mn in pydata:
+    what = 'MODULE'
+    ddict = pydata
+  else:
+    what = 'FILE'
+    ddict = data
 
-print '##[ MAIN: %s ]%s' % (first, '#' * (67-len(first)))
-print
-for line in data[first]:
-  print '%s' % line
+  print '%s' % '#' * 79
+  print
+  if mn != order[-1] and what == 'MODULE':
+    print 'sys.modules["%s"] = imp.new_module("%s")' % (mn, mn)
+    print 'exec """'
+    for line in ddict[mn]:
+      print '%s' % line.replace('\\', '\\\\').replace('"', '\\"')
+    print '""" in sys.modules["%s"].__dict__' % mn
+
+  elif what == 'FILE':
+    print '__DATA_%s = """' % mn.replace('.', '_').upper()
+    for line in ddict[mn]:
+      print '%s' % line.replace('\\', '\\\\').replace('"', '\\"')
+    print '"""'
+
+  else:
+    for line in ddict[mn]:
+      print '%s' % line
+
+  print
 
