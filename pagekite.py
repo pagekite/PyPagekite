@@ -593,6 +593,7 @@ except ImportError:
     return sha.new(data).hexdigest().lower()
 
 try:
+  HAVE_SOCKSCHAIN = True
   import socks
   # Enable system proxies
   # This will all fail if we don't have PySocksipyChain available.
@@ -602,15 +603,16 @@ try:
   if HAVE_SSL:
     # Secure connections to pagekite.net in SSL tunnels.
     def_hop = socks.parseproxy('default')
-    ssl_hop = socks.parseproxy('ssl:pagekite.net:443')
     http_hop = socks.parseproxy('http')
     for dest in ('pagekite.net', 'up.pagekite.net', 'up.b5p.us'):
       socks.setdefaultproxy(*def_hop, dest=dest)
-      socks.setdefaultproxy(*ssl_hop, dest=dest, append=True)
+      socks.setdefaultproxy(*socks.parseproxy('ssl:%s,pagekite.net:443' % dest),
+                            dest=dest, append=True)
       socks.setdefaultproxy(*http_hop, dest=dest, append=True)
 
   class PageKiteXmlRpcTransport(xmlrpclib.Transport): pass
 except:
+  HAVE_SOCKSCHAIN = False
   if HAVE_SSL:
     # Enable the HTTPS wrapper for our XML-RPC requests.
     class PageKiteXmlRpcTransport(xmlrpclib.SafeTransport):
@@ -2929,71 +2931,31 @@ class Tunnel(ChunkParser):
   def _Connect(self, server, conns, tokens=None):
     if self.fd: self.fd.close()
 
-    if conns.config.proxy_server:
+    sspec = server.split(':')
+    if len(sspec) < 2: sspec = (sspec[0], 443)
+
+    if conns.config.proxy_server or HAVE_SOCKSCHAIN:
       import socks
       socks.DEBUG = DEBUG_IO or socks.DEBUG
       sock = socks.socksocket()
+      if HAVE_SOCKSCHAIN:
+        chain = ['default']
+        if self.conns.config.fe_anon_tls_wrap:
+          chain.append('ssl-anon:%s:%s' % (sspec[0], sspec[1]))
+        chain.append('http:%s:%s' % (sspec[0], sspec[1]))
+        chain.append('ssl:%s:443' % ','.join(self.conns.config.fe_certname))
+        for hop in chain:
+          sock.setproxy(*socks.parseproxy(hop), append=True)
       self.SetFD(sock)
     else:
       self.SetFD(rawsocket(socket.AF_INET, socket.SOCK_STREAM))
+
     try:
       self.fd.settimeout(20.0) # Missing in Python 2.2
     except Exception:
       self.fd.setblocking(1)
 
-    sspec = server.split(':')
-    if len(sspec) > 1:
-      self.fd.connect((sspec[0], int(sspec[1])))
-    else:
-      self.fd.connect((server, 443))
-
-    if self.conns.config.fe_anon_tls_wrap:
-      # Wrap it twice, because we don't like being blocked.
-      try:
-        self.fd.setblocking(1)
-        raw_fd = self.fd
-        ctx = SSL.Context(SSL.TLSv1_METHOD)
-        self.fd = SSL_Connect(ctx, self.fd, connected=True, server_side=False)
-        LogDebug('Anon TLS wrapper to %s OK' % server)
-      except SSL.Error, e:
-        self.fd = raw_fd
-        self.fd.close()
-        LogError('SSL handshake failed: probably a bad cert (%s)' % e)
-        return None, None
-
-    if self.conns.config.fe_certname:
-      LogDebug('HTTP CONNECT start')
-      # We can't set the SNI directly from Python, so we use CONNECT instead
-      commonName = self.conns.config.fe_certname[0].split('/')[0]
-      if (not self.Send(['CONNECT %s:443 HTTP/1.0\r\n\r\n' % commonName],
-                        try_flush=True)
-          or not self.Flush(wait=True)):
-        LogError('CONNECT failed, could not send/flush request.')
-        return None, None
-      LogDebug('HTTP CONNECT sent')
-
-      data = self._RecvHttpHeaders()
-      if data is None or not data.startswith(HTTP_ConnectOK().strip()):
-        LogError('CONNECT failed, could not establish HTTP Proxy conn.')
-        self.fd.close()
-        return None, None
-
-      LogDebug('HTTP CONNECT ok')
-      try:
-        self.fd.setblocking(1)
-        raw_fd = self.fd
-        ctx = SSL.Context(SSL.TLSv1_METHOD)
-        ctx.load_verify_locations(self.conns.config.ca_certs)
-        self.fd = SSL_Connect(ctx, self.fd, connected=True, server_side=False,
-                              verify_names=self.conns.config.fe_certname)
-        LogDebug('TLS connection to %s OK' % server)
-        self.using_tls = commonName
-      except SSL.Error, e:
-        self.fd = raw_fd
-        self.fd.close()
-        LogError('SSL handshake failed: probably a bad cert (%s)' % e)
-        return None, None
-
+    self.fd.connect((sspec[0], int(sspec[1])))
     replace_sessionid = self.conns.config.servers_sessionids.get(server, None)
     if (not self.Send(HTTP_PageKiteRequest(server,
                                          conns.config.backends,
