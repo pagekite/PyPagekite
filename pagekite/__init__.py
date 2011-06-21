@@ -277,10 +277,8 @@ MAGIC_PATHS = (MAGIC_PATH, '/Beanstalk~Magic~Beans/0.2')
 
 SERVICE_PROVIDER = 'PageKite.net'
 SERVICE_DOMAINS = ('pagekite.me', )
-SERVICE_XMLRPC = 'pk:http://pagekite.net/xmlrpc/'
+SERVICE_XMLRPC = 'http://pagekite.net/xmlrpc/'
 SERVICE_TOS_URL = 'https://pagekite.net/support/terms/'
-
-SERVICE_XMLRPC = 'pk:http://pagekite.net/xmlrpc/'
 
 OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
@@ -592,48 +590,21 @@ except ImportError:
   def sha1hex(data):
     return sha.new(data).hexdigest().lower()
 
-try:
-  HAVE_SOCKSCHAIN = True
-  import socks
+import socks
+# Enable system proxies
+# This will all fail if we don't have PySocksipyChain available.
+socks.usesystemdefaults()
+socks.wrapmodule(sys.modules[__name__])
 
-  # Enable system proxies
-  # This will all fail if we don't have PySocksipyChain available.
-  socks.usesystemdefaults()
-  socks.wrapmodule(sys.modules[__name__])
-
-  if HAVE_SSL:
-    # Secure connections to pagekite.net in SSL tunnels.
-    def_hop = socks.parseproxy('default')
-    http_hop = socks.parseproxy('http:pagekite.net:443')
-    for dest in ('pagekite.net', 'up.pagekite.net', 'up.b5p.us'):
-      socks.setdefaultproxy(*def_hop, dest=dest)
-      socks.setdefaultproxy(*http_hop, dest=dest)
-      socks.setdefaultproxy(*socks.parseproxy(('ssl:%s,%s,pagekite.net:443'
-                                               ) % (dest, dest)),
-                            dest=dest, append=True)
-
-  class PageKiteXmlRpcTransport(xmlrpclib.Transport): pass
-except ImportError:
-  HAVE_SOCKSCHAIN = False
-  if HAVE_SSL:
-    # Enable the HTTPS wrapper for our XML-RPC requests.
-    class PageKiteXmlRpcTransport(xmlrpclib.SafeTransport):
-      """Treat the XML-RPC host as a HTTP proxy for itself (SNI workaround)"""
-      def make_connection(self, host):
-        # FIXME: This is insecure by default, certs are unchecked.
-        conn = xmlrpclib.SafeTransport.make_connection(self, host)
-        try:
-          # FIXME: This stuff will probably fail or be a no-op before Python 2.6,
-          # making our connections unreliable. :-(  We need a more robust hack.
-          host, extra_headers, x509 = self.get_host_info(host)
-          conn._conn._tunnel_host = host
-          conn._conn._tunnel_port = 443
-          conn._conn._tunnel_headers = {}
-        except:
-          LogError('Warning, failed to configure HTTP tunnel for %s' % host)
-        return conn
-  else:
-    class PageKiteXmlRpcTransport(xmlrpclib.Transport): pass
+if HAVE_SSL:
+  # Secure connections to pagekite.net in SSL tunnels.
+  def_hop = socks.parseproxy('default')
+  https_hop = socks.parseproxy('https:pagekite.net:443')
+  for dest in ('pagekite.net', 'up.pagekite.net', 'up.b5p.us'):
+    socks.setdefaultproxy(*def_hop, dest=dest)
+    socks.setdefaultproxy(*socks.parseproxy('http:%s:443' % dest),
+                          dest=dest, append=True)
+    socks.setdefaultproxy(*https_hop, dest=dest)
 
 
 # YamonD is a part of PageKite.net's internal monitoring systems. It's not
@@ -2936,20 +2907,17 @@ class Tunnel(ChunkParser):
     sspec = server.split(':')
     if len(sspec) < 2: sspec = (sspec[0], 443)
 
-    if conns.config.proxy_server or HAVE_SOCKSCHAIN:
-      socks.DEBUG = DEBUG_IO or socks.DEBUG
-      sock = socks.socksocket()
-      if HAVE_SOCKSCHAIN:
-        chain = ['default']
-        if self.conns.config.fe_anon_tls_wrap:
-          chain.append('ssl-anon:%s:%s' % (sspec[0], sspec[1]))
-        chain.append('http:%s:%s' % (sspec[0], sspec[1]))
-        chain.append('ssl:%s:443' % ','.join(self.conns.config.fe_certname))
-        for hop in chain:
-          sock.setproxy(*socks.parseproxy(hop), append=True)
-      self.SetFD(sock)
-    else:
-      self.SetFD(rawsocket(socket.AF_INET, socket.SOCK_STREAM))
+    # Use chained SocksiPy to secure our communication.
+    socks.DEBUG = DEBUG_IO or socks.DEBUG
+    sock = socks.socksocket()
+    chain = ['default']
+    if self.conns.config.fe_anon_tls_wrap:
+      chain.append('ssl-anon:%s:%s' % (sspec[0], sspec[1]))
+    chain.append('http:%s:%s' % (sspec[0], sspec[1]))
+    chain.append('ssl:%s:443' % ','.join(self.conns.config.fe_certname))
+    for hop in chain:
+      sock.setproxy(*socks.parseproxy(hop), append=True)
+    self.SetFD(sock)
 
     try:
       self.fd.settimeout(20.0) # Missing in Python 2.2
@@ -5384,11 +5352,7 @@ class PageKite(object):
 
   def GetServiceXmlRpc(self):
     service = self.service_xmlrpc
-    if service.startswith('pk:http'):
-      return xmlrpclib.ServerProxy(service.replace('pk:http', 'http'),
-                                   PageKiteXmlRpcTransport(), None, False)
-    else:
-      return xmlrpclib.ServerProxy(self.service_xmlrpc, None, None, False)
+    return xmlrpclib.ServerProxy(self.service_xmlrpc, None, None, False)
 
   def _KiteInfo(self, kitename):
     is_service_domain = kitename and SERVICE_DOMAIN_RE.search(kitename)
