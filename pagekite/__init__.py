@@ -391,6 +391,9 @@ from CGIHTTPServer import CGIHTTPRequestHandler
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 import Cookie
 
+# This should be our socksipy
+import socks
+
 
 ##[ Conditional imports & compatibility magic! ]###############################
 
@@ -590,9 +593,10 @@ except ImportError:
   def sha1hex(data):
     return sha.new(data).hexdigest().lower()
 
-import socks
+
 # Enable system proxies
 # This will all fail if we don't have PySocksipyChain available.
+# FIXME: Move this code somewhere else?
 socks.usesystemdefaults()
 socks.wrapmodule(sys.modules[__name__])
 
@@ -605,6 +609,9 @@ if HAVE_SSL:
     socks.setdefaultproxy(*socks.parseproxy('http:%s:443' % dest),
                           dest=dest, append=True)
     socks.setdefaultproxy(*https_hop, dest=dest)
+else:
+  # FIXME: Should scream and shout about lack of security.
+  pass
 
 
 # YamonD is a part of PageKite.net's internal monitoring systems. It's not
@@ -2910,13 +2917,14 @@ class Tunnel(ChunkParser):
     # Use chained SocksiPy to secure our communication.
     socks.DEBUG = DEBUG_IO or socks.DEBUG
     sock = socks.socksocket()
-    chain = ['default']
-    if self.conns.config.fe_anon_tls_wrap:
-      chain.append('ssl-anon:%s:%s' % (sspec[0], sspec[1]))
-    chain.append('http:%s:%s' % (sspec[0], sspec[1]))
-    chain.append('ssl:%s:443' % ','.join(self.conns.config.fe_certname))
-    for hop in chain:
-      sock.setproxy(*socks.parseproxy(hop), append=True)
+    if HAVE_SSL:
+      chain = ['default']
+      if self.conns.config.fe_anon_tls_wrap:
+        chain.append('ssl-anon:%s:%s' % (sspec[0], sspec[1]))
+      chain.append('http:%s:%s' % (sspec[0], sspec[1]))
+      chain.append('ssl:%s:443' % ','.join(self.conns.config.fe_certname))
+      for hop in chain:
+        sock.setproxy(*socks.parseproxy(hop), append=True)
     self.SetFD(sock)
 
     try:
