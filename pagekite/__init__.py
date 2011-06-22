@@ -5057,15 +5057,11 @@ class PageKite(object):
       elif opt in ('-a', '--all'): self.require_all = True
       elif opt in ('-N', '--new'): self.servers_new_only = True
       elif opt in ('--proxy', '--socksify', '--torify'):
-        try:
-          import socks
-        except Exception, e:
-          raise ConfigError("Please install SocksiPy: "
-                            " https://github.com/PageKite/PySocksipyChain/")
-
         if opt == '--proxy':
+          first = True
           for proxy in arg.split(','):
-            socks.setdefaultproxy(*socks.parseproxy(proxy), append=True)
+            socks.setdefaultproxy(*socks.parseproxy(proxy), append=(not first))
+            first = False
         else:
           (host, port) = arg.split(':')
           socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, host, int(port))
