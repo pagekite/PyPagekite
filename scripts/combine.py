@@ -46,13 +46,13 @@ for mn in order:
   print
   if mn != order[-1] and what == 'MODULE':
     print 'sys.modules["%s"] = imp.new_module("%s")' % (mn, mn)
-    print 'exec """'
+    print 'exec """\\'
     for line in ddict[mn]:
       print '%s' % line.replace('\\', '\\\\').replace('"', '\\"')
     print '""" in sys.modules["%s"].__dict__' % mn
 
   elif what == 'FILE':
-    print '__DATA_%s = """' % mn.replace('.', '_').upper()
+    print '__DATA_%s = """\\' % mn.replace('.', '_').upper()
     for line in ddict[mn]:
       print '%s' % line.replace('\\', '\\\\').replace('"', '\\"')
     print '"""'
