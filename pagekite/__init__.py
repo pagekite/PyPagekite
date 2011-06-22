@@ -605,10 +605,9 @@ if HAVE_SSL:
   def_hop = socks.parseproxy('default')
   https_hop = socks.parseproxy('https:pagekite.net:443')
   for dest in ('pagekite.net', 'up.pagekite.net', 'up.b5p.us'):
-    socks.setdefaultproxy(*def_hop, dest=dest)
-    socks.setdefaultproxy(*socks.parseproxy('http:%s:443' % dest),
-                          dest=dest, append=True)
-    socks.setdefaultproxy(*https_hop, dest=dest)
+    socks.setproxy(dest, *def_hop)
+    socks.addproxy(dest, *socks.parseproxy('http:%s:443' % dest))
+    socks.addproxy(dest, *https_hop)
 else:
   # FIXME: Should scream and shout about lack of security.
   pass
@@ -2924,7 +2923,7 @@ class Tunnel(ChunkParser):
       chain.append('http:%s:%s' % (sspec[0], sspec[1]))
       chain.append('ssl:%s:443' % ','.join(self.conns.config.fe_certname))
       for hop in chain:
-        sock.setproxy(*socks.parseproxy(hop), append=True)
+        sock.addproxy(*socks.parseproxy(hop))
     self.SetFD(sock)
 
     try:
@@ -5058,10 +5057,9 @@ class PageKite(object):
       elif opt in ('-N', '--new'): self.servers_new_only = True
       elif opt in ('--proxy', '--socksify', '--torify'):
         if opt == '--proxy':
-          first = True
+          socks.setdefaultproxy()
           for proxy in arg.split(','):
-            socks.setdefaultproxy(*socks.parseproxy(proxy), append=(not first))
-            first = False
+            socks.adddefaultproxy(*socks.parseproxy(proxy))
         else:
           (host, port) = arg.split(':')
           socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, host, int(port))
