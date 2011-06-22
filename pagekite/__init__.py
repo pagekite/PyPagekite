@@ -6133,9 +6133,3 @@ def Configure(pk):
     sys.exit(0)
 
 
-if __name__ == '__main__':
-  if sys.stdout.isatty():
-    Main(PageKite, Configure, uiclass=BasicUi)
-  else:
-    Main(PageKite, Configure)
-
