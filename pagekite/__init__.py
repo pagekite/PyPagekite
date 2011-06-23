@@ -1497,6 +1497,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
           is_dir = False
           break
 
+      rf_stat = rf_size = None
       if full_path:
         if is_dir:
           mimetype = 'text/html'
@@ -1509,16 +1510,16 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
             if full_path.endswith(s): is_cgi = True
           if not is_shtml and not is_cgi: shtml_vars = None
           rf = open(full_path, "rb")
-          rf_stat = os.fstat(rf.fileno())
-          rf_size = rf_stat.st_size
-      else:
-        rf = rf_stat = None
-        rf_size = 0
+          try:
+            rf_stat = os.fstat(rf.fileno())
+            rf_size = rf_stat.st_size
+          except:
+            self.chunked = True
     except (IOError, OSError), e:
       return False
 
     headers = [ ]
-    if not (is_dir or is_shtml or is_cgi):
+    if rf_stat and not (is_dir or is_shtml or is_cgi):
       # ETags for static content: we trust the file-system.
       etag = sha1hex(':'.join(['%s' % s for s in [full_path, rf_stat.st_mode,
                                    rf_stat.st_ino, rf_stat.st_dev,
@@ -1541,7 +1542,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     else:
       self.sendResponse(None, mimetype=mimetype,
                               length=rf_size,
-                              chunked=(shtml_vars is not None),
+                              chunked=self.chunked or (shtml_vars is not None),
                               header_list=headers)
 
     chunk_size = (is_shtml and 1024 or 16) * 1024
