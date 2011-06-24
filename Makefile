@@ -13,6 +13,7 @@ combined: startcom.txt pagekite tools socks.py
 pagekite: pagekite/__init__.py pagekite/__main__.py
 
 dev: socks.py
+	@ln -fs . .SELF
 
 socks.py: ../PySocksipyChain/socks.py
 	@ln -fs ../PySocksipyChain/socks.py socks.py
@@ -26,4 +27,4 @@ distclean: clean
 	@rm -vf pagekite-0.*.py
 
 clean:
-	@rm -vf socks.py *.pyc */*.pyc scripts/breeder.py
+	@rm -vf socks.py *.pyc */*.pyc scripts/breeder.py .SELF
