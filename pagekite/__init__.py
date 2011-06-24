@@ -1497,6 +1497,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
           is_dir = False
           break
 
+      self.chunked = False
       rf_stat = rf_size = None
       if full_path:
         if is_dir:
