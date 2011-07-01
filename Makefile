@@ -4,7 +4,7 @@ APPVER=`./pk --appver`
 
 combined: startcom.txt pagekite tools socks.py
 	@echo Version is `./pk --appver`
-	@./scripts/breeder.py *.txt socks.py \
+	@./scripts/breeder.py socks.py \
 	             pagekite/__init__.py pagekite/__main__.py \
 	             >pagekite-$(APPVER).py
 	@chmod +x pagekite-$(APPVER).py
