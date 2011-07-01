@@ -2924,8 +2924,9 @@ class Tunnel(ChunkParser):
       chain = ['default']
       if self.conns.config.fe_anon_tls_wrap:
         chain.append('ssl-anon:%s:%s' % (sspec[0], sspec[1]))
-      chain.append('http:%s:%s' % (sspec[0], sspec[1]))
-      chain.append('ssl:%s:443' % ','.join(self.conns.config.fe_certname))
+      if self.conns.config.fe_certname:
+        chain.append('http:%s:%s' % (sspec[0], sspec[1]))
+        chain.append('ssl:%s:443' % ','.join(self.conns.config.fe_certname))
       for hop in chain:
         sock.addproxy(*socks.parseproxy(hop))
     self.SetFD(sock)
@@ -3857,6 +3858,7 @@ class FingerConn(LineParser):
     LineParser.__init__(self, fd, address, on_port)
     self.conns = conns
     self.conns.Add(self)
+    self.my_tls = False
 
   def ProcessLine(self, line, lines):
     finger_user = line.strip()
