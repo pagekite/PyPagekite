@@ -210,6 +210,7 @@ Back-end Options:
  --all          -a      Terminate early if any tunnels fail to register.
  --new          -N      Don't attempt to connect to the domain's old front-end.
  --noprobes             Reject all probes for back-end liveness.
+ --fingerpath=P         Path recipe for the httpfinger back-end proxy.
  --proxy=T:S:P          Connect using a chain of proxies (requires socks.py)
  --socksify=S:P         Connect via SOCKS server S, port P (requires socks.py)
  --torify=S:P           Same as socksify, but more paranoid.
@@ -296,7 +297,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'ports=', 'protos=', 'portalias=', 'rawports=',
             'tls_default=', 'tls_endpoint=',
             'fe_certname=', 'jakenoia', 'ca_certs=',
-            'backend=', 'define_backend=', 'be_config=',
+            'backend=', 'define_backend=', 'be_config=', 'fingerpath=',
             'frontend=', 'frontends=', 'torify=', 'socksify=', 'proxy=',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes', 'debugio',
@@ -2892,11 +2893,12 @@ class Tunnel(ChunkParser):
       self.Cleanup()
       return None
 
-  def _RecvHttpHeaders(self):
+  def _RecvHttpHeaders(self, fd=None):
     data = ''
+    fd = fd or self.fd
     while not data.endswith('\r\n\r\n') and not data.endswith('\n\n'):
       try:
-        buf = self.fd.recv(4096)
+        buf = fd.recv(1)
       except:
         # This is sloppy, but the back-end will just connect somewhere else
         # instead, so laziness here should be fine.
@@ -3206,8 +3208,7 @@ class Tunnel(ChunkParser):
       LogError('Tunnel::ProcessChunk: Corrupt chunk: %s' % e)
       return False
 
-    conn = None
-    sid = None
+    proto = conn = sid = None
     try:
       sid = int(parse.Header('SID')[0])
       eof = parse.Header('EOF')
@@ -3283,6 +3284,27 @@ class Tunnel(ChunkParser):
                 req, rest = re.sub(r'(?mi)^x-forwarded-for',
                                    'X-Old-Forwarded-For', data).split('\n', 1)
                 data = ''.join([req, add_headers, rest])
+
+            elif proto == 'httpfinger':
+              # Rewrite a finger request to HTTP.
+              try:
+                firstline, rest = data.split('\n', 1)
+                if conn.config.get('rewritehost', False):
+                  rewritehost = conn.backend[BE_BHOST]
+                else:
+                  rewritehost = host
+                if '%s' in self.conns.config.finger_path:
+                  args =  (firstline.strip(), rIp, rewritehost, rest)
+                else:
+                  args =  (rIp, rewritehost, rest)
+                data = ('GET '+self.conns.config.finger_path+' HTTP/1.1\r\n'
+                        'X-Forwarded-For: %s\r\n'
+                        'Connection: close\r\n'
+                        'Host: %s\r\n\r\n%s') % args
+              except Exception, e:
+                self.LogError('Error formatting HTTP-Finger: %s' % e)
+                conn = None
+
           if conn:
             self.users[sid] = conn
 
@@ -3290,9 +3312,16 @@ class Tunnel(ChunkParser):
         self.CloseStream(sid)
         if not self.SendStreamEof(sid): return False
       else:
-        if not conn.Send(data):
-          # FIXME
-          pass
+        if proto == 'httpfinger':
+          conn.fd.setblocking(1)
+          conn.Send(data, try_flush=True) or conn.Flush(wait=True)
+          self._RecvHttpHeaders(fd=conn.fd)
+          conn.fd.setblocking(0)
+        else:
+          if not conn.Send(data):
+            # FIXME
+            pass
+
         if len(conn.write_blocked) > 2*max(conn.write_speed, 50000):
           if conn.created < time.time()-3:
             if not self.SendThrottle(sid, conn.write_speed): return False
@@ -3391,7 +3420,7 @@ class UserConn(Selectable):
     # then the just the proto. If the protocol is WebSocket and no tunnel is
     # found, look for a plain HTTP tunnel.
     if proto == 'probe':
-      protos = ['http', 'https', 'websocket', 'raw']
+      protos = ['http', 'https', 'websocket', 'raw', 'finger', 'httpfinger']
       ports = conns.config.server_ports[:]
       ports.extend(conns.config.server_aliasport.keys())
       ports.extend([x for x in conns.config.server_raw_ports if x != VIRTUAL_PN])
@@ -3697,11 +3726,12 @@ class UnknownConn(MagicProtocolParser):
 
           if (cport in self.conns.config.server_raw_ports or
               VIRTUAL_PN in self.conns.config.server_raw_ports):
-            if (('raw'+sid1) in tunnels) or (('raw'+sid2) in tunnels):
-              (self.on_port, self.host) = (cport, chost)
-              self.parser = HttpParser()
-              self.Send(HTTP_ConnectOK())
-              return self.ProcessRaw(''.join(lines), self.host)
+            for raw in ('raw', 'finger'):
+              if ((raw+sid1) in tunnels) or ((raw+sid2) in tunnels):
+                (self.on_port, self.host) = (cport, chost)
+                self.parser = HttpParser()
+                self.Send(HTTP_ConnectOK())
+                return self.ProcessRaw(''.join(lines), self.host)
 
         except ValueError:
           pass
@@ -3818,6 +3848,39 @@ class RawConn(Selectable):
       self.Cleanup(close=False)
     else:
       self.Cleanup()
+
+
+class FingerConn(LineParser):
+  """This class is a finger connection."""
+
+  def __init__(self, fd, address, on_port, conns):
+    LineParser.__init__(self, fd, address, on_port)
+    self.conns = conns
+    self.conns.Add(self)
+
+  def ProcessLine(self, line, lines):
+    finger_user = line.strip()
+    if '+' in finger_user:
+      user, domain = finger_user.split('+', 1)
+    elif '@' in finger_user:
+      user, domain = finger_user.split('@', 1)
+    else:
+      return False
+
+    lines = ['%s\r\n' % user] + lines
+    if domain and (UserConn.FrontEnd(self, self.address, 'finger', domain,
+                                     self.on_port, lines, self.conns) or
+                   UserConn.FrontEnd(self, self.address, 'httpfinger', domain,
+                                     self.on_port, lines, self.conns)):
+      self.Cleanup(close=False)
+      return True
+    else:
+      return False
+
+
+CONN_HANDLERS = {
+  '79': FingerConn,
+}
 
 
 class Listener(Selectable):
@@ -4296,7 +4359,8 @@ class PageKite(object):
     self.server_raw_ports = []
     self.server_portalias = {}
     self.server_aliasport = {}
-    self.server_protos = ['http', 'https', 'websocket', 'raw']
+    self.server_protos = ['http', 'https', 'websocket',
+                          'finger', 'httpfinger', 'raw']
 
     self.tls_default = None
     self.tls_endpoints = {}
@@ -4325,6 +4389,7 @@ class PageKite(object):
     self.enable_sslzlib = False
     self.buffer_max = 1024
     self.error_url = None
+    self.finger_path = '/~%s/.finger'
 
     self.tunnel_manager = None
     self.client_mode = 0
@@ -4499,6 +4564,7 @@ class PageKite(object):
           '# dyndns=user:pass@no-ip.com' ,
           '#',
           (self.error_url and ('errorurl=%s' % self.error_url) or '# errorurl=http://host/page/'),
+          (self.finger_path and ('fingerpath=%s' % self.finger_path) or '# fingerpath=/~%s/.finger'),
         ])
       config.extend([
         '#/ Replace with this to just use service defaults:',
@@ -5097,6 +5163,7 @@ class PageKite(object):
         self.servers_auto = (int(count), domain, int(port))
 
       elif opt in ('--errorurl', '-E'): self.error_url = arg
+      elif opt == '--fingerpath': self.finger_path = arg
       elif opt in ('--backend', '--define_backend'):
         bes = self.ArgToBackendSpecs(arg, status=((opt == '--backend')
                                                   and BE_STATUS_UNKNOWN
@@ -5960,7 +6027,8 @@ class PageKite(object):
           Listener(self.server_host, port, conns)
         for port in self.server_raw_ports:
           if port != VIRTUAL_PN and port > 0:
-            Listener(self.server_host, port, conns, connclass=RawConn)
+            Listener(self.server_host, port, conns,
+                     connclass=CONN_HANDLERS.get(str(port), RawConn))
 
       # Create the Tunnel Manager
       self.tunnel_manager = TunnelManager(self, conns)
