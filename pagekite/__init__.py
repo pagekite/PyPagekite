@@ -4968,8 +4968,9 @@ class PageKite(object):
       if matches == 0:
         proto = (proto or 'http')
         bhost = (bhost or 'localhost')
-        bport = (bport or (proto == 'http' and 80)
-                       or (proto == 'https' and 443))
+        bport = (bport or (proto in ('http', 'httpfinger', 'websocket') and 80)
+                       or (proto == 'https' and 443)
+                       or (proto == 'finger' and 79))
         if port:
           bid = '%s-%d:%s' % (proto, int(port), fdom)
         else:
@@ -5272,10 +5273,12 @@ class PageKite(object):
         be = None
       else:
         be = be_spec.replace('/', '').split(':')
-        if be[0].lower() in ('http', 'https', 'ssh'):
+        if be[0].lower() in ('http', 'https', 'httpfinger', 'finger', 'ssh'):
           be_proto = be.pop(0)
           if len(be) < 2:
-            be.append({'http': '80', 'https': '443', 'ssh': '22'}[be_proto])
+            be.append({'http': '80', 'https': '443',
+                       'httpfinger': '80', 'finger': '79',
+                       'ssh': '22'}[be_proto])
         if len(be) > 2:
           raise ConfigError('Bad back-end definition: %s' % be_spec)
         if len(be) < 2:
