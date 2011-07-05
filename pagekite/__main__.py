@@ -1,7 +1,13 @@
 import sys
 import pagekite as pk
+import pagekite.httpd as httpd
 
 if sys.stdout.isatty():
-  pk.Main(pk.PageKite, pk.Configure, uiclass=pk.BasicUi)
+  uiclass = pk.BasicUi
 else:
-  pk.Main(pk.PageKite, pk.Configure)
+  uiclass = None
+
+pk.Main(pk.PageKite, pk.Configure,
+        uiclass=uiclass,
+        http_handler=httpd.UiRequestHandler,
+        http_server=httpd.UiHttpServer)
