@@ -5570,7 +5570,7 @@ class PageKite(object):
                                           'View PageKite.net Terms of Service.',
                                           'No, I do not accept these terms.'],
                                          'Your choice:',
-                                         pre=['Do you accept the license and terms of service?'],
+                        pre=['Do you accept the license and terms of service?'],
                                          default=1, back=False)
           if ch is False:
             Back()
@@ -5615,6 +5615,7 @@ class PageKite(object):
               self.ui.ExplainError(error, 'Signup failed!', subject=register)
               Goto('service_login_email', back_skips_current=True)
             else:
+              print 'FIXME!  Error is %s' % error
               Goto('abort')
 
         elif 'choose_kite_account' in state:
