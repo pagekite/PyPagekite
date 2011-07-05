@@ -4756,7 +4756,7 @@ class PageKite(object):
     else:
       self.ui.Status('exiting', message=(message or 'Good-bye!'))
     if message: print 'Error: %s' % message
-    if not noexit: sys.exit(1)
+    if not noexit: os._exit(1)
 
   def GetTlsEndpointCtx(self, domain):
     if domain in self.tls_endpoints: return self.tls_endpoints[domain][1]
@@ -4892,7 +4892,7 @@ class PageKite(object):
 
   def HelpAndExit(self, longhelp=False):
     print longhelp and DOC or MINIDOC
-    sys.exit(0)
+    os._exit(0)
 
   def ArgToBackendSpecs(self, arg, status=BE_STATUS_UNKNOWN, secret=None):
     protos, fe_domain, be_host, be_port = '', '', '', ''
@@ -5220,11 +5220,11 @@ class PageKite(object):
       elif opt == '--controlpanel':
         import webbrowser
         webbrowser.open(self.LoginUrl())
-        sys.exit(0)
+        os._exit(0)
 
       elif opt == '--controlpass':
         print self.ConfigSecret()
-        sys.exit(0)
+        os._exit(0)
 
       else:
         self.HelpAndExit()
@@ -5675,11 +5675,11 @@ class PageKite(object):
             Back()
           else:
             self.ui.EndWizard()
-            sys.exit(1)
+            os._exit(0)
 
         elif 'abort' in state:
           self.ui.EndWizard()
-          sys.exit(1)
+          os._exit(0)
 
         else:
           raise ConfigError('Unknown state: %s' % state)
@@ -6136,7 +6136,7 @@ def Main(pagekite, configure, uiclass=NullUi, progname=None, appver=APPVER):
         return
 
     except SystemExit:
-      sys.exit(0)
+      os._exit(0)
 
     except Exception, msg:
       traceback.print_exc(file=sys.stderr)
@@ -6168,7 +6168,7 @@ def Main(pagekite, configure, uiclass=NullUi, progname=None, appver=APPVER):
 def Configure(pk):
   if '--appver' in sys.argv:
     print '%s' % APPVER
-    sys.exit(0)
+    os._exit(0)
 
   if '--clean' not in sys.argv and '--help' not in sys.argv:
     if os.path.exists(pk.rcfile): pk.ConfigureFromFile()
@@ -6177,7 +6177,7 @@ def Configure(pk):
 
   if '--settings' in sys.argv:
     pk.PrintSettings(safe=True)
-    sys.exit(0)
+    os._exit(0)
 
   if not pk.backends.keys():
     friendly_mode = sys.platform in ('win32', 'os2', 'os2emx',
@@ -6200,6 +6200,6 @@ def Configure(pk):
   if ('--list' in sys.argv or
       pk.kite_add or pk.kite_remove or pk.kite_only or pk.kite_disable):
     pk.ListKites()
-    sys.exit(0)
+    os._exit(0)
 
 
