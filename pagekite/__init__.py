@@ -2918,9 +2918,9 @@ class Tunnel(ChunkParser):
     if len(sspec) < 2: sspec = (sspec[0], 443)
 
     # Use chained SocksiPy to secure our communication.
-    socks.DEBUG = DEBUG_IO or socks.DEBUG
+    socks.DEBUG = (DEBUG_IO or socks.DEBUG) and LogDebug
     sock = socks.socksocket()
-    if HAVE_SSL:
+    if socks.HAVE_SSL:
       chain = ['default']
       if self.conns.config.fe_anon_tls_wrap:
         chain.append('ssl-anon:%s:%s' % (sspec[0], sspec[1]))
