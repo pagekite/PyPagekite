@@ -31,9 +31,9 @@ __logwait() {
   COUNT=0
   while [ 1 ]; do
     [ -e "$1" ] && grep "$2" $1 >/dev/null && return 0
-    sleep 1
+    perl -e 'use Time::HiRes qw(sleep); sleep(0.2)'
     let COUNT=$COUNT+1
-    [ $COUNT -gt 10 ] && {
+    [ $COUNT -gt 30 ] && {
       echo -n ' TIMED OUT! '
       return 1
     }
@@ -76,17 +76,17 @@ __logwait $LOG-2 connect= || __TEST_FAIL__ 'setup:BE' $KID_FE $KID_BE
 
   # Next, see if our test host responds at all...
   curl -v --silent -H "Host: testing" http://localhost:$PORT/ 2>&1 \
-    |tee $LOG-3 |grep -i 'html' >/dev/null \
+    |tee -a $LOG-3 |grep -i 'Powered by' >/dev/null \
     && __PART_OK__ 'backend' || __TEST_FAIL__ 'backend' $KID_FE $KID_BE
 
   # See if expected content is served.
   curl -v --silent -H "Host: testing" http://localhost:$PORT/etc/passwd 2>&1 \
-    |tee $LOG-3 |grep -i 'root' >/dev/null \
+    |tee -a $LOG-3 |grep -i 'root' >/dev/null \
     && __PART_OK__ 'httpd' || __TEST_FAIL__ 'httpd' $KID_FE $KID_BE
 
   # Check large-file download
   curl -v --silent -H "Host: testing" http://localhost:$PORT$LOG-4 2>&1 \
-    |tail -1|tee $LOG-3 |grep 'EOF' >/dev/null \
+    |tail -1|tee -a $LOG-3 |grep 'EOF' >/dev/null \
     && __PART_OK__ 'bigfile' || __TEST_FAIL__ 'bigfile' $KID_FE $KID_BE
 
 __TEST_END__ $KID_FE $KID_BE
