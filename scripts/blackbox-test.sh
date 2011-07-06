@@ -20,7 +20,8 @@ echo -n "Testing version: "
 echo -n "$($PK --clean --appver) ($PKARGS)"
 
 HAVE_TLS=" (SSL Enabled)"
-$PK --clean $PKARGS --tls_endpoint=a:b --settings >/dev/null 2>&1 || HAVE_TLS="" 
+$PK --clean $PKARGS "--tls_endpoint=a:$0" --settings >/dev/null 2>&1 \
+  || HAVE_TLS=""
 echo "$HAVE_TLS"
 
 
