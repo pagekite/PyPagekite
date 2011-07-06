@@ -1,18 +1,20 @@
 # Makefile for building combined pagekite.py files.
 
-APPVER=`./pk --appver`
-
-combined: startcom.txt pagekite tools socks.py
-	@echo Version is `./pk --appver`
+combined: startcom.txt pagekite tools dev
 	@./scripts/breeder.py socks.py \
-	             pagekite/__init__.py pagekite/__main__.py \
-	             >pagekite-$(APPVER).py
-	@chmod +x pagekite-$(APPVER).py
+	             pagekite/__init__.py \
+	             pagekite/httpd.py \
+	             pagekite/__main__.py \
+	             >pagekite-tmp.py
+	@chmod +x pagekite-tmp.py
+	@./pagekite-tmp.py --appver || rm pagekite-tmp.py .bail-on-error
+	@mv pagekite-tmp.py pagekite-`./pagekite-tmp.py --appver`.py
 	@ls -l pagekite-*.py
 
-pagekite: pagekite/__init__.py pagekite/__main__.py
+pagekite: pagekite/__init__.py pagekite/httpd.py pagekite/__main__.py
 
 dev: socks.py
+	@rm -f .SELF
 	@ln -fs . .SELF
 
 socks.py: ../PySocksipyChain/socks.py
@@ -28,3 +30,4 @@ distclean: clean
 
 clean:
 	@rm -vf socks.py *.pyc */*.pyc scripts/breeder.py .SELF
+	@rm -vf .appver pagekite-tmp.py
