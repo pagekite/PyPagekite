@@ -5039,8 +5039,12 @@ class PageKite(object):
     else:
       Log = LogToFile
 
-    if filename != 'stdio':
-      global LogFile
+    global LogFile
+    if filename in ('stdio', 'stdout'):
+      sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+      sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', 0)
+      LogFile = sys.stdout
+    else:
       try:
         LogFile = fd = open(filename, "a", 0)
         os.dup2(fd.fileno(), sys.stdin.fileno())
