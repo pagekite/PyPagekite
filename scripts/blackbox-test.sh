@@ -9,7 +9,10 @@ PKA="--clean  --nullui --logfile=$LOG"
 PORT=12000
 let PORT="$PORT+($$%10000)"
 
-[ "$PK" = "" ] && exit 1
+[ "$PK" = "" ] && {
+  echo "Usage: $0 /path/to/pagekite.py"
+  exit 1
+}
 echo -n "Testing version: "; $PK --appver
 
 __logwait() {
