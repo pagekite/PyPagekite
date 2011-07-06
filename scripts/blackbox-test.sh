@@ -15,7 +15,8 @@ let PORT="$PORT+($$%10000)"
   echo "Usage: $0 /path/to/pagekite.py [global pagekite options]"
   exit 1
 }
-echo -n "Testing version: "; $PK --appver
+echo -n "Testing version: "
+echo "$($PK --appver) ($*)"
 
 __logwait() {
   COUNT=0
