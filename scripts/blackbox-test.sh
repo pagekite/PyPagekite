@@ -46,7 +46,7 @@ __TEST_FAIL__() { echo " FAIL:$1"; shift; kill "$@"; exit 1; }
 __TEST_END__() { echo; kill "$@"; }
 
 ###############################################################################
-__TEST__ "Basic HTTP/HTTPD setup" "$LOG-1" "$LOG-2" "$LOG-3"
+__TEST__ "Basic FE/BE/HTTPD setup" "$LOG-1" "$LOG-2" "$LOG-3"
 
   FE_ARGS="$PKA-1 --isfrontend --ports=$PORT --domain=*:testing:ok"
   [ "$HAVE_TLS" = "" ] || FE_ARGS="$FE_ARGS --tls_endpoint=testing:$0 \
