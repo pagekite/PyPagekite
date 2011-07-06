@@ -33,12 +33,17 @@ __TEST_END__() { echo; kill "$@"; }
 ###############################################################################
 __TEST__ "Basic HTTP/HTTPD setup" "$LOG-1" "$LOG-2" "$LOG-3"
 
-  $PK $PKA-1 --isfrontend --ports=$PORT --domain=*:testing:ok &
+  FE_ARGS="$PKA-1 --isfrontend --ports=$PORT --domain=*:testing:ok"
+  BE_ARGS1="$PKA-2 --frontend=localhost:$PORT \
+                  --backend=http:testing:localhost:80:ok"
+  BE_ARGS2="/etc/passwd http://testing/"
+
+  $PK $FE_ARGS --settings >$LOG-1
+  $PK $FE_ARGS &
   KID_FE=$!
 __logwait $LOG-1 listen=:$PORT
-  $PK $PKA-2 --frontend=localhost:$PORT \
-             --backend=http:testing:localhost:80:ok \
-             /etc/passwd http://testing/ &
+  $PK $BE_ARGS1 --settings $BE_ARGS2 >$LOG-2
+  $PK $BE_ARGS1 $BE_ARGS2 &
   KID_BE=$!
 __logwait $LOG-2 connect=
 
@@ -64,5 +69,7 @@ __TEST_END__ $KID_FE $KID_BE
 
 
 ###############################################################################
+
+# TODO: Add duplicate tests with --nopyopenssl to test both code paths.
 
 
