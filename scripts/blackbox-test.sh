@@ -2,6 +2,7 @@
 #
 # Primitive black-box test for pagekite.py
 #
+export PATH=.:$PATH
 
 PK=$1
 LOG="/tmp/pk-test.log"
