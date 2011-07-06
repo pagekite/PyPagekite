@@ -212,12 +212,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def sendChunk(self, chunk):
     if self.chunked:
-      if DEBUG_IO: print '<== SENDING CHUNK ===\n%s\n' % chunk
+      if pagekite.DEBUG_IO: print '<== SENDING CHUNK ===\n%s\n' % chunk
       self.wfile.write('%x\r\n' % len(chunk))
       self.wfile.write(chunk)
       self.wfile.write('\r\n')
     else:
-      if DEBUG_IO: print '<== SENDING ===\n%s\n' % chunk
+      if pagekite.DEBUG_IO: print '<== SENDING ===\n%s\n' % chunk
       self.wfile.write(chunk)
 
   def sendEof(self):
@@ -440,7 +440,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                       for f in sorted(os.listdir(full_path))]
 
     # Remove dot-files
-    if self.host_config.get('indexes') != WEB_INDEX_ALL:
+    if self.host_config.get('indexes') != pagekite.WEB_INDEX_ALL:
       files = [f for f in files if not f[0].startswith('.')]
 
     fhtml = ['<table>']
@@ -665,7 +665,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       'body': '',
       'msg': 'OK',
       'now': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
-      'ver': APPVER
+      'ver': pagekite.APPVER
     }
     for key in self.headers.keys():
       data['http_'+key.lower()] = self.headers.get(key)
