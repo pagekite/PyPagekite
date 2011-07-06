@@ -434,148 +434,30 @@ except:
 # objects. If that fails, look for Python 2.6+ native ssl support and
 # create a compatibility wrapper. If both fail, bomb with a ConfigError
 # when the user tries to enable anything SSL-related.
-SEND_MAX_BYTES = 16 * 1024
 SEND_ALWAYS_BUFFERS = False
-HAVE_SSL = False
-try:
-  if '--nopyopenssl' in sys.argv or '--nossl' in sys.argv:
-    raise ImportError('pyOpenSSL disabled')
+SEND_MAX_BYTES = 16 * 1024
 
-  from OpenSSL import SSL
-  HAVE_SSL = True
-  def SSL_Connect(ctx, sock,
-                  server_side=False, accepted=False, connected=False,
-                  verify_names=None):
-    LogInfo('TLS is provided by pyOpenSSL')
-    if verify_names:
-      def vcb(conn, x509, errno, depth, rc):
-        # FIXME: No ALT names, no wildcards ...
-        if errno != 0: return False
-        if depth != 0: return True
-        commonName = x509.get_subject().commonName.lower()
-        cNameDigest = '%s/%s' % (commonName, x509.digest('sha1').replace(':','').lower())
-        if (commonName in verify_names) or (cNameDigest in verify_names):
-          LogDebug('Cert OK: %s' % (cNameDigest))
-          # FIXME: Short-circuit evaluation is vulnerable to timing attacks.
-          return True
-        return False
-      ctx.set_verify(SSL.VERIFY_PEER | SSL.VERIFY_FAIL_IF_NO_PEER_CERT, vcb)
-    else:
-      def vcb(conn, x509, errno, depth, rc): return (errno == 0)
-      ctx.set_verify(SSL.VERIFY_NONE, vcb)
+if socks.HAVE_PYOPENSSL:
+  SSL = socks.SSL
 
-    nsock = SSL.Connection(ctx, sock)
-    if accepted: nsock.set_accept_state()
-    if connected: nsock.set_connect_state()
-    if verify_names: nsock.do_handshake()
+elif socks.HAVE_SSL:
+  SEND_ALWAYS_BUFFERS = True
+  SEND_MAX_BYTES = 4 * 1024
+  SSL = socks.SSL
 
-    return nsock
-
-except ImportError:
-  try:
-    if '--nossl' in sys.argv:
-      raise ImportError('SSL disabled')
-    import ssl
-
-    # Because the native Python ssl module does not expose WantWriteError,
-    # we need this to keep tunnels from shutting down when busy.
-    SEND_ALWAYS_BUFFERS = True
-    SEND_MAX_BYTES = 4 * 1024
-    HAVE_SSL = True
-
-    class SSL(object):
-      SSLv23_METHOD = ssl.PROTOCOL_SSLv23
-      TLSv1_METHOD = ssl.PROTOCOL_TLSv1
-      WantReadError = ssl.SSLError
-      class Error(Exception): pass
-      class SysCallError(Exception): pass
-      class WantWriteError(Exception): pass
-      class ZeroReturnError(Exception): pass
-      class Context(object):
-        def __init__(self, method):
-          self.method = method
-          self.privatekey_file = None
-          self.certchain_file = None
-          self.ca_certs = None
-        def use_privatekey_file(self, fn): self.privatekey_file = fn
-        def use_certificate_chain_file(self, fn): self.certchain_file = fn
-        def load_verify_locations(self, pemfile, capath=None): self.ca_certs = pemfile
-
-    def SSL_CheckPeerName(fd, names):
-      cert = fd.getpeercert()
-      certhash = sha1hex(fd.getpeercert(binary_form=True))
-      if not cert: return None
-      # FIXME: Short-circuit evaluation is vulnerable to timing attacks.
-      for field in cert['subject']:
-        if field[0][0].lower() == 'commonname':
-          name = field[0][1].lower()
-          namehash = '%s/%s' % (name, certhash)
-          if name in names or namehash in names:
-            LogDebug('Cert OK: %s' % (namehash))
-            return name
-
-      if 'subjectAltName' in cert:
-        for field in cert['subjectAltName']:
-          if field[0].lower() == 'dns':
-            name = field[1].lower()
-            namehash = '%s/%s' % (name, certhash)
-            if name in names or namehash in names:
-              LogDebug('Cert OK: %s' % (namehash))
-              return name
-
-      return None
-
-    def SSL_Connect(ctx, sock,
-                    server_side=False, accepted=False, connected=False,
-                    verify_names=None):
-      LogInfo('TLS is provided by native Python ssl')
-      reqs = (verify_names and ssl.CERT_REQUIRED or ssl.CERT_NONE)
-      fd = ssl.wrap_socket(sock, keyfile=ctx.privatekey_file,
-                                 certfile=ctx.certchain_file,
-                                 cert_reqs=reqs,
-                                 ca_certs=ctx.ca_certs,
-                                 do_handshake_on_connect=False,
-                                 ssl_version=ctx.method,
-                                 server_side=server_side)
-      if verify_names:
-        fd.do_handshake()
-        if not SSL_CheckPeerName(fd, verify_names):
-          raise SSL.Error('Cert not in %s (%s)' % (verify_names, reqs))
-      return fd
-
-  except ImportError:
-    class SSL(object):
-      SSLv23_METHOD = 0
-      TLSv1_METHOD = 0
-      class Error(Exception): pass
-      class SysCallError(Exception): pass
-      class WantReadError(Exception): pass
-      class WantWriteError(Exception): pass
-      class ZeroReturnError(Exception): pass
-      class Context(object):
-        def __init__(self, method):
-          raise ConfigError('Neither pyOpenSSL nor python 2.6+ ssl modules found!')
-
-
-def DisableSSLCompression():
-  # Hack to disable compression in OpenSSL and reduce memory usage *lots*.
-  # Source:
-  #   http://journal.paul.querna.org/articles/2011/04/05/openssl-memory-use/
-  try:
-    import ctypes
-    import glob
-    openssl = ctypes.CDLL(None, ctypes.RTLD_GLOBAL)
-    try:
-      f = openssl.SSL_COMP_get_compression_methods
-    except AttributeError:
-      ssllib = sorted(glob.glob("/usr/lib/libssl.so.*"))[0]
-      openssl = ctypes.CDLL(ssllib, ctypes.RTLD_GLOBAL)
-
-    openssl.SSL_COMP_get_compression_methods.restype = ctypes.c_void_p
-    openssl.sk_zero.argtypes = [ctypes.c_void_p]
-    openssl.sk_zero(openssl.SSL_COMP_get_compression_methods())
-  except Exception, e:
-    LogError('disableSSLCompression: Failed: %s' % e)
+else:
+  class SSL(object):
+    SSLv23_METHOD = 0
+    TLSv1_METHOD = 0
+    class Error(Exception): pass
+    class SysCallError(Exception): pass
+    class WantReadError(Exception): pass
+    class WantWriteError(Exception): pass
+    class ZeroReturnError(Exception): pass
+    class Context(object):
+      def __init__(self, method):
+        raise ConfigError('Neither pyOpenSSL nor python 2.6+ '
+                          'ssl modules found!')
 
 
 # Different Python 2.x versions complain about deprecation depending on
@@ -603,7 +485,7 @@ except ImportError:
 socks.usesystemdefaults()
 socks.wrapmodule(sys.modules[__name__])
 
-if HAVE_SSL:
+if socks.HAVE_SSL:
   # Secure connections to pagekite.net in SSL tunnels.
   def_hop = socks.parseproxy('default')
   https_hop = socks.parseproxy('https:pagekite.net:443')
@@ -2903,7 +2785,8 @@ class UnknownConn(MagicProtocolParser):
       # If we know how to terminate the TLS/SSL, do so!
       ctx = self.conns.config.GetTlsEndpointCtx(domains[0])
       if ctx:
-        self.fd = SSL_Connect(ctx, self.fd, accepted=True, server_side=True)
+        self.fd = socks.SSL_Connect(ctx, self.fd,
+                                    accepted=True, server_side=True)
         self.peeking = False
         self.is_tls = False
         self.my_tls = True
@@ -3614,13 +3497,13 @@ class PageKite(object):
               self.servers_auto == def_frontends and
               self.error_url == def_error_url and
               self.ca_certs == def_ca_certs and
-              (self.fe_certname == def_fe_certs or not HAVE_SSL))
+              (self.fe_certname == def_fe_certs or not socks.HAVE_SSL))
     else:
       self.dyndns = (not clobber and self.dyndns) or def_dyndns
       self.servers_auto = (not clobber and self.servers_auto) or def_frontends
       self.error_url = (not clobber and self.error_url) or def_error_url
       self.ca_certs = def_ca_certs
-      if HAVE_SSL:
+      if socks.HAVE_SSL:
         for cert in def_fe_certs:
           if cert not in self.fe_certname:
             self.fe_certname.append(cert)
@@ -4289,8 +4172,7 @@ class PageKite(object):
           SEND_ALWAYS_BUFFERS = True
 
       elif opt == '--ca_certs': self.ca_certs = arg
-      elif opt == '--jakenoia':
-        self.fe_anon_tls_wrap = True
+      elif opt == '--jakenoia': self.fe_anon_tls_wrap = True
       elif opt == '--fe_certname':
         cert = arg.lower()
         if cert not in self.fe_certname: self.fe_certname.append(cert)
@@ -5154,7 +5036,9 @@ class PageKite(object):
     for optf in self.rcfiles_loaded: config_report.append(('optfile', optf))
     Log(config_report)
 
-    if not HAVE_SSL:
+    socks.DEBUG = (DEBUG_IO or socks.DEBUG) and LogDebug
+    if self.ca_certs: socks.setdefaultcertfile(self.ca_certs)
+    if not socks.HAVE_SSL:
       self.ui.Notify('SECURITY WARNING: No SSL support was found, tunnels are insecure!',
                      prefix='!', color=self.ui.WHITE)
       self.ui.Notify('Please install either pyOpenSSL or python-ssl.',
@@ -5167,6 +5051,7 @@ class PageKite(object):
     self.ui.Status('startup', message='Starting up...')
 
     try:
+
       # Set up our listeners if we are a server.
       if self.isfrontend:
         self.ui.Notify('This is a PageKite front-end server.')
@@ -5214,7 +5099,7 @@ class PageKite(object):
 
     # Disable compression in OpenSSL
     if not self.enable_sslzlib:
-      DisableSSLCompression()
+      socks.DisableSSLCompression()
 
     # Daemonize!
     if self.daemonize:

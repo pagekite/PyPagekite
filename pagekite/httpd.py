@@ -927,12 +927,12 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     self.server_port = sspec[1]
 
     if ssl_pem_filename:
-      ctx = socks.SSL.Context(socks.SSL.SSLv23_METHOD)
+      ctx = pagekite.SSL.Context(pagekite.SSL.SSLv3_METHOD)
       ctx.use_privatekey_file (ssl_pem_filename)
       ctx.use_certificate_chain_file(ssl_pem_filename)
-      self.socket = socks.SSL_Connect(ctx, socket.socket(self.address_family,
-                                                         self.socket_type),
-                                      server_side=True)
+      self.socket = pagekite.SSL_Connect(ctx, socket.socket(self.address_family,
+                                                            self.socket_type),
+                                         server_side=True)
       self.server_bind()
       self.server_activate()
       self.enable_ssl = True
