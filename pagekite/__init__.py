@@ -5260,8 +5260,8 @@ def Main(pagekite, configure, uiclass=NullUi, progname=None, appver=APPVER,
       try:
         try:
           configure(pk)
-        except SystemExit:
-          sys.exit(0)
+        except SystemExit, status:
+          sys.exit(status)
         except Exception, e:
           raise ConfigError(e)
 
@@ -5274,8 +5274,8 @@ def Main(pagekite, configure, uiclass=NullUi, progname=None, appver=APPVER,
         pk.FallDown(None, help=False, noexit=True)
         return
 
-    except SystemExit:
-      sys.exit(0)
+    except SystemExit, status:
+      sys.exit(status)
 
     except Exception, msg:
       traceback.print_exc(file=sys.stderr)
