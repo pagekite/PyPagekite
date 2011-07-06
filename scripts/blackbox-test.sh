@@ -5,13 +5,14 @@
 export PATH=.:$PATH
 
 PK=$1
+shift
 LOG="/tmp/pk-test.log"
-PKA="--clean  --nullui --logfile=$LOG"
+PKA="$* --clean --nullui --logfile=$LOG"
 PORT=12000
 let PORT="$PORT+($$%10000)"
 
 [ "$PK" = "" ] && {
-  echo "Usage: $0 /path/to/pagekite.py"
+  echo "Usage: $0 /path/to/pagekite.py [global pagekite options]"
   exit 1
 }
 echo -n "Testing version: "; $PK --appver

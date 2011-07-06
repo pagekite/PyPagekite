@@ -282,7 +282,7 @@ SERVICE_XMLRPC = 'http://pagekite.net/xmlrpc/'
 SERVICE_TOS_URL = 'https://pagekite.net/support/terms/'
 
 OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
-OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
+OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'nullui', 'help', 'settings',
             'optfile=', 'savefile=', 'reloadfile=', 'autosave', 'noautosave',
             'signup', 'list', 'add', 'only', 'disable', 'remove', 'save',
@@ -438,10 +438,10 @@ SEND_MAX_BYTES = 16 * 1024
 SEND_ALWAYS_BUFFERS = False
 HAVE_SSL = False
 try:
-  if '--nopyopenssl' in sys.argv:
+  if '--nopyopenssl' in sys.argv or '--nossl' in sys.argv:
     raise ImportError('pyOpenSSL disabled')
 
-  from xOpenSSL import SSL
+  from OpenSSL import SSL
   HAVE_SSL = True
   def SSL_Connect(ctx, sock,
                   server_side=False, accepted=False, connected=False,
@@ -473,6 +473,8 @@ try:
 
 except ImportError:
   try:
+    if '--nossl' in sys.argv:
+      raise ImportError('SSL disabled')
     import ssl
 
     # Because the native Python ssl module does not expose WantWriteError,
@@ -4345,8 +4347,8 @@ class PageKite(object):
         self.SetLocalSettings([int(p) for p in arg.split(',')])
         if not 'localhost' in args: args.append('localhost')
       elif opt == '--defaults': self.SetServiceDefaults()
-      elif opt in ('--clean', '--signup', '--nopyopenssl', '--settings'): pass
-      elif opt in ('--webaccess', '--webindexes', '--webroot'): pass
+      elif opt in ('--clean', '--nopyopenssl', '--nossl', '--settings'): pass
+      elif opt in ('--webaccess', '--webindexes', '--webroot', '--signup'): pass
       elif opt == '--help':
         self.HelpAndExit(longhelp=True)
 
