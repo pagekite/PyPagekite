@@ -8,7 +8,7 @@ PK=$1
 shift
 LOG="/tmp/pk-test.log"
 PKARGS="$*"
-PKA="$PKARGS --clean --nullui --logfile=$LOG"
+PKA="$PKARGS --clean --nullui --ca_certs=$0"
 PORT=12000
 let PORT="$PORT+($$%10000)"
 
@@ -39,33 +39,29 @@ __logwait() {
     }
   done
 }
-__TEST__() { echo -n " * $1 ..."; shift; rm -f "$@"; }
+__TEST__() { echo -n " * $1 ..."; shift; rm -f "$@"; touch "$@"; }
 __PART_OK__() { echo -n " ok:$1"; }
 __TEST_OK__() { echo ' OK'; }
 __TEST_FAIL__() { echo " FAIL:$1"; shift; kill "$@"; exit 1; }
 __TEST_END__() { echo; kill "$@"; }
 
 ###############################################################################
-__TEST__ "Basic FE/BE/HTTPD setup" "$LOG-1" "$LOG-2" "$LOG-3"
+__TEST__ "Basic FE/BE/HTTPD setup" "$LOG-1" "$LOG-2" "$LOG-3" "$LOG-4"
 
-  FE_ARGS="$PKA-1 --isfrontend --ports=$PORT --domain=*:testing:ok"
+  FE_ARGS="$PKA --isfrontend --ports=$PORT --domain=*:testing:ok"
   [ "$HAVE_TLS" = "" ] || FE_ARGS="$FE_ARGS --tls_endpoint=testing:$0 \
                                             --tls_default=testing"
   $PK $FE_ARGS --settings >$LOG-1
-  $PK $FE_ARGS &
+  $PK $FE_ARGS --logfile=stdio >>$LOG-1 2>&1 &
   KID_FE=$!
 __logwait $LOG-1 listen=:$PORT || __TEST_FAIL__ 'setup:FE' $KID_FE
 
-  # Create large file of crap
-  dd if=/dev/urandom of=$LOG-4 bs=1M count=1 2>/dev/null
-  (echo; echo EOF;) >>$LOG-4
-
-  BE_ARGS1="$PKA-2 --frontend=localhost:$PORT \
-                   --backend=http:testing:localhost:80:ok"
+  BE_ARGS1="$PKA --frontend=localhost:$PORT \
+                 --backend=http:testing:localhost:80:ok"
   [ "$HAVE_TLS" = "" ] || BE_ARGS1="$BE_ARGS1 --fe_certname=testing"
   BE_ARGS2="/etc/passwd $LOG-4 http://testing/"
   $PK $BE_ARGS1 --settings $BE_ARGS2 >$LOG-2
-  $PK $BE_ARGS1 $BE_ARGS2 &
+  $PK $BE_ARGS1 --logfile=stdio $BE_ARGS2 >>$LOG-2 2>&1 &
   KID_BE=$!
 __logwait $LOG-2 connect= || __TEST_FAIL__ 'setup:BE' $KID_FE $KID_BE
 
@@ -85,10 +81,13 @@ __logwait $LOG-2 connect= || __TEST_FAIL__ 'setup:BE' $KID_FE $KID_BE
     && __PART_OK__ 'httpd' || __TEST_FAIL__ 'httpd' $KID_FE $KID_BE
 
   # Check large-file download
+  dd if=/dev/urandom of=$LOG-4 bs=1M count=1 2>/dev/null
+  (echo; echo EOF;) >>$LOG-4
   curl -v --silent -H "Host: testing" http://localhost:$PORT$LOG-4 2>&1 \
     |tail -1|tee -a $LOG-3 |grep 'EOF' >/dev/null \
     && __PART_OK__ 'bigfile' || __TEST_FAIL__ 'bigfile' $KID_FE $KID_BE
 
+  #rm -f "$LOG-1" "$LOG-2" "$LOG-3" "$LOG-4"
 __TEST_END__ $KID_FE $KID_BE
 
 
@@ -101,37 +100,36 @@ exit 0
 ##[ Test certificates follow ]#################################################
 
 -----BEGIN RSA PRIVATE KEY-----
-MIICXAIBAAKBgQC6qqBXNTTF41621/M8nLwyxdeN88juhzsfikFqZzeLftyzAX1H
-o8uN5Sq/Mm4NApi8gRddoalWEzmDeGTzgiiIZqCwTSLa57e9mp5oIB72TT/WaAA/
-9S7sbYuyQvsh6ZqDrO+vUzDGJB3bBhhEG/p3dZpHsgcwbQXGONiUANcppwIDAQAB
-AoGBALY537GCxXPxlQLWKiQftjGypc10EdGZvoP5ygZ/oN/TBszRRWXsZsis0WA5
-cOnOgSB0vUSwjsjyl5DatWJqy/k/YnJHT/XT4kYMTucMogKeBVSo+BVHY9pYnNZH
-cCosfu9eIAkxF1lZYZGNM4zmZ7iXu4UKAYEYffQXG8PyIP0RAkEA8q736sf7d3I8
-I+3nw0wfBed3PwEoTxFuzgwRtgs+MXvfWtFEwVAfvGUlrevZ7Zo/LFsYk210Ds3R
-DBvYPirVxQJBAMToxkcnFRsKs6eRA16WhOoMoYaX+dc7RyujUugga3WQe0dHCHGP
-baecn3xfn7xZpUccEJ1tC0ZyOz4akclT5HsCQFxxEba5HqzNMuNsyA+4e0jAdsfl
-JPmZZl/OcSCq/7HRwa7ScCJC5xPYY5XwdT7wtoeq252s37yT4cF/CcwEfRECQCfD
-IZboq3hkdtbVj6qgFoL0vgFh2w+9ZqfHOUyqj0iUPnCsRWY5IlmAZSxGWwk7yQZN
-AoXnqSk2lAP8dYgEKtUCQDAdxF2sO5re4ZrifJnlY7/aaUC1qF9GHVtDVc/RYf+8
-fWqmY7Lcl6g0Dq3ZtZul5SrZBAzaaXzbdznpabZjuww=
+MIICXwIBAAKBgQDId+cQqU0fR9sxaP96ukUdpdYMDXU7hyl/7AGTz6RkpQWzFRFr
+8OwHKLLzMQMTCv31WtrjxtEWm/3mJcePCajcukfb9aXSGtMG06btwZyNDbp9H2No
+Qkzspg4o86tLo6NY4ts4qTUJQJVrvcwW27n2FZhJFzU6EIzPmCzJviBYiwIDAQAB
+AoGBALIHUYvJXnUuIiniHiiGrYSj1tBDT147LY6uL8RtvYenycT9K8iZX3MIIMu6
+Ngm+VESFmCh6UwtqIvQ1juCnam5vGFoJoFwNKkPgXVDaXLF1UvgT9eknUMvCI757
+wLsNy8rTJqzhUeBwiJvloi8vTQ4emFzt3/QWWtOrsHGi1A+JAkEA+mnZGxeA6uHM
+dNatMSkOxSQP1/gbBTS0SkoYa5XiGvOht/wPBn6xobkOXvi9ZoU5Wfh4eS0wH+Gf
+Ik2lelWcrQJBAMzwz1no6BzGw6RWC9y8uJzV5owcgW5MCOTcsHcOUFdTmAxIMgqP
+B3JFwakiY0X0qoZCSmc/e5NGUTbTpHWX+RcCQQDEpxlbgEK6sqaI3wpWAANcaGyU
+04AMv44ShUvWOXe+aLQIs8bs99PxyE1z4e2DtH4MnOenaghQETSSkN2yS8dlAkEA
+l07LqDP++w/87d3hkC19l72NI7EAFnDouB//4UaeJns/bQH4gDctZj7+RmNvK/0B
+0XIsAKKsGAX4fCQx7egwLQJBAKHzGacCxAqBzA7Vnr/vPtA8mJVAYXsDibbYMpVC
+HT9ybtKfqL4HHWZfOmUYc9qUtS4jmRnsRVjFuNDMbO80bT4=
 -----END RSA PRIVATE KEY-----
 -----BEGIN CERTIFICATE-----
-MIIDNDCCAp2gAwIBAgIJAKcyd6cpKGgWMA0GCSqGSIb3DQEBBQUAMHAxCzAJBgNV
-BAYTAklTMREwDwYDVQQIEwhUZXN0bGFuZDESMBAGA1UEBxMJVGVzdHZpbGxlMQ8w
-DQYDVQQKEwZUZXN0Y28xEDAOBgNVBAsTB1Rlc3RlcnMxFzAVBgNVBAMTDlRlc3Qg
-TWNUZXN0c29uMB4XDTExMDcwNjEzMDMyMVoXDTc1MDUwNjA2MzUwNVowcDELMAkG
-A1UEBhMCSVMxETAPBgNVBAgTCFRlc3RsYW5kMRIwEAYDVQQHEwlUZXN0dmlsbGUx
-DzANBgNVBAoTBlRlc3RjbzEQMA4GA1UECxMHVGVzdGVyczEXMBUGA1UEAxMOVGVz
-dCBNY1Rlc3Rzb24wgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqqoFc1NMXj
-XrbX8zycvDLF143zyO6HOx+KQWpnN4t+3LMBfUejy43lKr8ybg0CmLyBF12hqVYT
-OYN4ZPOCKIhmoLBNItrnt72anmggHvZNP9ZoAD/1Luxti7JC+yHpmoOs769TMMYk
-HdsGGEQb+nd1mkeyBzBtBcY42JQA1ymnAgMBAAGjgdUwgdIwHQYDVR0OBBYEFAR3
-mICMIdts75XO1rgMbjNVhw3hMIGiBgNVHSMEgZowgZeAFAR3mICMIdts75XO1rgM
-bjNVhw3hoXSkcjBwMQswCQYDVQQGEwJJUzERMA8GA1UECBMIVGVzdGxhbmQxEjAQ
-BgNVBAcTCVRlc3R2aWxsZTEPMA0GA1UEChMGVGVzdGNvMRAwDgYDVQQLEwdUZXN0
-ZXJzMRcwFQYDVQQDEw5UZXN0IE1jVGVzdHNvboIJAKcyd6cpKGgWMAwGA1UdEwQF
-MAMBAf8wDQYJKoZIhvcNAQEFBQADgYEAKPi4ApAJwyNGVhNN7V20unb6iByHjDiY
-PYuLUgYxSw9mWmot5d/Trslm2T1Qm3/xlMyPWBJA1o57ayo9rQxcnjJm53uzxT2y
-KipeTAr7rNc4mhPj1gawCIFU7Za5hvKW/NOMqaqTCK7Cs33GvWaFeURLXC8D4rro
-2Xy3wOCFpeE=
+MIIDIjCCAougAwIBAgIJAM5iMtoXM7wvMA0GCSqGSIb3DQEBBQUAMGoxCzAJBgNV
+BAYTAklTMRIwEAYDVQQIEwlUZXN0c3RhdGUxEjAQBgNVBAcTCVRlc3R2aWxsZTEP
+MA0GA1UEChMGVGVzdGNvMRAwDgYDVQQLEwdUZXN0ZXJzMRAwDgYDVQQDEwd0ZXN0
+aW5nMB4XDTExMDcwNjE5NDM1N1oXDTIxMDcwMzE5NDM1N1owajELMAkGA1UEBhMC
+SVMxEjAQBgNVBAgTCVRlc3RzdGF0ZTESMBAGA1UEBxMJVGVzdHZpbGxlMQ8wDQYD
+VQQKEwZUZXN0Y28xEDAOBgNVBAsTB1Rlc3RlcnMxEDAOBgNVBAMTB3Rlc3Rpbmcw
+gZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBAMh35xCpTR9H2zFo/3q6RR2l1gwN
+dTuHKX/sAZPPpGSlBbMVEWvw7AcosvMxAxMK/fVa2uPG0Rab/eYlx48JqNy6R9v1
+pdIa0wbTpu3BnI0Nun0fY2hCTOymDijzq0ujo1ji2zipNQlAlWu9zBbbufYVmEkX
+NToQjM+YLMm+IFiLAgMBAAGjgc8wgcwwHQYDVR0OBBYEFLoSm4Mq/Wt5MOYyb5Dp
+L246YgDWMIGcBgNVHSMEgZQwgZGAFLoSm4Mq/Wt5MOYyb5DpL246YgDWoW6kbDBq
+MQswCQYDVQQGEwJJUzESMBAGA1UECBMJVGVzdHN0YXRlMRIwEAYDVQQHEwlUZXN0
+dmlsbGUxDzANBgNVBAoTBlRlc3RjbzEQMA4GA1UECxMHVGVzdGVyczEQMA4GA1UE
+AxMHdGVzdGluZ4IJAM5iMtoXM7wvMAwGA1UdEwQFMAMBAf8wDQYJKoZIhvcNAQEF
+BQADgYEAjLF30yL6HBmbAEMcylPBRYgO4S951jOB+u4017sD2agiDd1cip2K8ND9
+DaLCv7c3MWgzR9/EQmi0BMyhNxtddPF+FZ9RgK3H0bOWlrN5u+MhIHhSMUAp8tdk
+pD3zEbiDGGOZi5zjAYXUZtCOZTVcGz3IS42dX9RDNZIrIE1Lb/I=
 -----END CERTIFICATE-----
