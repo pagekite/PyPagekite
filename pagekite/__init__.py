@@ -4896,6 +4896,7 @@ class PageKite(object):
               failures += 1
           except Exception, e:
             LogInfo('DynDNS update failed: %s' % e, [('data', update)])
+            traceback.print_exc(file=sys.stderr)
             failures += 1
       if not self.last_updates:
         self.last_updates = last_updates
@@ -5066,19 +5067,19 @@ class PageKite(object):
       self.tunnel_manager = TunnelManager(self, conns)
 
     except Exception, e:
-      Log = LogToFile
+      self.LogTo('stdio')
       FlushLogMemory()
       raise ConfigError(e)
 
-    # Preserve sane behavior when not run at the console.
-    if not sys.stdout.isatty():
-      Log = LogToFile
-
-    # Create log-file
+    # Configure logging
     if self.logfile:
       keep_open = [s.fd.fileno() for s in conns.conns]
       if self.ui_httpd: keep_open.append(self.ui_httpd.httpd.socket.fileno())
       self.LogTo(self.logfile, dont_close=keep_open)
+
+    elif not sys.stdout.isatty():
+      # Preserve sane behavior when not run at the console.
+      self.LogTo('stdio')
 
     # Flush in-memory log, if necessary
     FlushLogMemory()
