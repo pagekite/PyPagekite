@@ -1317,8 +1317,8 @@ class Selectable(object):
     if close:
       if self.fd:
         self.fd.close()
-        self.fd = None
       self.LogTraffic(final=True)
+    self.fd = None
 
   def ProcessData(self, data):
     self.LogError('Selectable::ProcessData: Should be overridden!')
@@ -2868,10 +2868,12 @@ class UnknownConn(MagicProtocolParser):
                            self.proto, self.host, self.on_port,
                            self.parser.lines + lines, self.conns) is None:
         if self.proto == 'probe':
-          self.Send(HTTP_NoFeConnection())
+          self.Send(HTTP_NoFeConnection(),
+                    try_flush=True)
         else:
           self.Send(HTTP_Unavailable('fe', self.proto, self.host,
-                                     frame_url=self.conns.config.error_url))
+                                     frame_url=self.conns.config.error_url),
+                    try_flush=True)
 
         return False
 
@@ -4499,7 +4501,8 @@ class PageKite(object):
             webpath = path[skip:]
           while webpath.endswith('/.'):
             webpath = webpath[:-2]
-          host_paths[(be_path_prefix + '/' + webpath).replace('//', '/')
+          host_paths[(be_path_prefix + '/' + webpath).replace('///', '/'
+                                                    ).replace('//', '/')
                      ] = (WEB_POLICY_DEFAULT, os.path.abspath(path))
           first = False
         just_these_webpaths[http_host] = host_paths
