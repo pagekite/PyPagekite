@@ -2399,19 +2399,20 @@ class Tunnel(ChunkParser):
           if conn:
             self.users[sid] = conn
 
+            if proto == 'httpfinger':
+              conn.fd.setblocking(1)
+              conn.Send(data, try_flush=True) or conn.Flush(wait=True)
+              self._RecvHttpHeaders(fd=conn.fd)
+              conn.fd.setblocking(0)
+              data = ''
+
       if not conn:
         self.CloseStream(sid)
         if not self.SendStreamEof(sid): return False
       else:
-        if proto == 'httpfinger':
-          conn.fd.setblocking(1)
-          conn.Send(data, try_flush=True) or conn.Flush(wait=True)
-          self._RecvHttpHeaders(fd=conn.fd)
-          conn.fd.setblocking(0)
-        else:
-          if not conn.Send(data):
-            # FIXME
-            pass
+        if not conn.Send(data, try_flush=True):
+          # FIXME
+          pass
 
         if len(conn.write_blocked) > 2*max(conn.write_speed, 50000):
           if conn.created < time.time()-3:
@@ -2803,7 +2804,7 @@ class UnknownConn(MagicProtocolParser):
                 ('http'+sid2) in tunnels):
               (self.on_port, self.host) = (cport, chost)
               self.parser = HttpParser()
-              self.Send(HTTP_ConnectOK())
+              self.Send(HTTP_ConnectOK(), try_flush=True)
               return True
 
           if cport == 443:
@@ -2812,7 +2813,7 @@ class UnknownConn(MagicProtocolParser):
                 chost in self.conns.config.tls_endpoints):
               (self.on_port, self.host) = (cport, chost)
               self.parser = HttpParser()
-              self.Send(HTTP_ConnectOK())
+              self.Send(HTTP_ConnectOK(), try_flush=True)
               return self.ProcessTls(''.join(lines), chost)
 
           if (cport in self.conns.config.server_raw_ports or
@@ -2821,7 +2822,7 @@ class UnknownConn(MagicProtocolParser):
               if ((raw+sid1) in tunnels) or ((raw+sid2) in tunnels):
                 (self.on_port, self.host) = (cport, chost)
                 self.parser = HttpParser()
-                self.Send(HTTP_ConnectOK())
+                self.Send(HTTP_ConnectOK(), try_flush=True)
                 return self.ProcessRaw(''.join(lines), self.host)
 
         except ValueError:
