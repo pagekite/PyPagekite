@@ -5,7 +5,7 @@ import pagekite.httpd as httpd
 if sys.stdout.isatty():
   uiclass = pk.BasicUi
 else:
-  uiclass = None
+  uiclass = pk.NullUi
 
 pk.Main(pk.PageKite, pk.Configure,
         uiclass=uiclass,
