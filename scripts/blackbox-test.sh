@@ -44,9 +44,13 @@ __TEST__ "Basic HTTP/HTTPD setup" "$LOG-1" "$LOG-2" "$LOG-3"
   KID_FE=$!
 __logwait $LOG-1 listen=:$PORT
 
+  # Create large file of crap
+  dd if=/dev/urandom of=$LOG-4 bs=1M count=1 2>/dev/null
+  (echo; echo EOF;) >>$LOG-4
+
   BE_ARGS1="$PKA-2 --frontend=localhost:$PORT \
                    --backend=http:testing:localhost:80:ok"
-  BE_ARGS2="/etc/passwd http://testing/"
+  BE_ARGS2="/etc/passwd $LOG-4 http://testing/"
   $PK $BE_ARGS1 --settings $BE_ARGS2 >$LOG-2
   $PK $BE_ARGS1 $BE_ARGS2 &
   KID_BE=$!
@@ -62,10 +66,15 @@ __logwait $LOG-2 connect=
     |tee $LOG-3 |grep -i 'html' >/dev/null \
     && __PART_OK__ 'backend' || __TEST_FAIL__ 'backend' $KID_FE $KID_BE
 
-  # Finally, see if expected content is served.
+  # See if expected content is served.
   curl -v --silent -H "Host: testing" http://localhost:$PORT/etc/passwd 2>&1 \
     |tee $LOG-3 |grep -i 'root' >/dev/null \
     && __PART_OK__ 'httpd' || __TEST_FAIL__ 'httpd' $KID_FE $KID_BE
+
+  # Check large-file download
+  curl -v --silent -H "Host: testing" http://localhost:$PORT$LOG-4 2>&1 \
+    |tail -1|tee $LOG-3 |grep 'EOF' >/dev/null \
+    && __PART_OK__ 'bigfile' || __TEST_FAIL__ 'bigfile' $KID_FE $KID_BE
 
 __TEST_END__ $KID_FE $KID_BE
 
