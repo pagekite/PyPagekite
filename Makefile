@@ -7,9 +7,13 @@ combined: startcom.txt pagekite tools dev
 	             pagekite/__main__.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
-	@./pagekite-tmp.py --appver || rm pagekite-tmp.py .bail-on-error
+	@./scripts/blackbox-test.sh ./pagekite-tmp.py \
+	             || rm pagekite-tmp.py .combined-did-not-run
 	@mv pagekite-tmp.py pagekite-`./pagekite-tmp.py --appver`.py
 	@ls -l pagekite-*.py
+
+test: dev
+	@./scripts/blackbox-test.sh ./pk
 
 pagekite: pagekite/__init__.py pagekite/httpd.py pagekite/__main__.py
 
