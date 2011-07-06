@@ -1,7 +1,7 @@
 # Makefile for building combined pagekite.py files.
 
-combined: startcom.txt pagekite tools dev
-	@./scripts/breeder.py startcom.txt socks.py \
+combined: pagekite tools dev
+	@./scripts/breeder.py socks.py \
 	             pagekite/__init__.py \
 	             pagekite/httpd.py \
 	             pagekite/__main__.py \
