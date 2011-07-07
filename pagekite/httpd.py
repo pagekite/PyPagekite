@@ -274,9 +274,9 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     try:
       auth = self.headers.get('authorization')
       if auth:
-        (how, ab64) = auth.split()
+        (how, ab64) = auth.strip().split()
         if how.lower() == 'basic':
-          (username, password) = base64.b64decode(ab64).split(':')
+          (username, password) = base64.decodestring(ab64).split(':')
           self.checkUsernamePasswordAuth(username, password)
           return True
 

@@ -2494,9 +2494,9 @@ class UserConn(Selectable):
           parse = HttpParser(lines=data.splitlines())
           auth = parse.Header('Authorization')
           try:
-            (how, ab64) = auth[0].split()
+            (how, ab64) = auth[0].strip().split()
             if how.lower() == 'basic':
-              user, pwd = base64.b64decode(ab64).split(':')
+              user, pwd = base64.decodestring(ab64).split(':')
           except:
             user = auth
 
@@ -3081,7 +3081,7 @@ class NullUi(object):
       self.CLEAR = '\033[H\033[J'
       self.NORM = '\033[0m'
       self.WHITE = '\033[1m'
-      self.GREY = '\033[30;1m'
+      self.GREY =  '\033[0m' #'\033[30;1m'
       self.RED = '\033[31;1m'
       self.GREEN = '\033[32;1m'
       self.YELLOW = '\033[33;1m'
