@@ -3465,15 +3465,8 @@ class PageKite(object):
       self.rcfile = 'pagekite.cfg'
       self.devnull = '/dev/null'
 
-    # Disabled for now, let's see who complains. (FIXME)
-    if False and not os.path.exists(self.rcfile):
-      for rcf in ('pagekite.rc', 'pagekite.cfg'):
-        prog_rcf = os.path.join(os.path.dirname(sys.argv[0]), rcf)
-        if os.path.exists(prog_rcf): self.rcfile = prog_rcf
-        elif os.path.exists(rcf): self.rcfile = rcf
-
     # Look for CA Certificates. If we don't find them in the host OS,
-    # we assume there might be something good in the config file.
+    # we assume there might be something good in the program itself.
     self.ca_certs_default = '/etc/ssl/certs/ca-certificates.crt'
     if not os.path.exists(self.ca_certs_default):
       self.ca_certs_default = sys.argv[0]
