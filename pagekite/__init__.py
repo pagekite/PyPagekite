@@ -4247,6 +4247,10 @@ class PageKite(object):
       else:
         self.HelpAndExit()
 
+    # Make sure these are configured before we try and do XML-RPC stuff.
+    socks.DEBUG = (DEBUG_IO or socks.DEBUG) and LogDebug
+    if self.ca_certs: socks.setdefaultcertfile(self.ca_certs)
+
     # Handle the user-friendly argument stuff and simple registration.
 
     just_these_backends = {}
@@ -5037,8 +5041,6 @@ class PageKite(object):
     for optf in self.rcfiles_loaded: config_report.append(('optfile', optf))
     Log(config_report)
 
-    socks.DEBUG = (DEBUG_IO or socks.DEBUG) and LogDebug
-    if self.ca_certs: socks.setdefaultcertfile(self.ca_certs)
     if not socks.HAVE_SSL:
       self.ui.Notify('SECURITY WARNING: No SSL support was found, tunnels are insecure!',
                      prefix='!', color=self.ui.WHITE)
