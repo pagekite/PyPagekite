@@ -2,15 +2,16 @@ import sys
 import pagekite as pk
 import pagekite.httpd as httpd
 
-if sys.stdout.isatty():
-  uiclass = pk.BasicUi
-else:
-  uiclass = pk.NullUi
+if __name__ == "__main__":
+  if sys.stdout.isatty():
+    uiclass = pk.BasicUi
+  else:
+    uiclass = pk.NullUi
 
-pk.Main(pk.PageKite, pk.Configure,
-        uiclass=uiclass,
-        http_handler=httpd.UiRequestHandler,
-        http_server=httpd.UiHttpServer)
+  pk.Main(pk.PageKite, pk.Configure,
+          uiclass=uiclass,
+          http_handler=httpd.UiRequestHandler,
+          http_server=httpd.UiHttpServer)
 
 
 ##############################################################################

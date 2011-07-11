@@ -14,6 +14,18 @@ combined: pagekite tools dev
 	@mv pagekite-tmp.py pagekite-`./pagekite-tmp.py --appver`.py
 	@ls -l pagekite-*.py
 
+android: pagekite tools test
+	@./scripts/breeder.py socks.py \
+	             pagekite/__init__.py \
+	             pagekite/httpd.py \
+	             pagekite/__main__.py \
+	             pagekite/__android__.py \
+	             >pagekite-tmp.py
+	@chmod +x pagekite-tmp.py
+	@mv pagekite-tmp.py pk-android-`./pagekite-tmp.py --appver`.py
+	@ls -l pk-android-*.py
+
+
 test: dev
 	@./scripts/blackbox-test.sh ./pk
 	@./scripts/blackbox-test.sh ./pk --nopyopenssl

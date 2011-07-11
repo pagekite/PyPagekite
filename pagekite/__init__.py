@@ -1048,20 +1048,20 @@ class Selectable(object):
     self.logged = []
     global selectable_id
     selectable_id += 1
+    selectable_id %= 0x10000
     self.sid = selectable_id
     self.alt_id = None
 
     if address:
       addr = address or ('x.x.x.x', 'x')
-      self.log_id = 's%s/%s:%s' % (self.sid, obfuIp(addr[0]), addr[1])
+      self.log_id = 's%x/%s:%s' % (self.sid, obfuIp(addr[0]), addr[1])
     else:
-      self.log_id = 's%s' % self.sid
+      self.log_id = 's%x' % self.sid
 
     # Introspection
+    global SELECTABLES
     if SELECTABLES is not None:
-      old = selectable_id-150
-      if old in SELECTABLES: del SELECTABLES[old]
-      if tracked: SELECTABLES[selectable_id] = self
+      SELECTABLES.append(self)
 
     global gYamon
     self.countas = 'selectables_live'
@@ -1103,8 +1103,8 @@ class Selectable(object):
                      len(self.write_blocked),
                      self.dead and '-' or (obfuIp(peer[0]), peer[1]),
                      self.dead and '-' or (obfuIp(sock[0]), sock[1]),
-                     fmt_size(self.all_in + self.read_bytes),
-                     fmt_size(self.all_out + self.wrote_bytes),
+                     self.all_in + self.read_bytes,
+                     self.all_out + self.wrote_bytes,
                      time.strftime('%Y-%m-%d %H:%M:%S',
                                    time.localtime(self.created)),
                      self.dead and 'dead' or 'alive',
@@ -5094,7 +5094,7 @@ class PageKite(object):
         LogError('Warning: signal handler unavailable, logrotate will not work.')
 
     # Disable compression in OpenSSL
-    if not self.enable_sslzlib:
+    if socks.HAVE_SSL and not self.enable_sslzlib:
       socks.DisableSSLCompression()
 
     # Daemonize!
