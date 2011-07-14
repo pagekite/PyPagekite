@@ -1080,7 +1080,7 @@ class FingerLineParser(BaseLineParser):
     if ' ' in line: return False
     if '+' in line:
       arg0, self.domain = line.strip().split('+', 1)
-    elif '@' in args[0]:
+    elif '@' in line:
       arg0, self.domain = line.strip().split('@', 1)
 
     if self.domain:
@@ -1107,6 +1107,7 @@ class IrcLineParser(BaseLineParser):
 
   def Parse(self, line):
     BaseLineParser.Parse(self, line)
+    if line in ('\n', '\r\n'): return True
     if self.state == IrcLineParser.WANT_USER:
       try:
         ocmd, arg = line.strip().split(' ', 1)
@@ -1162,6 +1163,7 @@ class Selectable(object):
     self.address = address
     self.on_port = on_port
     self.created = self.bytes_logged = time.time()
+    self.last_activity = 0
     self.dead = False
     self.ui = ui
 
@@ -1350,6 +1352,9 @@ class Selectable(object):
       self.LogTraffic(final=True)
     self.fd = None
 
+  def SayHello(self):
+    pass
+
   def ProcessData(self, data):
     self.LogError('Selectable::ProcessData: Should be overridden!')
     return False
@@ -1421,6 +1426,7 @@ class Selectable(object):
       self.read_eof = True
       return self.ProcessData('')
     else:
+      self.last_activity = time.time()
       if not self.peeking:
         self.read_bytes += len(data)
         if self.read_bytes > LOG_THRESHOLD: self.LogTraffic()
@@ -1532,6 +1538,7 @@ class Connections(object):
   def __init__(self, config):
     self.config = config
     self.ip_tracker = {}
+    self.idle = []
     self.conns = []
     self.conns_by_id = {}
     self.tunnels = {}
@@ -1542,6 +1549,7 @@ class Connections(object):
     self.auth.start()
 
   def Add(self, conn, alt_id=None):
+    self.idle.append(conn)
     self.conns.append(conn)
     if alt_id: self.conns_by_id[alt_id] = conn
 
@@ -1570,6 +1578,8 @@ class Connections(object):
       del self.conns_by_id[conn.alt_id]
     if conn in self.conns:
       self.conns.remove(conn)
+    if conn in self.idle:
+      self.idle.remove(conn)
     for tid in self.tunnels.keys():
       if conn in self.tunnels[tid]:
         self.tunnels[tid].remove(conn)
@@ -1890,7 +1900,6 @@ class Tunnel(ChunkParser):
     self.zhistory = {}
     self.backends = {}
     self.rtt = 100000
-    self.last_activity = time.time()
     self.last_ping = 0
     self.using_tls = False
 
@@ -2313,7 +2322,6 @@ class Tunnel(ChunkParser):
       LogError('Tunnel::ProcessChunk: Corrupt packet!')
       return False
 
-    self.last_activity = time.time()
     try:
       if parse.Header('Quota'):
         if self.quota:
@@ -2789,11 +2797,22 @@ class UnknownConn(MagicProtocolParser):
 
     self.host = None
     self.proto = None
+    self.said_hello = False
 
   def Cleanup(self, close=True):
     if self.conns: self.conns.Remove(self)
     MagicProtocolParser.Cleanup(self, close=close)
     self.conns = self.parser = None
+
+  def SayHello(self):
+    if self.said_hello:
+      return
+    else:
+      self.said_hello = True
+
+    if self.on_port in (25, 125, ):
+      # FIXME: We don't actually support SMTP yet and 125 is bogus.
+      self.Send(['220 ready ESMTP PageKite Magic Proxy\n'], try_flush=True)
 
   def __str__(self):
     return '%s (%s/%s:%s)' % (MagicProtocolParser.__str__(self),
@@ -3020,6 +3039,7 @@ class Listener(Selectable):
 
     self.connclass = connclass
     self.port = port
+    self.last_activity = self.created + 1
     self.conns = conns
     self.conns.Add(self)
 
@@ -3093,6 +3113,19 @@ class TunnelManager(threading.Thread):
     threading.Thread.__init__(self)
     self.pkite = pkite
     self.conns = conns
+
+  def CheckIdleConns(self, now):
+    active = []
+    for conn in self.conns.idle:
+      if conn.last_activity:
+        active.append(conn)
+      elif conn.created < now - 10:
+        self.conns.Remove(conn)
+        conn.Cleanup()
+      elif conn.created < now - 1:
+        conn.SayHello()
+    for conn in active:
+      self.conns.idle.remove(conn)
 
   def CheckTunnelQuotas(self, now):
     for tid in self.conns.tunnels:
@@ -3208,7 +3241,10 @@ class TunnelManager(threading.Thread):
                       message='DynDNS updates may be incomplete, will retry...')
 
       for i in xrange(0, check_interval):
-        if self.keep_running: time.sleep(1)
+        if self.keep_running:
+          time.sleep(1)
+          if self.pkite.isfrontend:
+            self.CheckIdleConns(time.time())
 
 
 class NullUi(object):
