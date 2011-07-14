@@ -1759,7 +1759,8 @@ class Tunnel(ChunkParser):
     try:
       for prefix in ('X-Beanstalk', 'X-PageKite'):
         for feature in conn.parser.Header(prefix+'-Features'):
-          if feature == 'ZChunks': self.EnableZChunks(level=1)
+          if not conns.config.disable_zchunks:
+            if feature == 'ZChunks': self.EnableZChunks(level=1)
 
         # Track which versions we see in the wild.
         version = 'old'
@@ -1824,12 +1825,14 @@ class Tunnel(ChunkParser):
 
     output = [HTTP_ResponseHeader(200, 'OK'),
               HTTP_Header('Transfer-Encoding', 'chunked'),
-              HTTP_Header('X-PageKite-Features', 'ZChunks'),
               HTTP_Header('X-PageKite-Protos', ', '.join(['%s' % p
                             for p in self.conns.config.server_protos])),
               HTTP_Header('X-PageKite-Ports', ', '.join(
                             ['%s' % self.conns.config.server_portalias.get(p, p)
                              for p in self.conns.config.server_ports]))]
+
+    if not self.conns.config.disable_zchunks:
+      output.append(HTTP_Header('X-PageKite-Features', 'ZChunks'))
 
     if self.conns.config.server_raw_ports:
       output.append(
