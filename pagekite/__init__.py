@@ -903,29 +903,94 @@ HTTP_METHODS = ['OPTIONS', 'CONNECT', 'GET', 'HEAD', 'POST', 'PUT', 'TRACE',
                 'LOCK', 'UNLOCK', 'PING']
 HTTP_VERSIONS = ['HTTP/1.0', 'HTTP/1.1']
 
-class HttpParser(object):
+
+
+##[ Protocol parsers! ]########################################################
+
+class BaseLineParser(object):
+  """Base protocol parser class."""
+
+  PROTO = 'unknown'
+  PROTOS = ['unknown']
+  PARSE_UNKNOWN = -2
+  PARSE_FAILED = -1
+  PARSE_OK = 100
+
+  def __init__(self, lines=None, state=PARSE_UNKNOWN, proto=PROTO):
+    self.state = state
+    self.protocol = proto
+    self.lines = []
+    self.domain = None
+    self.last_parser = self
+    if lines is not None:
+      for line in lines:
+        if not self.Parse(line): break
+
+  def ParsedOK(self):
+    return (self.state == self.PARSE_OK)
+
+  def Parse(self, line):
+    self.lines.append(line)
+    return False
+
+  def ErrorReply(self, port=None):
+    return ''
+
+class MagicLineParser(BaseLineParser):
+  """Parse an unknown incoming connection request, line-by-line."""
+
+  PROTO = 'magic'
+
+  def __init__(self, lines=None, state=BaseLineParser.PARSE_UNKNOWN,
+                     parsers=[]):
+    self.parsers = [p() for p in parsers]
+    BaseLineParser.__init__(self, lines, state, self.PROTO)
+    if self.last_parser == self:
+      self.last_parser = self.parsers[-1]
+
+  def ParsedOK(self):
+    return self.last_parser.ParsedOK()
+
+  def Parse(self, line):
+    BaseLineParser.Parse(self, line)
+    self.last_parser = self.parsers[-1]
+    for p in self.parsers[:]:
+      if not p.Parse(line):
+        LogDebug('Should remove %s' % p)
+        self.parsers.remove(p)
+        LogDebug('Parsers: %s' % self.parsers)
+      elif p.ParsedOK():
+        self.last_parser = p
+        self.domain = p.domain
+        self.protocol = p.protocol
+        self.state = p.state
+        self.parsers = [p]
+        break
+
+    if not self.parsers:
+      LogDebug('No more parsers!')
+
+    return (len(self.parsers) > 0)
+
+class HttpLineParser(BaseLineParser):
   """Parse an HTTP request, line-by-line."""
 
-  IN_REQUEST = 1
-  IN_HEADERS = 2
-  IN_BODY = 3
-  IN_RESPONSE = 4
-  PARSE_FAILED = -1
+  PROTO = 'http'
+  PROTOS = ['http']
+  IN_REQUEST = 11
+  IN_HEADERS = 12
+  IN_BODY = 13
+  IN_RESPONSE = 14
 
-  def __init__(self, lines=None, state=None, testbody=False):
-    self.state = state or self.IN_REQUEST
+  def __init__(self, lines=None, state=IN_REQUEST, testbody=False):
     self.method = None
     self.path = None
     self.version = None
     self.code = None
     self.message = None
     self.headers = []
-    self.lines = []
     self.body_result = testbody
-
-    if lines is not None:
-      for line in lines:
-        if not self.Parse(line): break
+    BaseLineParser.__init__(self, lines, state, self.PROTO)
 
   def ParseResponse(self, line):
     self.version, self.code, self.message = line.split()
@@ -966,8 +1031,11 @@ class HttpParser(object):
     # Could be overridden by subclasses, for now we just play dumb.
     return self.body_result
 
+  def ParsedOK(self):
+    return (self.state == self.IN_BODY)
+
   def Parse(self, line):
-    self.lines.append(line)
+    BaseLineParser.Parse(self, line)
     try:
       if (self.state == self.IN_RESPONSE):
         return self.ParseResponse(line)
@@ -982,14 +1050,92 @@ class HttpParser(object):
         return self.ParseBody(line)
 
     except ValueError, err:
-      LogInfo('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
+      LogDebug('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
 
-    self.state = self.PARSE_FAILED
+    self.state = BaseLineParser.PARSE_FAILED
     return False
 
   def Header(self, header):
     return [h[1].strip() for h in self.headers if h[0] == header.lower()]
 
+class FingerLineParser(BaseLineParser):
+  """Parse an incoming Finger request, line-by-line."""
+
+  PROTO = 'finger'
+  PROTOS = ['finger', 'httpfinger']
+  WANT_FINGER = 71
+
+  def __init__(self, lines=None, state=WANT_FINGER):
+    BaseLineParser.__init__(self, lines, state, self.PROTO)
+
+  def ErrorReply(self, port=None):
+    if port == 79:
+      return ('PageKite wants to know, what domain?\n'
+              'Try: finger user+domain@domain\n')
+    else:
+      return ''
+
+  def Parse(self, line):
+    BaseLineParser.Parse(self, line)
+    if ' ' in line: return False
+    if '+' in line:
+      arg0, self.domain = line.strip().split('+', 1)
+    elif '@' in args[0]:
+      arg0, self.domain = line.strip().split('@', 1)
+
+    if self.domain:
+      self.state = BaseLineParser.PARSE_OK
+      self.lines[-1] = '%s\n' % arg0
+      return True
+    else:
+      self.state = BaseLineParser.PARSE_FAILED
+      return False
+
+class IrcLineParser(BaseLineParser):
+  """Parse an incoming IRC connection, line-by-line."""
+
+  PROTO = 'irc'
+  PROTOS = ['irc']
+  WANT_USER = 61
+
+  def __init__(self, lines=None, state=WANT_USER):
+    self.seen = []
+    BaseLineParser.__init__(self, lines, state, self.PROTO)
+
+  def ErrorReply(self):
+    return ':pagekite 000 :Access denied (FIXME)\n'
+
+  def Parse(self, line):
+    BaseLineParser.Parse(self, line)
+    if self.state == IrcLineParser.WANT_USER:
+      try:
+        ocmd, arg = line.strip().split(' ', 1)
+        cmd = ocmd.lower()
+        self.seen.append(cmd)
+        args = arg.split(' ')
+        if cmd == 'pass':
+          pass
+        elif cmd in ('user', 'nick'):
+          if '+' in args[0]:
+            arg0, self.domain = args[0].split('+', 1)
+          elif '@' in args[0]:
+            arg0, self.domain = args[0].split('@', 1)
+          elif 'nick' in self.seen and 'user' in self.seen and not self.domain:
+            raise Error('No domain found')
+
+          if self.domain:
+            self.state = BaseLineParser.PARSE_OK
+            self.lines[-1] = '%s %s %s\n' % (ocmd, arg0, ' '.join(args[1:]))
+        else:
+          self.state = BaseLineParser.PARSE_FAILED
+      except Exception, err:
+        LogDebug('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
+        self.state = BaseLineParser.PARSE_FAILED
+
+    return (self.state != BaseLineParser.PARSE_FAILED)
+
+
+##[ Selectables ]##############################################################
 
 def obfuIp(ip):
   quads = ('%s' % ip).replace(':', '.').split('.')
@@ -1925,7 +2071,8 @@ class Tunnel(ChunkParser):
     if not data: return None, None
 
     self.fd.setblocking(0)
-    parse = HttpParser(lines=data.splitlines(), state=HttpParser.IN_RESPONSE)
+    parse = HttpLineParser(lines=data.splitlines(),
+                           state=HttpLineParser.IN_RESPONSE)
 
     return data, parse
 
@@ -2160,8 +2307,8 @@ class Tunnel(ChunkParser):
   def ProcessChunk(self, data):
     try:
       headers, data = data.split('\r\n\r\n', 1)
-      parse = HttpParser(lines=headers.splitlines(),
-                         state=HttpParser.IN_HEADERS)
+      parse = HttpLineParser(lines=headers.splitlines(),
+                             state=HttpLineParser.IN_HEADERS)
     except ValueError:
       LogError('Tunnel::ProcessChunk: Corrupt packet!')
       return False
@@ -2397,7 +2544,8 @@ class UserConn(Selectable):
     # then the just the proto. If the protocol is WebSocket and no tunnel is
     # found, look for a plain HTTP tunnel.
     if proto == 'probe':
-      protos = ['http', 'https', 'websocket', 'raw', 'finger', 'httpfinger']
+      protos = ['http', 'https', 'websocket', 'raw', 'irc',
+                'finger', 'httpfinger']
       ports = conns.config.server_ports[:]
       ports.extend(conns.config.server_aliasport.keys())
       ports.extend([x for x in conns.config.server_raw_ports if x != VIRTUAL_PN])
@@ -2494,7 +2642,7 @@ class UserConn(Selectable):
       if user_keys:
         user, pwd, fail = None, None, True
         if proto in ('websocket', 'http'):
-          parse = HttpParser(lines=data.splitlines())
+          parse = HttpLineParser(lines=data.splitlines())
           auth = parse.Header('Authorization')
           try:
             (how, ab64) = auth[0].strip().split()
@@ -2626,7 +2774,15 @@ class UnknownConn(MagicProtocolParser):
   def __init__(self, fd, address, on_port, conns):
     MagicProtocolParser.__init__(self, fd, address, on_port, ui=conns.config.ui)
     self.peeking = True
-    self.parser = HttpParser()
+
+    # Set up our parser chain.
+    self.parsers = [HttpLineParser]
+    if IrcLineParser.PROTO in conns.config.server_protos:
+      self.parsers.append(IrcLineParser)
+    if FingerLineParser.PROTO in conns.config.server_protos:
+      self.parsers.append(FingerLineParser)
+    self.parser = MagicLineParser(parsers=self.parsers)
+
     self.conns = conns
     self.conns.Add(self)
     self.sid = -1
@@ -2656,10 +2812,29 @@ class UnknownConn(MagicProtocolParser):
   def ProcessLine(self, line, lines):
     if not self.parser: return True
     if self.parser.Parse(line) is False: return False
-    if self.parser.state != self.parser.IN_BODY: return True
+    if not self.parser.ParsedOK(): return True
 
+    self.parser = self.parser.last_parser
+    if self.parser.protocol == HttpLineParser.PROTO:
+      # HTTP has special cases, including CONNECT etc.
+      return self.ProcessParsedHttp(line, lines)
+    else:
+      return self.ProcessParsedMagic(self.parser.PROTOS, line, lines)
+
+  def ProcessParsedMagic(self, protos, line, lines):
+    for proto in protos:
+      if UserConn.FrontEnd(self, self.address,
+                           proto, self.parser.domain, self.on_port,
+                           self.parser.lines + lines, self.conns) is not None:
+        self.Cleanup(close=False)
+        return True
+
+    self.Send([self.parser.ErrorReply(port=self.on_port)], try_flush=True)
+    self.Cleanup()
+    return False
+
+  def ProcessParsedHttp(self, line, lines):
     done = False
-
     if self.parser.method == 'PING':
       self.Send('PONG %s\r\n\r\n' % self.parser.path)
       self.read_eof = self.write_eof = done = True
@@ -2688,7 +2863,7 @@ class UnknownConn(MagicProtocolParser):
             if (('http'+sid1) in tunnels) or (
                 ('http'+sid2) in tunnels):
               (self.on_port, self.host) = (cport, chost)
-              self.parser = HttpParser()
+              self.parser = HttpLineParser()
               self.Send(HTTP_ConnectOK(), try_flush=True)
               return True
 
@@ -2697,7 +2872,7 @@ class UnknownConn(MagicProtocolParser):
                 ('https'+sid2) in tunnels) or (
                 chost in self.conns.config.tls_endpoints):
               (self.on_port, self.host) = (cport, chost)
-              self.parser = HttpParser()
+              self.parser = HttpLineParser()
               self.Send(HTTP_ConnectOK(), try_flush=True)
               return self.ProcessTls(''.join(lines), chost)
 
@@ -2706,7 +2881,7 @@ class UnknownConn(MagicProtocolParser):
             for raw in ('raw', 'finger'):
               if ((raw+sid1) in tunnels) or ((raw+sid2) in tunnels):
                 (self.on_port, self.host) = (cport, chost)
-                self.parser = HttpParser()
+                self.parser = HttpLineParser()
                 self.Send(HTTP_ConnectOK(), try_flush=True)
                 return self.ProcessRaw(''.join(lines), self.host)
 
@@ -2830,40 +3005,6 @@ class RawConn(Selectable):
       self.Cleanup()
 
 
-class FingerConn(LineParser):
-  """This class is a finger connection."""
-
-  def __init__(self, fd, address, on_port, conns):
-    LineParser.__init__(self, fd, address, on_port)
-    self.conns = conns
-    self.conns.Add(self)
-    self.my_tls = False
-
-  def ProcessLine(self, line, lines):
-    finger_user = line.strip()
-    if '+' in finger_user:
-      user, domain = finger_user.split('+', 1)
-    elif '@' in finger_user:
-      user, domain = finger_user.split('@', 1)
-    else:
-      return False
-
-    lines = ['%s\r\n' % user] + lines
-    if domain and (UserConn.FrontEnd(self, self.address, 'finger', domain,
-                                     self.on_port, lines, self.conns) or
-                   UserConn.FrontEnd(self, self.address, 'httpfinger', domain,
-                                     self.on_port, lines, self.conns)):
-      self.Cleanup(close=False)
-      return True
-    else:
-      return False
-
-
-CONN_HANDLERS = {
-  '79': FingerConn,
-}
-
-
 class Listener(Selectable):
   """This class listens for incoming connections and accepts them."""
 
@@ -2910,7 +3051,7 @@ class HttpUiThread(threading.Thread):
     threading.Thread.__init__(self)
     if not (server and handler):
       self.serve = False
-      return 
+      return
 
     self.ui_sspec = pkite.ui_sspec
     self.httpd = server(self.ui_sspec, pkite, conns,
@@ -3383,7 +3524,7 @@ class PageKite(object):
     self.server_raw_ports = []
     self.server_portalias = {}
     self.server_aliasport = {}
-    self.server_protos = ['http', 'https', 'websocket',
+    self.server_protos = ['http', 'https', 'websocket', 'irc',
                           'finger', 'httpfinger', 'raw']
 
     self.tls_default = None
@@ -3984,6 +4125,7 @@ class PageKite(object):
         proto = (proto or 'http')
         bhost = (bhost or 'localhost')
         bport = (bport or (proto in ('http', 'httpfinger', 'websocket') and 80)
+                       or (proto == 'irc' and 6667)
                        or (proto == 'https' and 443)
                        or (proto == 'finger' and 79))
         if port:
@@ -4291,10 +4433,11 @@ class PageKite(object):
         be = None
       else:
         be = be_spec.replace('/', '').split(':')
-        if be[0].lower() in ('http', 'https', 'httpfinger', 'finger', 'ssh'):
+        if be[0].lower() in ('http', 'https', 'httpfinger', 'finger', 'ssh',
+                             'irc'):
           be_proto = be.pop(0)
           if len(be) < 2:
-            be.append({'http': '80', 'https': '443',
+            be.append({'http': '80', 'https': '443', 'irc': '6667',
                        'httpfinger': '80', 'finger': '79',
                        'ssh': '22'}[be_proto])
         if len(be) > 2:
@@ -5058,8 +5201,7 @@ class PageKite(object):
           Listener(self.server_host, port, conns)
         for port in self.server_raw_ports:
           if port != VIRTUAL_PN and port > 0:
-            Listener(self.server_host, port, conns,
-                     connclass=CONN_HANDLERS.get(str(port), RawConn))
+            Listener(self.server_host, port, conns, connclass=RawConn)
 
       # Create the Tunnel Manager
       self.tunnel_manager = TunnelManager(self, conns)
