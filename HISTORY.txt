@@ -4,6 +4,7 @@ Version history - highlights
 v0.4.5    ??
 ------
    - Finalize and document finger and IRC support.
+   - Support wild-card backends (*.domain.com).
 
 
 v0.4.4   ??

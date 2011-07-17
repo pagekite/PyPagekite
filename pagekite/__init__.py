@@ -1635,6 +1635,16 @@ class Connections(object):
     if tid in self.tunnels:
       return self.tunnels[tid]
     else:
+      try:
+        dparts = domain.split('.')[1:]
+        while len(dparts) > 1:
+          wild_tid = '%s:*.%s' % (proto, '.'.join(dparts))
+          if wild_tid in self.tunnels:
+            return self.tunnels[wild_tid]
+          dparts = dparts[1:]
+      except:
+        pass
+
       return []
 
 
