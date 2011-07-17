@@ -1,6 +1,11 @@
 Version history - highlights
 ============================
 
+v0.4.5    ??
+------
+   - Finalize and document finger and IRC support.
+
+
 v0.4.4   ??
 ------
    - Host options:
@@ -8,12 +13,11 @@ v0.4.4   ??
       - Renamed +user/ to +password/
       - Allow +options after the domain name
    - Made the built-in HTTPD reply to http://localhost:port/ requests.
-   - Added support for the finger and IRC protocols.
+   - Experimental support for the finger and IRC protocols.
    - Major code reorganization, split giant pagekite.py into multiple
      parts, and spawned two spin-off projects:
       - http://pagekite.net/wiki/Floss/PyBreeder/
       - http://pagekite.net/wiki/Floss/PySocksipyChain/
-
 
 
 v0.4.3   2011.05.26

@@ -1103,7 +1103,7 @@ class IrcLineParser(BaseLineParser):
     BaseLineParser.__init__(self, lines, state, self.PROTO)
 
   def ErrorReply(self):
-    return ':pagekite 000 :Access denied (FIXME)\n'
+    return ':pagekite 451 :IRC Gateway requires user@HOST or nick@HOST\n'
 
   def Parse(self, line):
     BaseLineParser.Parse(self, line)
@@ -1117,10 +1117,10 @@ class IrcLineParser(BaseLineParser):
         if cmd == 'pass':
           pass
         elif cmd in ('user', 'nick'):
-          if '+' in args[0]:
-            arg0, self.domain = args[0].split('+', 1)
-          elif '@' in args[0]:
-            arg0, self.domain = args[0].split('@', 1)
+          if '@' in args[0]:
+            parts = args[0].split('@')
+            self.domain = parts[-1]
+            arg0 = '@'.join(parts[:-1])
           elif 'nick' in self.seen and 'user' in self.seen and not self.domain:
             raise Error('No domain found')
 
