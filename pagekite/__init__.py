@@ -400,7 +400,7 @@ import socks
 
 # Create our service-domain matching regexp
 SERVICE_DOMAIN_RE = re.compile('\.(' + '|'.join(SERVICE_DOMAINS) + ')$')
-SERVICE_SUBKITE_RE = re.compile(r'^[A-Za-z0-9_]+$')
+SERVICE_SUBDOMAIN_RE = re.compile(r'^([A-Za-z0-9_-]+\.)*[A-Za-z0-9_-]+$')
 
 # System logging on Unix
 try:
@@ -3495,7 +3495,7 @@ class BasicUi(NullUi):
     else:
       sys.stderr.write('\n    Please use one of the following domains:\n')
       for domain in domains:
-        sys.stderr.write('\n     %s' % domain)
+        sys.stderr.write('\n     *%s' % domain)
       sys.stderr.write('\n')
     while self.Retry():
       sys.stderr.write('\n => %s ' % question)
@@ -3504,15 +3504,15 @@ class BasicUi(NullUi):
         return back
       elif len(domains) == 1:
         answer = answer.replace(domains[0], '')
-        if answer and SERVICE_SUBKITE_RE.match(answer):
+        if answer and SERVICE_SUBDOMAIN_RE.match(answer):
           return answer+domains[0]
       else:
         for domain in domains:
           if answer.endswith(domain):
             answer = answer.replace(domain, '')
-            if answer and SERVICE_SUBKITE_RE.match(answer):
+            if answer and SERVICE_SUBDOMAIN_RE.match(answer):
               return answer+domain
-      sys.stderr.write('    (Please only use characters A-Z, 0-9 and _.)')
+      sys.stderr.write('    (Please only use characters A-Z, 0-9, - and _.)')
     raise Exception('Too many tries')
 
   def AskMultipleChoice(self, choices, question, pre=[], default=None,
@@ -4732,15 +4732,19 @@ class PageKite(object):
               Back()
 
         elif ('service_signup_is_subdomain' in state):
-          ch = self.ui.AskYesNo('Continue?',
-                                pre=['%s is a sub-domain of %s.' % (kitename,
-                                                               is_subdomain_of),
-                                     '',
-                     'This process will FAIL if you have not already registered',
-                                    'the parent domain, %s.' % is_subdomain_of],
+          ch = self.ui.AskYesNo('Use this name?',
+                                pre=[('WARNING: %s is a sub-domain!'
+                                      ) % kitename, '',
+         'This process will FAIL if you have not already registered the parent',
+                                     'domain: %s' % is_subdomain_of],
                                 default=True, back=-1)
           if ch is True:
-            Goto('service_signup_email')
+            if email:
+              Goto('service_signup')
+            else:
+              Goto('service_signup_email')
+          elif ch is False:
+            Goto('service_signup_kitename')
           else:
             Back()
 
@@ -4783,9 +4787,15 @@ class PageKite(object):
           ch = self.ui.AskKiteName(domains, 'Name your kite:', back=False)
           if ch:
             kitename = register = ch
-            (is_service_domain, is_cname_for, is_cname_ready) = self._KiteInfo(ch)
+            (is_subdomain_of, is_service_domain,
+             is_cname_for, is_cname_ready) = self._KiteInfo(ch)
             self.ui.StartWizard('Creating kite: %s' % kitename)
-            Goto('service_signup')
+            if is_subdomain_of:
+              Goto('service_signup_is_subdomain')
+            elif email:
+              Goto('service_signup')
+            else:
+              Goto('service_signup_email')
           else:
             Back()
 
@@ -4839,6 +4849,9 @@ class PageKite(object):
             elif error == 'email':
               self.ui.ExplainError(error, 'Signup failed!', subject=register)
               Goto('service_login_email', back_skips_current=True)
+            elif error == 'domain':
+              self.ui.ExplainError(error, 'Invalid domain!', subject=register)
+              Goto('service_signup_kitename', back_skips_current=True)
             else:
               print 'FIXME!  Error is %s' % error
               Goto('abort')
@@ -4893,8 +4906,8 @@ class PageKite(object):
 
 
         elif 'manual_abort' in state:
-          if self.ui.Tell(['Aborted!',
-            'Please add information about your kites and front-ends',
+          if self.ui.Tell(['Aborted!', '',
+            'Please manually add information about your kites and front-ends',
             'to the configuration file: %s' % self.rcfile],
                           error=True, back=False) is False:
             Back()
