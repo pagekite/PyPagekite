@@ -8,13 +8,6 @@ def Configure(pkobj):
   pk.Configure(pkobj)
 
 if __name__ == "__main__":
-  if False:
-    if '--nossl' not in sys.argv:
-      sys.argv.append('--nossl')
-
-    sys.argv.append('--logfile=stdio')
-    sys.argv.append('--debugio')
-
   if sys.stdout.isatty():
     uiclass = pk.BasicUi
   else:
