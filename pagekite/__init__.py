@@ -4630,8 +4630,17 @@ class PageKite(object):
 
   def _KiteInfo(self, kitename):
     is_service_domain = kitename and SERVICE_DOMAIN_RE.search(kitename)
-    is_cname_for = is_cname_ready = False
-    if kitename and not is_service_domain:
+    is_subdomain_of = is_cname_for = is_cname_ready = False
+
+    if is_service_domain:
+      parts = kitename.split('.')
+      if '-' in parts[0]:
+        parts[0] = '-'.join(parts[0].split('-')[1:])
+        is_subdomain_of = '.'.join(parts)
+      elif len(parts) > 3:
+        is_subdomain_of = '.'.join(parts[1:])
+
+    elif kitename:
       try:
         (hn, al, ips) = socket.gethostbyname_ex(kitename)
         if hn != kitename and SERVICE_DOMAIN_RE.search(hn):
@@ -4639,15 +4648,17 @@ class PageKite(object):
       except:
         pass
 
-    return is_service_domain, is_cname_for, is_cname_ready
+    return is_subdomain_of, is_service_domain, is_cname_for, is_cname_ready
 
   def RegisterNewKite(self, kitename=None, autoconfigure=False):
     if kitename:
       self.ui.StartWizard('Creating kite: %s' % kitename)
-      is_service_domain, is_cname_for, is_cname_ready = self._KiteInfo(kitename)
+      (is_subdomain_of, is_service_domain,
+       is_cname_for, is_cname_ready) = self._KiteInfo(kitename)
     else:
       self.ui.StartWizard('Create your first kite!')
-      is_service_domain = is_cname_for = is_cname_ready = False
+      is_subdomain_of = is_service_domain = False
+      is_cname_for = is_cname_ready = False
 
     service = self.GetServiceXmlRpc()
     service_accounts = {}
@@ -4691,7 +4702,10 @@ class PageKite(object):
               Goto('service_signup_email')
             elif is_service_domain:
               register = is_cname_for or kitename
-              Goto('service_signup_email')
+              if is_subdomain_of:
+                Goto('service_signup_is_subdomain')
+              else:
+                Goto('service_signup_email')
             else:
               Goto('service_signup_bad_domain')
           else:
@@ -4716,6 +4730,19 @@ class PageKite(object):
                 self.ui.Tell(['Login failed! Try again?'], error=True)
             if email is False:
               Back()
+
+        elif ('service_signup_is_subdomain' in state):
+          ch = self.ui.AskYesNo('Continue?',
+                                pre=['%s is a sub-domain of %s.' % (kitename,
+                                                               is_subdomain_of),
+                                     '',
+                     'This process will FAIL if you have not already registered',
+                                    'the parent domain, %s.' % is_subdomain_of],
+                                default=True, back=-1)
+          if ch is True:
+            Goto('service_signup_email')
+          else:
+            Back()
 
         elif ('service_signup_bad_domain' in state or
               'service_login_bad_domain' in state):
