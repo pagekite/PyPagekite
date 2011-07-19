@@ -11,8 +11,8 @@ combined: pagekite tools dev
 	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py --nopyopenssl \
 	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py --nossl \
 	        || rm pagekite-tmp.py .combined-did-not-run
-	@mv pagekite-tmp.py pagekite-`./pagekite-tmp.py --appver`.py
-	@ls -l pagekite-*.py
+	@mv pagekite-tmp.py bin/pagekite-`./pagekite-tmp.py --appver`.py
+	@ls -l bin/pagekite-*.py
 
 android: pagekite tools test
 	@./scripts/breeder.py socks.py \
@@ -22,8 +22,8 @@ android: pagekite tools test
 	             pagekite/__android__.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
-	@mv pagekite-tmp.py pk-android-`./pagekite-tmp.py --appver`.py
-	@ls -l pk-android-*.py
+	@mv pagekite-tmp.py bin/pk-android-`./pagekite-tmp.py --appver`.py
+	@ls -l bin/pk-android-*.py
 
 
 test: dev
@@ -46,7 +46,7 @@ scripts/breeder.py:
 	@ln -fs ../../PyBreeder/breeder.py scripts/breeder.py
 
 distclean: clean
-	@rm -vf pagekite-0.*.py
+	@rm -vf bin/*
 
 clean:
 	@rm -vf socks.py *.pyc */*.pyc scripts/breeder.py .SELF
