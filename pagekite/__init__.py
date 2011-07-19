@@ -3147,7 +3147,9 @@ class TunnelManager(threading.Thread):
     for tid in self.conns.tunnels:
       for tunnel in self.conns.tunnels[tid]:
         grace = max(40, len(tunnel.write_blocked)/(tunnel.write_speed or 0.001))
-        if tunnel.last_activity < tunnel.last_ping-(5+grace):
+        if tunnel.last_activity == 0:
+          pass
+        elif tunnel.last_activity < tunnel.last_ping-(5+grace):
           dead['%s' % tunnel] = tunnel
         elif tunnel.last_activity < now-30 and tunnel.last_ping < now-2:
           tunnel.SendPing()
