@@ -3,6 +3,7 @@
 # Primitive black-box test for pagekite.py
 #
 export PATH=.:$PATH
+export http_proxy=
 
 PK=$1
 shift
