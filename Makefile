@@ -53,4 +53,4 @@ distclean: clean
 
 clean:
 	@rm -vf socks.py *.pyc */*.pyc scripts/breeder.py .SELF
-	@rm -vf .appver pagekite-tmp.py
+	@rm -vf .appver pagekite-tmp.py MANIFEST

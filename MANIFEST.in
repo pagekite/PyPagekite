@@ -1,0 +1,6 @@
+include pk *.py *.md *.txt *.sample Makefile COPYING
+recursive-include pagekite *
+recursive-include scripts *
+recursive-include rpm *
+exclude socks.py
+exclude .SELF
