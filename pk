@@ -1,2 +1,3 @@
 #!/bin/bash
-exec python -m pagekite "$@"
+export PYTHONPATH=.
+exec python pagekite/__main__.py "$@"
