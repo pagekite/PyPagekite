@@ -54,6 +54,8 @@ You can download `pagekite.py` from <http://pagekite.net/downloads/>.
 
 [ [up](#toc) ]
 
+
+
 <a                                                              name=qs></a>
 ### 3. Getting started ###
 
@@ -95,9 +97,9 @@ manual prefer the more precise long-form arguments (`--this` or `--that`), as
 they are also used in the `pagekite.py` configuration files.  Shortcuts are
 discussed in further detail in section FIXME.
 
-
-
 [ [up](#toc) ]
+
+
 
 <a                                                              name=bes></a>
 ### 4. Running the back-end, using the service ###
