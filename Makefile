@@ -26,6 +26,9 @@ android: pagekite tools test
 	@ls -l bin/pk-android-*.py
 
 
+dist: test
+	@./scripts/make-tar-gz.sh
+
 test: dev
 	@./scripts/blackbox-test.sh ./pk
 	@./scripts/blackbox-test.sh ./pk --nopyopenssl
