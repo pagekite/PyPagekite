@@ -1,6 +1,13 @@
 #!/usr/bin/python
 from distutils.core import setup
 from pagekite import APPVER
+import os
+
+try:
+  # This borks sdist.
+  os.remove('.SELF')
+except:
+  pass
 
 setup(
     name="pagekite",

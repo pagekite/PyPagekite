@@ -27,7 +27,7 @@ android: pagekite tools test
 
 
 dist: test
-	@./scripts/make-tar-gz.sh
+	@python setup.py sdist
 
 test: dev
 	@./scripts/blackbox-test.sh ./pk
@@ -49,7 +49,7 @@ scripts/breeder.py:
 	@ln -fs ../../PyBreeder/breeder.py scripts/breeder.py
 
 distclean: clean
-	@rm -vf bin/*
+	@rm -rvf bin/* dist/
 
 clean:
 	@rm -vf socks.py *.pyc */*.pyc scripts/breeder.py .SELF
