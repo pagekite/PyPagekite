@@ -393,7 +393,7 @@ from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 import Cookie
 
 # This should be our socksipy
-import socks
+import sockschain as socks
 
 
 ##[ Conditional imports & compatibility magic! ]###############################

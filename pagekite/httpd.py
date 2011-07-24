@@ -37,7 +37,7 @@ from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 import Cookie
 
 import pagekite
-import socks
+import sockschain as socks
 
 
 ##[ Conditional imports & compatibility magic! ]###############################
