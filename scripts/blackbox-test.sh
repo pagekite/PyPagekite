@@ -2,7 +2,6 @@
 #
 # Primitive black-box test for pagekite.py
 #
-export PYTHONPATH=.:$PYTHONPATH
 export PATH=.:$PATH
 export http_proxy=
 

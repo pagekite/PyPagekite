@@ -1,5 +1,5 @@
 # Makefile for building combined pagekite.py files.
-PYTHONPATH := .
+export PYTHONPATH := .
 
 combined: pagekite tools dev
 	@./scripts/breeder.py socks.py \
@@ -40,6 +40,7 @@ pagekite: pagekite/__init__.py pagekite/httpd.py pagekite/__main__.py
 dev: socks.py
 	@rm -f .SELF
 	@ln -fs . .SELF
+	@echo export PYTHONPATH=`pwd`
 
 socks.py: ../PySocksipyChain/socks.py
 	@ln -fs ../PySocksipyChain/socks.py socks.py
