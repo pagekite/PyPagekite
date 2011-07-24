@@ -1,4 +1,5 @@
 # Makefile for building combined pagekite.py files.
+PYTHONPATH := .
 
 combined: pagekite tools dev
 	@./scripts/breeder.py socks.py \

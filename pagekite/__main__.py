@@ -1,3 +1,4 @@
+#!/usr/bin/python
 import sys
 import pagekite as pk
 import pagekite.httpd as httpd

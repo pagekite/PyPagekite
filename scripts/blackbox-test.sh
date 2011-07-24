@@ -2,6 +2,7 @@
 #
 # Primitive black-box test for pagekite.py
 #
+export PYTHONPATH=.:$PYTHONPATH
 export PATH=.:$PATH
 export http_proxy=
 
@@ -53,7 +54,7 @@ __TEST__ "Basic FE/BE/HTTPD setup" "$LOG-1" "$LOG-2" "$LOG-3" "$LOG-4"
   [ "$HAVE_TLS" = "" ] || FE_ARGS="$FE_ARGS --tls_endpoint=testing:$0 \
                                             --tls_default=testing"
   $PK $FE_ARGS --settings >$LOG-1
-  $PK $FE_ARGS --logfile=stdio >>$LOG-1 2>&1 &
+ ($PK $FE_ARGS --logfile=stdio) >>$LOG-1 2>&1 &
   KID_FE=$!
 __logwait $LOG-1 listen=:$PORT || __TEST_FAIL__ 'setup:FE' $KID_FE
 
@@ -62,7 +63,7 @@ __logwait $LOG-1 listen=:$PORT || __TEST_FAIL__ 'setup:FE' $KID_FE
   [ "$HAVE_TLS" = "" ] || BE_ARGS1="$BE_ARGS1 --fe_certname=testing"
   BE_ARGS2="/etc/passwd $LOG-4 http://testing/"
   $PK $BE_ARGS1 --settings $BE_ARGS2 >$LOG-2
-  $PK $BE_ARGS1 --logfile=stdio $BE_ARGS2 >>$LOG-2 2>&1 &
+ ($PK $BE_ARGS1 --logfile=stdio $BE_ARGS2) >>$LOG-2 2>&1 &
   KID_BE=$!
 __logwait $LOG-2 connect= || __TEST_FAIL__ 'setup:BE' $KID_FE $KID_BE
 
