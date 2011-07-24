@@ -30,6 +30,10 @@ android: pagekite tools test
 dist: test
 	@python setup.py sdist
 
+rpm: test
+	@python setup.py bdist_rpm --install=rpm/rpm-install.sh \
+	                           --requires=python-socksipychain
+
 test: dev
 	@./scripts/blackbox-test.sh ./pk
 	@./scripts/blackbox-test.sh ./pk --nopyopenssl
@@ -51,7 +55,7 @@ scripts/breeder.py:
 	@ln -fs ../../PyBreeder/breeder.py scripts/breeder.py
 
 distclean: clean
-	@rm -rvf bin/* dist/ *.egg-info
+	@rm -rvf bin/* dist/ build/ *.egg-info
 
 clean:
 	@rm -vf sockschain.py *.pyc */*.pyc scripts/breeder.py .SELF
