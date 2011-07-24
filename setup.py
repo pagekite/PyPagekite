@@ -28,7 +28,7 @@ Natively supported protocols: HTTP, HTTPS
 Partially supported protocols: IRC, Finger
 
 Any other TCP-based service, including SSH and VNC, may be exposed as well
-as well to clients supporting HTTP Proxies.
+to clients supporting HTTP Proxies.
 """,
    packages=['pagekite'],
 )
