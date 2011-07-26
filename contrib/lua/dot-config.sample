@@ -1,0 +1,15 @@
+-- Configuration
+-- NOTE: To use, please edit and rename to .config
+
+-- Production Front End configuration
+pk_site = 'USER.pagekite.me'   
+pk_server = '178.79.140.143'       
+pk_server_port = 443
+pk_server_token = 'SECRET'
+
+-- Web Server configuration
+proxy_web = "127.0.0.1"
+proxy_web_port = 80
+
+-- Varius settings
+debug = False
