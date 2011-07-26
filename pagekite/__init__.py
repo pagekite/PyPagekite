@@ -488,7 +488,7 @@ socks.wrapmodule(sys.modules[__name__])
 if socks.HAVE_SSL:
   # Secure connections to pagekite.net in SSL tunnels.
   def_hop = socks.parseproxy('default')
-  https_hop = socks.parseproxy('https:pagekite.net:443')
+  https_hop = socks.parseproxy('httpcs:pagekite.net:443')
   for dest in ('pagekite.net', 'up.pagekite.net', 'up.b5p.us'):
     socks.setproxy(dest, *def_hop)
     socks.addproxy(dest, *socks.parseproxy('http:%s:443' % dest))
