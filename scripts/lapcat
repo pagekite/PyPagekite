@@ -37,7 +37,6 @@ __DOC__ = """\
 #   priority = 1
 #
 #   [default]
-#   chain = socks5:localhost:9050
 #   host = 12345123451234512345.onion
 #   chain = socks5:localhost:9050
 #   priority = 100
@@ -358,7 +357,6 @@ if __name__ == '__main__':
 
   elif len(args) == 1 and args[0] in ('-h', '--help'):
     DebugPrint(__DOC__)
-    sys.exit(0)
 
   else:
     progname = os.path.basename(sys.argv[0])
