@@ -2,10 +2,15 @@
 
 ## General ##
 
-   * 0.4/launch: Add UI to report time/conn quota problems.
+   * 0.4.4: Release RPM and DEB packages.
 
-   * Add UI to report available upgrades at the back-end.
-   * Auto-upgrades?
+   * 0.4.5/launch: DOCUMENT IMPORTANT STUFF.
+   * 0.4.5/launch: Add UI to report time/conn quota problems.
+
+   * 0.4.6/launch: COMPLETE DOCUMENTATION. Bugfixes.
+
+   * 0.5.x: Add UI to report available upgrades at the back-end.
+   * 0.5.x: Windows: Auto upgrades?
 
 
 ## Built-in HTTPD ##
@@ -22,8 +27,14 @@
 
 ## Packaging ##
 
-   * Merge Hrafnkell's .deb work, then track changes made for Jonas
-   * Merge Edvin's .rpm work
-   * Create Windows distribution
-   * Create Windows .msi
+   * 0.4: Package socksipy?
+   * 0.4: Merge Hrafnkell's .deb work, then track changes made for Jonas
+   * 0.4: Merge Edvin's .rpm work
+
+   * 0.5: Create Windows distribution
+   * 0.5: Create Windows .msi
+
+   * 0.6: Package lapcat
+   * 0.6: Create Mac OS X GUI and package: Talk to Sveinbjörn?
+
 
