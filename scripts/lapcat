@@ -1,5 +1,5 @@
 #!/usr/bin/python
-#
+__DOC__ = """\
 # Copyright 2011, Bjarni R. Einarsson <http://bre.klaki.net/>
 # License: AGPLv3
 #
@@ -9,15 +9,46 @@
 # This is a netcat-like tool for opening up a TCP connection to some port
 # on some host, where the connection strategy depends on where you are.
 #
+# Requirements:
+#   Python 2.x or 3.x
+#   PySocksipyChain, <https://github.com/pagekite/PySocksipyChain/>
+#
+##############################################################################
+#
 # For example, say we want 'ssh homeserver' to behave like so:
 #
 #   - When at home, connect directly (fast!)
 #   - At work, use the local HTTP Proxy and PageKite (fast!)
 #   - From anywhere else, use a Tor hidden service (private!)
 #
-# With lapcat, this is possible by defining connection rules in ~/.lapcat
-# and then configuring ssh to use lapcat as a ProxyCommand.
+# With lapcat, this is possible by defining the following rules in a file
+# named ~/.lapcat/homeserver (use lapcat -N to generate network IDs).
 #
+#   [home]
+#   if network = 10.1.2.254/aa:bb:cc:dd:ee:ff
+#   host = homeserver.local
+#   chain = none
+#   priority = 1
+#
+#   [work]
+#   if network = 192.168.55.254/gw:ma:ca:dd:re:ss
+#   host = homeserver.pagekite.me
+#   chain = http:proxy.corp:8080, http:homeserver.pagekite.me:443
+#   priority = 1
+#
+#   [default]
+#   chain = socks5:localhost:9050
+#   host = 12345123451234512345.onion
+#   chain = socks5:localhost:9050
+#   priority = 100
+#
+# Then add the following to ~/.ssh/config
+#
+#   Host homeserver homeserver.pagekite.me
+#     CheckHostIP no
+#     ProxyCommand /path/to/lapcat homeserver 22
+#
+"""
 import os, socket, subprocess, sys
 import sockschain as socks
 
@@ -290,6 +321,7 @@ def NetCat(host, port, input_fd, output_fd):
     sys.exit(1)
 
 def HttpProxy(input_fd, output_fd):
+  # FIXME: Make this actually work.  It does nothing at the moment.
   try:
     host = 'lapcat-http-proxy'
     network = GetNetworkId()
@@ -325,8 +357,8 @@ if __name__ == '__main__':
     HttpProxy(sys.stdin, sys.stdout)
 
   elif len(args) == 1 and args[0] in ('-h', '--help'):
-    DebugPrint('FIXME: Implement help.')
-    sys.exit(99)
+    DebugPrint(__DOC__)
+    sys.exit(0)
 
   else:
     progname = os.path.basename(sys.argv[0])
