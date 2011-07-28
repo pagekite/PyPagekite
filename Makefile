@@ -2,7 +2,7 @@
 export PYTHONPATH := .
 
 combined: pagekite tools dev
-	@./scripts/breeder.py sockschain.py \
+	@./scripts/breeder.py sockschain \
 	             pagekite/__init__.py \
 	             pagekite/httpd.py \
 	             pagekite/__main__.py \
@@ -16,7 +16,7 @@ combined: pagekite tools dev
 	@ls -l bin/pagekite-*.py
 
 android: pagekite tools test
-	@./scripts/breeder.py sockschain.py \
+	@./scripts/breeder.py sockschain \
 	             pagekite/__init__.py \
 	             pagekite/httpd.py \
 	             pagekite/__main__.py \
@@ -32,7 +32,7 @@ dist: test
 
 rpm: test
 	@python setup.py bdist_rpm --install=rpm/rpm-install.sh \
-	                           --requires=python-socksipychain
+	                           --requires=python-SocksipyChain
 
 test: dev
 	@./scripts/blackbox-test.sh ./pk
@@ -41,13 +41,13 @@ test: dev
 
 pagekite: pagekite/__init__.py pagekite/httpd.py pagekite/__main__.py
 
-dev: sockschain.py
+dev: sockschain
 	@rm -f .SELF
 	@ln -fs . .SELF
 	@echo export PYTHONPATH=`pwd`
 
-sockschain.py: ../PySocksipyChain/sockschain.py
-	@ln -fs ../PySocksipyChain/sockschain.py sockschain.py
+sockschain:
+	@ln -fs ../PySocksipyChain/sockschain .
 
 tools: scripts/breeder.py Makefile
 
@@ -58,5 +58,5 @@ distclean: clean
 	@rm -rvf bin/* dist/ build/ *.egg-info
 
 clean:
-	@rm -vf sockschain.py *.pyc */*.pyc scripts/breeder.py .SELF
+	@rm -vf sockschain *.pyc */*.pyc scripts/breeder.py .SELF
 	@rm -vf .appver pagekite-tmp.py MANIFEST
