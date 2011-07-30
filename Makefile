@@ -26,11 +26,28 @@ android: pagekite tools test
 	@mv pagekite-tmp.py bin/pk-android-`./pagekite-tmp.py --appver`.py
 	@ls -l bin/pk-android-*.py
 
-
 dist: test
 	@python setup.py sdist
 
-rpm: test
+allrpm: rpm_el4 rpm_el5 rpm_el6-fc13 rpm_fc14-15
+
+rpm_fc14-15:
+	@./rpm/rpm-setup.sh 0pagekite_fc14fc15 /usr/lib/python2.7/site-packages
+	@make .rpm
+
+rpm_el4:
+	@./rpm/rpm-setup.sh 0pagekite_el4 /usr/lib/python2.3/site-packages
+	@make .rpm
+
+rpm_el5:
+	@./rpm/rpm-setup.sh 0pagekite_el5 /usr/lib/python2.4/site-packages
+	@make .rpm
+
+rpm_el6-fc13:
+	@./rpm/rpm-setup.sh 0pagekite_el6fc13 /usr/lib/python2.6/site-packages
+	@make .rpm
+
+.rpm:
 	@python setup.py bdist_rpm --install=rpm/rpm-install.sh \
 	                           --requires=python-SocksipyChain
 
