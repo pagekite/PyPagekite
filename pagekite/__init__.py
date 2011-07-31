@@ -298,6 +298,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'ports=', 'protos=', 'portalias=', 'rawports=',
             'tls_default=', 'tls_endpoint=',
             'fe_certname=', 'jakenoia', 'ca_certs=',
+            'kitename=', 'kitesecret=',
             'backend=', 'define_backend=', 'be_config=', 'fingerpath=',
             'frontend=', 'frontends=', 'torify=', 'socksify=', 'proxy=',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
@@ -3439,6 +3440,8 @@ class PageKite(object):
     self.servers_preferred = []
     self.servers_sessionids = {}
 
+    self.kitename = ''
+    self.kitesecret = ''
     self.dyndns = None
     self.last_updates = []
     self.backends = {}  # These are the backends we want tunnels for.
@@ -3602,15 +3605,21 @@ class PageKite(object):
       '',
       '#/ Your kites and local back-end servers',
       '#',
+      (self.kitename and ('kitename=%s' % self.kitename) or '#kitename=NAME'),
+      (self.kitesecret and ('kitesecret=%s' % self.kitesecret) or '#kitesecret=SECRET'),
+      '#',
     ])
     bprinted = 0
     for bid in sorted(self.backends.keys()):
       be = self.backends[bid]
+      proto, domain = bid.split(':')
       if be[BE_BHOST]:
-        config.append(('%s=%s:%s:%s:%s'
+        config.append(('%s=%s:%s:%s:%s:%s'
                        ) % ((be[BE_STATUS] == BE_STATUS_DISABLED
                              ) and 'define_backend' or 'backend',
-                            bid, be[BE_BHOST], be[BE_BPORT], be[BE_SECRET]))
+                   proto, ((domain == self.kitename) and '@kitename' or domain),
+              be[BE_BHOST], be[BE_BPORT],
+         (be[BE_SECRET] == self.kitesecret) and '@kitesecret' or be[BE_SECRET]))
         bprinted += 1
     if bprinted == 0:
       config.append('# backend=http:YOU.pagekite.me:localhost:80:SECRET')
@@ -4199,11 +4208,18 @@ class PageKite(object):
 
       elif opt in ('--errorurl', '-E'): self.error_url = arg
       elif opt == '--fingerpath': self.finger_path = arg
+      elif opt == '--kitename': self.kitename = arg
+      elif opt == '--kitesecret': self.kitesecret = arg
       elif opt in ('--backend', '--define_backend'):
-        bes = self.ArgToBackendSpecs(arg, status=((opt == '--backend')
-                                                  and BE_STATUS_UNKNOWN
-                                                  or BE_STATUS_DISABLED))
+        bes = self.ArgToBackendSpecs(arg.replace('@kitesecret', self.kitesecret)
+                                        .replace('@kitename', self.kitename),
+                                     status=((opt == '--backend')
+                                             and BE_STATUS_UNKNOWN
+                                             or BE_STATUS_DISABLED))
         for bid in bes:
+          if not self.kitename:
+            self.kitename = bes[bid][BE_DOMAIN]
+            self.kitesecret = bes[bid][BE_SECRET]
           if bid in self.backends:
             raise ConfigError("Same backend/domain defined twice: %s" % bid)
         self.backends.update(bes)
