@@ -26,9 +26,11 @@ android: pagekite tools test
 	@mv pagekite-tmp.py bin/pk-android-`./pagekite-tmp.py --appver`.py
 	@ls -l bin/pk-android-*.py
 
-dist: test .targz .allrpm .deb
+dist: test .targz allrpm alldeb
 
 allrpm: rpm_el4 rpm_el5 rpm_el6-fc13 rpm_fc14-15
+
+alldeb: .deb
 
 rpm_fc14-15:
 	@./rpm/rpm-setup.sh 0pagekite_fc14fc15 /usr/lib/python2.7/site-packages
@@ -67,10 +69,10 @@ VERSION=`python setup.py --version`
 	     -e "s/@DATE@/`date -R`/g" \
 		< debian/changelog.in >debian/changelog
 
-.deb: .debpreb
+.deb: .debprep
 	@debuild -i -us -uc -b
 	@mv ../pagekite_*.deb dist/
-	@rm ../pagekite-*
+	@rm ../pagekite-$(VERSION)*
 
 test: dev
 	@./scripts/blackbox-test.sh ./pk
@@ -93,10 +95,10 @@ scripts/breeder.py:
 	@ln -fs ../../PyBreeder/breeder.py scripts/breeder.py
 
 distclean: clean
-	@rm -rvf bin/* dist/ build/ *.egg-info
+	@rm -rvf bin/* dist/
 
 clean:
 	@rm -vf sockschain *.pyc */*.pyc scripts/breeder.py .SELF
 	@rm -vf .appver pagekite-tmp.py MANIFEST
 	@rm -vf debian/files debian/control debian/copyright debian/changelog
-	@rm -vrf debian/pagekite* debian/python*
+	@rm -vrf debian/pagekite* debian/python* build/ *.egg-info
