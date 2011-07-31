@@ -26,8 +26,7 @@ android: pagekite tools test
 	@mv pagekite-tmp.py bin/pk-android-`./pagekite-tmp.py --appver`.py
 	@ls -l bin/pk-android-*.py
 
-dist: test
-	@python setup.py sdist
+dist: test .targz .allrpm .deb
 
 allrpm: rpm_el4 rpm_el5 rpm_el6-fc13 rpm_fc14-15
 
@@ -50,6 +49,28 @@ rpm_el6-fc13:
 .rpm:
 	@python setup.py bdist_rpm --install=rpm/rpm-install.sh \
 	                           --requires=python-SocksipyChain
+
+
+.targz:
+	@python setup.py sdist
+
+VERSION=`python setup.py --version`
+.debprep:	.targz
+	@rm -f setup.cfg
+	@cp -v dist/pagekite*.tar.gz \
+		../pagekite-$(VERSION)_$(VERSION).orig.tar.gz
+	@sed -e "s/@VERSION@/$(VERSION)/g" \
+		< debian/control.in >debian/control
+	@sed -e "s/@VERSION@/$(VERSION)/g" \
+		< debian/copyright.in >debian/copyright
+	@sed -e "s/@VERSION@/$(VERSION)/g" \
+	     -e "s/@DATE@/`date -R`/g" \
+		< debian/changelog.in >debian/changelog
+
+.deb: .debpreb
+	@debuild -i -us -uc -b
+	@mv ../pagekite_*.deb dist/
+	@rm ../pagekite-*
 
 test: dev
 	@./scripts/blackbox-test.sh ./pk
@@ -77,3 +98,5 @@ distclean: clean
 clean:
 	@rm -vf sockschain *.pyc */*.pyc scripts/breeder.py .SELF
 	@rm -vf .appver pagekite-tmp.py MANIFEST
+	@rm -vf debian/files debian/control debian/copyright debian/changelog
+	@rm -vrf debian/pagekite* debian/python*

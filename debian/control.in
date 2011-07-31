@@ -14,7 +14,7 @@ Package: pagekite
 Section: python
 Architecture: all
 Depends: ${misc:Depends}, ${python:Depends}, python (>= 2.3)
-Description: PageKite makes localhost servers visible to the world.
+Description: Make localhost servers publicly visible.
  PageKite is a system for running publicly visible servers (generally
  web servers) on machines without a direct connection to the Internet,
  such as mobile devices or computers behind restrictive firewalls.
