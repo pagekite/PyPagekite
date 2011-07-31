@@ -20,12 +20,12 @@ pagekite \- Make localhost servers publicly visible.
 
 
 .SH SYNOPSIS
-.B pagekite.py
+.B pagekite
 .RI [ options ]
 [[<port>] [<proto>:]<hostname>[:<port>]
 .RI [ flags ]]
 
-.B pagekite.py
+.B pagekite
 .RI [ options ]
 [<paths> [http:]<hostname>[:<port>]
 .RI [ flags ]]
@@ -51,28 +51,28 @@ collaboration.
 .P
 Basic usage, makes http://localhost:80/ publicly visible:
 .RS
-pagekite.py ANYTHING.pagekite.me
+pagekite ANYTHING.pagekite.me
 .RE
 
 To expose specific folders, files or use alternate local ports:
 .RS
-pagekite.py /a/path NAME.pagekite.me +indexes
+pagekite /a/path NAME.pagekite.me +indexes
 .RE
 .RS
-pagekite.py *.html *.css *.js NAME.pagekite.me
+pagekite *.html *.css *.js NAME.pagekite.me
 .RE
 .RS
-pagekite.py 3000 NAME.pagekite.me
+pagekite 3000 NAME.pagekite.me
 .RE
 
 To expose multiple servers (SSH and HTTP):
 .RS
-pagekite.py ssh:NAME.pagekite.me AND 3000 NAME.pagekite.me
+pagekite ssh:NAME.pagekite.me AND 3000 NAME.pagekite.me
 .RE
 
 To watch the data flow back and forth:
 .RS
-pagekite.py --nozchunks --debugio --logfile=stdio \\
+pagekite --nozchunks --debugio --logfile=stdio \\
 .RE
 .RS
             ANYTHING.pagekite.me

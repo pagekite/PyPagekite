@@ -1,0 +1,66 @@
+.\"                                      Hey, EMACS: -*- nroff -*-
+.\" First parameter, NAME, should be all caps
+.\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
+.\" other parameters are allowed: see man(7), man(1)
+.TH LAPCAT 1 "2011-07-31"
+.\" Please adjust this date whenever revising the manpage.
+.\"
+.\" Some roff macros, for reference:
+.\" .nh        disable hyphenation
+.\" .hy        enable hyphenation
+.\" .ad l      left justify
+.\" .ad b      justify to both left and right margins
+.\" .nf        disable filling
+.\" .fi        enable filling
+.\" .br        insert line break
+.\" .sp <n>    insert n+1 empty lines
+.\" for manpage-specific macros, see man(7)
+.SH NAME
+lapcat \- Location Aware Proxy Chooser And Tunneler
+
+
+.SH SYNOPSIS
+.B lapcat
+.RI [ options ]
+<host> <port>
+
+
+.SH DESCRIPTION
+.PP
+\fBlapcat\fP is a netcat-like tool which opens up a TCP/IP connection to
+a particular host, on a particular port.
+
+How the connection is established depends on a set of rules which may vary
+depending on host, active network connection and availability.
+
+
+.SH OPTIONS
+
+Not many!
+
+.SS Common options
+.P
+  -d       Enable debug output.
+
+.P
+  -d -d    Enable even more debug output.
+
+.SH AUTHOR
+.P
+Written by Bjarni R. Einarsson <http://bre.klaki.net/>.
+
+
+.SH CONFIGURATION
+
+FIXME: Write this!
+
+
+.SH COPYRIGHT
+.P
+Copyright © 2011 Bjarni R. Einarsson and The Beanstalks Project ehf.
+.P
+License: AGPLv3+, GNU Affero GPL version 3 or later
+<http://gnu.org/licenses/agpl.html>.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
