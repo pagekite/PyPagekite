@@ -33,10 +33,10 @@ pagekite \- Make localhost servers publicly visible.
 
 .SH DESCRIPTION
 .PP
-\fBpagekite\fP is a program allows you to run servers and services on 
-computers or other mobile devices that do not have a direct connection 
-to the Internet or are 'protected' by a firewall that filters incoming
-connections, such as mobile devices or computers behind NAT.
+\fBpagekite\fP lets you run servers and services on computers or other
+mobile devices that do not have a direct connection to the Internet or are
+'protected' by a firewall that filters incoming connections, such as mobile
+devices or computers behind NAT.
 
 The program gives servers running on localhost or the local LAN a publicly
 visible DNS name and act as a tunneled reverse proxy, routing connections
@@ -127,10 +127,10 @@ command-line.
 
 .SS Common options
 .P
-  --optfile=X    -o X     Read options from file X. 
+  --optfile=X    -o X     Read options from file X.
                           Default is ~/.pagekiterc.
-.P 
-  --httpd=X:P    -H X:P   Enable the HTTP user interface on 
+.P
+  --httpd=X:P    -H X:P   Enable the HTTP user interface on
                           hostname X, port P.
 .P
   --pemfile=X    -P X     Use X as a PEM key for the HTTPS UI.
@@ -139,36 +139,36 @@ command-line.
 .P
    --nozchunks            Disable zlib tunnel compression.
 .P
-   --buffers       N      Buffer at most N kB of back-end data 
+   --buffers       N      Buffer at most N kB of back-end data
                           before blocking.
 .P
    --logfile=F    -L F    Log to file F.
 .P
    --daemonize    -Z      Run as a daemon.
 .P
-   --runas        -U U:G  Set UID:GID after opening our 
+   --runas        -U U:G  Set UID:GID after opening our
                           listening sockets.
 .P
    --pidfile=P    -I P    Write PID to the named file.
 .P
-   --clean                Skip loading the default 
+   --clean                Skip loading the default
                           configuration file.
 .P
-   --nocrashreport        Don't send anonymous crash reports 
+   --nocrashreport        Don't send anonymous crash reports
                           to PageKite.net.
 .P
-   --tls_default=N        Default name to use for SSL, if SNI 
+   --tls_default=N        Default name to use for SSL, if SNI
                           and tracking fail.
 .P
-   --tls_endpoint=N:F     Terminate SSL/TLS for name N, using 
+   --tls_endpoint=N:F     Terminate SSL/TLS for name N, using
                           key/cert from F.
 .P
    --defaults             Set some reasonable default setings.
 .P
-   --errorurl=U  -E U     URL to redirect to when back-ends are 
+   --errorurl=U  -E U     URL to redirect to when back-ends are
                           not found.
 .P
-   --settings             Dump the current settings to STDOUT, 
+   --settings             Dump the current settings to STDOUT,
                           formatted as an options file would be.
 
 
@@ -186,52 +186,52 @@ command-line.
 .P
    --protos=A,B,C         Accept the listed protocols for tunneling.
 .P
-   --rawports=A,B,C       Listen on ports A, B, C, ... 
+   --rawports=A,B,C       Listen on ports A, B, C, ...
                           (raw/timed connections)
 .P
    --domain=proto,proto2,pN:domain:secret
-                          Accept tunneling requests for the named 
-                          protocols and specified domain, using 
-                          the given secret.  A * may be used as a 
+                          Accept tunneling requests for the named
+                          protocols and specified domain, using
+                          the given secret.  A * may be used as a
                           wildcard for subdomains. (FIXME)
 
 .SS Back-end options
 .P
-   --all          -a      Terminate early if any tunnels fail to 
+   --all          -a      Terminate early if any tunnels fail to
                           register.
 .P
-   --dyndns=X     -D X    Register changes with DynDNS provider X.  
-                          X can either be simply the name of one of 
-                          the 'built-in' providers, or a URL format 
+   --dyndns=X     -D X    Register changes with DynDNS provider X.
+                          X can either be simply the name of one of
+                          the 'built-in' providers, or a URL format
                           string for ad-hoc updating.
 
 .P
-   --frontends=N:X:P      Choose N front-ends from X (a DNS domain 
+   --frontends=N:X:P      Choose N front-ends from X (a DNS domain
                           name), port P.
 .P
    --frontend=host:port   Connect to the named front-end server.
 .P
-   --new          -N      Don't attempt to connect to the domain's 
+   --new          -N      Don't attempt to connect to the domain's
                           old front-end.
 .P
-   --socksify=S:P         Connect via SOCKS server S, port P 
+   --socksify=S:P         Connect via SOCKS server S, port P
                           (requires socks.py)
 .P
    --torify=S:P           Same as socksify, but more paranoid.
 .P
    --noprobes             Reject all probes for back-end liveness.
 .P
-   --fe_certname=N        Connect using SSL, accepting valid certs for 
+   --fe_certname=N        Connect using SSL, accepting valid certs for
                           domain N.
 .P
-   --ca_certs=PATH        Path to your trusted root SSL 
+   --ca_certs=PATH        Path to your trusted root SSL
                           certificates file.
 .P
    --backend=proto:domain:host:port:secret
-                          Configure a back-end service on host:port, 
-                          using protocol proto and the given domain. 
-                          As a special case, if host and port are left 
-                          blank and the proto is HTTP or HTTPS, the 
+                          Configure a back-end service on host:port,
+                          using protocol proto and the given domain.
+                          As a special case, if host and port are left
+                          blank and the proto is HTTP or HTTPS, the
                           built-in server will be used.
 
 .SS About the options file
