@@ -150,6 +150,7 @@ Common Options:
  --local=ports          Configure for local serving only (no remote front-end)
 
  --optfile=X    -o X    Read settings from file X. Default is ~/.pagekite.rc.
+ --optdir=X     -O X    Read settings from *.rc in directory X.
  --savefile=X   -S X    Saved settings will be written to file X.
  --reloadfile=X         Re-read settings from X on SIGHUP.
  --autosave             Enable auto-saving.
@@ -281,13 +282,13 @@ SERVICE_DOMAINS = ('pagekite.me', )
 SERVICE_XMLRPC = 'http://pagekite.net/xmlrpc/'
 SERVICE_TOS_URL = 'https://pagekite.net/support/terms/'
 
-OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
+OPT_FLAGS = 'o:O:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'nullui', 'help', 'settings',
-            'optfile=', 'savefile=', 'reloadfile=', 'autosave', 'noautosave',
+            'optfile=', 'optdir=', 'savefile=', 'reloadfile=',
+            'autosave', 'noautosave',
             'signup', 'list', 'add', 'only', 'disable', 'remove', 'save',
             'service_xmlrpc=', 'controlpanel', 'controlpass',
-            'optfile=', 'savefile=',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webpath=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings',
@@ -3914,6 +3915,11 @@ class PageKite(object):
     self.rcfile_recursion -= 1
     return self
 
+  def ConfigureFromDirectory(self, dirname):
+    for fn in sorted(os.listdir(dirname)):
+      if not fn.startswith('.') and fn.endswith('.rc'):
+        self.ConfigureFromFile(os.path.join(dirname, fn))
+
   def HelpAndExit(self, longhelp=False):
     print longhelp and DOC or MINIDOC
     sys.exit(0)
@@ -4030,6 +4036,8 @@ class PageKite(object):
     for opt, arg in opts:
       if opt in ('-o', '--optfile'):
         self.ConfigureFromFile(arg)
+      elif opt in ('-O', '--optdir'):
+        self.ConfigureFromDirectory(arg)
       elif opt == '--reloadfile':
         self.ConfigureFromFile(arg)
         self.reloadfile = arg
@@ -5085,7 +5093,8 @@ class PageKite(object):
                      ('platform', sys.platform),
                      ('argv', ' '.join(sys.argv[1:])),
                      ('ca_certs', self.ca_certs)]
-    for optf in self.rcfiles_loaded: config_report.append(('optfile', optf))
+    for optf in self.rcfiles_loaded:
+      config_report.append(('optfile_%s' % optf, 'ok'))
     Log(config_report)
 
     if not socks.HAVE_SSL:
