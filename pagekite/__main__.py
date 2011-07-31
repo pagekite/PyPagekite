@@ -2,10 +2,10 @@
 import sys
 import pagekite as pk
 import pagekite.httpd as httpd
-import pagekite.basicui
 
 if __name__ == "__main__":
   if sys.stdout.isatty():
+    import pagekite.basicui
     uiclass = pagekite.basicui.BasicUi
   else:
     uiclass = pk.NullUi
