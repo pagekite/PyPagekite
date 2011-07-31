@@ -68,7 +68,7 @@ VERSION=`python setup.py --version`
 	@sed -e "s/@VERSION@/$(VERSION)/g" \
 	     -e "s/@DATE@/`date -R`/g" \
 		< debian/changelog.in >debian/changelog
-	@ls -1 *.1 >debian/pagekite.manpages
+	@ls -1 doc/*.? >debian/pagekite.manpages
 
 .deb: .debprep
 	@debuild -i -us -uc -b
