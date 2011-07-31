@@ -101,6 +101,6 @@ distclean: clean
 
 clean:
 	@rm -vf sockschain *.pyc */*.pyc scripts/breeder.py .SELF
-	@rm -vf .appver pagekite-tmp.py MANIFEST
+	@rm -vf .appver pagekite-tmp.py MANIFEST setup.cfg
 	@rm -vf debian/files debian/control debian/copyright debian/changelog
 	@rm -vrf debian/pagekite* debian/python* build/ *.egg-info

@@ -1,0 +1,6 @@
+#################################[ This file is placed in the Public Domain. ]#
+# Daemon config
+
+logfile=/var/log/pagekite/pagekite.log
+runas=daemon:daemon
+daemonize

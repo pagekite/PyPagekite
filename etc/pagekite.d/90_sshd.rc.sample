@@ -1,0 +1,4 @@
+#################################[ This file is placed in the Public Domain. ]#
+# Expose the local SSH daemon
+
+backend=raw/22:@kitename:localhost:22:@kitesecret
