@@ -22,7 +22,6 @@ if __name__ == "__main__":
   sys.argv.extend('@ARGS@'.split())
 
   pk.Main(pk.PageKite, pk.Configure,
-          uiclass=pk.NullUi,
           http_handler=httpd.UiRequestHandler,
           http_server=httpd.UiHttpServer)
 

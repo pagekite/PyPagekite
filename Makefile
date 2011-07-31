@@ -4,6 +4,7 @@ export PYTHONPATH := .
 combined: pagekite tools dev
 	@./scripts/breeder.py sockschain \
 	             pagekite/__init__.py \
+	             pagekite/basicui.py \
 	             pagekite/httpd.py \
 	             pagekite/__main__.py \
 	             >pagekite-tmp.py
@@ -12,7 +13,7 @@ combined: pagekite tools dev
 	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py --nopyopenssl \
 	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py --nossl \
 	        || rm pagekite-tmp.py .combined-did-not-run
-	@mv pagekite-tmp.py bin/pagekite-`./pagekite-tmp.py --appver`.py
+	@mv pagekite-tmp.py bin/pagekite-`python setup.py --version`.py
 	@ls -l bin/pagekite-*.py
 
 android: pagekite tools test

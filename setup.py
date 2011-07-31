@@ -13,7 +13,7 @@ except:
 setup(
     name="pagekite",
     version=APPVER.replace('github',
-                           'github'+date.today().isoformat().replace('-', '')),
+                           'dev'+date.today().isoformat().replace('-', '')),
     license="AGPLv3+",
     author="Bjarni R. Einarsson",
     author_email="bre@pagekite.net",
