@@ -133,7 +133,7 @@ class RemoteUi(NullUi):
       if default:
         sys.stderr.write(' default: %s\n' % default)
       sys.stderr.write(' question: %s\n' % (question or '').replace('\n', ' '))
-      sys.stderr.write(' expect: choice\n')
+      sys.stderr.write(' expect: choice_index\n')
       sys.stderr.write('end_ask_multiplechoice\n')
 
       answer = sys.stdin.readline().strip().lower()
