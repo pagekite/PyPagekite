@@ -5,6 +5,7 @@ combined: pagekite tools dev
 	@./scripts/breeder.py sockschain \
 	             pagekite/__init__.py \
 	             pagekite/basicui.py \
+	             pagekite/remoteui.py \
 	             pagekite/httpd.py \
 	             pagekite/__main__.py \
 	             >pagekite-tmp.py

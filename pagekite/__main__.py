@@ -4,7 +4,10 @@ import pagekite as pk
 import pagekite.httpd as httpd
 
 if __name__ == "__main__":
-  if sys.stdout.isatty():
+  if '--remoteui' in sys.argv:
+    import pagekite.remoteui
+    uiclass = pagekite.remoteui.RemoteUi
+  elif sys.stdout.isatty():
     import pagekite.basicui
     uiclass = pagekite.basicui.BasicUi
   else:

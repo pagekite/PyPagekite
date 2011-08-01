@@ -284,7 +284,7 @@ SERVICE_TOS_URL = 'https://pagekite.net/support/terms/'
 
 OPT_FLAGS = 'o:O:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
-            'nullui', 'help', 'settings',
+            'nullui', 'remoteui', 'help', 'settings',
             'optfile=', 'optdir=', 'savefile=', 'reloadfile=',
             'autosave', 'noautosave',
             'signup', 'list', 'add', 'only', 'disable', 'remove', 'save',
@@ -4260,8 +4260,9 @@ class PageKite(object):
         self.SetLocalSettings([int(p) for p in arg.split(',')])
         if not 'localhost' in args: args.append('localhost')
       elif opt == '--defaults': self.SetServiceDefaults()
-      elif opt in ('--clean', '--nopyopenssl', '--nossl', '--settings'): pass
-      elif opt in ('--webaccess', '--webindexes', '--webroot', '--signup'): pass
+      elif opt in ('--clean', '--nopyopenssl', '--nossl', '--settings',
+                   '--remoteui', '--webaccess', '--webindexes',
+                   '--webroot', '--signup'): pass
       elif opt == '--help':
         self.HelpAndExit(longhelp=True)
 
