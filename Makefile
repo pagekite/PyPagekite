@@ -51,6 +51,8 @@ rpm_el6-fc13:
 
 .rpm:
 	@python setup.py bdist_rpm --install=rpm/rpm-install.sh \
+	                           --post-install=rpm/rpm-post.sh \
+	                           --pre-uninstall=rpm/rpm-preun.sh \
 	                           --requires=python-SocksipyChain
 
 

@@ -1,0 +1,7 @@
+chkconfig --add pagekite
+
+# HACK: Enable default config files, without overwriting.
+cd /etc/pagekite.d/default
+for conffile in *; do
+  [ -e ../$conffile ] || cp -a $conffile ..
+done

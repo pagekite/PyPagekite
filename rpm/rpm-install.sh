@@ -11,17 +11,24 @@ for manpage in $(cd doc && echo *.1); do
   gzip --verbose $RPM_BUILD_ROOT/usr/share/man/man1/$manpage
 done
 
-mkdir -m 755 -p $RPM_BUILD_ROOT/etc/pagekite.d
+mkdir -m 755 -p $RPM_BUILD_ROOT/etc/pagekite.d/default
 for rcfile in etc/pagekite.d/*; do
-  install -v -m 644 $rcfile $RPM_BUILD_ROOT/etc/pagekite.d
+  install -v -m 644 $rcfile $RPM_BUILD_ROOT/etc/pagekite.d/default/
 done
-chmod 600 $RPM_BUILD_ROOT/etc/pagekite.d/*account*
+chmod 600 $RPM_BUILD_ROOT/etc/pagekite.d/default/*account*
 
 find $RPM_BUILD_ROOT -type f \
   |sed -e "s|^$RPM_BUILD_ROOT/*|/|" \
        -e 's|/[^/]*$||' \
   |uniq >INSTALLED_FILES
 
-mkdir -m 755 -p $RPM_BUILD_ROOT/etc/init.d
-install -v -m 755 etc/init.d/pagekite $RPM_BUILD_ROOT/etc/init.d/pagekite
-echo /etc/init.d/pagekite >>INSTALLED_FILES
+mkdir -m 755 -p $RPM_BUILD_ROOT/var/log/pagekite
+echo /var/log/pagekite >>INSTALLED_FILES
+
+for where in init.d logrotate.d sysconfig; do
+  if [ -e etc/$where/pagekite.fedora ]; then
+    mkdir -m 755 -p $RPM_BUILD_ROOT/etc/$where
+    install -v -m 755 etc/$where/pagekite.fedora $RPM_BUILD_ROOT/etc/$where/pagekite
+    echo /etc/$where/pagekite >>INSTALLED_FILES
+  fi
+done
