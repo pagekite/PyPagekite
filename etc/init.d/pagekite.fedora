@@ -26,6 +26,10 @@ pidfile=${PIDFILE-/var/run/pagekite.pid}
 lockfile=${LOCKFILE-/var/lock/subsys/pagekite}
 RETVAL=0
 
+# Exit if package is unconfigured
+grep -c ^abort_not_configured /etc/pagekite.d/10_account.rc \
+  2>/dev/null >/dev/null && exit 0
+
 # Check for 0.3-style configuration
 check03x () {
 	CONFFILE=/etc/pagekite/local.rc

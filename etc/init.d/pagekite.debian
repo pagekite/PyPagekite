@@ -31,6 +31,10 @@ SCRIPTNAME=/etc/init.d/$NAME
 # Exit if the package is not installed
 [ -x "$DAEMON" ] || exit 0
 
+# Exit if package is unconfigured
+grep -c ^abort_not_configured /etc/pagekite.d/10_account.rc \
+  2>/dev/null >/dev/null && exit 0
+
 # Read configuration variable file if it is present
 [ -r /etc/default/$NAME ] && . /etc/default/$NAME
 
