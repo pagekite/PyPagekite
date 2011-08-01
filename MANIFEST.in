@@ -3,6 +3,7 @@ recursive-include pagekite *.py
 recursive-include scripts *
 recursive-include doc *
 recursive-include rpm *
+recursive-include debian *
 recursive-include etc *
 exclude *.pyc
 exclude socks.py

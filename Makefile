@@ -56,14 +56,9 @@ rpm_el6-fc13:
 	                           --requires=python-SocksipyChain
 
 
-.targz:
-	@python setup.py sdist
-
 VERSION=`python setup.py --version`
-.debprep:	.targz
+.debprep:
 	@rm -f setup.cfg
-	@cp -v dist/pagekite*.tar.gz \
-		../pagekite-$(VERSION)_$(VERSION).orig.tar.gz
 	@sed -e "s/@VERSION@/$(VERSION)/g" \
 		< debian/control.in >debian/control
 	@sed -e "s/@VERSION@/$(VERSION)/g" \
@@ -72,8 +67,15 @@ VERSION=`python setup.py --version`
 	     -e "s/@DATE@/`date -R`/g" \
 		< debian/changelog.in >debian/changelog
 	@ls -1 doc/*.? >debian/pagekite.manpages
+	@ln -fs ../etc/logrotate.d/pagekite.debian debian/pagekite.logrotate
+	@ln -fs ../etc/init.d/pagekite.debian debian/init.d
 
-.deb: .debprep
+.targz: .debprep
+	@python setup.py sdist
+
+.deb: .targz
+	@cp -v dist/pagekite*.tar.gz \
+		../pagekite-$(VERSION)_$(VERSION).orig.tar.gz
 	@debuild -i -us -uc -b
 	@mv ../pagekite_*.deb dist/
 	@rm ../pagekite-$(VERSION)*
@@ -104,5 +106,7 @@ distclean: clean
 clean:
 	@rm -vf sockschain *.pyc */*.pyc scripts/breeder.py .SELF
 	@rm -vf .appver pagekite-tmp.py MANIFEST setup.cfg
+	@rm -vrf *.egg-info build/
 	@rm -vf debian/files debian/control debian/copyright debian/changelog
-	@rm -vrf debian/pagekite* debian/python* build/ *.egg-info
+	@rm -vrf debian/pagekite* debian/python* debian/init.d
+
