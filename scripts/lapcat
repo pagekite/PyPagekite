@@ -315,8 +315,8 @@ def NetCat(host, port, input_fd, output_fd):
     socks.usesystemdefaults()
     socks.netcat(LapCatConfig(host, port, network).configure().connect(),
                  input_fd, output_fd)
-  except IOError as e:
-    DebugPrint('%s' % e)
+  except IOError:
+    DebugPrint('%s' % (sys.exc_info(), ))
     sys.exit(1)
 
 def HttpProxy(input_fd, output_fd):
@@ -328,8 +328,8 @@ def HttpProxy(input_fd, output_fd):
     socks.netcat(LapCatConfig(host, 0, network).configure().connect(),
                  input_fd, output_fd)
     return
-  except IOError as e:
-    DebugPrint('%s' % e)
+  except IOError:
+    DebugPrint('%s' % (sys.exc_info(), ))
     sys.exit(1)
 
   # Get the initial request...

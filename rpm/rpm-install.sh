@@ -17,10 +17,11 @@ for rcfile in etc/pagekite.d/*; do
 done
 chmod 600 $RPM_BUILD_ROOT/etc/pagekite.d/*account*
 
-mkdir -m 755 -p $RPM_BUILD_ROOT/etc/init.d
-install -v -m 644 etc/init.d/pagekite $RPM_BUILD_ROOT/etc/init.d
-
 find $RPM_BUILD_ROOT -type f \
   |sed -e "s|^$RPM_BUILD_ROOT/*|/|" \
        -e 's|/[^/]*$||' \
   |uniq >INSTALLED_FILES
+
+mkdir -m 755 -p $RPM_BUILD_ROOT/etc/init.d
+install -v -m 755 etc/init.d/pagekite $RPM_BUILD_ROOT/etc/init.d/pagekite
+echo /etc/init.d/pagekite >>INSTALLED_FILES
