@@ -17,9 +17,15 @@
 PATH=/sbin:/usr/sbin:/bin:/usr/bin
 DESC="PageKite system service"
 NAME=pagekite
+RUNAS=daemon:daemon
 DAEMON=/usr/bin/$NAME
 PIDFILE=/var/run/$NAME.pid
-DAEMON_ARGS="--pidfile=$PIDFILE --clean --optdir=/etc/pagekite.d"
+LOGFILE=/var/log/$NAME/$NAME.log
+DAEMON_ARGS="--clean --pidfile=$PIDFILE \
+             --runas=$RUNAS \
+             --logfile=$LOGFILE \
+             --optdir=/etc/$NAME.d \
+             --daemonize"
 SCRIPTNAME=/etc/init.d/$NAME
 
 # Exit if the package is not installed
@@ -44,6 +50,8 @@ do_start()
 	#   0 if daemon has been started
 	#   1 if daemon was already running
 	#   2 if daemon could not be started
+        touch $LOGFILE
+        chown $RUNAS $(dirname $LOGFILE) $LOGFILE
 	start-stop-daemon --quiet --pidfile $PIDFILE --test --start --startas $DAEMON  > /dev/null \
 		|| return 1
 	start-stop-daemon --quiet --pidfile $PIDFILE --start --startas $DAEMON -- \

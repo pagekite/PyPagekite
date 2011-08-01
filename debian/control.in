@@ -11,9 +11,13 @@ Standards-Version: 3.9.1
 Homepage: https://pagekite.net/
 
 Package: pagekite
-Section: python
+Section: net
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}, python (>= 2.3)
+Depends: ${misc:Depends},
+         ${python:Depends},
+         python (>= 2.3),
+         python (<< 3.0),
+         python-openssl
 Description: Make localhost servers publicly visible.
  PageKite is a system for running publicly visible servers (generally
  web servers) on machines without a direct connection to the Internet,
