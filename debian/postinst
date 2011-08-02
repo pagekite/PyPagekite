@@ -37,7 +37,7 @@ case "$1" in
 
 	chmod 644 /etc/pagekite.d/*
 	chmod 600 /etc/pagekite.d/[019]*
-        rmdir /etc/pagekite || true
+        [ -d /etc/pagekite ] && rmdir /etc/pagekite || true
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
