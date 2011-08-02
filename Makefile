@@ -20,6 +20,8 @@ combined: pagekite tools dev
 android: pagekite tools test
 	@./scripts/breeder.py sockschain \
 	             pagekite/__init__.py \
+	             pagekite/basicui.py \
+	             pagekite/remoteui.py \
 	             pagekite/httpd.py \
 	             pagekite/__main__.py \
 	             pagekite/__android__.py \
@@ -28,7 +30,7 @@ android: pagekite tools test
 	@mv pagekite-tmp.py bin/pk-android-`./pagekite-tmp.py --appver`.py
 	@ls -l bin/pk-android-*.py
 
-dist: test .targz allrpm alldeb
+dist: test combined android .targz allrpm alldeb
 
 allrpm: rpm_el4 rpm_el5 rpm_el6-fc13 rpm_fc14-15
 

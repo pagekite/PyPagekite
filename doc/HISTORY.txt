@@ -7,18 +7,20 @@ v0.4.5    ??
    - Support wild-card backends (*.domain.com).
 
 
-v0.4.4   ??
+v0.4.4   2011.08.02
 ------
-   - Host options:
-      - Added +rewritehost
-      - Renamed +user/ to +password/
-      - Allow +options after the domain name
-   - Made the built-in HTTPD reply to http://localhost:port/ requests.
-   - Experimental support for the finger and IRC protocols.
    - Major code reorganization, split giant pagekite.py into multiple
      parts, and spawned two spin-off projects:
       - http://pagekite.net/wiki/Floss/PyBreeder/
       - http://pagekite.net/wiki/Floss/PySocksipyChain/
+   - Made the built-in HTTPD reply to http://localhost:port/ requests.
+   - Added back-end flags:
+      - Added +rewritehost
+      - Renamed +user/ to +password/
+      - Allow +options after the domain name
+   - Experimental support for the finger and IRC protocols.
+   - Experimental setuptools, .deb and .rpm packaging rules.
+   - Experimental --remoteui to facilitate development of GUIs.
 
 
 v0.4.3   2011.05.26

@@ -94,7 +94,7 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.4.3+github'
+APPVER = '0.4.4'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -4249,6 +4249,9 @@ class PageKite(object):
       elif opt == '--noall': self.require_all = False
       elif opt == '--nozchunks': self.disable_zchunks = True
       elif opt == '--nullui': self.ui = NullUi()
+      elif opt == '--remoteui':
+        import pagekite.remoteui
+        self.ui = pagekite.remoteui.RemoteUi()
       elif opt == '--sslzlib': self.enable_sslzlib = True
       elif opt == '--debugio':
         global DEBUG_IO
@@ -4261,7 +4264,7 @@ class PageKite(object):
         if not 'localhost' in args: args.append('localhost')
       elif opt == '--defaults': self.SetServiceDefaults()
       elif opt in ('--clean', '--nopyopenssl', '--nossl', '--settings',
-                   '--remoteui', '--webaccess', '--webindexes',
+                   '--webaccess', '--webindexes',
                    '--webroot', '--signup'): pass
       elif opt == '--help':
         self.HelpAndExit(longhelp=True)

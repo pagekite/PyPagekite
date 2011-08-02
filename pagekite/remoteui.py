@@ -76,7 +76,8 @@ class RemoteUi(NullUi):
       if email:
         sys.stderr.write(' default: %s\n' % email)
       sys.stderr.write(' question: %s\n' % (question or '').replace('\n', ' '))
-      sys.stderr.write(' expect: email, password\n')
+      sys.stderr.write(' expect: email\n')
+      sys.stderr.write(' expect: password\n')
       sys.stderr.write('end_ask_login\n')
 
       answer_email = sys.stdin.readline().strip()
@@ -139,7 +140,7 @@ class RemoteUi(NullUi):
       answer = sys.stdin.readline().strip().lower()
       try:
         ch = int(answer)
-        if ch >= 0 and ch < len(choices): return ch
+        if ch > 0 and ch <= len(choices): return ch
       except: 
         pass
       if back is not None and answer == 'back': return back
