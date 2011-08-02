@@ -17,6 +17,7 @@ Depends: ${misc:Depends},
          ${python:Depends},
          python (>= 2.3),
          python (<< 3.0),
+         python-socksipychain (>= 2.0),
          python-openssl
 Description: Make localhost servers publicly visible.
  PageKite is a system for running publicly visible servers (generally
