@@ -94,7 +94,7 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.4.4b'
+APPVER = '0.4.4c'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -1970,6 +1970,7 @@ class Tunnel(ChunkParser):
       self.Cleanup()
       return None
 
+    self.last_activity = time.time()
     self.CountAs('backends_live')
     self.SetConn(conn)
     conns.auth.check(requests[:], conn, lambda r: self.AuthCallback(conn, r))
@@ -3150,6 +3151,7 @@ class TunnelManager(threading.Thread):
       if conn.last_activity:
         active.append(conn)
       elif conn.created < now - 10:
+        LogDebug('Removing idle connection: %s' % conn)
         self.conns.Remove(conn)
         conn.Cleanup()
       elif conn.created < now - 1:
