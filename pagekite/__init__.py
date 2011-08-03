@@ -1156,12 +1156,24 @@ class Selectable(object):
                      errno.EALREADY)
 
   def __init__(self, fd=None, address=None, on_port=None, maxread=16000,
-                     ui=None, tracked=True):
+                     ui=None, tracked=True, bind=None, backlog=100):
     self.fd = None
+
     try:
       self.SetFD(fd or rawsocket(socket.AF_INET6, socket.SOCK_STREAM), six=True)
-    except Exception:
+      if bind:
+        self.fd.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.fd.bind(bind)
+        self.fd.listen(backlog)
+        self.fd.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    except:
       self.SetFD(fd or rawsocket(socket.AF_INET, socket.SOCK_STREAM))
+      if bind:
+        self.fd.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.fd.bind(bind)
+        self.fd.listen(backlog)
+        self.fd.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
     self.address = address
     self.on_port = on_port
     self.created = self.bytes_logged = time.time()
@@ -3051,12 +3063,7 @@ class Listener(Selectable):
   """This class listens for incoming connections and accepts them."""
 
   def __init__(self, host, port, conns, backlog=100, connclass=UnknownConn):
-    Selectable.__init__(self)
-    self.fd.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    self.fd.bind((host, port))
-    self.fd.listen(backlog)
-    self.fd.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
+    Selectable.__init__(self, bind=(host, port), backlog=backlog)
     self.Log([('listen', '%s:%s' % (host, port))])
     conns.config.ui.Notify(' - Listening on %s:%s' % (host or '*', port))
 
@@ -3790,6 +3797,7 @@ class PageKite(object):
     else:
       self.ui.Status('exiting', message=(message or 'Good-bye!'))
     if message: print 'Error: %s' % message
+    if DEBUG_IO: traceback.print_exc(file=sys.stderr)
     if not noexit: sys.exit(1)
 
   def GetTlsEndpointCtx(self, domain):
@@ -5146,7 +5154,8 @@ class PageKite(object):
     except Exception, e:
       self.LogTo('stdio')
       FlushLogMemory()
-      raise ConfigError(e)
+      if DEBUG_IO: traceback.print_exc(file=sys.stderr)
+      raise ConfigError('Configuring listeners: %s ' % e)
 
     # Configure logging
     if self.logfile:
