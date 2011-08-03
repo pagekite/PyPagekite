@@ -104,7 +104,7 @@ scripts/breeder.py:
 	@ln -fs ../../PyBreeder/breeder.py scripts/breeder.py
 
 distclean: clean
-	@rm -rvf dist/
+	@rm -rvf dist/*.*
 
 clean:
 	@rm -vf sockschain *.pyc */*.pyc scripts/breeder.py .SELF
