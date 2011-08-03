@@ -14,10 +14,10 @@ combined: pagekite tools dev
 	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py --nopyopenssl \
 	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py --nossl \
 	        || rm pagekite-tmp.py .combined-did-not-run
-	@mv pagekite-tmp.py bin/pagekite-`python setup.py --version`.py
-	@ls -l bin/pagekite-*.py
+	@mv pagekite-tmp.py dist/pagekite-`python setup.py --version`.py
+	@ls -l dist/pagekite-*.py
 
-android: pagekite tools test
+android: pagekite tools
 	@./scripts/breeder.py sockschain \
 	             pagekite/__init__.py \
 	             pagekite/basicui.py \
@@ -27,10 +27,10 @@ android: pagekite tools test
 	             pagekite/__android__.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
-	@mv pagekite-tmp.py bin/pk-android-`./pagekite-tmp.py --appver`.py
-	@ls -l bin/pk-android-*.py
+	@mv pagekite-tmp.py dist/pk-android-`./pagekite-tmp.py --appver`.py
+	@ls -l dist/pk-android-*.py
 
-dist: test combined android .targz allrpm alldeb
+dist: combined alldeb allrpm android
 
 allrpm: rpm_el4 rpm_el5 rpm_el6-fc13 rpm_fc14-15
 
@@ -104,7 +104,7 @@ scripts/breeder.py:
 	@ln -fs ../../PyBreeder/breeder.py scripts/breeder.py
 
 distclean: clean
-	@rm -rvf bin/* dist/
+	@rm -rvf dist/
 
 clean:
 	@rm -vf sockschain *.pyc */*.pyc scripts/breeder.py .SELF
