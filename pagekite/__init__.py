@@ -3087,8 +3087,22 @@ class Listener(Selectable):
         self.Log([('accept', '%s:%s' % (obfuIp(address[0]), address[1]))])
         uc = self.connclass(client, address, self.port, self.conns)
         return True
+
+    except IOError, err:
+      if err.errno in self.HARMLESS_ERRNOS:
+        return True
+      else:
+        self.LogDebug('Listener::ReadData: error: %s (%s)' % (err, err.errno))
+
+    except socket.error, (errno, msg):
+      if errno in self.HARMLESS_ERRNOS:
+        return True
+      else:
+        self.LogInfo('Listener::ReadData: error: %s (errno=%s)' % (msg, errno))
+
     except Exception, e:
       LogDebug('Listener::ReadData: %s' % e)
+
     return False
 
 
