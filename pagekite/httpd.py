@@ -319,8 +319,11 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
           http_host = '%s:%s' % (be[pagekite.BE_DOMAIN],
                                  be[pagekite.BE_PORT] or 80)
     if not http_host:
-      http_host = sorted(self.server.pkite.be_config.keys()
-                         )[0].replace('/', ':')
+      if self.server.pkite.be_config.keys():
+        http_host = sorted(self.server.pkite.be_config.keys()
+                           )[0].replace('/', ':')
+      else:
+        http_host = 'unknown'
     self.http_host = http_host
     self.host_config = self.server.pkite.be_config.get((':' in http_host
                                                            and http_host
