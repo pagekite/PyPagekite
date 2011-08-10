@@ -1,0 +1,20 @@
+pagekite.lua
+version 0.3, 4/8/2011
+by Stelios Mersinas (steliosm@gmail.com)
+
+
+   This is a backend client for PageKite protocol/service implemented in Lua targeting at small embedded systems that are able to run Lua.
+  
+
+INSTALLATION NOTES
+   You need to have recent Lua version installed along with the Lua-socket module. Extract the archive which will create a pagekite directory. Rename the dot-config file to .config. Edit the .config file to suit your setup (private PageKite front-end or public Pagekite front-end). Run start.sh and you should be OK. a log file named log will be crated to display the status of the client, mainly crashes and restarts. You can set the option debug = 1 in the config file to have a more detailed output about what the client is doing.
+
+
+NEW FEATURES
+v0.3: Supports tunnel status check using Ping requests.
+      The shell script will restart the service in case of a segfault (had a few during developing and testing the client).
+
+
+BUG FIXES
+   Did you find a bug? E-mail me!
+
