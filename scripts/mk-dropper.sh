@@ -13,8 +13,10 @@ ARGS="$*"
 
 make tools
 make dev
-./scripts/breeder.py socks.py \
+./scripts/breeder.py sockschain \
 	             pagekite/__init__.py \
+	             pagekite/basicui.py \
+	             pagekite/remoteui.py \
 	             pagekite/httpd.py \
 	             pagekite/__main__.py \
 	             pagekite/__dropper__.py \
@@ -25,5 +27,5 @@ make dev
 python pagekite-tmp.py --appver >/dev/null \
   || rm -f bin/pagekite-tmp.py .failplease
 chmod +x pagekite-tmp.py
-mv pagekite-tmp.py bin/pagekite-$KITENAME.py
-ls -l bin/pagekite-$KITENAME.py
+mv pagekite-tmp.py dist/pagekite-$KITENAME.py
+ls -l dist/pagekite-$KITENAME.py
