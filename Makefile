@@ -94,6 +94,8 @@ dev: sockschain
 	@rm -f .SELF
 	@ln -fs . .SELF
 	@echo export PYTHONPATH=`pwd`
+	@echo export HTTP_PROXY=
+	@echo export http_proxy=
 
 sockschain:
 	@ln -fs ../PySocksipyChain/sockschain .

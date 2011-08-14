@@ -94,7 +94,7 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.4.4f'
+APPVER = '0.4.4f+github'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -4046,7 +4046,7 @@ class PageKite(object):
         backends[bid][BE_DOMAIN] = fdom
         backends[bid][BE_BHOST] = bhost.lower()
         backends[bid][BE_BPORT] = int(bport)
-        backends[bid][BE_SECRET] = sec or self.kitesecret
+        backends[bid][BE_SECRET] = sec
         backends[bid][BE_STATUS] = status
 
     return backends
@@ -4458,7 +4458,11 @@ class PageKite(object):
 
     need_registration = {}
     for be in just_these_backends.values():
-      if not be[BE_SECRET]: need_registration[be[BE_DOMAIN]] = True
+      if not be[BE_SECRET]:
+        if self.kitesecret and be[BE_DOMAIN] == self.kitename:
+          be[BE_SECRET] = self.kitesecret
+        else:
+          need_registration[be[BE_DOMAIN]] = True
 
     for domain in need_registration:
       result = self.RegisterNewKite(kitename=domain)
