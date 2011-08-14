@@ -610,6 +610,7 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
   tokens = tokens or {}
   for d in backends.keys():
     if (backends[d][BE_BHOST] and
+        backends[d][BE_SECRET] and
         backends[d][BE_STATUS] not in BE_INACTIVE):
 
       # A stable (for replay on challenge) but unguessable salt.
@@ -1736,7 +1737,7 @@ class MagicProtocolParser(LineParser):
       return False
 
     proto = 'proto' in args and args['proto'] or None
-    if proto in ('http', 'websocket'):
+    if proto in ('http', 'http2', 'http3', 'websocket'):
       return LineParser.ProcessData(self, data)
 
     domain = 'domain' in args and args['domain'] or None
@@ -2409,7 +2410,7 @@ class Tunnel(ChunkParser):
           else:
             conn = UserConn.BackEnd(proto, host, sid, self, port,
                                     remote_ip=rIp, remote_port=rPort, data=data)
-            if proto in ('http', 'websocket'):
+            if proto in ('http', 'http2', 'http3', 'websocket'):
               if conn is None:
                 if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
                                           HTTP_Unavailable('be', proto, host,
@@ -2586,6 +2587,7 @@ class UserConn(Selectable):
       protos = [proto]
       ports = [on_port]
       if proto == 'websocket': protos.append('http')
+      elif proto == 'http': protos.extend(['http2', 'http3'])
 
     tunnels = None
     for p in protos:
@@ -2627,11 +2629,15 @@ class UserConn(Selectable):
 
     # Try and find the right back-end. We prefer proto/port specifications
     # first, then the just the proto. If the protocol is WebSocket and no
-    # tunnel is found, look for a plain HTTP tunnel.
+    # tunnel is found, look for a plain HTTP tunnel.  Fallback hosts can
+    # be registered using the http2/3/4 protocols.
     backend = None
-    protos = [proto]
-    if proto == 'probe': protos = ['http']
-    if proto == 'websocket': protos.append('http')
+
+    if proto == 'http': protos = [proto, 'http2', 'http3']
+    elif proto == 'probe': protos = ['http', 'http2', 'http3']
+    elif proto == 'websocket': protos = [proto, 'http', 'http2', 'http3']
+    else: protos = [proto]
+
     for p in protos:
       if not backend: backend, be = self.conns.config.GetBackendServer('%s-%s' % (p, on_port), host)
       if not backend: backend, be = self.conns.config.GetBackendServer(p, host)
@@ -2674,7 +2680,7 @@ class UserConn(Selectable):
       user_keys = [k for k in host_config if k.startswith('password/')]
       if user_keys:
         user, pwd, fail = None, None, True
-        if proto in ('websocket', 'http'):
+        if proto in ('websocket', 'http', 'http2', 'http3'):
           parse = HttpLineParser(lines=data.splitlines())
           auth = parse.Header('Authorization')
           try:
@@ -2905,7 +2911,11 @@ class UnknownConn(MagicProtocolParser):
 
           if cport in (80, 8080):
             if (('http'+sid1) in tunnels) or (
-                ('http'+sid2) in tunnels):
+                ('http'+sid2) in tunnels) or (
+                ('http2'+sid1) in tunnels) or (
+                ('http2'+sid2) in tunnels) or (
+                ('http3'+sid1) in tunnels) or (
+                ('http3'+sid2) in tunnels):
               (self.on_port, self.host) = (cport, chost)
               self.parser = HttpLineParser()
               self.Send(HTTP_ConnectOK(), try_flush=True)
@@ -3248,7 +3258,7 @@ class TunnelManager(threading.Thread):
               # Do we have auto-SSL at the front-end?
               protoport = (port and ('%s-%s' % (proto, port)) or proto)
               tunnels = self.conns.Tunnel(protoport, domain)
-              if proto == 'http' and tunnels:
+              if proto in ('http', 'http2', 'http3') and tunnels:
                 proto = 'https'
                 for t in tunnels:
                   if (protoport, domain) not in t.remote_ssl: proto = 'http'
@@ -3417,8 +3427,8 @@ class PageKite(object):
     self.server_raw_ports = []
     self.server_portalias = {}
     self.server_aliasport = {}
-    self.server_protos = ['http', 'https', 'websocket', 'irc',
-                          'finger', 'httpfinger', 'raw']
+    self.server_protos = ['http', 'http2', 'http3', 'https', 'websocket',
+                          'irc', 'finger', 'httpfinger', 'raw']
 
     self.tls_default = None
     self.tls_endpoints = {}
@@ -4354,11 +4364,12 @@ class PageKite(object):
         be = None
       else:
         be = be_spec.replace('/', '').split(':')
-        if be[0].lower() in ('http', 'https', 'httpfinger', 'finger', 'ssh',
-                             'irc'):
+        if be[0].lower() in ('http', 'http2', 'http3', 'https',
+                             'httpfinger', 'finger', 'ssh', 'irc'):
           be_proto = be.pop(0)
           if len(be) < 2:
-            be.append({'http': '80', 'https': '443', 'irc': '6667',
+            be.append({'http': '80', 'http2': '80', 'http3': '80',
+                       'https': '443', 'irc': '6667',
                        'httpfinger': '80', 'finger': '79',
                        'ssh': '22'}[be_proto])
         if len(be) > 2:
@@ -4489,7 +4500,7 @@ class PageKite(object):
       elif self.kite_remove:
         for bid in just_these_backends:
           be = self.backends[bid]
-          if be[BE_PROTO] == 'http':
+          if be[BE_PROTO] in ('http', 'http2', 'http3'):
             http_host = '%s/%s' % (be[BE_DOMAIN], be[BE_PORT] or '80')
             if http_host in self.ui_paths: del self.ui_paths[http_host]
             if http_host in self.be_config: del self.be_config[http_host]
