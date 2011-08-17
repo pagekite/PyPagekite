@@ -2231,6 +2231,7 @@ class Tunnel(ChunkParser):
 
     conns.Add(self)
     self.CountAs('frontends_live')
+    self.last_activity = time.time()
 
     return self
 
