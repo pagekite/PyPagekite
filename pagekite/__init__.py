@@ -2150,12 +2150,12 @@ class Tunnel(ChunkParser):
           sname = self.server_info[self.S_NAME]
           conns.config.ui.Notify('Connecting to front-end %s ...' % sname,
                                  color=conns.config.ui.GREY)
-          conns.config.ui.Notify(' - Protocols: %s' % ', '.join(self.server_info[self.S_PROTOS]),
+          conns.config.ui.Notify(' - Protocols: %s' % ' '.join(self.server_info[self.S_PROTOS]),
                                  color=conns.config.ui.GREY)
-          conns.config.ui.Notify(' - Ports: %s' % ', '.join(self.server_info[self.S_PORTS]),
+          conns.config.ui.Notify(' - Ports: %s' % ' '.join(self.server_info[self.S_PORTS]),
                                  color=conns.config.ui.GREY)
           if 'raw' in self.server_info[self.S_PROTOS]:
-            conns.config.ui.Notify(' - Raw ports: %s' % ', '.join(self.server_info[self.S_RAW_PORTS]),
+            conns.config.ui.Notify(' - Raw ports: %s' % ' '.join(self.server_info[self.S_RAW_PORTS]),
                                    color=conns.config.ui.GREY)
 
           for quota in parse.Header('X-PageKite-Quota'):
