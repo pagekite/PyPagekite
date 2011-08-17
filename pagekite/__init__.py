@@ -4910,8 +4910,10 @@ class PageKite(object):
       # First, check for old addresses and always connect to those.
       if not self.servers_new_only:
         for bid in self.backends:
-          if self.backends[bid][BE_STATUS] != BE_STATUS_DISABLED:
-            (proto, bdom) = bid.split(':')
+          (proto, bdom) = bid.split(':')
+          if (self.backends[bid][BE_STATUS] not in BE_INACTIVE and
+              self.backends[bid][BE_SECRET] and
+              not bdom.startswith('*')):
             try:
               (hn, al, ips) = self.GetHostDetails(bdom)
               for ip in ips:
