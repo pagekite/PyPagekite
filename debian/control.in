@@ -15,6 +15,7 @@ Section: net
 Architecture: all
 Depends: ${misc:Depends},
          ${python:Depends},
+         daemon (>= 0.6),
          python (>= 2.3),
          python (<< 3.0),
          python-socksipychain (>= 2.0),
