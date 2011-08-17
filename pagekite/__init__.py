@@ -516,13 +516,8 @@ class MockYamonD(object):
   def quit(self): pass
   def run(self): pass
 
-gYamon = MockYamonD(())
-
-try:
-  import yamond
-  YamonD = yamond.YamonD
-except Exception:
-  YamonD = MockYamonD
+YamonD = MockYamonD
+gYamon = YamonD(())
 
 
 ##[ PageKite.py code starts here! ]############################################

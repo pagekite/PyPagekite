@@ -942,6 +942,12 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     else:
       self.enable_ssl = False
 
+    try:
+      from pagekite import yamond
+      pagekite.YamonD = yamond.YamonD
+    except:
+      pass
+
     gYamon = pagekite.gYamon = pagekite.YamonD(sspec)
     gYamon.vset('started', int(time.time()))
     gYamon.vset('version', pagekite.APPVER)

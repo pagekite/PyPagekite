@@ -6,6 +6,7 @@ combined: pagekite tools dev
 	             pagekite/__init__.py \
 	             pagekite/basicui.py \
 	             pagekite/remoteui.py \
+	             pagekite/yamond.py \
 	             pagekite/httpd.py \
 	             pagekite/__main__.py \
 	             >pagekite-tmp.py
@@ -22,6 +23,7 @@ android: pagekite tools
 	             pagekite/__init__.py \
 	             pagekite/basicui.py \
 	             pagekite/remoteui.py \
+	             pagekite/yamond.py \
 	             pagekite/httpd.py \
 	             pagekite/__main__.py \
 	             pagekite/__android__.py \
