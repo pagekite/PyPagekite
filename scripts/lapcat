@@ -336,6 +336,7 @@ def HttpProxy(input_fd, output_fd):
   #try:
   #  if words[0].upper() == 'CONNECT':
 
+
 class FileWrapper(object):
   def __init__(self, sock):
     self.sock = sock
@@ -343,6 +344,7 @@ class FileWrapper(object):
   def close(self): return self.sock.close()
   def write(self, data): return self.sock.send(data)
   def fileno(self): return self.sock.fileno()
+
 
 def ForkAndListen(outfmt, baseport=0, tries=1, relative=False):
   for t in range(0, tries):
@@ -377,6 +379,7 @@ def ForkAndListen(outfmt, baseport=0, tries=1, relative=False):
   if DEBUG: DEBUG('Accepted: %s' % (address, ))
   fw = FileWrapper(client)
   return fw, fw
+
 
 if __name__ == '__main__':
   args = sys.argv[1:]
