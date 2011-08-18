@@ -344,15 +344,26 @@ class FileWrapper(object):
   def write(self, data): return self.sock.send(data)
   def fileno(self): return self.sock.fileno()
 
-def ForkAndListen(outfmt):
-  try:
-    srv = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-  except:
-    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+def ForkAndListen(outfmt, baseport=0, tries=1, relative=False):
+  for t in range(0, tries):
+    try:
+      try:
+        srv = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+      except:
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+      srv.bind(('', baseport+t))
+      break
+    except:
+      pass
+
   srv.listen(3)
   srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-  sys.stdout.write((outfmt+'\n') % srv.getsockname()[1])
+  if relative:
+    sys.stdout.write((outfmt+'\n') % (srv.getsockname()[1]-baseport))
+  else:
+    sys.stdout.write((outfmt+'\n') % srv.getsockname()[1])
+
   sys.stdout.flush()
   os.close(sys.stdout.fileno())
   os.close(sys.stdin.fileno())
@@ -369,7 +380,7 @@ def ForkAndListen(outfmt):
 
 if __name__ == '__main__':
   args = sys.argv[1:]
-  fin, fout = sys.stdin, sys.stdout
+  portadd, fin, fout = 0, sys.stdin, sys.stdout
 
   if '-v' in args:
     DEBUG = DebugPrint
@@ -392,9 +403,19 @@ if __name__ == '__main__':
     fmt = args[idx+1]
     args[idx:idx+1] = []
     fin, fout = ForkAndListen(fmt)
+  elif '-rdp' in args:
+    args.remove('-rdp')
+    fin, fout = ForkAndListen('127.0.0.1:%d')
+    if len(args) == 1: args.append('3389')
+  elif '-vnc' in args:
+    args.remove('-vnc')
+    fin, fout = ForkAndListen('127.0.0.1:%d',
+                              baseport=5900, tries=10, relative=True)
+    if len(args) == 1: args.append('0')
+    portadd = 5900
 
   if len(args) == 2:
-    NetCat(args[0], args[1], fin, fout)
+    NetCat(args[0], portadd + int(args[1]), fin, fout)
 
   elif len(args) == 1 and args[0] == '-N':
     print('%s' % GetNetworkId())
@@ -408,20 +429,22 @@ if __name__ == '__main__':
   else:
     print(('%(p)s: Location Aware Proxy Chooser And Tunneler / NetCat for Laptops\n'
            '\n'
-           'Usage: %(p)s [-v [-v]]    host port   # Connect to host:port\n'
-           '       %(p)s <-t|-tc|-tp> host port   # Inline proxy mode\n'
-           '       %(p)s -tf <fmt>    host port   # Inline proxy mode\n'
-           '       %(p)s -N                       # Show current network ID\n'
-           '       %(p)s -P                       # Behave like an HTTP Proxy\n'
-           '       %(p)s -h                       # Print instructions\n'
+           'Usage: %(p)s [-v [-v]]    host port     # Connect to host:port\n'
+           '       %(p)s <-t|-tc|-tp> host port     # Inline proxy mode\n'
+           '       %(p)s -tf <fmt>    host port     # Inline proxy mode\n'
+           '       %(p)s -rdp         host [port]   # Inline RDP proxy mode\n'
+           '       %(p)s -vnc         host [screen] # Inline VNC proxy mode\n'
+           '       %(p)s -N                         # Show current network ID\n'
+#          '       %(p)s -P                         # Behave like an HTTP Proxy\n'
+           '       %(p)s -h                         # Print instructions\n'
            '\n'
            'To use with ssh, add to ~/.ssh/config:\n'
            '    ProxyCommand %(fp)s %%h %%p\n'
            '    CheckHostIP no\n'
            '\n'
            'Inline use examples:\n'
-           '    $ vncviewer `%(p)s -tc hostname port`\n'
-           '    $ rdesktop `%(p)s -tc homebox.pagekite.me 3389`\n'
+           '    $ vncviewer `%(p)s -vnc hostname`\n'
+           '    $ rdesktop `%(p)s -rdp homebox.pagekite.me`\n'
            '    $ irssi -c localhost -p `%(p)s -tp irc.freenode.net 6667`\n'
            ) % {'fp': os.path.abspath(sys.argv[0]),
                 'p': os.path.basename(sys.argv[0])})
