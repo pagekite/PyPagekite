@@ -406,16 +406,19 @@ if __name__ == '__main__':
   elif '-rdp' in args:
     args.remove('-rdp')
     fin, fout = ForkAndListen('127.0.0.1:%d')
-    if len(args) == 1: args.append('3389')
+    if len(args) == 1 and ':' not in args[0]: args.append('3389')
   elif '-vnc' in args:
     args.remove('-vnc')
     fin, fout = ForkAndListen('127.0.0.1:%d',
                               baseport=5900, tries=10, relative=True)
-    if len(args) == 1: args.append('0')
+    if len(args) == 1 and ':' not in args[0]: args.append('0')
     portadd = 5900
 
+  if len(args) == 1 and ':' in args[0]:
+    args = args[0].split(':')
+
   if len(args) == 2:
-    NetCat(args[0], portadd + int(args[1]), fin, fout)
+    NetCat(args[0], portadd + int(args[1].replace(':', '')), fin, fout)
 
   elif len(args) == 1 and args[0] == '-N':
     print('%s' % GetNetworkId())
