@@ -392,23 +392,23 @@ if __name__ == '__main__':
   if '-t' in args:
     args.remove('-t')
     fin, fout = ForkAndListen('127.0.0.1 %d')
-  elif '-tc' in args:
-    args.remove('-tc')
+  elif '--tc' in args:
+    args.remove('--tc')
     fin, fout = ForkAndListen('127.0.0.1:%d')
-  elif '-tp' in args:
-    args.remove('-tp')
+  elif '--tp' in args:
+    args.remove('--tp')
     fin, fout = ForkAndListen('%d')
-  elif '-tf' in args:
-    idx = args.index('-tf')
+  elif '--tf' in args:
+    idx = args.index('--tf')
     fmt = args[idx+1]
     args[idx:idx+1] = []
     fin, fout = ForkAndListen(fmt)
-  elif '-rdp' in args:
-    args.remove('-rdp')
+  elif '--rdp' in args:
+    args.remove('--rdp')
     fin, fout = ForkAndListen('127.0.0.1:%d')
     if len(args) == 1 and ':' not in args[0]: args.append('3389')
-  elif '-vnc' in args:
-    args.remove('-vnc')
+  elif '--vnc' in args:
+    args.remove('--vnc')
     fin, fout = ForkAndListen('127.0.0.1:%d',
                               baseport=5900, tries=10, relative=True)
     if len(args) == 1 and ':' not in args[0]: args.append('0')
@@ -432,14 +432,14 @@ if __name__ == '__main__':
   else:
     print(('%(p)s: Location Aware Proxy Chooser And Tunneler / NetCat for Laptops\n'
            '\n'
-           'Usage: %(p)s [-v [-v]]    host port     # Connect to host:port\n'
-           '       %(p)s <-t|-tc|-tp> host port     # Inline proxy mode\n'
-           '       %(p)s -tf <fmt>    host port     # Inline proxy mode\n'
-           '       %(p)s -rdp         host [port]   # Inline RDP proxy mode\n'
-           '       %(p)s -vnc         host [screen] # Inline VNC proxy mode\n'
-           '       %(p)s -N                         # Show current network ID\n'
-#          '       %(p)s -P                         # Behave like an HTTP Proxy\n'
-           '       %(p)s -h                         # Print instructions\n'
+           'Usage: %(p)s [-v [-v]]      host port     # Connect to host:port\n'
+           '       %(p)s <-t|--tc|--tp> host port     # Inline proxy mode\n'
+           '       %(p)s --tf <fmt>     host port     # Inline proxy mode\n'
+           '       %(p)s --rdp          host [port]   # Inline RDP proxy mode\n'
+           '       %(p)s --vnc          host [screen] # Inline VNC proxy mode\n'
+           '       %(p)s -N                           # Show current network ID\n'
+#          '       %(p)s -P                           # Behave like an HTTP Proxy\n'
+           '       %(p)s -h                           # Print instructions\n'
            '\n'
            'To use with ssh, add to ~/.ssh/config:\n'
            '    ProxyCommand %(fp)s %%h %%p\n'
