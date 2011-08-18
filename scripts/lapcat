@@ -446,9 +446,9 @@ if __name__ == '__main__':
            '    CheckHostIP no\n'
            '\n'
            'Inline use examples:\n'
-           '    $ vncviewer `%(p)s -vnc hostname`\n'
-           '    $ rdesktop `%(p)s -rdp homebox.pagekite.me`\n'
-           '    $ irssi -c localhost -p `%(p)s -tp irc.freenode.net 6667`\n'
+           '    $ vncviewer `%(p)s --vnc hostname`\n'
+           '    $ rdesktop `%(p)s --rdp homebox.pagekite.me`\n'
+           '    $ irssi -c localhost -p `%(p)s --tp irc.freenode.net 6667`\n'
            ) % {'fp': os.path.abspath(sys.argv[0]),
                 'p': os.path.basename(sys.argv[0])})
     sys.exit(100)
