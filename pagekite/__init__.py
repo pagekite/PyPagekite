@@ -3772,12 +3772,8 @@ class PageKite(object):
       be = self.backends[bid]
       be_be = (be[BE_BHOST], be[BE_BPORT])
       backend = (be_be == self.ui_sspec) and 'builtin' or '%s:%s' % be_be
-      if '-' in be[BE_PROTO]:
-        fe_proto, fe_port = be[BE_PROTO].split('-', 1)
-      else:
-        fe_proto, fe_port = be[BE_PROTO], ''
-
-      frontend = '%s://%s%s%s' % (fe_proto, be[BE_DOMAIN],
+      fe_port = be[BE_PORT] or ''
+      frontend = '%s://%s%s%s' % (be[BE_PROTO], be[BE_DOMAIN],
                                   fe_port and ':' or '', fe_port)
 
       if be[BE_STATUS] == BE_STATUS_DISABLED:
@@ -3785,7 +3781,7 @@ class PageKite(object):
         status = '(disabled)'
       else:
         color = self.ui.NORM
-        status = (fe_proto == 'raw') and '(HTTP proxied)' or ''
+        status = (be[BE_PROTO] == 'raw') and '(HTTP proxied)' or ''
       message.append(''.join([color, backend, ' ' * (19-len(backend)),
                               frontend, ' ' * (42-len(frontend)), status]))
     message.append(self.ui.NORM)
