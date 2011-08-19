@@ -429,26 +429,27 @@ if __name__ == '__main__':
     DebugPrint(__DOC__)
 
   else:
-    print(('%(p)s: Location Aware Proxy Chooser And Tunneler / NetCat for Laptops\n'
-           '\n'
-           'Usage: %(p)s [-v [-v]]      host port     # Connect to host:port\n'
-           '       %(p)s <-t|--tc|--tp> host port     # Inline proxy mode\n'
-           '       %(p)s --tf=<fmt>     host port     # Inline proxy mode\n'
-           '       %(p)s --rdp          host [port]   # Inline RDP proxy mode\n'
-           '       %(p)s --vnc          host [screen] # Inline VNC proxy mode\n'
-           '       %(p)s -N                           # Show current network ID\n'
-#          '       %(p)s -P                           # Behave like an HTTP Proxy\n'
-           '       %(p)s -h                           # Print instructions\n'
-           '\n'
-           'To use with ssh, add to ~/.ssh/config:\n'
-           '    ProxyCommand %(fp)s %%h %%p\n'
-           '    CheckHostIP no\n'
-           '\n'
-           'Inline use examples:\n'
-           '    $ vncviewer `%(p)s --vnc hostname`\n'
-           '    $ rdesktop `%(p)s --rdp homebox.pagekite.me`\n'
-           '    $ irssi -c localhost -p `%(p)s --tp irc.freenode.net 6667`\n'
-           ) % {'fp': os.path.abspath(sys.argv[0]),
-                'p': os.path.basename(sys.argv[0])})
+    print((
+      '%(p)s: Location Aware Proxy Chooser And Tunneler / NetCat for Laptops\n'
+      '\n'
+      'Usage: %(p)s [-v [-v]]      host port     # Connect to host:port\n'
+      '       %(p)s <-t|--tc|--tp> host port     # Inline proxy mode\n'
+      '       %(p)s --tf=<fmt>     host port     # Inline proxy mode\n'
+      '       %(p)s --rdp          host [port]   # Inline RDP proxy mode\n'
+      '       %(p)s --vnc          host [screen] # Inline VNC proxy mode\n'
+      '       %(p)s -N                           # Show current network ID\n'
+#     '       %(p)s -P                           # Behave like an HTTP Proxy\n'
+      '       %(p)s -h                           # Print instructions\n'
+      '\n'
+      'To use with ssh, add to ~/.ssh/config:\n'
+      '    ProxyCommand %(fp)s %%h %%p\n'
+      '    CheckHostIP no\n'
+      '\n'
+      'Inline use examples:\n'
+      '    $ vncviewer `%(p)s --vnc hostname`\n'
+      '    $ rdesktop `%(p)s --rdp homebox.pagekite.me`\n'
+      '    $ irssi -c localhost -p `%(p)s --tp irc.freenode.net 6667`\n'
+    ) % {'fp': os.path.abspath(sys.argv[0]),
+         'p': os.path.basename(sys.argv[0])})
     sys.exit(100)
 
