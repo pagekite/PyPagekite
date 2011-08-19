@@ -48,7 +48,7 @@ __DOC__ = """\
 #     ProxyCommand /path/to/lapcat homeserver 22
 #
 """
-import os, select, socket, subprocess, sys
+import getopt, os, select, socket, subprocess, sys
 import sockschain as socks
 
 def DebugPrint(text): sys.stderr.write(text+'\n')
@@ -382,51 +382,47 @@ def ForkAndListen(outfmt, baseport=0, tries=1, relative=False):
 
 
 if __name__ == '__main__':
-  args = sys.argv[1:]
-  portadd, fin, fout = 0, sys.stdin, sys.stdout
-
-  if '-v' in args:
-    DEBUG = DebugPrint
-    args.remove('-v')
-  while '-v' in args:
-    socks.DEBUG = DebugPrint
-    args.remove('-v')
-
-  if '-t' in args:
-    args.remove('-t')
-    fin, fout = ForkAndListen('127.0.0.1 %d')
-  elif '--tc' in args:
-    args.remove('--tc')
-    fin, fout = ForkAndListen('127.0.0.1:%d')
-  elif '--tp' in args:
-    args.remove('--tp')
-    fin, fout = ForkAndListen('%d')
-  elif '--tf' in args:
-    idx = args.index('--tf')
-    fmt = args[idx+1]
-    args[idx:idx+1] = []
-    fin, fout = ForkAndListen(fmt)
-  elif '--rdp' in args:
-    args.remove('--rdp')
-    fin, fout = ForkAndListen('127.0.0.1:%d')
-    if len(args) == 1 and ':' not in args[0]: args.append('3389')
-  elif '--vnc' in args:
-    args.remove('--vnc')
-    fin, fout = ForkAndListen('127.0.0.1:%d',
-                              baseport=5900, tries=10, relative=True)
-    if len(args) == 1 and ':' not in args[0]: args.append('0')
-    portadd = 5900
+  opts, args = getopt.getopt(sys.argv[1:],
+                             'hNPtv', ['tc', 'tp', 'tf=', 'vnc', 'rdp'])
 
   if len(args) == 1 and ':' in args[0]:
     args = args[0].split(':')
 
-  if len(args) == 2:
+  mode, portadd, inlinefmt, inlineargs = 'netcat', 0, '', {}
+  for opt, arg in opts:
+    if '-v' == opt:
+      if DEBUG: socks.DEBUG = DebugPrint
+      DEBUG = DebugPrint
+
+    if '-N' == opt: mode = 'networkid'
+    elif '-P' == opt: mode = 'httpproxy'
+    else:
+      if mode != 'netcat':
+        mode = 'invalid'
+        break
+      elif '-t' == opt:   mode, inlinefmt = 'inline', '127.0.0.1 %d'
+      elif '--tc' == opt: mode, inlinefmt = 'inline', '127.0.0.1:%d'
+      elif '--tp' == opt: mode, inlinefmt = 'inline', '%d'
+      elif '--tf' == opt: mode, inlinefmt = 'inline', arg
+      elif '--rdp' == opt:
+        mode, inlinefmt = 'inline', '127.0.0.1:%d'
+        if len(args) == 1: args.append('3389')
+      elif '--vnc' == opt:
+        mode, inlinefmt, portadd = 'inline', '127.0.0.1:%d', 5900
+        inlineargs = {'baseport': 5900, 'tries': 20, 'relative': True}
+        if len(args) == 1: args.append('0')
+
+  if mode == 'netcat' and len(args) == 2:
+    NetCat(args[0], int(args[1].replace(':', '')), sys.stdin, sys.stdout)
+
+  elif mode == 'inline' and len(args) == 2:
+    fin, fout = ForkAndListen(inlinefmt, **inlineargs)
     NetCat(args[0], portadd + int(args[1].replace(':', '')), fin, fout)
 
-  elif len(args) == 1 and args[0] == '-N':
+  elif mode == 'networkid' and len(args) == 0:
     print('%s' % GetNetworkId())
 
-  elif len(args) == 1 and args[0] == '-P':
+  elif mode == 'httpproxy' and len(args) == 0:
     HttpProxy(sys.stdin, sys.stdout)
 
   elif len(args) == 1 and args[0] in ('-h', '--help'):
@@ -437,7 +433,7 @@ if __name__ == '__main__':
            '\n'
            'Usage: %(p)s [-v [-v]]      host port     # Connect to host:port\n'
            '       %(p)s <-t|--tc|--tp> host port     # Inline proxy mode\n'
-           '       %(p)s --tf <fmt>     host port     # Inline proxy mode\n'
+           '       %(p)s --tf=<fmt>     host port     # Inline proxy mode\n'
            '       %(p)s --rdp          host [port]   # Inline RDP proxy mode\n'
            '       %(p)s --vnc          host [screen] # Inline VNC proxy mode\n'
            '       %(p)s -N                           # Show current network ID\n'
