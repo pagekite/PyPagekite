@@ -9,7 +9,8 @@
 # Description:       PageKite makes localhost servers publicly visible.
 ### END INIT INFO
 
-# Author: Hrafnkell Eiriksson <he@klaki.net>
+# Authors: Bjarni R. Einarsson <bre@pagekite.net>
+#          Hrafnkell Eiriksson <he@klaki.net>
 
 # Do NOT "set -e"
 
@@ -22,12 +23,12 @@ DAEMON=/usr/bin/$NAME
 WRAPPER=/usr/bin/daemon
 PIDFILE=/var/run/$NAME.pid
 LOGFILE=/var/log/$NAME/$NAME.log
-WRAPPER_ARGS="--noconfig --unsafe --respawn --delay=60 --name=$NAME \
-              --pidfile=$PIDFILE"
+WRAPPER_PIDFILE=$PIDFILE.wrapper
+WRAPPER_ARGS="--noconfig --unsafe --respawn --delay=60 --name=$NAME"
 DAEMON_ARGS="--clean --noloop \
-             --pidfile=$PIDFILE \
              --runas=$RUNAS \
              --logfile=$LOGFILE \
+             --pidfile=$PIDFILE \
              --optdir=/etc/$NAME.d"
 SCRIPTNAME=/etc/init.d/$NAME
 
@@ -59,12 +60,24 @@ do_start()
 	#   2 if daemon could not be started
         touch $LOGFILE
         chown $RUNAS $(dirname $LOGFILE) $LOGFILE
-	start-stop-daemon --quiet --pidfile $PIDFILE --test --start --startas $WRAPPER  > /dev/null \
-		|| return 1
-	start-stop-daemon \
-            --quiet --pidfile $PIDFILE --start --startas $WRAPPER -- \
-                              $WRAPPER_ARGS -- $DAEMON $DAEMON_ARGS \
+        if [ -x $WRAPPER ]; then
+	  start-stop-daemon --quiet --pidfile $WRAPPER_PIDFILE --test --start \
+                            --startas $WRAPPER  > /dev/null \
+	  	|| return 1
+	  start-stop-daemon \
+            --quiet --pidfile $WRAPPER_PIDFILE --start --startas $WRAPPER -- \
+                    --pidfile $WRAPPER_PIDFILE $WRAPPER_ARGS -- $DAEMON \
+                    --pidfile $PIDFILE $DAEMON_ARGS \
 		|| return 2
+        else
+	  start-stop-daemon --quiet --pidfile $PIDFILE --test --start \
+                            --startas $DAEMON  > /dev/null \
+	  	|| return 1
+	  start-stop-daemon \
+            --quiet --pidfile $PIDFILE --start --startas $DAEMON -- \
+                    --pidfile $PIDFILE --daemonize $DAEMON_ARGS \
+		|| return 2
+        fi
 	# Add code here, if necessary, that waits for the process to be ready
 	# to handle requests from services started subsequently which depend
 	# on this one.  As a last resort, sleep for some time.
@@ -80,33 +93,27 @@ do_stop()
 	#   1 if daemon was already stopped
 	#   2 if daemon could not be stopped
 	#   other if a failure occurred
-	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --pidfile $PIDFILE --name $NAME
+        if [ -e $WRAPPER_PIDFILE ]; then
+	  start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 \
+                            --pidfile $WRAPPER_PIDFILE
+        else
+          WRAPPERS=$(ps axw |grep $WRAPPER |grep $DAEMON \
+                            |grep $LOGFILE |cut -b1-5)
+          if [ "$WRAPPERS" = "" ]; then
+	    start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 \
+                              --pidfile $PIDFILE
+          else
+            kill $WRAPPERS
+	    start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 \
+                              --pidfile $PIDFILE --oknodo
+          fi
+        fi
 	RETVAL="$?"
 	[ "$RETVAL" = 2 ] && return 2
-	# Wait for children to finish too if this is a daemon that forks
-	# and if the daemon is only ever run from this initscript.
-	# If the above conditions are not satisfied then add some other code
-	# that waits for the process to drop all resources that could be
-	# needed by services started subsequently.  A last resort is to
-	# sleep for some time.
-	start-stop-daemon --stop --quiet --oknodo --retry=0/30/KILL/5 --exec $DAEMON
-	[ "$?" = 2 ] && return 2
-	# Many daemons don't delete their pidfiles when they exit.
-	rm -f $PIDFILE
-	return "$RETVAL"
-}
 
-#
-# Function that sends a SIGHUP to the daemon/service
-#
-do_reload() {
-	#
-	# If the daemon can reload its configuration without
-	# restarting (for example, when it is sent a SIGHUP),
-	# then implement that here.
-	#
-	start-stop-daemon --stop --signal 1 --quiet --pidfile $PIDFILE --name $NAME
-	return 0
+	# Many daemons don't delete their pidfiles when they exit.
+	rm -f $PIDFILE $WRAPPER_PIDFILE
+	return "$RETVAL"
 }
 
 case "$1" in
