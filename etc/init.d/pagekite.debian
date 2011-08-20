@@ -25,10 +25,9 @@ PIDFILE=/var/run/$NAME.pid
 LOGFILE=/var/log/$NAME/$NAME.log
 WRAPPER_PIDFILE=$PIDFILE.wrapper
 WRAPPER_ARGS="--noconfig --unsafe --respawn --delay=60 --name=$NAME"
-DAEMON_ARGS="--clean --noloop \
+DAEMON_ARGS="--clean \
              --runas=$RUNAS \
              --logfile=$LOGFILE \
-             --pidfile=$PIDFILE \
              --optdir=/etc/$NAME.d"
 SCRIPTNAME=/etc/init.d/$NAME
 
@@ -67,7 +66,7 @@ do_start()
 	  start-stop-daemon \
             --quiet --pidfile $WRAPPER_PIDFILE --start --startas $WRAPPER -- \
                     --pidfile $WRAPPER_PIDFILE $WRAPPER_ARGS -- $DAEMON \
-                    --pidfile $PIDFILE $DAEMON_ARGS \
+                    --pidfile $PIDFILE $DAEMON_ARGS --noloop \
 		|| return 2
         else
 	  start-stop-daemon --quiet --pidfile $PIDFILE --test --start \
