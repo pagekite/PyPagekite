@@ -52,7 +52,7 @@ esac
 # This has to happen before the default debhelper stuff, because CDBS gets
 # the order wrong.
 if which update-python-modules >/dev/null 2>&1; then
-        update-python-modules  pagekite.public
+        update-python-modules pagekite
 fi
 
 # dh_installdeb will replace this with shell code automatically
