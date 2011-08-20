@@ -954,9 +954,7 @@ class MagicLineParser(BaseLineParser):
     self.last_parser = self.parsers[-1]
     for p in self.parsers[:]:
       if not p.Parse(line):
-        LogDebug('Should remove %s' % p)
         self.parsers.remove(p)
-        LogDebug('Parsers: %s' % self.parsers)
       elif p.ParsedOK():
         self.last_parser = p
         self.domain = p.domain
