@@ -2154,10 +2154,10 @@ class Tunnel(ChunkParser):
           for quota in parse.Header('X-PageKite-Quota'):
             self.quota = [int(quota), None, None]
             self.Log([('FE', sname), ('quota', quota)])
-            qGB = 1024 * 1024
-            conns.config.ui.Notify(('You have %.2f GB of quota left.'
-                                    ) % (float(quota) / qGB),
-                                   prefix=(int(quota) < qGB) and '!' or ' ',
+            qMB = 1024
+            conns.config.ui.Notify(('You have %.2f MB of quota left.'
+                                    ) % (float(quota) / qMB),
+                                   prefix=(int(quota) < qMB) and '!' or ' ',
                                    color=conns.config.ui.MAGENTA)
 
           invalid_reasons = {}
@@ -2348,8 +2348,8 @@ class Tunnel(ChunkParser):
           self.quota[0] = int(parse.Header('Quota')[0])
         else:
           self.quota = [int(parse.Header('Quota')[0]), None, None]
-        self.conns.config.ui.Notify(('You have %.2f GB of quota left.'
-                                     ) % (float(self.quota[0]) / (1024*1024)),
+        self.conns.config.ui.Notify(('You have %.2f MB of quota left.'
+                                     ) % (float(self.quota[0]) / 1024),
                                     color=self.conns.config.ui.MAGENTA)
       if parse.Header('PING'): return self.SendPong()
       if parse.Header('ZRST') and not self.ResetZChunks(): return False
