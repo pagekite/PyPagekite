@@ -83,7 +83,7 @@ Here are a few useful examples:
 The above examples could all be combined into a single command, and the
 configuration saved as your default, like so:
 
-    pagekite.py --save \
+    pagekite.py --add \
       80 http://FOO.pagekite.me +password/guest=foo AND \
       /var/www http://BAR.pagekite.me:8080/ +indexes AND \
       localhost:22 ssh://FOO.pagekite.me

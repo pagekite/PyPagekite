@@ -316,7 +316,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def getHostInfo(self):
     http_host = self.headers.get('HOST', self.headers.get('host', 'unknown'))
-    if http_host == 'unknown' or http_host.startswith('localhost:'):
+    if http_host == 'unknown' or (http_host.startswith('localhost:') and
+                http_host.replace(':', '/') not in self.server.pkite.be_config):
       http_host = None
       for bid in sorted(self.server.pkite.backends.keys()):
         be = self.server.pkite.backends[bid]
