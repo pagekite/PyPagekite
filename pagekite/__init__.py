@@ -94,7 +94,7 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.4.5'
+APPVER = '0.4.4h'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -3904,7 +3904,19 @@ class PageKite(object):
     data = '%s:%s:%s' % (protoport, domain, srand)
     auth_error_type = None
     if (not token) or (not check_token) or checkSignature(sign=token, payload=data):
-      if self.auth_domain:
+
+      secret = (self.GetBackendData(protoport, domain) or BE_NONE)[BE_SECRET]
+      if not secret:
+        secret = (self.GetBackendData(proto, domain) or BE_NONE)[BE_SECRET]
+
+      if secret:
+        if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
+          return (-1, None)
+        else:
+          LogError('Invalid signature for: %s (%s)' % (domain, protoport))
+          return (None, auth_error_type or 'signature')
+
+      elif self.auth_domain:
         try:
           lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
           (rv, auth_error_type) = self.LookupDomainQuota(lookup)
@@ -3913,16 +3925,6 @@ class PageKite(object):
           # Lookup failed, fail open.
           LogError('Quota lookup failed: %s' % e)
           return (-2, None)
-
-      secret = (self.GetBackendData(protoport, domain) or BE_NONE)[BE_SECRET]
-      if not secret:
-        secret = (self.GetBackendData(proto, domain) or BE_NONE)[BE_SECRET]
-      if secret:
-        if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
-          return (-1, None)
-        else:
-          LogError('Invalid signature for: %s (%s)' % (domain, protoport))
-          return (None, auth_error_type or 'signature')
 
     LogInfo('No authentication found for: %s (%s)' % (domain, protoport))
     return (None, auth_error_type or 'auth')
