@@ -94,7 +94,7 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.4.4h'
+APPVER = '0.4.4h+github'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -3912,11 +3912,11 @@ class PageKite(object):
       if secret:
         if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
           return (-1, None)
-        else:
+        elif not self.auth_domain:
           LogError('Invalid signature for: %s (%s)' % (domain, protoport))
           return (None, auth_error_type or 'signature')
 
-      elif self.auth_domain:
+      if self.auth_domain:
         try:
           lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
           (rv, auth_error_type) = self.LookupDomainQuota(lookup)
