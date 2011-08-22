@@ -94,7 +94,7 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.4.5'
+APPVER = '0.4.5a'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'

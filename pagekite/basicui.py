@@ -1,4 +1,5 @@
 import re, sys, time
+import pagekite
 from pagekite import NullUi
 
 class BasicUi(NullUi):
@@ -151,13 +152,13 @@ class BasicUi(NullUi):
         return back
       elif len(domains) == 1:
         answer = answer.replace(domains[0], '')
-        if answer and SERVICE_SUBDOMAIN_RE.match(answer):
+        if answer and pagekite.SERVICE_SUBDOMAIN_RE.match(answer):
           return answer+domains[0]
       else:
         for domain in domains:
           if answer.endswith(domain):
             answer = answer.replace(domain, '')
-            if answer and SERVICE_SUBDOMAIN_RE.match(answer):
+            if answer and pagekite.SERVICE_SUBDOMAIN_RE.match(answer):
               return answer+domain
       sys.stderr.write('    (Please only use characters A-Z, 0-9, - and _.)')
     raise Exception('Too many tries')
