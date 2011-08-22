@@ -3056,6 +3056,9 @@ class RawConn(Selectable):
 
   def __init__(self, fd, address, on_port, conns):
     Selectable.__init__(self, fd, address, on_port)
+    self.my_tls = False
+    self.is_tls = False
+
     domain = conns.LastIpDomain(address[0])
     if domain and UserConn.FrontEnd(self, address, 'raw', domain, on_port,
                                     [], conns):
