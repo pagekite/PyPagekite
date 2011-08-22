@@ -32,7 +32,7 @@ android: pagekite tools
 	@mv pagekite-tmp.py dist/pk-android-`./pagekite-tmp.py --appver`.py
 	@ls -l dist/pk-android-*.py
 
-dist: combined alldeb allrpm android
+dist: combined allrpm android
 
 allrpm: rpm_el4 rpm_el5 rpm_el6-fc13 rpm_fc14-15
 
