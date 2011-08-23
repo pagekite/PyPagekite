@@ -2601,8 +2601,9 @@ class UserConn(Selectable):
                     and self.conns):
       self.Log([('domain', self.host), ('on_port', on_port), ('proto', self.proto), ('is', 'FE')])
       self.conns.Add(self)
-      self.conns.TrackIP(address[0], host)
-      # FIXME: Use the tracked data to detect & mitigate abuse?
+      if proto.startswith('http'):
+        self.conns.TrackIP(address[0], host)
+        # FIXME: Use the tracked data to detect & mitigate abuse?
       return self
     else:
       self.LogDebug('No back-end', [('on_port', on_port), ('proto', self.proto),
