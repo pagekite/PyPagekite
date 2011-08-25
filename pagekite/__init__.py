@@ -94,7 +94,7 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.4.5a'
+APPVER = '0.4.5b'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -3008,17 +3008,6 @@ class UnknownConn(MagicProtocolParser):
         # better luck on the next round.
         return True
 
-    if domains:
-      # If we know how to terminate the TLS/SSL, do so!
-      ctx = self.conns.config.GetTlsEndpointCtx(domains[0])
-      if ctx:
-        self.fd = socks.SSL_Connect(ctx, self.fd,
-                                    accepted=True, server_side=True)
-        self.peeking = False
-        self.is_tls = False
-        self.my_tls = True
-        return True
-
     if domains and domains[0] is not None:
       if UserConn.FrontEnd(self, self.address,
                            'https', domains[0], self.on_port,
@@ -3035,6 +3024,7 @@ class UnknownConn(MagicProtocolParser):
                                       accepted=True, server_side=True)
           self.peeking = False
           self.is_tls = False
+          self.my_tls = True
           return True
         else:
           return False
