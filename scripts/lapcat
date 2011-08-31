@@ -320,21 +320,34 @@ def NetCat(host, port, input_fd, output_fd):
     sys.exit(1)
 
 def HttpProxy(input_fd, output_fd):
-  # FIXME: Make this actually work.  It does nothing at the moment.
   try:
-    host = 'lapcat-http-proxy'
-    network = GetNetworkId()
-    socks.usesystemdefaults()
-    socks.netcat(LapCatConfig(host, 0, network).configure().connect(),
-                 input_fd, output_fd)
-    return
-  except IOError:
+    # Get the initial request
+    request = ''
+    while not (request.endswith('\n\n') or request.endswith('\r\n\r\n')):
+      request += os.read(input_fd.fileno(), 1)
+
+    # If it is a HTTP CONNECT, we connect directly.
+    words = request.split()
+    if (len(words) >= 3 and
+        words[0].upper() == 'CONNECT' and
+        words[2].upper().startswith('HTTP/')):
+      host, port = words[1].split(':')
+      if DEBUG: DEBUG('Using native lapcat connection to %s:%s' % (host, port))
+      NetCat(host, port, input_fd, output_fd)
+
+    # Otherwise, forward this to a real HTTP Proxy for processing.
+    else:
+      if DEBUG: DEBUG('Connecting via. lapcat-http-proxy')
+      host = 'lapcat-http-proxy'
+      network = GetNetworkId()
+      socks.usesystemdefaults()
+      conn = LapCatConfig(host, 0, network).configure().connect()
+      conn.sendall(request)
+      socks.netcat(conn, input_fd, output_fd)
+
+  except (ValueError, IOError):
     DebugPrint('%s' % (sys.exc_info(), ))
     sys.exit(1)
-
-  # Get the initial request...
-  #try:
-  #  if words[0].upper() == 'CONNECT':
 
 
 class FileWrapper(object):
@@ -403,40 +416,42 @@ if __name__ == '__main__':
     if '-N' == opt: mode = 'networkid'
     elif '-P' == opt: mode = 'httpproxy'
     else:
-      if mode != 'netcat':
+      if mode not in ('netcat', 'httpproxy'):
         mode = 'invalid'
         break
-      elif '-t' == opt:   mode, inlinefmt = 'inline', '127.0.0.1 %d'
-      elif '--tc' == opt: mode, inlinefmt = 'inline', '127.0.0.1:%d'
-      elif '--tp' == opt: mode, inlinefmt = 'inline', '%d'
-      elif '--tf' == opt: mode, inlinefmt = 'inline', arg
+      elif '-t' == opt:   inlinefmt = '127.0.0.1 %d'
+      elif '--tc' == opt: inlinefmt = '127.0.0.1:%d'
+      elif '--tp' == opt: inlinefmt = '%d'
+      elif '--tf' == opt: inlinefmt = arg
       elif '--rdp' == opt:
-        mode, inlinefmt = 'inline', '127.0.0.1:%d'
+        inlinefmt = '127.0.0.1:%d'
         if len(args) == 1: args.append('3389')
       elif '--vnc' == opt:
-        mode, inlinefmt, portadd = 'inline', '127.0.0.1:%d', 5900
+        inlinefmt, portadd = '127.0.0.1:%d', 5900
         inlineargs = {'baseport': 5900, 'tries': 20, 'relative': True}
         if len(args) == 1: args.append('0')
       elif opt in ('-l', '--listen'):
-        mode, inlinefmt = 'inline', '127.0.0.1:%d'
+        inlinefmt = '127.0.0.1:%d'
         inlineargs = {'baseport': int(arg), 'tries': 1, 'loop': True}
 
-  if mode == 'netcat' and len(args) == 2:
-    NetCat(args[0], int(args[1].replace(':', '')), sys.stdin, sys.stdout)
-
-  elif mode == 'inline' and len(args) == 2:
+  # Set up the listener, if necessary...
+  if inlinefmt and ((mode == 'netcat' and len(args) == 2) or
+                    (mode == 'httpproxy')):
     fin, fout = ForkAndListen(inlinefmt, **inlineargs)
-    NetCat(args[0], portadd + int(args[1].replace(':', '')), fin, fout)
+  else:
+    fin, fout = sys.stdin, sys.stdout
 
+  # Do proxy stuff!
+  if mode == 'netcat' and len(args) == 2:
+    NetCat(args[0], portadd + int(args[1].replace(':', '')), fin, fout)
+  elif mode == 'httpproxy' and len(args) == 0:
+    HttpProxy(fin, fout)
+
+  # Or print information!
   elif mode == 'networkid' and len(args) == 0:
     print('%s' % GetNetworkId())
-
-  elif mode == 'httpproxy' and len(args) == 0:
-    HttpProxy(sys.stdin, sys.stdout)
-
   elif len(args) == 1 and args[0] in ('-h', '--help'):
     DebugPrint(__DOC__)
-
   else:
     print((
       '%(p)s: Location Aware Proxy Chooser And Tunneler / NetCat for Laptops\n'
@@ -448,7 +463,7 @@ if __name__ == '__main__':
       '       %(p)s --vnc          host [screen] # Inline VNC proxy mode\n'
       '       %(p)s -l port        host port     # Local port <=> host proxy\n'
       '       %(p)s -N                           # Show current network ID\n'
-#     '       %(p)s -P [port]                    # Behave like an HTTP Proxy\n'
+      '       %(p)s -P                           # Behave like an HTTP Proxy\n'
       '       %(p)s -h                           # Print instructions\n'
       '\n'
       'To use with ssh, add to ~/.ssh/config:\n'
