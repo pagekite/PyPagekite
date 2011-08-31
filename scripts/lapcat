@@ -337,9 +337,10 @@ def HttpProxy(input_fd, output_fd):
     if (len(words) >= 3 and
         words[0].upper() == 'CONNECT' and
         words[2].upper().startswith('HTTP/')):
+      output_fd.write('HTTP/1.1 200 Tunnel established\r\n\r\n')
+      output_fd.flush()
       host, port = words[1].split(':')
       if DEBUG: DEBUG('Using native lapcat connection to %s:%s' % (host, port))
-      output_fd.write('HTTP/1.1 200 Tunnel established\r\n\r\n')
       NetCat(host, port, input_fd, output_fd)
 
     # Otherwise, forward this to a real HTTP Proxy for processing.
