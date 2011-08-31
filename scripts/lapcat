@@ -323,6 +323,13 @@ def NetCat(host, port, input_fd, output_fd):
     DebugPrint('%s' % (sys.exc_info(), ))
     sys.exit(1)
 
+def SetProcTitle(title):
+  try:
+    import setproctitle
+    setproctitle.setproctitle(title)
+  except:
+    pass
+
 def HttpProxy(input_fd, output_fd):
   try:
     # Get the initial request
@@ -341,6 +348,7 @@ def HttpProxy(input_fd, output_fd):
       output_fd.flush()
       host, port = words[1].split(':')
       if DEBUG: DEBUG('Using native lapcat connection to %s:%s' % (host, port))
+      SetProcTitle('lapcat: %s:%s' % (host, port))
       NetCat(host, port, input_fd, output_fd)
 
     # Otherwise, forward this to a real HTTP Proxy for processing.
@@ -348,6 +356,7 @@ def HttpProxy(input_fd, output_fd):
       if DEBUG: DEBUG('Connecting via. lapcat-http-proxy')
       host = 'lapcat-http-proxy'
       network = GetNetworkId()
+      SetProcTitle('lapcat: http proxy')
       conn = LapCatConfig(host, 0, network).configure().connect()
       conn.sendall(request)
       socks.netcat(conn, input_fd, output_fd)
