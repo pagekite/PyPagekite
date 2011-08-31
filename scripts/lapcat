@@ -51,9 +51,14 @@ __DOC__ = """\
 import getopt, os, select, socket, subprocess, sys
 import sockschain as socks
 
-def DebugPrint(text): sys.stderr.write(text+'\n')
-DEBUG = False
-# DEBUG = DebugPrint
+def DebugPrint(text):
+  sys.stderr.write(text+'\n')
+  sys.stderr.flush()
+
+global TRACE
+global DEBUG
+TRACE = DEBUG = False
+TRACE = False
 
 SYS_CONF_DIR = '/etc/lapcat'
 USER_CONF_DIR = '~/.lapcat'
@@ -312,7 +317,6 @@ class LapCatConfig(object):
 def NetCat(host, port, input_fd, output_fd):
   try:
     network = GetNetworkId()
-    socks.usesystemdefaults()
     socks.netcat(LapCatConfig(host, port, network).configure().connect(),
                  input_fd, output_fd)
   except IOError:
@@ -326,6 +330,8 @@ def HttpProxy(input_fd, output_fd):
     while not (request.endswith('\n\n') or request.endswith('\r\n\r\n')):
       request += os.read(input_fd.fileno(), 1)
 
+    if TRACE: TRACE('Got request: >>%s<<' % request)
+
     # If it is a HTTP CONNECT, we connect directly.
     words = request.split()
     if (len(words) >= 3 and
@@ -333,6 +339,7 @@ def HttpProxy(input_fd, output_fd):
         words[2].upper().startswith('HTTP/')):
       host, port = words[1].split(':')
       if DEBUG: DEBUG('Using native lapcat connection to %s:%s' % (host, port))
+      output_fd.write('HTTP/1.1 200 Tunnel established\r\n\r\n')
       NetCat(host, port, input_fd, output_fd)
 
     # Otherwise, forward this to a real HTTP Proxy for processing.
@@ -340,7 +347,6 @@ def HttpProxy(input_fd, output_fd):
       if DEBUG: DEBUG('Connecting via. lapcat-http-proxy')
       host = 'lapcat-http-proxy'
       network = GetNetworkId()
-      socks.usesystemdefaults()
       conn = LapCatConfig(host, 0, network).configure().connect()
       conn.sendall(request)
       socks.netcat(conn, input_fd, output_fd)
@@ -401,20 +407,27 @@ def ForkAndListen(outfmt, baseport=0, tries=1, loop=False, relative=False):
 
 
 if __name__ == '__main__':
-  opts, args = getopt.getopt(sys.argv[1:], 'hNPtvl:',
+  opts, args = getopt.getopt(sys.argv[1:], 'hl:NPRtvV:',
                              ['listen=', 'tc', 'tp', 'tf=', 'vnc', 'rdp'])
 
   if len(args) == 1 and ':' in args[0]:
     args = args[0].split(':')
 
+  use_sysdefaults = True
   mode, portadd, inlinefmt, inlineargs = 'netcat', 0, '', {}
+
   for opt, arg in opts:
+    if '-V' == opt:
+      opt = '-v'
+      sys.stderr = open(arg, 'a')
     if '-v' == opt:
+      if DEBUG and socks.DEBUG: TRACE = DebugPrint
       if DEBUG: socks.DEBUG = DebugPrint
       DEBUG = DebugPrint
 
     if '-N' == opt: mode = 'networkid'
     elif '-P' == opt: mode = 'httpproxy'
+    elif '-R' == opt: use_sysdefaults = False
     else:
       if mode not in ('netcat', 'httpproxy'):
         mode = 'invalid'
@@ -433,6 +446,9 @@ if __name__ == '__main__':
       elif opt in ('-l', '--listen'):
         inlinefmt = '127.0.0.1:%d'
         inlineargs = {'baseport': int(arg), 'tries': 1, 'loop': True}
+
+  if use_sysdefaults:
+    socks.usesystemdefaults()
 
   # Set up the listener, if necessary...
   if inlinefmt and ((mode == 'netcat' and len(args) == 2) or
