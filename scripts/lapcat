@@ -334,10 +334,14 @@ def HttpProxy(input_fd, output_fd):
   try:
     # Get the initial request
     request = ''
-    while not (request.endswith('\n\n') or request.endswith('\r\n\r\n')):
+    loops = 1024
+    while not (loops < 1 or
+               request.endswith('\n\n') or
+               request.endswith('\r\n\r\n')):
       request += os.read(input_fd.fileno(), 1)
+      loops -= 1
 
-    if TRACE: TRACE('Got request: >>%s<<' % request)
+    if TRACE: TRACE('<<< Got request (l:%s):\n%s<<<\n' % (1024-loops, request))
 
     # If it is a HTTP CONNECT, we connect directly.
     words = request.split()
@@ -352,11 +356,11 @@ def HttpProxy(input_fd, output_fd):
       NetCat(host, port, input_fd, output_fd)
 
     # Otherwise, forward this to a real HTTP Proxy for processing.
-    else:
+    elif len(words) > 2:
       if DEBUG: DEBUG('Connecting via. lapcat-http-proxy')
       host = 'lapcat-http-proxy'
       network = GetNetworkId()
-      SetProcTitle('lapcat: http proxy')
+      SetProcTitle('lapcat: %s' % words[1])
       conn = LapCatConfig(host, 0, network).configure().connect()
       conn.sendall(request)
       socks.netcat(conn, input_fd, output_fd)
