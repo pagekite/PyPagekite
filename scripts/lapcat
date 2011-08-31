@@ -346,20 +346,20 @@ class FileWrapper(object):
   def fileno(self): return self.sock.fileno()
 
 
-def ForkAndListen(outfmt, baseport=0, tries=1, relative=False):
+def ForkAndListen(outfmt, baseport=0, tries=1, loop=False, relative=False):
   for t in range(0, tries):
     try:
       try:
         srv = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
       except:
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+      srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
       srv.bind(('', baseport+t))
       break
     except:
-      pass
+      srv = None
 
   srv.listen(3)
-  srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
   if relative:
     sys.stdout.write((outfmt+'\n') % (srv.getsockname()[1]-baseport))
@@ -369,21 +369,27 @@ def ForkAndListen(outfmt, baseport=0, tries=1, relative=False):
   sys.stdout.flush()
   os.close(sys.stdout.fileno())
   os.close(sys.stdin.fileno())
-  if os.fork() != 0: os._exit(0)
+  if not loop and os.fork() != 0: os._exit(0)
 
-  # Wait for a connection OR DIE.
-  i, o, e = select.select([srv], [], [], 15)
-  if srv not in i: os._exit(0)
-
-  client, address = srv.accept()
-  if DEBUG: DEBUG('Accepted: %s' % (address, ))
-  fw = FileWrapper(client)
-  return fw, fw
+  while True:
+    # Wait for a connection...
+    i, o, e = select.select([srv], [], [], 15)
+    if srv in i:
+      client, address = srv.accept()
+      if DEBUG: DEBUG('Accepted: %s' % (address, ))
+      if not (loop and (os.fork() != 0)):
+        srv.close()
+        fw = FileWrapper(client)
+        return fw, fw
+      client.close()
+    elif not loop:
+      # Or die?
+      os._exit(0)
 
 
 if __name__ == '__main__':
-  opts, args = getopt.getopt(sys.argv[1:],
-                             'hNPtv', ['tc', 'tp', 'tf=', 'vnc', 'rdp'])
+  opts, args = getopt.getopt(sys.argv[1:], 'hNPtvl:',
+                             ['listen=', 'tc', 'tp', 'tf=', 'vnc', 'rdp'])
 
   if len(args) == 1 and ':' in args[0]:
     args = args[0].split(':')
@@ -411,6 +417,9 @@ if __name__ == '__main__':
         mode, inlinefmt, portadd = 'inline', '127.0.0.1:%d', 5900
         inlineargs = {'baseport': 5900, 'tries': 20, 'relative': True}
         if len(args) == 1: args.append('0')
+      elif opt in ('-l', '--listen'):
+        mode, inlinefmt = 'inline', '127.0.0.1:%d'
+        inlineargs = {'baseport': int(arg), 'tries': 1, 'loop': True}
 
   if mode == 'netcat' and len(args) == 2:
     NetCat(args[0], int(args[1].replace(':', '')), sys.stdin, sys.stdout)
