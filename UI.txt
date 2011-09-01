@@ -1,0 +1,47 @@
+## UI! ##
+
+Indicator icon:  down / connecting / flying / traffic
+
+Main menu:
+
+   15 day trial
+   Buy buy buy
+   --------------------
+   Pagekites:
+   - bre.pagekite.me  > [x] WWW (PageKite)
+   - www.fnord.com          Open in Browser
+   - b.pagekite.me      ---------------------------
+                        [ ] Secure Shell (SSH)
+                        [ ] Share Desktop (VNC/RDP)
+                        ---------------------------
+   New Kite                 Settings
+                            Delete Kite
+   --------------------
+   Connections ...    > Portals:
+                        - SSH: bre.pagekite.me
+                        - VNC: bre.pagekite.me  > Open
+                        - RDP: askja.ok.is        Remove
+                        - 3349: magicserv:2341
+                        Add Portal
+                        --------------------
+                        Hosts:
+                        - bjarni
+                        - fooxbar
+                        Add Host
+                        --------------------
+                        [ ] Lapcat HTTP Proxy (localhost:7669)
+   --------------------
+   Shared items:
+   - /foo/bar/baz     > Open in Browser
+   - Pasted Text        Copy Link
+   - Pasted Image       Stop Sharing
+   Paste to Web
+   Share Folder or File
+   --------------------
+   Advanced           > View Log
+                        Config File
+                        Connect ... 
+   Help               > About PageKite
+                        On-line support
+   Quit
+
