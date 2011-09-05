@@ -3114,6 +3114,7 @@ class HttpUiThread(threading.Thread):
     threading.Thread.__init__(self)
     if not (server and handler):
       self.serve = False
+      self.httpd = None
       return
 
     self.ui_sspec = pkite.ui_sspec
@@ -3143,8 +3144,8 @@ class HttpUiThread(threading.Thread):
       except Exception, e:
         LogInfo('HTTP UI caught exception: %s' % e)
     LogDebug('HttpUiThread: done')
-    self.httpd.socket.close()
-
+    if self.httpd:
+      self.httpd.socket.close()
 
 
 class TunnelManager(threading.Thread):
@@ -3314,6 +3315,9 @@ class NullUi(object):
       self.BLUE = '\033[34;1m'
       self.MAGENTA = '\033[35;1m'
       self.CYAN = '\033[36;1m'
+
+    self.wfile = sys.stderr
+    self.rfile = sys.stdin
 
     self.in_wizard = False
     self.wizard_tell = None
