@@ -2174,8 +2174,8 @@ class Tunnel(ChunkParser):
                       ('proto', proto),
                       ('reason', reason),
                       ('domain', domain)])
-            conns.config.ui.Notify(('REJECTED: %s:%s (invalid or out of quota)'
-                                    ) % (proto, domain),
+            conns.config.ui.Notify(('REJECTED: %s:%s (%s)'
+                                    ) % (proto, domain, reason),
                                    prefix='!', color=conns.config.ui.RED)
 
           for request in parse.Header('X-PageKite-Duplicate'):
@@ -3897,7 +3897,9 @@ class PageKite(object):
 
     data = '%s:%s:%s' % (protoport, domain, srand)
     auth_error_type = None
-    if (not token) or (not check_token) or checkSignature(sign=token, payload=data):
+    if ((not token) or
+        (not check_token) or
+        checkSignature(sign=token, payload=data)):
 
       secret = (self.GetBackendData(protoport, domain) or BE_NONE)[BE_SECRET]
       if not secret:
@@ -3914,14 +3916,15 @@ class PageKite(object):
         try:
           lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
           (rv, auth_error_type) = self.LookupDomainQuota(lookup)
-          if rv is None or rv >= 0: return (rv, auth_error_type)
+          if rv is None or rv >= 0:
+            return (rv, auth_error_type or 'unauthorized')
         except Exception, e:
           # Lookup failed, fail open.
           LogError('Quota lookup failed: %s' % e)
           return (-2, None)
 
     LogInfo('No authentication found for: %s (%s)' % (domain, protoport))
-    return (None, auth_error_type or 'auth')
+    return (None, auth_error_type or 'unauthorized')
 
   def ConfigureFromFile(self, filename=None):
     if not filename: filename = self.rcfile
