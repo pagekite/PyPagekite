@@ -102,25 +102,20 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     ag = gtk.ActionGroup('Actions')
     ag.add_actions([
       ('Menu',  None, 'Menu'),
-
-      ('QuotaDisplay', None, 'XX.YY GB of Quota left'),
-      ('GetQuota', None, 'Get _More Quota...', None, 'Get more Quota from PageKite.net', self.on_stub),
-
-      ('PageKiteList', None, 'Your kites:'),
-       ('AddKite', None, 'New _Kite', None, 'Add Another PageKite', self.on_stub),
-
-      ('SharedItems', None, 'Sharing:', None, 'Items you are currently sharing', self.on_stub),
-       ('QuickShareClipBoard', None, '_Paste To Web', None, None, self.on_stub),
-       ('QuickSharePath', None, 'Share _From Disk', None, None, self.on_stub),
-       ('QuickShareScreen', None, 'Share _Screenshot', None, None, self.on_stub),
-
-      ('AdvancedMenu', None, '_Advanced ...'),
-       ('ViewLog', None, 'PageKite _Log', None, 'Display PageKite event log', self.on_stub),
-       ('ConfigFile', None, '_Configuration', None, 'Edit the PageKite configuration file', self.on_stub),
-       ('ConnectTo', None, 'Connect To ...', None, 'Connect to a remote PageKite'),
-
-      ('About', gtk.STOCK_ABOUT, 'About', None, 'About PageKite', self.on_about),
-      ('Quit', None, '_Quit PageKite', None, 'Turn PageKite off completely', self.quit),
+       ('QuotaDisplay', None, 'XX.YY GB of Quota left'),
+       ('GetQuota', None, 'Get _More Quota...', None, 'Get more Quota from PageKite.net', self.on_stub),
+       ('PageKiteList', None, 'Your kites:'),
+        ('AddKite', None, 'New _Kite', None, 'Add Another PageKite', self.on_stub),
+       ('SharedItems', None, 'Sharing:', None, 'Items you are currently sharing', self.on_stub),
+        ('QuickShareClipBoard', None, '_Paste To Web', None, None, self.on_stub),
+        ('QuickSharePath', None, 'Share _From Disk', None, None, self.on_stub),
+        ('QuickShareScreen', None, 'Share _Screenshot', None, None, self.on_stub),
+       ('AdvancedMenu', None, '_Advanced ...'),
+        ('ViewLog', None, 'PageKite _Log', None, 'Display PageKite event log', self.on_stub),
+        ('ConfigFile', None, '_Configuration', None, 'Edit the PageKite configuration file', self.on_stub),
+        ('ConnectTo', None, 'Connect To ...', None, 'Connect to a remote PageKite'),
+       ('About', gtk.STOCK_ABOUT, 'About', None, 'About PageKite', self.on_about),
+       ('Quit', None, '_Quit PageKite', None, 'Turn PageKite off completely', self.quit),
     ])
     ag.add_toggle_actions([
       ('QuickShareEnabled', None, '_Enable Sharing', None, None, self.on_stub, False),

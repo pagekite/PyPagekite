@@ -284,7 +284,7 @@ SERVICE_TOS_URL = 'https://pagekite.net/support/terms/'
 
 OPT_FLAGS = 'o:O:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
-            'nullui', 'remoteui', 'help', 'settings',
+            'nullui', 'remoteui', 'uiport=', 'help', 'settings',
             'optfile=', 'optdir=', 'savefile=', 'reloadfile=',
             'autosave', 'noautosave',
             'signup', 'list', 'add', 'only', 'disable', 'remove', 'save',
@@ -3042,6 +3042,62 @@ class UnknownConn(MagicProtocolParser):
     return True
 
 
+class UiConn(LineParser):
+
+  STATE_PASSWORD = 0
+  STATE_LIVE     = 1
+
+  def __init__(self, fd, address, on_port, conns):
+    LineParser.__init__(self, fd=fd, address=address, on_port=on_port)
+    self.state = self.STATE_PASSWORD
+
+    self.conns = conns
+    self.conns.Add(self)
+    self.lines = []
+
+    self.Send('PageKite?\r\n')
+
+  def readline(self):
+    if self.lines:
+      return self.lines.pop(0)
+    else:
+      # block?
+      return ''
+
+  def write(self, data):
+    sys.stderr.write(data)
+    self.Send(data)
+
+  def Cleanup(self):
+    self.conns.config.ui.wfile = sys.stderr
+    self.conns.config.ui.rfile = sys.stdin
+    self.lines = self.conns.config.ui_conn = None
+    self.conns = None
+    LineParser.Cleanup(self)
+
+  def Disconnect(self):
+    self.Send('Goodbye')
+    self.Cleanup()
+
+  def ProcessLine(self, line, lines):
+    if self.state == self.STATE_LIVE:
+      return True
+    elif self.state == self.STATE_PASSWORD:
+      if line.strip() == self.conns.config.ConfigSecret():
+        if self.conns.config.ui_conn: self.conns.config.ui_conn.Disconnect()
+        self.conns.config.ui_conn = self
+        self.conns.config.ui.wfile = self
+        self.conns.config.ui.rfile = self
+        self.state = self.STATE_LIVE
+        self.Send('OK!\r\n')
+        return True
+      else:
+        self.Send('Sorry.\r\n')
+        return False
+    else:
+      return False
+
+
 class RawConn(Selectable):
   """This class is a raw/timed connection."""
 
@@ -3061,10 +3117,12 @@ class RawConn(Selectable):
 class Listener(Selectable):
   """This class listens for incoming connections and accepts them."""
 
-  def __init__(self, host, port, conns, backlog=100, connclass=UnknownConn):
+  def __init__(self, host, port, conns, backlog=100,
+                     connclass=UnknownConn, quiet=False):
     Selectable.__init__(self, bind=(host, port), backlog=backlog)
     self.Log([('listen', '%s:%s' % (host, port))])
-    conns.config.ui.Notify(' - Listening on %s:%s' % (host or '*', port))
+    if not quiet:
+      conns.config.ui.Notify(' - Listening on %s:%s' % (host or '*', port))
 
     self.connclass = connclass
     self.port = port
@@ -3076,7 +3134,7 @@ class Listener(Selectable):
     return '%s port=%s' % (Selectable.__str__(self), self.port)
 
   def __html__(self):
-    return '<p>Listening on port %s</p>' % self.port
+    return '<p>Listening on port %s for %s</p>' % (self.port, self.connclass)
 
   def ReadData(self, maxread=None):
     try:
@@ -3482,6 +3540,8 @@ class PageKite(object):
     self.reloadfile = None
     self.added_kites = False
     self.ui = ui or NullUi()
+    self.ui_port = None
+    self.ui_conn = None
 
     self.save = 0
     self.kite_add = False
@@ -4279,6 +4339,7 @@ class PageKite(object):
       elif opt == '--remoteui':
         import pagekite.remoteui
         self.ui = pagekite.remoteui.RemoteUi()
+      elif opt == '--uiport': self.ui_port = int(arg)
       elif opt == '--sslzlib': self.enable_sslzlib = True
       elif opt == '--debugio':
         global DEBUG_IO
@@ -5174,6 +5235,9 @@ class PageKite(object):
         for port in self.server_raw_ports:
           if port != VIRTUAL_PN and port > 0:
             Listener(self.server_host, port, conns, connclass=RawConn)
+
+      if self.ui_port:
+        Listener('127.0.0.1', self.ui_port, conns, connclass=UiConn)
 
       # Create the Tunnel Manager
       self.tunnel_manager = TunnelManager(self, conns)
