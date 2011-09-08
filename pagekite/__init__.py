@@ -286,7 +286,7 @@ OPT_FLAGS = 'o:O:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'nullui', 'remoteui', 'uiport=', 'help', 'settings',
             'optfile=', 'optdir=', 'savefile=', 'reloadfile=',
-            'autosave', 'noautosave',
+            'autosave', 'noautosave', 'friendly',
             'signup', 'list', 'add', 'only', 'disable', 'remove', 'save',
             'service_xmlrpc=', 'controlpanel', 'controlpass',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webpath=',
@@ -4356,7 +4356,7 @@ class PageKite(object):
       elif opt == '--defaults': self.SetServiceDefaults()
       elif opt in ('--clean', '--nopyopenssl', '--nossl', '--settings',
                    '--webaccess', '--webindexes',
-                   '--webroot', '--signup'): pass
+                   '--webroot', '--signup', '--friendly'): pass
       elif opt == '--help':
         self.HelpAndExit(longhelp=True)
 
@@ -5394,8 +5394,9 @@ def Configure(pk):
     sys.exit(0)
 
   if not pk.backends.keys() and (not pk.kitesecret or not pk.kitename):
-    friendly_mode = sys.platform in ('win32', 'os2', 'os2emx',
-                                     'darwin', 'darwin1', 'darwin2')
+    friendly_mode = (('--friendly' in sys.argv) or
+                     (sys.platform in ('win32', 'os2', 'os2emx',
+                                       'darwin', 'darwin1', 'darwin2')))
     if '--signup' in sys.argv or friendly_mode:
       pk.RegisterNewKite(autoconfigure=True)
     if friendly_mode: pk.save = True

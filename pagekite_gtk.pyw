@@ -63,7 +63,6 @@ class PageKiteThread(threading.Thread):
     data = self.gui_incoming[0:bytecount]
     self.gui_incoming = self.gui_incoming[bytecount:]
     self.gui_readlock.release()
-    print '<<GUI<< %s' % data.strip()
     return data
   def send(self, data):
     if not data.endswith('\n') and data != '':
@@ -92,6 +91,7 @@ class PageKiteThread(threading.Thread):
       self.stopped = False
       return pagekite.Configure(pk)
     except:
+      self.stopped = True
       self.pk = None
       raise
 
@@ -110,6 +110,32 @@ class PageKiteThread(threading.Thread):
     if self.pk: self.pk.keep_looping = self.pk.main_loop = False
     self.looping = False
     self.close()
+
+
+class CommThread(threading.Thread):
+  def __init__(self, pkThread):
+    threading.Thread.__init__(self)
+    self.pkThread = pkThread
+    self.looping = False
+
+    # Callbacks
+    self.cb = {}
+
+  def run(self):
+    self.pkThread.start()
+    self.looping = True
+    line = ''
+    while self.looping:
+      line += self.pkThread.recv(1)
+      if line.endswith('\n'):
+        command, args = line.strip().split(': ', 1)
+        if command in self.cb:
+          self.cb[command](args)
+        line = ''
+
+  def quit(self):
+    self.pkThread.quit()
+    self.looping = False
 
 
 class PageKiteStatusIcon(gtk.StatusIcon):
@@ -152,10 +178,12 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       </ui>
   '''
 
-  def __init__(self, pkThread):
+  def __init__(self, pkComm):
     gtk.StatusIcon.__init__(self)
 
-    self.pkThread = pkThread
+    self.pkComm = pkComm
+    self.pkComm.cb['status_tag'] = self.set_status_tag
+    self.pkComm.cb['status_msg'] = self.set_status_msg
     self.set_tooltip('PageKite')
 
     self.icon_file = ICON_FILE_IDLE
@@ -167,10 +195,10 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
     self.connect('activate', self.on_activate)
     self.connect('popup-menu', self.on_popup_menu)
-    gobject.timeout_add_seconds(1, self.on_tick)
+    #gobject.timeout_add_seconds(1, self.on_tick)
 
+    self.pkComm.start()
     self.set_visible(True)
-    self.pkThread.start()
 
   def create_menu(self):
     self.manager = gtk.UIManager()
@@ -209,6 +237,27 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     self.create_menu()
     self.show_menu(0, 0)
     return False
+
+  def set_status_msg(self, message):
+    self.set_tooltip('PageKite: %s' % message)
+
+  def set_status_tag(self, status):
+    old_if = self.icon_file
+    if status == 'traffic': self.icon_file = ICON_FILE_TRAFFIC
+    elif status == 'serving': self.icon_file = ICON_FILE_TRAFFIC
+    # Connecting..
+    elif status == 'startup': self.icon_file = ICON_FILE_IDLE
+    elif status == 'connect': self.icon_file = ICON_FILE_ACTIVE
+    elif status == 'dyndns': self.icon_file = ICON_FILE_IDLE
+    # Inactive, boo
+    elif status == 'idle': self.icon_file = ICON_FILE_IDLE
+    elif status == 'down': self.icon_file = ICON_FILE_IDLE
+    elif status == 'exiting': self.icon_file = ICON_FILE_IDLE
+    # Ready and waiting
+    elif status == 'flying': self.icon_file = ICON_FILE_ACTIVE
+    elif status == 'active': self.icon_file = ICON_FILE_ACTIVE
+    if self.icon_file != old_if:
+      self.set_from_file(os.path.join(self.icon_dir, self.icon_file))
 
   def on_tick(self):
     old_if = self.icon_file
@@ -250,11 +299,11 @@ class PageKiteStatusIcon(gtk.StatusIcon):
                  '/Menubar/Menu/AdvancedMenu/ViewLog',
                  '/Menubar/Menu/AdvancedMenu/VerboseLog'):
       try:
-        w(item).set_sensitive(not self.pkThread.stopped)
+        w(item).set_sensitive(not self.pkComm.pkThread.stopped)
       except:
         print '!!! No item: %s' % item
 
-    if self.pkThread.stopped:
+    if self.pkComm.pkThread.stopped:
       w('/Menubar/Menu/QuotaDisplay').hide()
       w('/Menubar/Menu/GetQuota').hide()
     else:
@@ -277,19 +326,24 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     dialog.destroy()
 
   def quit(self, data):
-    self.pkThread.quit()
+    self.pkComm.quit()
     sys.exit(0)
 
 
 if __name__ == '__main__':
-  pkt = PageKiteThread()
+  sys.argv.append('--friendly')
+  pkt = pksi = ct = None
   try:
-    pksi = PageKiteStatusIcon(pkt)
+    pkt = PageKiteThread()
+    ct = CommThread(pkt)
+    pksi = PageKiteStatusIcon(ct)
     gobject.threads_init()
     gtk.main()
   except:
     print '%s' % (sys.exc_info(), )
-  pkt.quit()
+
+  if pkt: pkt.quit()
+  if ct: ct.quit()
 
 
 ##############################################################################
