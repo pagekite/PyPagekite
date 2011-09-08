@@ -43,10 +43,10 @@ class PageKiteThread(threading.Thread):
     else:
       line = ''
     self.pk_readlock.release()
-    print '>>PK>> %s' % line.strip()
+    #print '>>PK>> %s' % line.strip()
     return line
   def write(self, data):
-    print '>>GUI>> %s' % data.strip()
+    #print '>>GUI>> %s' % data.strip()
     self.gui_readlock.acquire()
     if data:
       self.gui_incoming += data
@@ -67,7 +67,7 @@ class PageKiteThread(threading.Thread):
   def send(self, data):
     if not data.endswith('\n') and data != '':
       raise ValueError('Please always send whole lines')
-    print '<<PK<< %s' % data.strip()
+    #print '<<PK<< %s' % data.strip()
     self.pk_readlock.acquire()
     if data:
       self.pk_incoming.append(data)
@@ -104,6 +104,7 @@ class PageKiteThread(threading.Thread):
                     http_handler=httpd.UiRequestHandler,
                     http_server=httpd.UiHttpServer)
       self.stopped = True
+      self.pk = None
       time.sleep(1)
 
   def quit(self):
@@ -259,27 +260,6 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     if self.icon_file != old_if:
       self.set_from_file(os.path.join(self.icon_dir, self.icon_file))
 
-  def on_tick(self):
-    old_if = self.icon_file
-
-    if (not self.pkThread.pk) or (self.pkThread.pk.last_loop < time.time()-5):
-      self.icon_file = ICON_FILE_IDLE
-      self.set_tooltip('PageKite (idle)')
-    else:
-      traffic = False
-      # FIXME: Detect traffic!
-      if traffic:
-        self.icon_file = ICON_FILE_TRAFFIC
-        self.set_tooltip('PageKite (transmitting)')
-      else:
-        self.icon_file = ICON_FILE_ACTIVE
-        self.set_tooltip('PageKite (active)')
-
-    if self.icon_file != old_if:
-      self.set_from_file(os.path.join(self.icon_dir, self.icon_file))
-
-    return True
-
   def on_popup_menu(self, status, button, when):
     if self.menu.props.visible:
       self.menu.popdown()
@@ -326,7 +306,14 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     dialog.destroy()
 
   def quit(self, data):
+    self.set_status_tag('exiting')
+    self.set_status_msg('Shutting down...')
     self.pkComm.quit()
+    gobject.timeout_add_seconds(1, self.quitting)
+
+  def quitting(self):
+    if self.pkComm and self.pkComm.pkThread and self.pkComm.pkThread.pk:
+      return
     sys.exit(0)
 
 
