@@ -3065,12 +3065,12 @@ class UiConn(LineParser):
       return ''
 
   def write(self, data):
-    sys.stderr.write(data)
+    self.conns.config.ui_wfile.write(data)
     self.Send(data)
 
   def Cleanup(self):
-    self.conns.config.ui.wfile = sys.stderr
-    self.conns.config.ui.rfile = sys.stdin
+    self.conns.config.ui.wfile = self.conns.config.ui_wfile
+    self.conns.config.ui.rfile = self.conns.config.ui_rfile
     self.lines = self.conns.config.ui_conn = None
     self.conns = None
     LineParser.Cleanup(self)
@@ -3357,7 +3357,7 @@ class NullUi(object):
 
   WANTS_STDERR = False
 
-  def __init__(self, welcome=None):
+  def __init__(self, welcome=None, wfile=sys.stderr, rfile=sys.stdin):
     if sys.platform in ('win32', 'os2', 'os2emx'):
       self.CLEAR = '\n\n'
       self.NORM = self.WHITE = self.GREY = self.GREEN = self.YELLOW = ''
@@ -3374,8 +3374,8 @@ class NullUi(object):
       self.MAGENTA = '\033[35;1m'
       self.CYAN = '\033[36;1m'
 
-    self.wfile = sys.stderr
-    self.rfile = sys.stdin
+    self.wfile = wfile
+    self.rfile = rfile
 
     self.in_wizard = False
     self.wizard_tell = None
@@ -3529,7 +3529,8 @@ class PageKite(object):
     self.last_updates = []
     self.backends = {}  # These are the backends we want tunnels for.
     self.conns = None
-    self.looping = False
+    self.last_loop = 0
+    self.keep_looping = True
     self.main_loop = True
 
     self.crash_report_url = '%scgi-bin/crashes.pl' % WWWHOME
@@ -3540,6 +3541,8 @@ class PageKite(object):
     self.reloadfile = None
     self.added_kites = False
     self.ui = ui or NullUi()
+    self.ui_wfile = sys.stderr
+    self.ui_rfile = sys.stdin
     self.ui_port = None
     self.ui_conn = None
 
@@ -5123,11 +5126,10 @@ class PageKite(object):
     global buffered_bytes
 
     conns = self.conns
-    last_loop = time.time()
+    self.last_loop = time.time()
 
-    self.looping = True
     iready, oready, eready = None, None, None
-    while self.looping:
+    while self.keep_looping:
       isocks, osocks = conns.Readable(), conns.Blocked()
       try:
         if isocks or osocks:
@@ -5140,11 +5142,11 @@ class PageKite(object):
       except Exception, e:
         LogError('Error in select: %s (%s/%s)' % (e, isocks, osocks))
         conns.CleanFds()
-        last_loop -= 1
+        self.last_loop -= 1
 
       now = time.time()
       if not iready and not oready:
-        if (isocks or osocks) and (now < last_loop + 1):
+        if (isocks or osocks) and (now < self.last_loop + 1):
           LogError('Spinning, pausing ...')
           time.sleep(0.1)
 
@@ -5175,7 +5177,7 @@ class PageKite(object):
         conns.Remove(conn)
         conn.Cleanup()
 
-      last_loop = now
+      self.last_loop = now
 
   def Loop(self):
     self.conns.start()
@@ -5306,6 +5308,7 @@ class PageKite(object):
     # Finally, run our select/epoll loop.
     self.Loop()
 
+    self.ui.Status('exiting', message='Stopping...')
     Log([('stopping', 'pagekite.py')])
     if self.ui_httpd: self.ui_httpd.quit()
     if self.tunnel_manager: self.tunnel_manager.quit()
@@ -5372,6 +5375,9 @@ def Main(pagekite, configure, uiclass=NullUi,
       time.sleep(2 ** crashes)
       crashes += 1
       if crashes > 9: crashes = 9
+
+    # No exception, do we keep looping?
+    if not pk.main_loop: return
 
 def Configure(pk):
   if '--appver' in sys.argv:
