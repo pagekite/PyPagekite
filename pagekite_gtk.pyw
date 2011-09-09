@@ -293,8 +293,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       try:
         w(item).set_sensitive(not self.pkComm.pkThread.stopped)
       except:
-        print '!!! No item: %s' % item
-
+        pass
 
     if self.pkComm.pkThread.stopped:
       w('/Menubar/Menu/QuotaDisplay').hide()
