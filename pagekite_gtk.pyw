@@ -88,10 +88,8 @@ class PageKiteThread(threading.Thread):
       self.pk = pk
       pk.ui_wfile = pk.ui.wfile = self
       pk.ui_rfile = pk.ui.rfile = self
-      self.stopped = False
       return pagekite.Configure(pk)
     except:
-      self.stopped = True
       self.pk = None
       raise
 
@@ -104,16 +102,24 @@ class PageKiteThread(threading.Thread):
                       uiclass=remoteui.RemoteUi,
                       http_handler=httpd.UiRequestHandler,
                       http_server=httpd.UiHttpServer)
+        self.write('status_msg: Disabled\nstatus_tag: idle\n')
         self.pk = None
       time.sleep(1)
 
   def stop(self):
     self.stopped = True
-    if self.pk: self.pk.keep_looping = self.pk.main_loop = False
+    if self.pk: self.send('exit: stopping\n')
+
+  def toggle(self):
+    if self.stopped:
+      self.stopped = False
+    else:
+      self.stop()
 
   def quit(self):
-    if self.pk: self.pk.keep_looping = self.pk.main_loop = False
     self.looping = False
+    self.stopped = True
+    if self.pk: self.send('exit: quitting\n')
     self.close()
 
 
@@ -227,7 +233,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
        ('Quit', None, '_Quit PageKite', None, 'Turn PageKite off completely', self.quit),
     ])
     ag.add_toggle_actions([
-      ('EnablePageKite', None, '_Enable PageKite', None, 'Enable local PageKite', self.toggle_enable, True),
+      ('EnablePageKite', None, '_Enable PageKite', None, 'Enable local PageKite', self.toggle_enable, (not self.pkComm.pkThread.stopped)),
       ('QuickShareEnabled', None, '_Enable Sharing', None, None, self.on_stub, False),
       ('VerboseLog', None, 'Verbose Logging', None, 'Verbose logging facilitate troubleshooting.', self.on_stub, False),
     ])
@@ -289,6 +295,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       except:
         print '!!! No item: %s' % item
 
+
     if self.pkComm.pkThread.stopped:
       w('/Menubar/Menu/QuotaDisplay').hide()
       w('/Menubar/Menu/GetQuota').hide()
@@ -299,7 +306,9 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     self.menu.popup(None, None, None, button, when)
 
   def toggle_enable(self, data):
-    print 'Enable: %s' % data
+    pkt = self.pkComm.pkThread
+    pkt.toggle()
+    data.set_active(not pkt.stopped)
 
   def on_stub(self, data):
     print 'Stub'
