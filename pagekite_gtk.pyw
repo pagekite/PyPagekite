@@ -98,14 +98,18 @@ class PageKiteThread(threading.Thread):
   def run(self):
     self.looping = True
     while self.looping:
-      from pagekite import remoteui, httpd
-      pagekite.Main(pagekite.PageKite, self.Configure,
-                    uiclass=remoteui.RemoteUi,
-                    http_handler=httpd.UiRequestHandler,
-                    http_server=httpd.UiHttpServer)
-      self.stopped = True
-      self.pk = None
+      if not self.stopped:
+        from pagekite import remoteui, httpd
+        pagekite.Main(pagekite.PageKite, self.Configure,
+                      uiclass=remoteui.RemoteUi,
+                      http_handler=httpd.UiRequestHandler,
+                      http_server=httpd.UiHttpServer)
+        self.pk = None
       time.sleep(1)
+
+  def stop(self):
+    self.stopped = True
+    if self.pk: self.pk.keep_looping = self.pk.main_loop = False
 
   def quit(self):
     if self.pk: self.pk.keep_looping = self.pk.main_loop = False
@@ -167,6 +171,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
         %(sharing)s
         <separator/>
          <menu action="AdvancedMenu">
+          <menuitem action="EnablePageKite"/>
           <menuitem action="ViewLog"/>
           <menuitem action="VerboseLog"/>
           <menuitem action="ConfigFile"/>
@@ -222,6 +227,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
        ('Quit', None, '_Quit PageKite', None, 'Turn PageKite off completely', self.quit),
     ])
     ag.add_toggle_actions([
+      ('EnablePageKite', None, '_Enable PageKite', None, 'Enable local PageKite', self.toggle_enable, True),
       ('QuickShareEnabled', None, '_Enable Sharing', None, None, self.on_stub, False),
       ('VerboseLog', None, 'Verbose Logging', None, 'Verbose logging facilitate troubleshooting.', self.on_stub, False),
     ])
@@ -292,6 +298,9 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
     self.menu.popup(None, None, None, button, when)
 
+  def toggle_enable(self, data):
+    print 'Enable: %s' % data
+
   def on_stub(self, data):
     print 'Stub'
 
@@ -302,6 +311,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     dialog.set_comments('PageKite is a tool for running personal servers, '
                         'sharing work and communicating over the WWW.')
     dialog.set_website(pagekite.WWWHOME)
+    dialog.set_license(pagekite.LICENSE)
     dialog.run()
     dialog.destroy()
 

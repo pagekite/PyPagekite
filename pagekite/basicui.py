@@ -5,6 +5,7 @@ from pagekite import NullUi
 class BasicUi(NullUi):
   """Stdio based user interface."""
 
+  DAEMON_FRIENDLY = False
   WANTS_STDERR = True
   EMAIL_RE = re.compile(r'^[a-z0-9!#$%&\'\*\+\/=?^_`{|}~-]+'
                          '(?:\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'

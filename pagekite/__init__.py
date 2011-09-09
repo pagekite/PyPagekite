@@ -1,22 +1,22 @@
 #!/usr/bin/python -u
-#
-# pagekite.py, Copyright 2010, 2011, the Beanstalks Project ehf.
-#                                    and Bjarni Runar Einarsson
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as
-# published by the Free Software Foundation, either version 3 of the
-# License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-#
+LICENSE = """\
+pagekite.py, Copyright 2010, 2011, the Beanstalks Project ehf.
+                                   and Bjarni Runar Einarsson
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the  GNU  Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful,  but  WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more
+details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see: <http://www.gnu.org/licenses/>
+
+"""
 ##[ Maybe TODO: ]##############################################################
 #
 # Optimization:
@@ -2154,11 +2154,7 @@ class Tunnel(ChunkParser):
           for quota in parse.Header('X-PageKite-Quota'):
             self.quota = [int(quota), None, None]
             self.Log([('FE', sname), ('quota', quota)])
-            qMB = 1024
-            conns.config.ui.Notify(('You have %.2f MB of quota left.'
-                                    ) % (float(quota) / qMB),
-                                   prefix=(int(quota) < qMB) and '!' or ' ',
-                                   color=conns.config.ui.MAGENTA)
+            conns.config.ui.NotifyQuota(float(quota))
 
           invalid_reasons = {}
           for request in parse.Header('X-PageKite-Invalid-Why'):
@@ -3206,6 +3202,54 @@ class HttpUiThread(threading.Thread):
       self.httpd.socket.close()
 
 
+class UiCommunicator(threading.Thread):
+  """Listen for interactive commands."""
+
+  def __init__(self, config, conns):
+    threading.Thread.__init__(self)
+    self.looping = False
+    self.config = config
+    self.conns = conns
+    LogDebug('UiComm: Created')
+
+  def run(self):
+    self.looping = True
+    while self.looping:
+      if not self.config or not self.config.ui.ALLOWS_INPUT:
+        time.sleep(1)
+        continue
+
+      line = ''
+      try:
+        i, o, e = select.select([self.config.ui.rfile], [], [], 1)
+        if not i: continue
+      except:
+        pass
+
+      if self.config:
+        line = self.config.ui.rfile.readline().strip()
+        if line: self.Parse(line)
+
+  def Parse(self, line):
+    LogDebug('UiComm: %s' % line)
+    try:
+      command, args = line.split(': ', 1)
+
+      if command == 'exit':
+        self.config.keep_looping = False
+        self.config.main_loop = False
+      if command == 'restart':
+        self.config.keep_looping = False
+        self.config.main_loop = True
+
+    except:
+      pass
+
+  def quit(self):
+    self.looping = False
+    self.config = self.conns = None
+
+
 class TunnelManager(threading.Thread):
   """Create new tunnels as necessary or kill idle ones."""
 
@@ -3355,6 +3399,8 @@ class TunnelManager(threading.Thread):
 class NullUi(object):
   """This is a UI that always returns default values or raises errors."""
 
+  DAEMON_FRIENDLY = True
+  ALLOWS_INPUT = False
   WANTS_STDERR = False
 
   def __init__(self, welcome=None, wfile=sys.stderr, rfile=sys.stdin):
@@ -3437,6 +3483,12 @@ class NullUi(object):
     if popup: Log([('info', '%s%s%s' % (message,
                                         alignright and ' ' or '',
                                         alignright))])
+
+  def NotifyQuota(self, quota):
+    qMB = 1024
+    self.Notify('You have %.2f MB of quota left.' % (quota / qMB),
+                prefix=(int(quota) < qMB) and '!' or ' ',
+                color=self.MAGENTA)
 
   def Status(self, tag, message=None, color=None): pass
 
@@ -3544,7 +3596,7 @@ class PageKite(object):
     self.ui_wfile = sys.stderr
     self.ui_rfile = sys.stdin
     self.ui_port = None
-    self.ui_conn = None
+    self.ui_comm = None
 
     self.save = 0
     self.kite_add = False
@@ -3867,7 +3919,9 @@ class PageKite(object):
     if self.conns and self.conns.auth: self.conns.auth.quit()
     if self.ui_httpd: self.ui_httpd.quit()
     if self.tunnel_manager: self.tunnel_manager.quit()
-    self.conns = self.ui_httpd = self.tunnel_manager = None
+    if self.ui_comm: self.ui_comm.quit()
+    self.keep_looping = False
+    self.conns = self.ui_httpd = self.ui_comm = self.tunnel_manager = None
     if help or longhelp:
       print longhelp and DOC or MINIDOC
       print '***'
@@ -3875,7 +3929,9 @@ class PageKite(object):
       self.ui.Status('exiting', message=(message or 'Good-bye!'))
     if message: print 'Error: %s' % message
     if DEBUG_IO: traceback.print_exc(file=sys.stderr)
-    if not noexit: sys.exit(1)
+    if not noexit:
+      self.main_loop = False
+      sys.exit(1)
 
   def GetTlsEndpointCtx(self, domain):
     if domain in self.tls_endpoints: return self.tls_endpoints[domain][1]
@@ -4171,7 +4227,7 @@ class PageKite(object):
       elif opt in ('-L', '--logfile'): self.logfile = arg
       elif opt in ('-Z', '--daemonize'):
         self.daemonize = True
-        self.ui = NullUi()
+        if not self.ui.DAEMON_FRIENDLY: self.ui = NullUi()
       elif opt in ('-U', '--runas'):
         import pwd
         import grp
@@ -5102,8 +5158,6 @@ class PageKite(object):
 
     global LogFile
     if filename in ('stdio', 'stdout'):
-      sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
-      sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', 0)
       LogFile = sys.stdout
     else:
       try:
@@ -5183,6 +5237,7 @@ class PageKite(object):
     self.conns.start()
     if self.ui_httpd: self.ui_httpd.start()
     if self.tunnel_manager: self.tunnel_manager.start()
+    if self.ui_comm: self.ui_comm.start()
 
     try:
       epoll = select.epoll()
@@ -5199,7 +5254,8 @@ class PageKite(object):
     # If we are going to spam stdout with ugly crap, then there is no point
     # attempting the fancy stuff. This also makes us backwards compatible
     # for the most part.
-    if self.logfile == 'stdio': self.ui = NullUi()
+    if self.logfile == 'stdio':
+      if not self.ui.DAEMON_FRIENDLY: self.ui = NullUi()
 
     # Announce that we've started up!
     self.ui.Status('startup', message='Starting up...')
@@ -5226,6 +5282,9 @@ class PageKite(object):
     LogInfo('Collecting entropy for a secure secret.')
     globalSecret()
     self.ui.Status('startup', message='Starting up...')
+
+    # Create the UI Communicator
+    self.ui_comm = UiCommunicator(self, conns)
 
     try:
 
@@ -5312,6 +5371,7 @@ class PageKite(object):
     Log([('stopping', 'pagekite.py')])
     if self.ui_httpd: self.ui_httpd.quit()
     if self.tunnel_manager: self.tunnel_manager.quit()
+    if self.ui_comm: self.ui_comm.quit()
     if self.conns:
       if self.conns.auth: self.conns.auth.quit()
       for conn in self.conns.conns: conn.Cleanup()

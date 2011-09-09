@@ -4,6 +4,8 @@ from pagekite import NullUi
 class RemoteUi(NullUi):
   """Stdio based user interface for interacting with other processes."""
 
+  DAEMON_FRIENDLY = True
+  ALLOWS_INPUT = True
   WANTS_STDERR = True
   EMAIL_RE = re.compile(r'^[a-z0-9!#$%&\'\*\+\/=?^_`{|}~-]+'
                          '(?:\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'
