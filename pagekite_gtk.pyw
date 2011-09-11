@@ -119,8 +119,10 @@ class PageKiteThread(threading.Thread):
   def quit(self):
     self.looping = False
     self.stopped = True
-    if self.pk: self.send('exit: quitting\n')
+    if self.pk:
+      self.send('exit: quitting\n')
     self.close()
+    self.pk = None
 
 
 class CommThread(threading.Thread):
@@ -128,9 +130,57 @@ class CommThread(threading.Thread):
     threading.Thread.__init__(self)
     self.pkThread = pkThread
     self.looping = False
+    self.busy = False
+
+    self.multi = None
+    self.multi_args = None
 
     # Callbacks
-    self.cb = {}
+    self.cb = {
+      'tell_message': self.tell_message,
+      'tell_error':   self.tell_error,
+      'start_wizard': self.start_wizard,
+      'end_wizard':   self.end_wizard,
+    }
+
+  def tell_message(self, message):
+    print 'Message: %s' % message
+
+  def tell_error(self, message):
+    print 'Error: %s' % message
+
+  def start_wizard(self, title):
+    print 'Should start wizard for: %s' % title
+    self.busy = True
+
+  def end_wizard(self, title):
+    print 'Should end wizard for: %s' % title
+    self.busy = False
+
+  def parse_line(self, line):
+    print '<< %s' % line[:-1]
+    if line.startswith('begin_'):
+      self.multi = line[6:].strip()
+      self.multi_args = {}
+    elif self.multi:
+      if line.startswith('end_'):
+        if self.multi in self.cb:
+          self.cb[self.multi](self.multi_args)
+        elif 'default' in self.multi_args:
+          self.pkThread.send(self.multi_args['default']+'\n')
+        self.multi = self.multi_args = None
+      else:
+        try:
+          variable, value = line.strip().split(': ', 1)
+          self.multi_args[variable] = value
+        except ValueError:
+          pass
+    else:
+      try:
+        command, args = line.strip().split(': ', 1)
+        if command in self.cb: self.cb[command](args)
+      except ValueError:
+        pass
 
   def run(self):
     self.pkThread.start()
@@ -139,9 +189,7 @@ class CommThread(threading.Thread):
     while self.looping:
       line += self.pkThread.recv(1)
       if line.endswith('\n'):
-        command, args = line.strip().split(': ', 1)
-        if command in self.cb:
-          self.cb[command](args)
+        self.parse_line(line)
         line = ''
 
   def quit(self):
@@ -181,7 +229,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
           <menuitem action="ViewLog"/>
           <menuitem action="VerboseLog"/>
           <menuitem action="ConfigFile"/>
-          <menuitem action="ConnectTo"/>
+          <!-- menuitem action="ConnectTo"/ -->
          </menu>
          <menuitem action="About"/>
          <menuitem action="Quit"/>
@@ -291,7 +339,8 @@ class PageKiteStatusIcon(gtk.StatusIcon):
                  '/Menubar/Menu/AdvancedMenu/ViewLog',
                  '/Menubar/Menu/AdvancedMenu/VerboseLog'):
       try:
-        w(item).set_sensitive(not self.pkComm.pkThread.stopped)
+        w(item).set_sensitive(not self.pkComm.pkThread.stopped and
+                              not self.pkComm.busy)
       except:
         pass
 

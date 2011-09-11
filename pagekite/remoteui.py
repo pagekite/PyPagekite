@@ -48,7 +48,7 @@ class RemoteUi(NullUi):
     return self.tries
 
   def EndWizard(self):
-    self.wfile.write('end_wizard\n')
+    self.wfile.write('end_wizard: done\n')
 
   def Spacer(self):
     pass
@@ -106,6 +106,7 @@ class RemoteUi(NullUi):
       answer = self.rfile.readline().strip().lower()
       if back is not None and answer == 'back': return back
       if answer in ('y', 'n'): return (answer == 'y')
+      if answer == str(default).lower(): return default
 
   def AskKiteName(self, domains, question, pre=[], default=None,
                   wizard_hint=False, image=None, back=None):

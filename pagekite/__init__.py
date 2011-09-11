@@ -199,6 +199,7 @@ Back-end Options:
               is used as a port number, pagekite.py's HTTP server will be used.
 
  --define_backend=...   Same as --backend, except not enabled by default.
+ --delete_backend=...   Delete a given back-end.
  --frontends=N:X:P      Choose N front-ends from X (a DNS domain name), port P.
  --frontend=host:port   Connect to the named front-end server.
  --fe_certname=N        Connect using SSL, accepting valid certs for domain N.
@@ -298,8 +299,8 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'ports=', 'protos=', 'portalias=', 'rawports=',
             'tls_default=', 'tls_endpoint=',
             'fe_certname=', 'jakenoia', 'ca_certs=',
-            'kitename=', 'kitesecret=',
-            'backend=', 'define_backend=', 'be_config=', 'fingerpath=',
+            'kitename=', 'kitesecret=', 'fingerpath=',
+            'backend=', 'define_backend=', 'be_config=', 'delete_backend',
             'frontend=', 'frontends=', 'torify=', 'socksify=', 'proxy=',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes', 'debugio',
@@ -3050,15 +3051,24 @@ class UiConn(LineParser):
     self.conns = conns
     self.conns.Add(self)
     self.lines = []
+    self.qc = threading.Condition()
 
-    self.Send('PageKite?\r\n')
+    self.challenge = sha1hex('%s%8.8x' % (globalSecret(),
+                                          random.randint(0, 0x7FFFFFFD)+1))
+    self.expect = signToken(token=self.challenge,
+                            secret=self.conns.config.ConfigSecret(),
+                            payload=self.challenge,
+                            length=1000)
+    LogDebug('Expecting: %s' % self.expect)
+    self.Send('PageKite? %s\r\n' % self.challenge)
+
 
   def readline(self):
-    if self.lines:
-      return self.lines.pop(0)
-    else:
-      # block?
-      return ''
+    self.qc.acquire()
+    while not self.lines: self.qc.wait()
+    line = self.lines.pop(0)
+    self.qc.release()
+    return line
 
   def write(self, data):
     self.conns.config.ui_wfile.write(data)
@@ -3077,9 +3087,13 @@ class UiConn(LineParser):
 
   def ProcessLine(self, line, lines):
     if self.state == self.STATE_LIVE:
+      self.qc.acquire()
+      self.lines.append(line)
+      self.qc.notify()
+      self.qc.release()
       return True
     elif self.state == self.STATE_PASSWORD:
-      if line.strip() == self.conns.config.ConfigSecret():
+      if line.strip() == self.expect:
         if self.conns.config.ui_conn: self.conns.config.ui_conn.Disconnect()
         self.conns.config.ui_conn = self
         self.conns.config.ui.wfile = self
@@ -3241,6 +3255,12 @@ class UiCommunicator(threading.Thread):
       if command == 'restart':
         self.config.keep_looping = False
         self.config.main_loop = True
+      if command == 'config':
+        self.config.Configure(['--%s' % args])
+      if command == 'addkite':
+        self.config.RegisterNewKite(kitename=args)
+      if command == 'save':
+        self.config.SaveUserConfig()
 
     except:
       pass
@@ -3596,6 +3616,7 @@ class PageKite(object):
     self.ui_wfile = sys.stderr
     self.ui_rfile = sys.stdin
     self.ui_port = None
+    self.ui_conn = None
     self.ui_comm = None
 
     self.save = 0
@@ -4356,6 +4377,7 @@ class PageKite(object):
       elif opt == '--fingerpath': self.finger_path = arg
       elif opt == '--kitename': self.kitename = arg
       elif opt == '--kitesecret': self.kitesecret = arg
+
       elif opt in ('--backend', '--define_backend'):
         bes = self.ArgToBackendSpecs(arg.replace('@kitesecret', self.kitesecret)
                                         .replace('@kitename', self.kitename),
@@ -4375,6 +4397,11 @@ class PageKite(object):
         hostc = self.be_config.get(host, {})
         hostc[key] = {'True': True, 'False': False, 'None': None}.get(val, val)
         self.be_config[host] = hostc
+      elif opt == '--delete_backend':
+        bes = self.ArgToBackendSpecs(arg)
+        for bid in bes:
+          if bid in self.backends:
+            del self.backends[bid]
 
       elif opt == '--domain':
         protos, domain, secret = arg.split(':')
