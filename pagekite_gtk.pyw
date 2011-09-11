@@ -130,32 +130,12 @@ class CommThread(threading.Thread):
     threading.Thread.__init__(self)
     self.pkThread = pkThread
     self.looping = False
-    self.busy = False
 
     self.multi = None
     self.multi_args = None
 
     # Callbacks
-    self.cb = {
-      'tell_message': self.tell_message,
-      'tell_error':   self.tell_error,
-      'start_wizard': self.start_wizard,
-      'end_wizard':   self.end_wizard,
-    }
-
-  def tell_message(self, message):
-    print 'Message: %s' % message
-
-  def tell_error(self, message):
-    print 'Error: %s' % message
-
-  def start_wizard(self, title):
-    print 'Should start wizard for: %s' % title
-    self.busy = True
-
-  def end_wizard(self, title):
-    print 'Should end wizard for: %s' % title
-    self.busy = False
+    self.cb = {}
 
   def parse_line(self, line):
     print '<< %s' % line[:-1]
@@ -165,7 +145,7 @@ class CommThread(threading.Thread):
     elif self.multi:
       if line.startswith('end_'):
         if self.multi in self.cb:
-          self.cb[self.multi](self.multi_args)
+          gobject.idle_add(cb[self.multi], self.multi_args)
         elif 'default' in self.multi_args:
           self.pkThread.send(self.multi_args['default']+'\n')
         self.multi = self.multi_args = None
@@ -178,7 +158,8 @@ class CommThread(threading.Thread):
     else:
       try:
         command, args = line.strip().split(': ', 1)
-        if command in self.cb: self.cb[command](args)
+        if command in self.cb:
+          gobject.idle_add(self.cb[command], args)
       except ValueError:
         pass
 
@@ -241,9 +222,16 @@ class PageKiteStatusIcon(gtk.StatusIcon):
   def __init__(self, pkComm):
     gtk.StatusIcon.__init__(self)
 
+    self.in_wizard = False
     self.pkComm = pkComm
-    self.pkComm.cb['status_tag'] = self.set_status_tag
-    self.pkComm.cb['status_msg'] = self.set_status_msg
+    self.pkComm.cb.update({
+      'status_tag': self.set_status_tag,
+      'status_msg': self.set_status_msg,
+      'tell_message': self.show_info_dialog,
+      'tell_error': self.show_error_dialog,
+      'start_wizard': self.start_wizard,
+      'end_wizard': self.end_wizard,
+    })
     self.set_tooltip('PageKite')
 
     self.icon_file = ICON_FILE_IDLE
@@ -340,7 +328,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
                  '/Menubar/Menu/AdvancedMenu/VerboseLog'):
       try:
         w(item).set_sensitive(not self.pkComm.pkThread.stopped and
-                              not self.pkComm.busy)
+                              not self.in_wizard)
       except:
         pass
 
@@ -353,15 +341,19 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
     self.menu.popup(None, None, None, button, when)
 
-  def toggle_enable(self, data):
-    pkt = self.pkComm.pkThread
-    pkt.toggle()
-    data.set_active(not pkt.stopped)
+  def show_info_dialog(self, message):
+    print 'FIXME: info_dialog(%s)' % message
+    dialog = gtk.MessageDialog()
+    dialog.run()
+    dialog.destroy()
 
-  def on_stub(self, data):
-    print 'Stub'
+  def show_error_dialog(self, message):
+    print 'FIXME: error_dialog(%s)' % message
+    dialog = gtk.MessageDialog()
+    dialog.run()
+    dialog.destroy()
 
-  def on_about(self, data):
+  def show_about(self):
     dialog = gtk.AboutDialog()
     dialog.set_name('PageKite')
     dialog.set_version(pagekite.APPVER)
@@ -371,6 +363,25 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     dialog.set_license(pagekite.LICENSE)
     dialog.run()
     dialog.destroy()
+
+  def toggle_enable(self, data):
+    pkt = self.pkComm.pkThread
+    pkt.toggle()
+    data.set_active(not pkt.stopped)
+
+  def start_wizard(self, title):
+    self.in_wizard = True
+    print 'FIXME: start_wizard(%s)' % title
+
+  def end_wizard(self, message):
+    self.in_wizard = False
+    print 'FIXME: end_wizard(%s)' % message
+
+  def on_stub(self, data):
+    print 'Stub'
+
+  def on_about(self, data):
+    self.show_about()
 
   def quit(self, data):
     self.set_status_tag('exiting')
@@ -389,6 +400,12 @@ if __name__ == '__main__':
   pkt = pksi = ct = None
   try:
     pkt = PageKiteThread()
+    if '--remote' in sys.argv:
+      pkt.stopped = True
+      sys.argv.remove('--remote')
+    else:
+      pkt.stopped = False
+
     ct = CommThread(pkt)
     pksi = PageKiteStatusIcon(ct)
     gobject.threads_init()
