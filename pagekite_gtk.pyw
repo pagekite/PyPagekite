@@ -67,7 +67,7 @@ class PageKiteThread(threading.Thread):
   def send(self, data):
     if not data.endswith('\n') and data != '':
       raise ValueError('Please always send whole lines')
-    #print '<<PK<< %s' % data.strip()
+    print '<<PK<< %s' % data.strip()
     self.pk_readlock.acquire()
     if data:
       self.pk_incoming.append(data)
@@ -145,7 +145,7 @@ class CommThread(threading.Thread):
     elif self.multi:
       if line.startswith('end_'):
         if self.multi in self.cb:
-          gobject.idle_add(cb[self.multi], self.multi_args)
+          gobject.idle_add(self.cb[self.multi], self.multi_args)
         elif 'default' in self.multi_args:
           self.pkThread.send(self.multi_args['default']+'\n')
         self.multi = self.multi_args = None
@@ -231,6 +231,8 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       'tell_error': self.show_error_dialog,
       'start_wizard': self.start_wizard,
       'end_wizard': self.end_wizard,
+      'ask_yesno': self.ask_yesno,
+      'ask_email': self.ask_email,
     })
     self.set_tooltip('PageKite')
 
@@ -343,15 +345,35 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
   def show_info_dialog(self, message):
     print 'FIXME: info_dialog(%s)' % message
-    dialog = gtk.MessageDialog()
-    dialog.run()
-    dialog.destroy()
+    dlg = gtk.MessageDialog(type=gtk.MESSAGE_INFO,
+                            buttons=gtk.BUTTONS_CLOSE,
+                            message_format=message)
+    dlg.run()
+    dlg.destroy()
 
   def show_error_dialog(self, message):
     print 'FIXME: error_dialog(%s)' % message
-    dialog = gtk.MessageDialog()
-    dialog.run()
-    dialog.destroy()
+    dlg = gtk.MessageDialog(type=gtk.MESSAGE_ERROR,
+                            buttons=gtk.BUTTONS_CLOSE,
+                            message_format=message)
+    dlg.run()
+    dlg.destroy()
+
+  def ask_yesno(self, args):
+    if 'pre' in args:
+      question = '\n'.join(args['pre'])+'\n'+args['question']
+    else:
+      question = args['question']
+    dlg = gtk.MessageDialog(type=gtk.MESSAGE_QUESTION,
+                            buttons=gtk.BUTTONS_YES_NO,
+                            message_format=question)
+    response = dlg.get_widget_for_response(dlg.run()).get_label()
+    self.pkComm.pkThread.send(response[4]+'\n')
+    dlg.destroy()
+
+  def ask_email(self, args):
+    print 'FIXME: ask_email(%s)' % args
+    pass
 
   def show_about(self):
     dialog = gtk.AboutDialog()
