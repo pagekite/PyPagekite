@@ -2142,15 +2142,7 @@ class Tunnel(ChunkParser):
 
         if data and parse:
           sname = self.server_info[self.S_NAME]
-          conns.config.ui.Notify('Connecting to front-end %s ...' % sname,
-                                 color=conns.config.ui.GREY)
-          conns.config.ui.Notify(' - Protocols: %s' % ' '.join(self.server_info[self.S_PROTOS]),
-                                 color=conns.config.ui.GREY)
-          conns.config.ui.Notify(' - Ports: %s' % ' '.join(self.server_info[self.S_PORTS]),
-                                 color=conns.config.ui.GREY)
-          if 'raw' in self.server_info[self.S_PROTOS]:
-            conns.config.ui.Notify(' - Raw ports: %s' % ' '.join(self.server_info[self.S_RAW_PORTS]),
-                                   color=conns.config.ui.GREY)
+          conns.config.ui.NotifyServer(self, self.server_info)
 
           for quota in parse.Header('X-PageKite-Quota'):
             self.quota = [int(quota), None, None]
@@ -3353,42 +3345,34 @@ class TunnelManager(threading.Thread):
               proto, port = proto.split('-')
             else:
               port = ''
-            self.pkite.ui.Notify(('Flying: %s://%s%s/'
-                                  ) % (proto, domain, port and ':'+port or ''),
-                                 prefix='~<>', color=self.pkite.ui.CYAN)
+            self.pkite.ui.NotifyFlyingFE(proto, port, domain)
 
         if len(self.pkite.backends.keys()):
           self.pkite.ui.Status('flying')
           for tid in self.conns.tunnels:
             be = self.pkite.backends.get(tid)
             if be and be[BE_STATUS] not in BE_INACTIVE:
-              domain = be[BE_DOMAIN]
-              port = be[BE_PORT]
-              proto = be[BE_PROTO]
-
               # Do we have auto-SSL at the front-end?
-              protoport = (port and ('%s-%s' % (proto, port)) or proto)
+              protoport, domain = tid.split(':', 1)
               tunnels = self.conns.Tunnel(protoport, domain)
-              if proto in ('http', 'http2', 'http3') and tunnels:
-                proto = 'https'
+              if be[BE_PROTO] in ('http', 'http2', 'http3') and tunnels:
+                has_ssl = True
                 for t in tunnels:
-                  if (protoport, domain) not in t.remote_ssl: proto = 'http'
+                  if (protoport, domain) not in t.remote_ssl: has_ssl = False
+              else:
+                has_ssl = False
 
-              prox = (proto == 'raw') and ' (HTTP proxied)' or ''
-              if proto == 'raw' and port in ('22', 22): proto = 'ssh'
-              url = '%s://%s%s' % (proto, domain, port and (':%s' % port) or '')
-              self.pkite.ui.Notify(('Flying %s:%s as %s/%s'
-                                    ) % (be[BE_BHOST], be[BE_BPORT], url, prox),
-                                    prefix='~<>', color=self.pkite.ui.CYAN)
-              domainp = '%s/%s' % (domain, port or '80')
+              # Get list of webpaths...
+              domainp = '%s/%s' % (domain, be[BE_PORT] or '80')
               if (self.pkite.ui_sspec and
                   domainp in self.pkite.ui_paths and
                   be[BE_BHOST] == self.pkite.ui_sspec[0] and
                   be[BE_BPORT] == self.pkite.ui_sspec[1]):
                 dpaths = self.pkite.ui_paths[domainp]
-                for dp in sorted(dpaths.keys()):
-                  self.pkite.ui.Notify(' - %s%s' % (url, dp),
-                                       color=self.pkite.ui.BLUE)
+              else:
+                dpaths = {}
+
+              self.pkite.ui.NotifyFlyingBE(be, has_ssl, dpaths)
 
           self.PingTunnels(time.time())
 
@@ -3504,11 +3488,39 @@ class NullUi(object):
                                         alignright and ' ' or '',
                                         alignright))])
 
+  def NotifyServer(self, obj, server_info):
+    self.Notify('Connecting to front-end %s ...' % server_info[obj.S_NAME],
+                color=self.GREY)
+    self.Notify(' - Protocols: %s' % ' '.join(server_info[obj.S_PROTOS]),
+                color=self.GREY)
+    self.Notify(' - Ports: %s' % ' '.join(server_info[obj.S_PORTS]),
+                color=self.GREY)
+    if 'raw' in server_info[obj.S_PROTOS]:
+      self.Notify(' - Raw ports: %s' % ' '.join(server_info[obj.S_RAW_PORTS]),
+                  color=self.GREY)
+
   def NotifyQuota(self, quota):
     qMB = 1024
     self.Notify('You have %.2f MB of quota left.' % (quota / qMB),
                 prefix=(int(quota) < qMB) and '!' or ' ',
                 color=self.MAGENTA)
+
+  def NotifyFlyingFE(self, proto, port, domain, be=None):
+    self.Notify(('Flying: %s://%s%s/'
+                 ) % (proto, domain, port and ':'+port or ''),
+                prefix='~<>', color=self.CYAN)
+
+  def NotifyFlyingBE(self, be, has_ssl, dpaths):
+    domain, port, proto = be[BE_DOMAIN], be[BE_PORT], be[BE_PROTO]
+    prox = (proto == 'raw') and ' (HTTP proxied)' or ''
+    if proto == 'raw' and port in ('22', 22): proto = 'ssh'
+    url = '%s://%s%s' % (proto, domain, port and (':%s' % port) or '')
+
+    self.Notify(('Flying %s:%s as %s/%s'
+                 ) % (be[BE_BHOST], be[BE_BPORT], url, prox),
+                prefix='~<>', color=self.CYAN)
+    for dp in sorted(dpaths.keys()):
+      self.Notify(' - %s%s' % (url, dp), color=self.BLUE)
 
   def Status(self, tag, message=None, color=None): pass
 
