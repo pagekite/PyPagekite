@@ -122,7 +122,7 @@ Reply: `person@example.com`
 
 Reply: `person.pagekite.me`
 
-    start_wizard: Creating kite: bretestetst.pagekite.me
+    start_wizard: Creating kite: person.pagekite.me
      begin_ask_multiplechoice
      preamble: Do you accept the license and terms of service?
      choice_1: Yes, I agree!
@@ -151,6 +151,10 @@ Reply: `y`
     notify: Hello! This is pk v0.4.99pre5-1.
     ...
 
+Implementations should accept unknown arguments/commands gracefully by
+ignoring them, or in the case of unknown commands, immediately replying
+with the default value if present.
 
-
+Note that control commands won't work while PageKite is waiting for a
+reply to a UI request.
 
