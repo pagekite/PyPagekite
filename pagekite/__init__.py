@@ -3463,7 +3463,7 @@ class NullUi(object):
 
   def Browse(self, url):
     import webbrowser
-    self.Tell(['Opening %s in your browser...' % url], error=True)
+    self.Tell(['Opening %s in your browser...' % url], error=False)
     webbrowser.open(url)
 
   def DefaultOrFail(self, question, default):
@@ -4270,6 +4270,10 @@ class PageKite(object):
         else:
           self.ui_sspec = (host, 0)
 
+      elif opt == '--nowebpath':
+        host, path = arg.split(':', 1)
+        if host in self.ui_paths and path in self.ui_paths[host]:
+          del self.ui_paths[host][path]
       elif opt == '--webpath':
         host, path, policy, fpath = arg.split(':', 3)
 

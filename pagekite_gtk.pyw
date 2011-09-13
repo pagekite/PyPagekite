@@ -178,6 +178,14 @@ class CommThread(threading.Thread):
     self.looping = False
 
 
+class UiContainer(gtk.Window):
+  pass
+
+class UiWizard(UiContainer):
+  def __init__(self):
+    pass
+
+
 class PageKiteStatusIcon(gtk.StatusIcon):
   KITEITEM_TEMPLATE = '''\
         <menu action="KiteMenu_%(count)s">
@@ -222,7 +230,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
   def __init__(self, pkComm):
     gtk.StatusIcon.__init__(self)
 
-    self.in_wizard = False
+    self.wizard = None
     self.pkComm = pkComm
     self.pkComm.cb.update({
       'status_tag': self.set_status_tag,
@@ -330,7 +338,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
                  '/Menubar/Menu/AdvancedMenu/VerboseLog'):
       try:
         w(item).set_sensitive(not self.pkComm.pkThread.stopped and
-                              not self.in_wizard)
+                              not self.wizard)
       except:
         pass
 
@@ -392,7 +400,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     data.set_active(not pkt.stopped)
 
   def start_wizard(self, title):
-    self.in_wizard = True
+    self.wizard = True
     print 'FIXME: start_wizard(%s)' % title
 
   def end_wizard(self, message):
@@ -414,7 +422,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
   def quitting(self):
     if self.pkComm and self.pkComm.pkThread and self.pkComm.pkThread.pk:
       return
-    sys.exit(0)
+    gtk.main_quit()
 
 
 if __name__ == '__main__':

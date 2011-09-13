@@ -132,8 +132,10 @@ class RemoteUi(NullUi):
       self.wfile.write('begin_ask_multiplechoice\n')
       if pre:
         self.wfile.write(' preamble: %s\n' % ' '.join(pre).replace('\n', ' '))
+      count = 0
       for choice in choices:
-        self.wfile.write(' choice: %s\n' % choice)
+        count += 1
+        self.wfile.write(' choice_%d: %s\n' % (count, choice))
       if default:
         self.wfile.write(' default: %s\n' % default)
       self.wfile.write(' question: %s\n' % (question or '').replace('\n', ' '))
