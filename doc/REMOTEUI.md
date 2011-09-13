@@ -68,8 +68,8 @@ debugging.
 
 Configuration commands of particular interest to UI programmers are:
 
-    webpath=<HOST>:<WEBPATH>:<POLICY>:<FILEPATH>
-    nowebpath=<HOST>:<WEBPATH>
+    webpath=<HOST/PORT>:<WEBPATH>:<POLICY>:<FILEPATH>
+    nowebpath=<HOST/PORT>:<WEBPATH>
 
 These can be used to register/deregister paths with the built-in HTTPD on
 the fly during program runtime.
