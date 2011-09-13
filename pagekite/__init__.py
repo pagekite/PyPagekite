@@ -2163,9 +2163,7 @@ class Tunnel(ChunkParser):
                       ('proto', proto),
                       ('reason', reason),
                       ('domain', domain)])
-            conns.config.ui.Notify(('REJECTED: %s:%s (%s)'
-                                    ) % (proto, domain, reason),
-                                   prefix='!', color=conns.config.ui.RED)
+            conns.config.ui.NotifyKiteRejected(proto, domain, reason, crit=True)
 
           for request in parse.Header('X-PageKite-Duplicate'):
             abort = True
@@ -2174,9 +2172,7 @@ class Tunnel(ChunkParser):
                       ('err', 'Duplicate'),
                       ('proto', proto),
                       ('domain', domain)])
-            conns.config.ui.Notify(('REJECTED: %s:%s (duplicate)'
-                                    ) % (proto, domain),
-                                   prefix='!', color=conns.config.ui.YELLOW)
+            conns.config.ui.NotifyKiteRejected(proto, domain, 'duplicate')
 
           if not conns.config.disable_zchunks:
             for feature in parse.Header('X-PageKite-Features'):
@@ -3487,6 +3483,10 @@ class NullUi(object):
     if popup: Log([('info', '%s%s%s' % (message,
                                         alignright and ' ' or '',
                                         alignright))])
+
+  def NotifyKiteRejected(self, proto, domain, reason, crit=False):
+    self.Notify('REJECTED: %s:%s (%s)' % (proto, domain, reason),
+                prefix='!', color=(crit and self.RED or self.YELLOW))
 
   def NotifyServer(self, obj, server_info):
     self.Notify('Connecting to front-end %s ...' % server_info[obj.S_NAME],
