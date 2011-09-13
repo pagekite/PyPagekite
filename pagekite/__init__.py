@@ -94,7 +94,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.4.5b'
+APPVER = '0.4.99pre5-1'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
