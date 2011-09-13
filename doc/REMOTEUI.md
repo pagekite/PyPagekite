@@ -30,8 +30,8 @@ PageKite will send messages looking like this:
 These messages will continue to arrive every few seconds for the lifetime
 of the program, updating the UI on the current state.
 
-Each message will span exactly one line (`'\n'` terminated), and is split into
-the name and argument separated by `': '` (semicolon, space).
+Each message will span exactly one line (`\n` terminated), and is split into
+the name and argument separated by `: ` (semicolon, space).
 
 
 ### Existing status tags ###
@@ -53,7 +53,7 @@ tags currently exist:
 ## Run-time control commands ##
 
 The UI can control the pagekite process by sending commands in the same
-format as basic messages: `'command: argument\n'`
+format as basic messages: `command: argument\n`
 
 The following commands are recognized:
 
