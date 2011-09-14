@@ -1,4 +1,5 @@
 import re, time
+import pagekite
 from pagekite import NullUi
 
 class RemoteUi(NullUi):
@@ -12,6 +13,18 @@ class RemoteUi(NullUi):
                          '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
                          '(?:[a-zA-Z]{2,4}|museum)$')
 
+  def NotifyFlyingBE(self, be, has_ssl, dpaths, now=None):
+    message = ('be_status:'
+               ' status=%x domain=%s port=%s proto=%s'
+               ' bhost=%s bport=%s ssl=%s'
+               '\n') % (be[pagekite.BE_STATUS], be[pagekite.BE_DOMAIN],
+                        be[pagekite.BE_PORT], be[pagekite.BE_PROTO],
+                        be[pagekite.BE_BHOST], be[pagekite.BE_BPORT], has_ssl) 
+    if message not in self.notify_history:
+      self.notify_history[message] = now or time.time()
+      self.wfile.write(message)
+    # FIXME: Report dpaths
+
   def Notify(self, message, prefix=' ',
              popup=False, color=None, now=None, alignright=''):
 
@@ -24,7 +37,7 @@ class RemoteUi(NullUi):
 
     message = '%s' % message
     if message not in self.notify_history:
-      self.notify_history[message] = now
+      self.notify_history[message] = now or time.time()
       self.wfile.write('notify: %s\n' % message)
 
   def Status(self, tag, message=None, color=None):

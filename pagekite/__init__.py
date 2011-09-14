@@ -342,11 +342,13 @@ BE_BPORT = 4
 BE_SECRET = 5
 BE_STATUS = 6
 
-BE_STATUS_OK = 100
-BE_STATUS_BE_FAIL = 2
-BE_STATUS_NO_TUNNEL = 1
-BE_STATUS_DISABLED = -1
-BE_STATUS_UNKNOWN = -2
+BE_STATUS_REMOTE_SSL   = 0x10000
+BE_STATUS_OK           = 0x01000
+BE_STATUS_ERR_DNS      = 0x00100
+BE_STATUS_ERR_BE       = 0x00010
+BE_STATUS_ERR_TUNNEL   = 0x00001
+BE_STATUS_UNKNOWN      = 0
+BE_STATUS_DISABLED     = -1
 BE_STATUS_DISABLE_ONCE = -3
 BE_INACTIVE = (BE_STATUS_DISABLED, BE_STATUS_DISABLE_ONCE)
 
@@ -2164,6 +2166,8 @@ class Tunnel(ChunkParser):
                       ('reason', reason),
                       ('domain', domain)])
             conns.config.ui.NotifyKiteRejected(proto, domain, reason, crit=True)
+            conns.config.SetBackendStatus(domain, proto,
+                                          add=BE_STATUS_ERR_TUNNEL)
 
           for request in parse.Header('X-PageKite-Duplicate'):
             abort = True
@@ -2173,6 +2177,8 @@ class Tunnel(ChunkParser):
                       ('proto', proto),
                       ('domain', domain)])
             conns.config.ui.NotifyKiteRejected(proto, domain, 'duplicate')
+            conns.config.SetBackendStatus(domain, proto,
+                                          add=BE_STATUS_ERR_TUNNEL)
 
           if not conns.config.disable_zchunks:
             for feature in parse.Header('X-PageKite-Features'):
@@ -2186,12 +2192,15 @@ class Tunnel(ChunkParser):
             abort = False
             proto, domain, srand = request.split(':')
             conns.Tunnel(proto, domain, self)
+            status = BE_STATUS_OK
             if request in ssl_available:
+              status |= BE_STATUS_REMOTE_SSL
               self.remote_ssl[(proto, domain)] = True
             self.Log([('FE', sname),
                       ('proto', proto),
-                      ('ssl', (request in ssl_available)),
-                      ('domain', domain)])
+                      ('domain', domain),
+                      ('ssl', (request in ssl_available))])
+            conns.config.SetBackendStatus(domain, proto, add=status)
 
         self.rtt = (time.time() - begin)
 
@@ -3315,6 +3324,7 @@ class TunnelManager(threading.Thread):
         self._run()
       except Exception, e:
         LogError('TunnelManager died: %s' % e)
+        if DEBUG_IO: traceback.print_exc(file=sys.stderr)
         time.sleep(5)
 
   def _run(self):
@@ -3343,34 +3353,34 @@ class TunnelManager(threading.Thread):
               port = ''
             self.pkite.ui.NotifyFlyingFE(proto, port, domain)
 
+        self.PingTunnels(time.time())
         if len(self.pkite.backends.keys()):
           self.pkite.ui.Status('flying')
-          for tid in self.conns.tunnels:
-            be = self.pkite.backends.get(tid)
-            if be and be[BE_STATUS] not in BE_INACTIVE:
-              # Do we have auto-SSL at the front-end?
-              protoport, domain = tid.split(':', 1)
-              tunnels = self.conns.Tunnel(protoport, domain)
-              if be[BE_PROTO] in ('http', 'http2', 'http3') and tunnels:
-                has_ssl = True
-                for t in tunnels:
-                  if (protoport, domain) not in t.remote_ssl: has_ssl = False
-              else:
-                has_ssl = False
 
-              # Get list of webpaths...
-              domainp = '%s/%s' % (domain, be[BE_PORT] or '80')
-              if (self.pkite.ui_sspec and
-                  domainp in self.pkite.ui_paths and
-                  be[BE_BHOST] == self.pkite.ui_sspec[0] and
-                  be[BE_BPORT] == self.pkite.ui_sspec[1]):
-                dpaths = self.pkite.ui_paths[domainp]
-              else:
-                dpaths = {}
+      for bid in self.pkite.backends:
+        be = self.pkite.backends[bid]
+        if be[BE_STATUS] not in BE_INACTIVE:
+          # Do we have auto-SSL at the front-end?
+          protoport, domain = bid.split(':', 1)
+          tunnels = self.conns.Tunnel(protoport, domain)
+          if be[BE_PROTO] in ('http', 'http2', 'http3') and tunnels:
+            has_ssl = True
+            for t in tunnels:
+              if (protoport, domain) not in t.remote_ssl: has_ssl = False
+          else:
+            has_ssl = False
 
-              self.pkite.ui.NotifyFlyingBE(be, has_ssl, dpaths)
+          # Get list of webpaths...
+          domainp = '%s/%s' % (domain, be[BE_PORT] or '80')
+          if (self.pkite.ui_sspec and
+              domainp in self.pkite.ui_paths and
+              be[BE_BHOST] == self.pkite.ui_sspec[0] and
+              be[BE_BPORT] == self.pkite.ui_sspec[1]):
+            dpaths = self.pkite.ui_paths[domainp]
+          else:
+            dpaths = {}
 
-          self.PingTunnels(time.time())
+          self.pkite.ui.NotifyFlyingBE(be, has_ssl, dpaths)
 
       tunnel_count = len(self.pkite.conns and
                          self.pkite.conns.TunnelServers() or [])
@@ -3977,6 +3987,16 @@ class PageKite(object):
       parts.pop(0)
     return None
 
+  def SetBackendStatus(self, domain, proto='', add=None, sub=None):
+    match = '%s:%s' % (proto, domain)
+    for bid in self.backends:
+      if bid == match or (proto == '' and bid.endswith(match)):
+        status = self.backends[bid][BE_STATUS]
+        if add: self.backends[bid][BE_STATUS] |= add
+        if sub and (status & sub): self.backends[bid][BE_STATUS] -= sub
+        Log([('bid', bid),
+             ('status', '0x%x' % self.backends[bid][BE_STATUS])])
+
   def GetBackendData(self, proto, domain, recurse=True):
     backend = '%s:%s' % (proto.lower(), domain.lower())
     if backend in self.backends:
@@ -4380,9 +4400,12 @@ class PageKite(object):
       elif opt == '--ca_certs': self.ca_certs = arg
       elif opt == '--jakenoia': self.fe_anon_tls_wrap = True
       elif opt == '--fe_certname':
-        cert = arg.lower()
-        if cert not in self.fe_certname: self.fe_certname.append(cert)
-        self.fe_certname.sort()
+        if arg == '':
+          self.fe_certname = []
+        else:
+          cert = arg.lower()
+          if cert not in self.fe_certname: self.fe_certname.append(cert)
+          self.fe_certname.sort()
       elif opt == '--service_xmlrpc': self.service_xmlrpc = arg
       elif opt == '--frontend': self.servers_manual.append(arg)
       elif opt == '--frontends':
@@ -4397,9 +4420,9 @@ class PageKite(object):
       elif opt in ('--backend', '--define_backend'):
         bes = self.ArgToBackendSpecs(arg.replace('@kitesecret', self.kitesecret)
                                         .replace('@kitename', self.kitename),
-                                     status=((opt == '--backend')
-                                             and BE_STATUS_UNKNOWN
-                                             or BE_STATUS_DISABLED))
+                                     status=((opt != '--backend')
+                                             and BE_STATUS_DISABLED
+                                             or BE_STATUS_UNKNOWN))
         for bid in bes:
           if not self.kitename:
             self.kitename = bes[bid][BE_DOMAIN]
@@ -5168,12 +5191,18 @@ class PageKite(object):
             self.last_updates.append(update)
             if result.startswith('good') or result.startswith('nochg'):
               Log([('dyndns', result), ('data', update)])
+              self.SetBackendStatus(update.split(':')[0],
+                                    sub=BE_STATUS_ERR_DNS)
             else:
               LogInfo('DynDNS update failed: %s' % result, [('data', update)])
+              self.SetBackendStatus(update.split(':')[0],
+                                    add=BE_STATUS_ERR_DNS)
               failures += 1
           except Exception, e:
             LogInfo('DynDNS update failed: %s' % e, [('data', update)])
-            traceback.print_exc(file=sys.stderr)
+            if DEBUG_IO: traceback.print_exc(file=sys.stderr)
+            self.SetBackendStatus(update.split(':')[0],
+                                  add=BE_STATUS_ERR_DNS)
             failures += 1
       if not self.last_updates:
         self.last_updates = last_updates
