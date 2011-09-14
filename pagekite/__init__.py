@@ -347,6 +347,7 @@ BE_STATUS_OK           = 0x01000
 BE_STATUS_ERR_DNS      = 0x00100
 BE_STATUS_ERR_BE       = 0x00010
 BE_STATUS_ERR_TUNNEL   = 0x00001
+BE_STATUS_ERR_ANY      = 0x00fff
 BE_STATUS_UNKNOWN      = 0
 BE_STATUS_DISABLED     = -1
 BE_STATUS_DISABLE_ONCE = -3
@@ -3380,7 +3381,7 @@ class TunnelManager(threading.Thread):
           else:
             dpaths = {}
 
-          self.pkite.ui.NotifyFlyingBE(be, has_ssl, dpaths)
+          self.pkite.ui.NotifyBE(be, has_ssl, dpaths)
 
       tunnel_count = len(self.pkite.conns and
                          self.pkite.conns.TunnelServers() or [])
@@ -3520,17 +3521,32 @@ class NullUi(object):
                  ) % (proto, domain, port and ':'+port or ''),
                 prefix='~<>', color=self.CYAN)
 
-  def NotifyFlyingBE(self, be, has_ssl, dpaths):
+  def NotifyBE(self, be, has_ssl, dpaths):
     domain, port, proto = be[BE_DOMAIN], be[BE_PORT], be[BE_PROTO]
     prox = (proto == 'raw') and ' (HTTP proxied)' or ''
     if proto == 'raw' and port in ('22', 22): proto = 'ssh'
     url = '%s://%s%s' % (proto, domain, port and (':%s' % port) or '')
 
-    self.Notify(('Flying %s:%s as %s/%s'
-                 ) % (be[BE_BHOST], be[BE_BPORT], url, prox),
-                prefix='~<>', color=self.CYAN)
-    for dp in sorted(dpaths.keys()):
-      self.Notify(' - %s%s' % (url, dp), color=self.BLUE)
+    if be[BE_STATUS] == BE_STATUS_UNKNOWN: return
+    if be[BE_STATUS] & BE_STATUS_OK:
+      if be[BE_STATUS] & BE_STATUS_ERR_ANY:
+        status = 'Trying'
+        color = self.YELLOW
+        prefix = '   '
+      else:
+        status = 'Flying'
+        color = self.CYAN
+        prefix = '~<>'
+    else:
+      return
+
+    self.Notify(('%s %s:%s as %s/%s'
+                 ) % (status, be[BE_BHOST], be[BE_BPORT], url, prox),
+                prefix=prefix, color=color)
+
+    if status == 'Flying':
+      for dp in sorted(dpaths.keys()):
+        self.Notify(' - %s%s' % (url, dp), color=self.BLUE)
 
   def Status(self, tag, message=None, color=None): pass
 
@@ -4344,9 +4360,11 @@ class PageKite(object):
             self.dyndns = (provider, {'user': usr, 'pass': pwd})
           else:
             self.dyndns = (provider, {'user': usrpwd, 'pass': ''})
-        else:
+        elif arg:
           if arg in DYNDNS: arg = DYNDNS[arg]
           self.dyndns = (arg, {'user': '', 'pass': ''})
+        else:
+          self.dyndns = None
 
       elif opt in ('-p', '--ports'): self.server_ports = [int(x) for x in arg.split(',')]
       elif opt == '--portalias':

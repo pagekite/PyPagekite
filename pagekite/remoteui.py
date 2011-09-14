@@ -13,7 +13,7 @@ class RemoteUi(NullUi):
                          '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
                          '(?:[a-zA-Z]{2,4}|museum)$')
 
-  def NotifyFlyingBE(self, be, has_ssl, dpaths, now=None):
+  def NotifyBE(self, be, has_ssl, dpaths, now=None):
     message = ('be_status:'
                ' status=%x domain=%s port=%s proto=%s'
                ' bhost=%s bport=%s ssl=%s'
