@@ -23,9 +23,10 @@ PageKite will send messages looking like this:
     status_msg: Kites are flying and all is well.
     status_tag: flying
     ...
-    notify: Flying localhost:5900 as raw://b.pagekite.me:5900/ (HTTP proxied)
-    notify: Flying localhost:52422 as https://chatkite.pagekite.me/
-    notify:  - https://chatkite.pagekite.me/
+    be_status: status=1000 domain=foo.pagekite.me port= proto=http ...
+    be_path: url=http://foo.pagekite.me/ policy=default src=/path/to/file
+    ...
+    notify: Some random text message
 
 These messages will continue to arrive every few seconds for the lifetime
 of the program, updating the UI on the current state.
@@ -46,8 +47,7 @@ tags currently exist:
     serving  -  An HTTP request is being handled
     idle     -  Running as front-end, waiting for back-ends.
     down     -  Running as back-end, waiting for a front-end.
-    flying   -  Have front- and back-ends, may be waiting for more.
-    active   -  Have all required front- and back-ends, woohoo!
+    flying   -  Flying some kites!
     exiting  -  Shutting down
 
 ## Run-time control commands ##

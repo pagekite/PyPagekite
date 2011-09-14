@@ -3355,8 +3355,6 @@ class TunnelManager(threading.Thread):
             self.pkite.ui.NotifyFlyingFE(proto, port, domain)
 
         self.PingTunnels(time.time())
-        if len(self.pkite.backends.keys()):
-          self.pkite.ui.Status('flying')
 
       for bid in self.pkite.backends:
         be = self.pkite.backends[bid]
@@ -3398,7 +3396,12 @@ class TunnelManager(threading.Thread):
                              ) % (tunnel_count, tunnel_total))
       elif problem:
         self.pkite.ui.Status('flying', color=self.pkite.ui.YELLOW,
-                      message='DynDNS updates may be incomplete, will retry...')
+                     message='DynDNS updates may be incomplete, will retry...')
+      else:
+        self.pkite.ui.Status('flying', color=self.pkite.ui.GREEN,
+                                   message='Kites are flying and all is well.')
+
+
 
       for i in xrange(0, check_interval):
         if self.keep_running:
@@ -5224,10 +5227,6 @@ class PageKite(object):
             failures += 1
       if not self.last_updates:
         self.last_updates = last_updates
-
-    if not failures:
-      self.ui.Status('active', color=self.ui.GREEN,
-                               message='Kites are flying and all is well.')
 
     return failures
 
