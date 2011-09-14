@@ -14,16 +14,29 @@ class RemoteUi(NullUi):
                          '(?:[a-zA-Z]{2,4}|museum)$')
 
   def NotifyBE(self, be, has_ssl, dpaths, now=None):
+    domain = be[pagekite.BE_DOMAIN]
+    port = be[pagekite.BE_PORT]
+    proto = be[pagekite.BE_PROTO]
+    prox = (proto == 'raw') and ' (HTTP proxied)' or ''
+    if proto == 'raw' and port in ('22', 22): proto = 'ssh'
+    url = '%s://%s%s' % (proto, domain, port and (':%s' % port) or '')
+
     message = ('be_status:'
                ' status=%x domain=%s port=%s proto=%s'
                ' bhost=%s bport=%s ssl=%s'
-               '\n') % (be[pagekite.BE_STATUS], be[pagekite.BE_DOMAIN],
-                        be[pagekite.BE_PORT], be[pagekite.BE_PROTO],
+               '\n') % (be[pagekite.BE_STATUS], domain, port, proto,
                         be[pagekite.BE_BHOST], be[pagekite.BE_BPORT], has_ssl) 
+
     if message not in self.notify_history:
       self.notify_history[message] = now or time.time()
       self.wfile.write(message)
-    # FIXME: Report dpaths
+
+    for path in dpaths:
+      message = ('be_path: url=%s%s policy=%s src=%s\n'
+                 ) % (url, path, dpaths[path][0], dpaths[path][1])
+      if message not in self.notify_history:
+        self.notify_history[message] = now or time.time()
+        self.wfile.write(message)
 
   def Notify(self, message, prefix=' ',
              popup=False, color=None, now=None, alignright=''):
