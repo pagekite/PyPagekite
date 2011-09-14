@@ -241,6 +241,8 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       'end_wizard': self.end_wizard,
       'ask_yesno': self.ask_yesno,
       'ask_email': self.ask_email,
+      'be_status': self.parse_status,
+      'be_path': self.parse_status,
     })
     self.set_tooltip('PageKite')
 
@@ -254,6 +256,9 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     self.connect('activate', self.on_activate)
     self.connect('popup-menu', self.on_popup_menu)
     #gobject.timeout_add_seconds(1, self.on_tick)
+
+    self.kites = {}
+    self.shared = {}
 
     self.pkComm.start()
     self.set_visible(True)
@@ -351,6 +356,46 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
     self.menu.popup(None, None, None, button, when)
 
+  def parse_status(self, argtext):
+    args = {}
+    for arg in argtext.split('; '):
+      var, val = arg.split('=', 1)
+      args[var] = val
+
+    if 'domain' in args:
+      domain_info = self.kites.get(args['domain'], {})
+      proto = args.get('proto', 'http')
+      port = args.get('port') or '80' # FIXME: this is dumb
+      bid = '%s/%s' % (proto, port)
+      backend_info = domain_info.get(bid, {})
+      if 'path' in args:
+        path_info = backend_info.get('paths', {})
+        if 'delete' in args:
+          if args['path'] in path_info: del path_info[args['path']]
+        else:
+          path_info[args['path']] = {
+            'domain': args['domain'],
+            'policy': args['policy'],
+            'port': port,
+            'src': args['src']
+          }
+          backend_info['paths'] = path_info
+          domain_info[bid] = backend_info
+          # Also add to self.shared
+          share_info = self.shared.get(args['src'], [])
+          share_info.append(path_info[args['path']])
+          self.shared[args['src']] = share_info
+      else:
+        if 'delete' in args:
+          if bid in domain_info: del domain_info[bid]
+        else:
+          for i in ('proto', 'port', 'status', 'bhost', 'bport', 'ssl'):
+            backend_info[i] = args[i]
+          domain_info[bid] = backend_info
+      self.kites[args['domain']] = domain_info
+
+    print 'Kites: %s' % self.kites
+
   def show_info_dialog(self, message):
     print 'FIXME: info_dialog(%s)' % message
     dlg = gtk.MessageDialog(type=gtk.MESSAGE_INFO,
@@ -426,7 +471,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
 
 if __name__ == '__main__':
-  sys.argv.append('--friendly')
+  sys.argv[1:1] = ['--friendly']
   pkt = pksi = ct = None
   try:
     pkt = PageKiteThread()

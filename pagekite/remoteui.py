@@ -22,8 +22,8 @@ class RemoteUi(NullUi):
     url = '%s://%s%s' % (proto, domain, port and (':%s' % port) or '')
 
     message = ('be_status:'
-               ' status=%x domain=%s port=%s proto=%s'
-               ' bhost=%s bport=%s ssl=%s'
+               ' status=%x; domain=%s; port=%s; proto=%s;'
+               ' bhost=%s; bport=%s; ssl=%s'
                '\n') % (be[pagekite.BE_STATUS], domain, port, proto,
                         be[pagekite.BE_BHOST], be[pagekite.BE_BPORT], has_ssl) 
 
@@ -32,8 +32,9 @@ class RemoteUi(NullUi):
       self.wfile.write(message)
 
     for path in dpaths:
-      message = ('be_path: url=%s%s policy=%s src=%s\n'
-                 ) % (url, path, dpaths[path][0], dpaths[path][1])
+      message = ('be_path: domain=%s; port=%s; path=%s; policy=%s; src=%s\n'
+                 ) % (domain, port or 80, path,
+                      dpaths[path][0], dpaths[path][1])
       if message not in self.notify_history:
         self.notify_history[message] = now or time.time()
         self.wfile.write(message)
