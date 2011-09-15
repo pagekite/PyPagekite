@@ -206,10 +206,10 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       <ui>
        <menubar name="Menubar">
         <menu action="Menu">
-         <menuitem action="QuotaDisplay"/>
+         <!-- menuitem action="QuotaDisplay"/>
          <menuitem action="GetQuota"/>
-        <separator/>
-         %(kitelist)s
+        <separator/ -->
+        %(kitelist)s
          <menuitem action="AddKite"/>
         %(sharing)s
         <separator/>
@@ -294,7 +294,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       'kitelist': self.kite_menu(action_group=ag),
       'sharing': self.sharing_menu(action_group=ag),
     })
-    self.manager.get_widget('/Menubar/Menu/QuotaDisplay').set_sensitive(False)
+    #self.manager.get_widget('/Menubar/Menu/QuotaDisplay').set_sensitive(False)
     self.menu = self.manager.get_widget('/Menubar/Menu/About').props.parent
 
   def kite_menu(self, action_group=None):
@@ -304,28 +304,52 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       actions.append((act,  None, tit))
 
     domains = sorted(self.kites.keys())
-    if domains:
+    if len(domains):
       a('menuitem', 'PageKiteList', 'My Kites:', close=True)
       for domain in domains:
         mdomain = domain.replace('.', 'X')
-        a('menu', 'ViewKiteX%s' % mdomain, ' - %s' % domain)
+        a('menu', 'ViewKiteX%s' % mdomain, '  %s' % domain)
         # FIXME: Add real items!
         a('menuitem', 'WebX%s' % mdomain, 'WWW on PORT', close=True)
         xml.append('</menu>')
     else:
-      a('menuitem', 'PageKiteList', 'No Kites (yet)', close=True)
+      a('menuitem', 'PageKiteList', 'No Kites Yet', close=True)
 
     if action_group and actions: action_group.add_actions(actions)
     if action_group and toggles: action_group.add_toggle_actions(toggles)
     return ''.join(xml)
 
   def sharing_menu(self, action_group=None):
-    xml, actions, toggles = [], [], []
+    xml, actions, toggles = ['<separator/>'], [], []
     def a(elem, act, tit, close=False):
       xml.append('<%s action="%s"%s>' % (elem, act, close and '/' or ''))
       actions.append((act,  None, tit))
+    def sn(path):
+      p = path[-20:]
+      if p != path:
+        if '/' in p:
+          p = '/'.join(('...', p.split('/', 1)[1]))
+        elif '\\' in p:
+          p = '\\'.join(('...', p.split('\\', 1)[1]))
+      return p
 
-    # FIXME!
+    shared = sorted(self.shared.keys())
+    if len(shared):
+      a('menuitem', 'SharedList', 'Shared:', close=True)
+      scount = 0
+      for src in shared:
+        scount += 1
+        a('menu', 'Shared%s' % scount, '  %s' % sn(src))
+        a('menuitem', 'UnShare%s' % scount, 'Stop sharing', close=True)
+        xml.append('</menu>')
+    else:
+      a('menuitem', 'SharedList', 'Nothing Shared Yet', close=True)
+
+    a('menu', 'Share', 'New Share ...')
+    a('menuitem', 'SharePath',      'File or Folder', close=True)
+    a('menuitem', 'ShareClipBoard', 'Paste To Web', close=True)
+    a('menuitem', 'ShareScreen',    'Take Screenshot', close=True)
+    xml.append('</menu>')
 
     if action_group and actions: action_group.add_actions(actions)
     if action_group and toggles: action_group.add_toggle_actions(toggles)
@@ -380,16 +404,20 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       except:
         pass
 
-    if not self.kites.keys():
-      w('/Menubar/Menu/PageKiteList').set_sensitive(False)
+    w('/Menubar/Menu/PageKiteList').set_sensitive(False)
+    w('/Menubar/Menu/SharedList').set_sensitive(False)
 
-    for item in ('/Menubar/Menu/QuotaDisplay',
+    for item in (#'/Menubar/Menu/QuotaDisplay',
+                 #'/Menubar/Menu/GetQuota',
                  '/Menubar/Menu/AddKite',
-                 '/Menubar/Menu/GetQuota'):
-      if self.pkComm.pkThread.stopped:
-        w(item).hide()
-      else:
-        w(item).show()
+                 ):
+      try:
+        if self.pkComm.pkThread.stopped:
+          w(item).hide()
+        else:
+          w(item).show()
+      except:
+        pass
 
     self.menu.popup(None, None, None, button, when)
 
