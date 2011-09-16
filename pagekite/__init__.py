@@ -3356,6 +3356,7 @@ class TunnelManager(threading.Thread):
 
         self.PingTunnels(time.time())
 
+      self.pkite.ui.StartListingBackEnds()
       for bid in self.pkite.backends:
         be = self.pkite.backends[bid]
         if be[BE_STATUS] not in BE_INACTIVE:
@@ -3523,6 +3524,8 @@ class NullUi(object):
     self.Notify(('Flying: %s://%s%s/'
                  ) % (proto, domain, port and ':'+port or ''),
                 prefix='~<>', color=self.CYAN)
+
+  def StartListingBackEnds(self): pass
 
   def NotifyBE(self, be, has_ssl, dpaths):
     domain, port, proto = be[BE_DOMAIN], be[BE_PORT], be[BE_PROTO]

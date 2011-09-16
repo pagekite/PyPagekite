@@ -19,6 +19,14 @@ ICON_FILE_TRAFFIC = 'pk-traffic.png'
 ICON_FILE_IDLE    = 'pk-idle.png'
 
 
+def GetScreenShot():
+  w = gtk.gdk.get_default_root_window()
+  sz = w.get_size()
+  print "The size of the window is %d x %d" % sz
+  pb = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False, 8, sz[0], sz[1])
+  pb = pb.get_from_drawable(w, w.get_colormap(), 0,0,0,0, sz[0], sz[1])
+  return pb
+
 class PageKiteThread(threading.Thread):
   def __init__(self):
     threading.Thread.__init__(self)
@@ -187,31 +195,16 @@ class UiWizard(UiContainer):
 
 
 class PageKiteStatusIcon(gtk.StatusIcon):
-  KITEITEM_TEMPLATE = '''\
-        <menu action="KiteMenu_%(count)s">
-         %(services)s
-        <separator/>
-         <menu action="KiteSettings_%(count)s">
-         <menu action="KiteDelete_%(count)s">
-        </menu>
-  '''
-  SHARING_TEMPLATE = '''
-        <separator/>
-         <menuitem action="SharedItems"/>%(sharedlist)s
-         <menuitem action="QuickShareClipBoard"/>
-         <menuitem action="QuickSharePath"/>
-         <menuitem action="QuickShareScreen"/>
-  '''
   MENU_TEMPLATE = '''
       <ui>
        <menubar name="Menubar">
         <menu action="Menu">
-         <!-- menuitem action="QuotaDisplay"/>
-         <menuitem action="GetQuota"/>
-        <separator/ -->
-        %(kitelist)s
+         <menuitem action="ShareClipboard"/>
+         <menuitem action="SharePath"/>
+         <menuitem action="ShareScreenshot"/>
+        <separator/>
+         %(kitelist)s
          <menuitem action="AddKite"/>
-        %(sharing)s
         <separator/>
          <menu action="AdvancedMenu">
           <menuitem action="ViewLog"/>
@@ -242,6 +235,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       'end_wizard': self.end_wizard,
       'ask_yesno': self.ask_yesno,
       'ask_email': self.ask_email,
+      'be_list_start': self.reset_status,
       'be_status': self.parse_status,
       'be_path': self.parse_status,
     })
@@ -259,7 +253,13 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     #gobject.timeout_add_seconds(1, self.on_tick)
 
     self.kites = {}
-    self.shared = {}
+
+    try:
+      GetScreenShot()
+      self.have_screenshots = True
+    except:
+      self.have_screenshots = False
+    self.have_sharing = False
 
     self.pkComm.start()
     self.set_visible(True)
@@ -271,11 +271,10 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       ('Menu',  None, 'Menu'),
        ('QuotaDisplay', None, 'XX.YY GB of Quota left'),
        ('GetQuota', None, 'Get _More Quota...', None, 'Get more Quota from PageKite.net', self.on_stub),
+       ('SharePath', None, 'Share File or Folder', None, 'Make a file or folder visible to the Web', self.share_path),
+       ('ShareClipboard', None, 'Paste To Web', None, 'Make the contents of the clipboard visible to the Web', self.share_clipboard),
+       ('ShareScreenshot', None, 'Share Screenshot', None, 'Put a screenshot of your desktop on the Web', self.share_screenshot),
         ('AddKite', None, 'New _Kite', None, 'Add Another PageKite', self.on_stub),
-       ('SharedItems', None, 'Sharing:', None, 'Items you are currently sharing', self.on_stub),
-        ('QuickShareClipBoard', None, '_Paste To Web', None, None, self.on_stub),
-        ('QuickSharePath', None, 'Share _From Disk', None, None, self.on_stub),
-        ('QuickShareScreen', None, 'Share _Screenshot', None, None, self.on_stub),
        ('AdvancedMenu', None, '_Advanced ...'),
         ('ViewLog', None, 'PageKite _Log', None, 'Display PageKite event log', self.on_stub),
         ('ConfigFile', None, '_Configuration', None, 'Edit the PageKite configuration file', self.on_stub),
@@ -285,47 +284,31 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     ])
     ag.add_toggle_actions([
       ('EnablePageKite', None, '_Enable PageKite', None, 'Enable local PageKite', self.toggle_enable, (not self.pkComm.pkThread.stopped)),
-      ('QuickShareEnabled', None, '_Enable Sharing', None, None, self.on_stub, False),
       ('VerboseLog', None, 'Verbose Logging', None, 'Verbose logging facilitate troubleshooting.', self.on_stub, False),
     ])
 
     self.manager.insert_action_group(ag, 0)
     self.manager.add_ui_from_string(self.MENU_TEMPLATE % {
       'kitelist': self.kite_menu(action_group=ag),
-      'sharing': self.sharing_menu(action_group=ag),
     })
     #self.manager.get_widget('/Menubar/Menu/QuotaDisplay').set_sensitive(False)
     self.menu = self.manager.get_widget('/Menubar/Menu/About').props.parent
 
   def kite_menu(self, action_group=None):
     xml, actions, toggles = [], [], []
-    def a(elem, act, tit, close=False):
-      xml.append('<%s action="%s"%s>' % (elem, act, close and '/' or ''))
-      actions.append((act,  None, tit))
+    mcount = 0
 
-    domains = sorted(self.kites.keys())
-    if len(domains):
-      a('menuitem', 'PageKiteList', 'My Kites:', close=True)
-      for domain in domains:
-        mdomain = domain.replace('.', 'X')
-        a('menu', 'ViewKiteX%s' % mdomain, '  %s' % domain)
-        # FIXME: Add real items!
-        a('menuitem', 'WebX%s' % mdomain, 'WWW on PORT', close=True)
-        xml.append('</menu>')
-    else:
-      a('menuitem', 'PageKiteList', 'No Kites Yet', close=True)
+    def a(elem, tit, action=None, close=False, cb=None, toggle=None):
+      if not action:
+        action = 'PageKiteList_%s' % mcount
+      xml.append('<%s action="%s"%s>' % (elem, action, close and '/' or ''))
+      if toggle is not None:
+        toggles.append((action,  None, tit, None, None, cb, toggle))
+      else:
+        actions.append((action,  None, tit, None, None, cb))
 
-    if action_group and actions: action_group.add_actions(actions)
-    if action_group and toggles: action_group.add_toggle_actions(toggles)
-    return ''.join(xml)
-
-  def sharing_menu(self, action_group=None):
-    xml, actions, toggles = ['<separator/>'], [], []
-    def a(elem, act, tit, close=False):
-      xml.append('<%s action="%s"%s>' % (elem, act, close and '/' or ''))
-      actions.append((act,  None, tit))
     def sn(path):
-      p = path[-20:]
+      p = path[-30:]
       if p != path:
         if '/' in p:
           p = '/'.join(('...', p.split('/', 1)[1]))
@@ -333,23 +316,32 @@ class PageKiteStatusIcon(gtk.StatusIcon):
           p = '\\'.join(('...', p.split('\\', 1)[1]))
       return p
 
-    shared = sorted(self.shared.keys())
-    if len(shared):
-      a('menuitem', 'SharedList', 'Shared:', close=True)
-      scount = 0
-      for src in shared:
-        scount += 1
-        a('menu', 'Shared%s' % scount, '  %s' % sn(src))
-        a('menuitem', 'UnShare%s' % scount, 'Stop sharing', close=True)
+    def foo(what): print 'what=%s' % what
+
+    print '%s' % self.kites
+    domains = sorted(self.kites.keys())
+    if len(domains):
+      a('menuitem', 'My Kites:', action='PageKiteList', close=True)
+      for domain in domains:
+        mcount += 1
+        a('menu', '  %s' % domain)
+
+        www = [k for k in self.kites[domain].keys() if k.startswith('http')]
+        for protoport in www:
+          info = self.kites[domain][protoport]
+          proto = protoport.split('/')[0]
+          mcount += 1
+          a('menuitem', 'WWW (%s)' % protoport, close=True, cb=foo, toggle=True)
+
+        for protoport in [k for k in self.kites[domain].keys() if k not in www]:
+          info = self.kites[domain][protoport]
+          proto = protoport.split('/')[0]
+          mcount += 1
+          a('menuitem', '%s' % protoport, close=True, cb=foo, toggle=True)
+
         xml.append('</menu>')
     else:
-      a('menuitem', 'SharedList', 'Nothing Shared Yet', close=True)
-
-    a('menu', 'Share', 'New Share ...')
-    a('menuitem', 'SharePath',      'File or Folder', close=True)
-    a('menuitem', 'ShareClipBoard', 'Paste To Web', close=True)
-    a('menuitem', 'ShareScreen',    'Take Screenshot', close=True)
-    xml.append('</menu>')
+      a('menuitem', 'No Kites Yet', action='PageKiteList', close=True)
 
     if action_group and actions: action_group.add_actions(actions)
     if action_group and toggles: action_group.add_toggle_actions(toggles)
@@ -388,24 +380,38 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       self.show_menu(button, when)
     return False
 
+  def ui_full(self):
+    return (not self.pkComm.pkThread.stopped and not self.wizard)
+
   def show_menu(self, button, when):
     w = self.manager.get_widget
 
     for item in ('/Menubar/Menu/PageKiteList',
                  '/Menubar/Menu/SharedItems',
-                 '/Menubar/Menu/QuickShareClipBoard',
-                 '/Menubar/Menu/QuickSharePath',
-                 '/Menubar/Menu/QuickShareScreen',
+                 '/Menubar/Menu/SharePath',
+                 '/Menubar/Menu/ShareClipboard',
+                 '/Menubar/Menu/ShareScreenshot',
                  '/Menubar/Menu/AdvancedMenu/ViewLog',
                  '/Menubar/Menu/AdvancedMenu/VerboseLog'):
       try:
-        w(item).set_sensitive(not self.pkComm.pkThread.stopped and
-                              not self.wizard)
+        w(item).set_sensitive(self.ui_full())
       except:
         pass
 
-    w('/Menubar/Menu/PageKiteList').set_sensitive(False)
-    w('/Menubar/Menu/SharedList').set_sensitive(False)
+    for item in ('/Menubar/Menu/PageKiteList',
+                 ):
+      try:
+        w(item).set_sensitive(False)
+      except:
+        pass
+
+    if not self.have_screenshots:
+      w('/Menubar/Menu/ShareScreenshot').hide()
+
+    if not self.have_sharing:
+      w('/Menubar/Menu/ShareScreenshot').hide()
+      w('/Menubar/Menu/ShareClipboard').hide()
+      w('/Menubar/Menu/SharePath').hide()
 
     for item in (#'/Menubar/Menu/QuotaDisplay',
                  #'/Menubar/Menu/GetQuota',
@@ -420,6 +426,10 @@ class PageKiteStatusIcon(gtk.StatusIcon):
         pass
 
     self.menu.popup(None, None, None, button, when)
+
+  def reset_status(self, argtext):
+    self.kites = {}
+    self.have_sharing = False
 
   def parse_status(self, argtext):
     args = {}
@@ -446,16 +456,15 @@ class PageKiteStatusIcon(gtk.StatusIcon):
           }
           backend_info['paths'] = path_info
           domain_info[bid] = backend_info
-          # Also add to self.shared
-          share_info = self.shared.get(args['src'], [])
-          share_info.append(path_info[args['path']])
-          self.shared[args['src']] = share_info
       else:
         if 'delete' in args:
           if bid in domain_info: del domain_info[bid]
         else:
-          for i in ('proto', 'port', 'status', 'bhost', 'bport', 'ssl'):
-            backend_info[i] = args[i]
+          if 'builtin' in args: self.have_sharing = True
+          for i in ('proto', 'port', 'status', 'bhost', 'bport',
+                    'ssl', 'builtin'):
+            if i in args:
+              backend_info[i] = args[i]
           domain_info[bid] = backend_info
       self.kites[args['domain']] = domain_info
 
@@ -474,6 +483,19 @@ class PageKiteStatusIcon(gtk.StatusIcon):
                             message_format=message)
     dlg.run()
     dlg.destroy()
+
+  def share_clipboard(self, data):
+    self.show_error_dialog('Unimplemented...')
+
+  def share_path(self, data):
+    self.show_error_dialog('Unimplemented...')
+
+  def share_screenshot(self, data):
+    try:
+      pb = GetScreenShot()
+      pb.save('/tmp/pk-screenshot.png', 'png')
+    except:
+      self.show_error_dialog('Screenshot failed: %s' % (sys.exc_info(), ))
 
   def ask_yesno(self, args):
     if 'pre' in args:
@@ -508,7 +530,6 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     data.set_active(not pkt.stopped)
     if pkt.stopped:
       self.kites = {}
-      self.shares = {}
 
   def start_wizard(self, title):
     self.wizard = True

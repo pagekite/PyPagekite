@@ -13,6 +13,9 @@ class RemoteUi(NullUi):
                          '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
                          '(?:[a-zA-Z]{2,4}|museum)$')
 
+  def StartListingBackEnds(self):
+    self.wfile.write('be_list_start: now\n')
+
   def NotifyBE(self, be, has_ssl, dpaths, now=None):
     domain = be[pagekite.BE_DOMAIN]
     port = be[pagekite.BE_PORT]
@@ -23,36 +26,23 @@ class RemoteUi(NullUi):
 
     message = ('be_status:'
                ' status=%x; domain=%s; port=%s; proto=%s;'
-               ' bhost=%s; bport=%s; ssl=%s'
+               ' bhost=%s; bport=%s%s%s'
                '\n') % (be[pagekite.BE_STATUS], domain, port, proto,
-                        be[pagekite.BE_BHOST], be[pagekite.BE_BPORT], has_ssl) 
-
-    if message not in self.notify_history:
-      self.notify_history[message] = now or time.time()
-      self.wfile.write(message)
+                        be[pagekite.BE_BHOST], be[pagekite.BE_BPORT],
+                        has_ssl and '; ssl=1' or '',
+                        len(dpaths.keys()) and '; builtin=1' or '')
+    self.wfile.write(message)
 
     for path in dpaths:
       message = ('be_path: domain=%s; port=%s; path=%s; policy=%s; src=%s\n'
                  ) % (domain, port or 80, path,
                       dpaths[path][0], dpaths[path][1])
-      if message not in self.notify_history:
-        self.notify_history[message] = now or time.time()
-        self.wfile.write(message)
+      self.wfile.write(message)
 
   def Notify(self, message, prefix=' ',
              popup=False, color=None, now=None, alignright=''):
-
-    # We suppress duplicates that are either new or recent.
-    keys = self.notify_history.keys()
-    if len(keys) > 20:
-      for key in keys:
-        if self.notify_history[key] < now-300:
-          del self.notify_history[key]
-
     message = '%s' % message
-    if message not in self.notify_history:
-      self.notify_history[message] = now or time.time()
-      self.wfile.write('notify: %s\n' % message)
+    self.wfile.write('notify: %s\n' % message)
 
   def Status(self, tag, message=None, color=None):
     self.status_tag = tag
@@ -173,7 +163,7 @@ class RemoteUi(NullUi):
       try:
         ch = int(answer)
         if ch > 0 and ch <= len(choices): return ch
-      except: 
+      except:
         pass
       if back is not None and answer == 'back': return back
 
