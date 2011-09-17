@@ -296,16 +296,17 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
   def kite_menu(self, action_group=None):
     xml, actions, toggles = [], [], []
-    mcount = 0
+    mc = 0
 
-    def a(elem, tit, action=None, close=False, cb=None, toggle=None):
+    def a(elem, tit, action=None, close=True, cb=None, toggle=None):
       if not action:
-        action = 'PageKiteList_%s' % mcount
+        action = 'PageKiteList_%s' % mc
       xml.append('<%s action="%s"%s>' % (elem, action, close and '/' or ''))
       if toggle is not None:
         toggles.append((action,  None, tit, None, None, cb, toggle))
       else:
         actions.append((action,  None, tit, None, None, cb))
+      return 1
 
     def sn(path):
       p = path[-30:]
@@ -321,27 +322,51 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     print '%s' % self.kites
     domains = sorted(self.kites.keys())
     if len(domains):
-      a('menuitem', 'My Kites:', action='PageKiteList', close=True)
+      a('menuitem', 'My Kites:', action='PageKiteList')
       for domain in domains:
-        mcount += 1
-        a('menu', '  %s' % domain)
+        mc += a('menu', '  %s' % domain, close=False)
 
         www = [k for k in self.kites[domain].keys() if k.startswith('http')]
+        www.sort(key=lambda x: int(self.kites[domain][x]['port'] or
+                                   self.kites[domain][x]['bport'] or 0))
         for protoport in www:
           info = self.kites[domain][protoport]
           proto = protoport.split('/')[0]
-          mcount += 1
-          a('menuitem', 'WWW (%s)' % protoport, close=True, cb=foo, toggle=True)
+          secure = ('ssl' in info or info['proto'] == 'https'
+                    and 'Secure ' or '')
+          pdesc = info['port'] and ' (port %s)' % info['port'] or ''
+          bdesc = 'builtin' in info and 'PageKite' or '%s:%s' % (info['bhost'], info['bport'])
+          mc += a('menuitem', '%sWWW%s to %s' % (secure, pdesc, bdesc),
+                  cb=foo, toggle=True)
+          if pagekite.BE_STATUS_OK & int(info['status']):
+            mc += a('menuitem', 'Open in Browser', cb=foo)
+          if 'paths' not in info:
+            mc += a('menuitem', 'Copy Link', cb=foo)
+          elif len(info['paths'].keys()):
+            for path in sorted(info['paths'].keys()):
+              mc += a('menu', '  %s' % (sn(info['paths'][path]['src']), ),
+                      close=False)
+              if pagekite.BE_STATUS_OK & int(info['status']):
+                mc += a('menuitem', 'Open in Browser', cb=foo)
+              mc += a('menuitem', 'Copy Link', cb=foo)
+              mc += a('menuitem', 'Stop Sharing', cb=foo)
+              xml.append('</menu>')
+          xml.append('<separator/>')
 
-        for protoport in [k for k in self.kites[domain].keys() if k not in www]:
+        others = [k for k in self.kites[domain].keys() if k not in www]
+        others.sort(key=lambda x: int(self.kites[domain][x]['port'] or
+                                      self.kites[domain][x]['bport'] or 0))
+        for protoport in others:
           info = self.kites[domain][protoport]
           proto = protoport.split('/')[0]
-          mcount += 1
-          a('menuitem', '%s' % protoport, close=True, cb=foo, toggle=True)
+          mc += a('menuitem', '%s' % protoport, cb=foo, toggle=True)
 
+        xml.append('<separator/>')
+        mc += a('menuitem', 'Configure ...')
+        mc += a('menuitem', 'Delete %s' % domain)
         xml.append('</menu>')
     else:
-      a('menuitem', 'No Kites Yet', action='PageKiteList', close=True)
+      a('menuitem', 'No Kites Yet', action='PageKiteList')
 
     if action_group and actions: action_group.add_actions(actions)
     if action_group and toggles: action_group.add_toggle_actions(toggles)
