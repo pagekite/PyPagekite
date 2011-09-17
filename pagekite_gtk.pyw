@@ -6,6 +6,7 @@ import sys
 import socket
 import threading
 import time
+import webbrowser
 
 import pagekite
 
@@ -272,7 +273,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
        ('QuotaDisplay', None, 'XX.YY GB of Quota left'),
        ('GetQuota', None, 'Get _More Quota...', None, 'Get more Quota from PageKite.net', self.on_stub),
        ('SharePath', None, 'Share File or Folder', None, 'Make a file or folder visible to the Web', self.share_path),
-       ('ShareClipboard', None, 'Paste To Web', None, 'Make the contents of the clipboard visible to the Web', self.share_clipboard),
+       ('ShareClipboard', None, 'Paste to Web', None, 'Make the contents of the clipboard visible to the Web', self.share_clipboard),
        ('ShareScreenshot', None, 'Share Screenshot', None, 'Put a screenshot of your desktop on the Web', self.share_screenshot),
         ('AddKite', None, 'New _Kite', None, 'Add Another PageKite', self.on_stub),
        ('AdvancedMenu', None, '_Advanced ...'),
@@ -298,14 +299,16 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     xml, actions, toggles = [], [], []
     mc = 0
 
-    def a(elem, tit, action=None, close=True, cb=None, toggle=None):
+    def a(elem, tit, action=None, tooltip=None, close=True,
+                     cb=None, toggle=None):
+      if elem == 'menu': close = False
       if not action:
         action = 'PageKiteList_%s' % mc
       xml.append('<%s action="%s"%s>' % (elem, action, close and '/' or ''))
       if toggle is not None:
-        toggles.append((action,  None, tit, None, None, cb, toggle))
+        toggles.append((action,  None, tit, None, tooltip, cb, toggle))
       else:
-        actions.append((action,  None, tit, None, None, cb))
+        actions.append((action,  None, tit, None, tooltip, cb))
       return 1
 
     def sn(path):
@@ -317,14 +320,16 @@ class PageKiteStatusIcon(gtk.StatusIcon):
           p = '\\'.join(('...', p.split('\\', 1)[1]))
       return p
 
-    def foo(what): print 'what=%s' % what
+    def make_cb(func, data):
+      def tmp(what): return func(data)
+      return tmp
 
     print '%s' % self.kites
     domains = sorted(self.kites.keys())
     if len(domains):
       a('menuitem', 'My Kites:', action='PageKiteList')
       for domain in domains:
-        mc += a('menu', '  %s' % domain, close=False)
+        mc += a('menu', '  %s' % domain)
 
         www = [k for k in self.kites[domain].keys() if k.startswith('http')]
         www.sort(key=lambda x: int(self.kites[domain][x]['port'] or
@@ -334,23 +339,34 @@ class PageKiteStatusIcon(gtk.StatusIcon):
           proto = protoport.split('/')[0]
           secure = ('ssl' in info or info['proto'] == 'https'
                     and 'Secure ' or '')
+          url = '%s://%s%s' % (secure and 'https' or 'http', domain,
+                               info['port'] and ':%s' % info['port'] or '')
           pdesc = info['port'] and ' (port %s)' % info['port'] or ''
           bdesc = 'builtin' in info and 'PageKite' or '%s:%s' % (info['bhost'], info['bport'])
+
           mc += a('menuitem', '%sWWW%s to %s' % (secure, pdesc, bdesc),
-                  cb=foo, toggle=True)
+                  cb=make_cb(self.kite_toggle, info), toggle=True)
+
           if pagekite.BE_STATUS_OK & int(info['status']):
-            mc += a('menuitem', 'Open in Browser', cb=foo)
+            mc += a('menuitem', 'Open in Browser',
+                    cb=make_cb(self.open_url, url), tooltip=url)
+
           if 'paths' not in info:
-            mc += a('menuitem', 'Copy Link', cb=foo)
+            mc += a('menuitem', 'Copy Link',
+                    cb=make_cb(self.copy_url, url), tooltip=url)
+
           elif len(info['paths'].keys()):
             for path in sorted(info['paths'].keys()):
-              mc += a('menu', '  %s' % (sn(info['paths'][path]['src']), ),
-                      close=False)
+              mc += a('menu', '  ' + sn(info['paths'][path]['src']))
               if pagekite.BE_STATUS_OK & int(info['status']):
-                mc += a('menuitem', 'Open in Browser', cb=foo)
-              mc += a('menuitem', 'Copy Link', cb=foo)
-              mc += a('menuitem', 'Stop Sharing', cb=foo)
+                mc += a('menuitem', 'Open in Browser',
+                        cb=make_cb(self.open_url, url+path), tooltip=url+path)
+              mc += a('menuitem', ('Copy Link to: %s'
+                                   ) % (path == '/' and 'Home page' or path),
+                      cb=make_cb(self.copy_url, url+path), tooltip=url+path)
+              mc += a('menuitem', 'Stop Sharing')
               xml.append('</menu>')
+
           xml.append('<separator/>')
 
         others = [k for k in self.kites[domain].keys() if k not in www]
@@ -359,7 +375,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
         for protoport in others:
           info = self.kites[domain][protoport]
           proto = protoport.split('/')[0]
-          mc += a('menuitem', '%s' % protoport, cb=foo, toggle=True)
+          mc += a('menuitem', '%s' % protoport, toggle=True)
 
         xml.append('<separator/>')
         mc += a('menuitem', 'Configure ...')
@@ -508,6 +524,15 @@ class PageKiteStatusIcon(gtk.StatusIcon):
                             message_format=message)
     dlg.run()
     dlg.destroy()
+
+  def kite_toggle(self, kite_info):
+    self.show_error_dialog('Unimplemented... %s' % (kite_info, ))
+
+  def copy_url(self, url):
+    gtk.clipboard_get('CLIPBOARD').set_text(url, len=-1)
+
+  def open_url(self, url):
+    webbrowser.open(url)
 
   def share_clipboard(self, data):
     self.show_error_dialog('Unimplemented...')

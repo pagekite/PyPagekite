@@ -3373,14 +3373,15 @@ class TunnelManager(threading.Thread):
           # Get list of webpaths...
           domainp = '%s/%s' % (domain, be[BE_PORT] or '80')
           if (self.pkite.ui_sspec and
-              domainp in self.pkite.ui_paths and
               be[BE_BHOST] == self.pkite.ui_sspec[0] and
               be[BE_BPORT] == self.pkite.ui_sspec[1]):
-            dpaths = self.pkite.ui_paths[domainp]
+            builtin = True
+            dpaths = self.pkite.ui_paths.get(domainp, {})
           else:
+            builtin = False
             dpaths = {}
 
-          self.pkite.ui.NotifyBE(be, has_ssl, dpaths)
+          self.pkite.ui.NotifyBE(be, has_ssl, dpaths, is_builtin=builtin)
 
       tunnel_count = len(self.pkite.conns and
                          self.pkite.conns.TunnelServers() or [])
@@ -3527,7 +3528,7 @@ class NullUi(object):
 
   def StartListingBackEnds(self): pass
 
-  def NotifyBE(self, be, has_ssl, dpaths):
+  def NotifyBE(self, be, has_ssl, dpaths, is_builtin=False):
     domain, port, proto = be[BE_DOMAIN], be[BE_PORT], be[BE_PROTO]
     prox = (proto == 'raw') and ' (HTTP proxied)' or ''
     if proto == 'raw' and port in ('22', 22): proto = 'ssh'
