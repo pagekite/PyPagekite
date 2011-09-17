@@ -622,8 +622,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       self.wizard_first = False
       if not self.wizard: wizard.close()
     wizard.set_buttons([
-      ((self.wizard and not self.wizard_first) and '<< No' or 'No',
-                                                     lambda w: respond(w, 'n')),
+      ('No', lambda w: respond(w, 'n')),
       (self.wizard and 'Yes >>' or 'Yes', lambda w: respond(w, 'y')),
     ])
 
@@ -644,7 +643,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     wizard.set_buttons([
       ((self.wizard and not self.wizard_first) and '<< Back' or 'Cancel',
                                                   lambda w: respond(w, 'back')),
-      (self.wizard and 'OK >>' or 'OK',
+      (self.wizard and 'Next >>' or 'OK',
                              lambda w: respond(w, wizard.textinput.get_text())),
     ])
 
@@ -680,7 +679,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     wizard.set_buttons([
       ((self.wizard and not self.wizard_first) and '<< Back' or 'Cancel',
                                                   lambda w: respond(w, 'back')),
-      (self.wizard and 'OK >>' or 'OK', lambda w: respond(w)),
+      (self.wizard and 'Next >>' or 'OK', lambda w: respond(w)),
     ])
 
   def kite_toggle(self, kite_info):
