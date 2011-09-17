@@ -3459,7 +3459,7 @@ class NullUi(object):
 
   def Browse(self, url):
     import webbrowser
-    self.Tell(['Opening %s in your browser...' % url], error=False)
+    self.Tell(['Opening %s in your browser...' % url])
     webbrowser.open(url)
 
   def DefaultOrFail(self, question, default):
@@ -3977,9 +3977,9 @@ class PageKite(object):
       self.ui.Spacer()
       Log([('saved', 'Settings saved to: %s' % self.savefile)])
     except Exception, e:
-      self.ui.Tell(['ERROR: Could not save to %s: %s' % (self.savefile, e)])
+      self.ui.Tell(['Could not save to %s: %s' % (self.savefile, e)],
+                   error=True)
       self.ui.Spacer()
-      LogError('Could not save to %s: %s' % (self.savefile, e))
 
   def FallDown(self, message, help=True, longhelp=False, noexit=False):
     if self.conns and self.conns.auth: self.conns.auth.quit()
@@ -4795,7 +4795,12 @@ class PageKite(object):
     while 'end' not in state:
       try:
         if 'use_service_question' in state:
-          ch = self.ui.AskYesNo('Use the %s service?' % self.service_provider,
+          ch = self.ui.AskYesNo('Use the service?',
+                                pre=['Welcome to PageKite!',
+                                     '',
+                                     'If you plan to use the %s service,' % self.service_provider,
+                                     'please answer a few quick questions to',
+                                     'create your first kite.'],
                                 default=True, back=-1)
           if ch is True:
             self.SetServiceDefaults(clobber=False)
@@ -4874,7 +4879,13 @@ class PageKite(object):
             Back()
 
         elif 'service_signup_email' in state:
-          email = self.ui.AskEmail('What is your e-mail address?', back=False)
+          email = self.ui.AskEmail('What is your e-mail address?',
+                                   pre=['The service operators need to be able',
+                                        'to contact you now and then with news',
+                                        'about the service and your account.',
+                                        '',
+                                        'Your details will be kept private.'],
+                                   back=False)
           if email and register:
             Goto('service_signup')
           elif email:
@@ -4888,7 +4899,12 @@ class PageKite(object):
           except:
             domains = ['.%s' % x for x in SERVICE_DOMAINS]
 
-          ch = self.ui.AskKiteName(domains, 'Name your kite:', back=False)
+          ch = self.ui.AskKiteName(domains, 'Name your kite:',
+                                  pre=['Your kite name becomes the public name',
+                                       'of your personal servers and websites.',
+                                       '',
+                                       'Note: You can add more names later.'],
+                                   back=False)
           if ch:
             kitename = register = ch
             (is_subdomain_of, is_service_domain,
@@ -4957,6 +4973,7 @@ class PageKite(object):
               self.ui.ExplainError(error, 'Invalid domain!', subject=register)
               Goto('service_signup_kitename', back_skips_current=True)
             else:
+              self.ui.ExplainError(error, 'Network error!', subject=register)
               print 'FIXME!  Error is %s' % error
               Goto('abort')
 
@@ -5011,8 +5028,9 @@ class PageKite(object):
 
         elif 'manual_abort' in state:
           if self.ui.Tell(['Aborted!', '',
-            'Please manually add information about your kites and front-ends',
-            'to the configuration file: %s' % self.rcfile],
+            'Please manually add information about your',
+            'kites and front-ends to the configuration file:',
+            '', ' %s' % self.rcfile],
                           error=True, back=False) is False:
             Back()
           else:

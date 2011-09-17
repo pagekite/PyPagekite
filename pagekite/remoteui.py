@@ -53,7 +53,7 @@ class RemoteUi(NullUi):
       self.wfile.write('status_tag: %s\n' % tag)
 
   def Welcome(self, pre=None):
-    self.wfile.write('welcome: %s\n' % (pre or '').replace('\n', ' '))
+    self.wfile.write('welcome: %s\n' % (pre or '').replace('\n', '  '))
 
   def StartWizard(self, title):
     self.wfile.write('start_wizard: %s\n' % title)
@@ -75,10 +75,10 @@ class RemoteUi(NullUi):
     while self.Retry():
       self.wfile.write('begin_ask_email\n')
       if pre:
-        self.wfile.write(' preamble: %s\n' % ' '.join(pre).replace('\n', ' '))
+        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       if default:
         self.wfile.write(' default: %s\n' % default)
-      self.wfile.write(' question: %s\n' % (question or '').replace('\n', ' '))
+      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
       self.wfile.write(' expect: email\n')
       self.wfile.write('end_ask_email\n')
 
@@ -91,10 +91,10 @@ class RemoteUi(NullUi):
     while self.Retry():
       self.wfile.write('begin_ask_login\n')
       if pre:
-        self.wfile.write(' preamble: %s\n' % ' '.join(pre).replace('\n', ' '))
+        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       if email:
         self.wfile.write(' default: %s\n' % email)
-      self.wfile.write(' question: %s\n' % (question or '').replace('\n', ' '))
+      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
       self.wfile.write(' expect: email\n')
       self.wfile.write(' expect: password\n')
       self.wfile.write('end_ask_login\n')
@@ -113,10 +113,10 @@ class RemoteUi(NullUi):
     while self.Retry():
       self.wfile.write('begin_ask_yesno\n')
       if pre:
-        self.wfile.write(' preamble: %s\n' % ' '.join(pre).replace('\n', ' '))
+        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       if default:
         self.wfile.write(' default: %s\n' % default)
-      self.wfile.write(' question: %s\n' % (question or '').replace('\n', ' '))
+      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
       self.wfile.write(' expect: yesno\n')
       self.wfile.write('end_ask_yesno\n')
 
@@ -130,12 +130,12 @@ class RemoteUi(NullUi):
     while self.Retry():
       self.wfile.write('begin_ask_kitename\n')
       if pre:
-        self.wfile.write(' preamble: %s\n' % ' '.join(pre).replace('\n', ' '))
+        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       for domain in domains:
         self.wfile.write(' domain: %s\n' % domain)
       if default:
         self.wfile.write(' default: %s\n' % default)
-      self.wfile.write(' question: %s\n' % (question or '').replace('\n', ' '))
+      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
       self.wfile.write(' expect: kitename\n')
       self.wfile.write('end_ask_kitename\n')
 
@@ -148,14 +148,14 @@ class RemoteUi(NullUi):
     while self.Retry():
       self.wfile.write('begin_ask_multiplechoice\n')
       if pre:
-        self.wfile.write(' preamble: %s\n' % ' '.join(pre).replace('\n', ' '))
+        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       count = 0
       for choice in choices:
         count += 1
         self.wfile.write(' choice_%d: %s\n' % (count, choice))
       if default:
         self.wfile.write(' default: %s\n' % default)
-      self.wfile.write(' question: %s\n' % (question or '').replace('\n', ' '))
+      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
       self.wfile.write(' expect: choice_index\n')
       self.wfile.write('end_ask_multiplechoice\n')
 
@@ -169,5 +169,5 @@ class RemoteUi(NullUi):
 
   def Tell(self, lines, error=False, back=None):
     dialog = error and 'error' or 'message'
-    self.wfile.write('tell_%s: %s\n' % (dialog, ' '.join(lines)))
+    self.wfile.write('tell_%s: %s\n' % (dialog, '  '.join(lines)))
 

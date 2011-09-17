@@ -13,8 +13,9 @@ import pagekite
 
 URL_HOME = ('https://pagekite.net/home/')
 
-ICON_DIR_WINDOWS = 'gui/icons-16'
-ICON_DIR_DEFAULT = 'gui/icons-127'
+IMG_DIR_WINDOWS = 'gui/icons-16'
+IMG_DIR_DEFAULT = 'gui/icons-127'
+IMG_FILE_WIZARD  = 'pk-active.png'
 ICON_FILE_ACTIVE  = 'pk-active.png'
 ICON_FILE_TRAFFIC = 'pk-traffic.png'
 ICON_FILE_IDLE    = 'pk-idle.png'
@@ -23,10 +24,10 @@ ICON_FILE_IDLE    = 'pk-idle.png'
 def GetScreenShot():
   w = gtk.gdk.get_default_root_window()
   sz = w.get_size()
-  print "The size of the window is %d x %d" % sz
   pb = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False, 8, sz[0], sz[1])
   pb = pb.get_from_drawable(w, w.get_colormap(), 0,0,0,0, sz[0], sz[1])
   return pb
+
 
 class PageKiteThread(threading.Thread):
   def __init__(self):
@@ -76,7 +77,7 @@ class PageKiteThread(threading.Thread):
   def send(self, data):
     if not data.endswith('\n') and data != '':
       raise ValueError('Please always send whole lines')
-    print '<<PK<< %s' % data.strip()
+#   print '<<PK<< %s' % data.strip()
     self.pk_readlock.acquire()
     if data:
       self.pk_incoming.append(data)
@@ -147,7 +148,7 @@ class CommThread(threading.Thread):
     self.cb = {}
 
   def parse_line(self, line):
-    print '<< %s' % line[:-1]
+#   print '<< %s' % line[:-1]
     if line.startswith('begin_'):
       self.multi = line[6:].strip()
       self.multi_args = {}
@@ -195,6 +196,81 @@ class UiWizard(UiContainer):
     pass
 
 
+class PageKiteWizard:
+  def __init__(self, title=''):
+    self.window = gtk.Dialog()
+
+    # Just keep window open forever and ever
+    self.window.connect("delete_event", lambda w, e: True)
+    self.window.connect("destroy", lambda w: False)
+
+    # Prepare our standard widgets
+    self.title = gtk.Label("PageKite")
+    self.title.set_justify(gtk.JUSTIFY_CENTER)
+    self.question = gtk.Label('Welcome to PageKite!')
+    self.question.set_justify(gtk.JUSTIFY_LEFT)
+    self.decoration = gtk.Image()
+    self.decoration.set_from_file(os.path.join(IMG_DIR_DEFAULT, IMG_FILE_WIZARD))
+    self.inputprefix = gtk.Label('')
+    self.textinput = gtk.Entry()
+    self.inputsuffix = gtk.Label('')
+
+    # Set up our packing...
+    self.right = gtk.VBox(False, spacing=15)
+    self.left = gtk.VBox(False, spacing=5)
+    self.hbox = gtk.HBox(False, spacing=0)
+    self.input_hbox = gtk.HBox(False, spacing=0)
+    self.hbox.pack_start(self.right, expand=True, fill=True, padding=10)
+    self.hbox.pack_start(self.left, expand=True, fill=True, padding=10)
+
+    self.right.pack_start(self.decoration, expand=False, fill=False)
+    self.left.pack_start(self.question, expand=True, fill=True)
+    self.input_hbox.pack_start(self.inputprefix, expand=False, fill=False)
+    self.input_hbox.pack_start(self.textinput, expand=True, fill=True)
+    self.input_hbox.pack_start(self.inputsuffix, expand=False, fill=False)
+    self.left.pack_start(self.input_hbox, expand=True, fill=True)
+
+    self.window.vbox.pack_start(self.title, expand=False,fill=False, padding=5)
+    self.window.vbox.pack_start(self.hbox, expand=True, fill=True, padding=10)
+
+    if title: self.set_title(title)
+
+    self.buttons = []
+    self.window.show_all()
+    self.input_hbox.hide()
+
+  def set_title(self, title):
+    self.title.set_markup('<big> <b>%s</b> </big>' % title)
+
+  def click_last(self, w, e):
+    if self.buttons: self.buttons[-1][0](e)
+
+  def clear_buttons(self):
+    for b in self.buttons:
+      self.window.action_area.remove(b)
+    self.buttons = []
+
+  def set_question(self, question):
+    self.question.set_markup(question.replace('  ', '\n'))
+    self.question.set_justify(gtk.JUSTIFY_LEFT)
+
+  def set_buttons(self, buttonlist):
+    self.clear_buttons()
+    for label, callback in buttonlist:
+      button = gtk.Button(label)
+      button.connect('clicked', callback)
+      button.show()
+      self.window.action_area.pack_start(button)
+      self.buttons.append(button)
+    # FIXME: we want to make the LAST button the 'default' action.
+
+  def close(self):
+    self.clear_buttons()
+    self.window.hide()
+    self.window.destroy()
+    self.window = self.buttons = None
+
+
 class PageKiteStatusIcon(gtk.StatusIcon):
   MENU_TEMPLATE = '''
       <ui>
@@ -207,6 +283,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
          %(kitelist)s
          <menuitem action="AddKite"/>
         <separator/>
+         <menuitem action="About"/>
          <menu action="AdvancedMenu">
           <menuitem action="ViewLog"/>
           <menuitem action="VerboseLog"/>
@@ -215,7 +292,6 @@ class PageKiteStatusIcon(gtk.StatusIcon):
           <menuitem action="EnablePageKite"/>
           <!-- menuitem action="ConnectTo"/ -->
          </menu>
-         <menuitem action="About"/>
          <menuitem action="Quit"/>
         </menu>
        </menubar>
@@ -236,6 +312,8 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       'end_wizard': self.end_wizard,
       'ask_yesno': self.ask_yesno,
       'ask_email': self.ask_email,
+      'ask_kitename': self.ask_kitename,
+      'ask_multiplechoice': self.ask_multiplechoice,
       'be_list_start': self.reset_status,
       'be_status': self.parse_status,
       'be_path': self.parse_status,
@@ -244,9 +322,9 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
     self.icon_file = ICON_FILE_IDLE
     if sys.platform in ('win32', 'os2', 'os2emx'):
-      self.icon_dir = ICON_DIR_WINDOWS
+      self.icon_dir = IMG_DIR_WINDOWS
     else:
-      self.icon_dir = ICON_DIR_DEFAULT
+      self.icon_dir = IMG_DIR_DEFAULT
     self.set_from_file(os.path.join(self.icon_dir, self.icon_file))
 
     self.connect('activate', self.on_activate)
@@ -272,15 +350,15 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       ('Menu',  None, 'Menu'),
        ('QuotaDisplay', None, 'XX.YY GB of Quota left'),
        ('GetQuota', None, 'Get _More Quota...', None, 'Get more Quota from PageKite.net', self.on_stub),
-       ('SharePath', None, 'Share File or Folder', None, 'Make a file or folder visible to the Web', self.share_path),
-       ('ShareClipboard', None, 'Paste to Web', None, 'Make the contents of the clipboard visible to the Web', self.share_clipboard),
-       ('ShareScreenshot', None, 'Share Screenshot', None, 'Put a screenshot of your desktop on the Web', self.share_screenshot),
+       ('SharePath', None, 'Share _File or Folder', None, 'Make a file or folder visible to the Web', self.share_path),
+       ('ShareClipboard', None, '_Paste to Web', None, 'Make the contents of the clipboard visible to the Web', self.share_clipboard),
+       ('ShareScreenshot', None, 'Share _Screenshot', None, 'Put a screenshot of your desktop on the Web', self.share_screenshot),
         ('AddKite', None, 'New _Kite', None, 'Add Another PageKite', self.on_stub),
-       ('AdvancedMenu', None, '_Advanced ...'),
+       ('About', gtk.STOCK_ABOUT, '_About', None, 'About PageKite', self.on_about),
+       ('AdvancedMenu', None, 'Ad_vanced ...'),
         ('ViewLog', None, 'PageKite _Log', None, 'Display PageKite event log', self.on_stub),
         ('ConfigFile', None, '_Configuration', None, 'Edit the PageKite configuration file', self.on_stub),
         ('ConnectTo', None, 'Connect To ...', None, 'Connect to a remote PageKite'),
-       ('About', gtk.STOCK_ABOUT, 'About', None, 'About PageKite', self.on_about),
        ('Quit', None, '_Quit PageKite', None, 'Turn PageKite off completely', self.quit),
     ])
     ag.add_toggle_actions([
@@ -324,7 +402,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       def tmp(what): return func(data)
       return tmp
 
-    print '%s' % self.kites
+#   print '%s' % self.kites
     domains = sorted(self.kites.keys())
     if len(domains):
       a('menuitem', 'My Kites:', action='PageKiteList')
@@ -389,8 +467,12 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     return ''.join(xml)
 
   def on_activate(self, data):
-    self.create_menu()
-    self.show_menu(0, 0)
+    if self.wizard:
+      self.wizard.window.hide()
+      self.wizard.window.show()
+    else:
+      self.create_menu()
+      self.show_menu(0, 0)
     return False
 
   def set_status_msg(self, message):
@@ -509,21 +591,97 @@ class PageKiteStatusIcon(gtk.StatusIcon):
           domain_info[bid] = backend_info
       self.kites[args['domain']] = domain_info
 
-  def show_info_dialog(self, message):
-    print 'FIXME: info_dialog(%s)' % message
-    dlg = gtk.MessageDialog(type=gtk.MESSAGE_INFO,
+  def show_info_dialog(self, message, d_type=gtk.MESSAGE_INFO):
+    dlg = gtk.MessageDialog(type=d_type,
                             buttons=gtk.BUTTONS_CLOSE,
-                            message_format=message)
-    dlg.run()
-    dlg.destroy()
+                            message_format=message.replace('  ', '\n'))
+    dlg.get_action_area().children()[0].connect('clicked',
+                                                lambda w: dlg.destroy())
+    dlg.show()
 
   def show_error_dialog(self, message):
-    print 'FIXME: error_dialog(%s)' % message
-    dlg = gtk.MessageDialog(type=gtk.MESSAGE_ERROR,
-                            buttons=gtk.BUTTONS_CLOSE,
-                            message_format=message)
-    dlg.run()
-    dlg.destroy()
+    self.show_info_dialog(message, d_type=gtk.MESSAGE_ERROR)
+
+  def wizard_prepare(self, args):
+    if 'preamble' in args:
+      question = args['preamble'].replace('  ', '\n')+'\n\n'+args['question']
+    else:
+      question = args['question']
+
+    wizard = self.wizard
+    if not wizard: wizard = PageKiteWizard(title='A question!')
+    wizard.set_question(question)
+
+    return question, wizard
+
+  def ask_yesno(self, args):
+    question, wizard = self.wizard_prepare(args)
+
+    def respond(window, what):
+      self.pkComm.pkThread.send('%s\n' % what)
+      self.wizard_first = False
+      if not self.wizard: wizard.close()
+    wizard.set_buttons([
+      ((self.wizard and not self.wizard_first) and '<< No' or 'No',
+                                                     lambda w: respond(w, 'n')),
+      (self.wizard and 'Yes >>' or 'Yes', lambda w: respond(w, 'y')),
+    ])
+
+  def ask_question(self, args, valid_re):
+    question, wizard = self.wizard_prepare(args)
+    wizard.textinput.set_text(args.get('default', ''))
+    wizard.inputprefix.set_text('  ')
+    wizard.inputsuffix.set_text(args.get('domain', '')+'     ')
+    wizard.input_hbox.show()
+
+    def respond(window, what):
+      self.pkComm.pkThread.send('%s\n' % what)
+      wizard.input_hbox.hide()
+      wizard.inputprefix.set_text('')
+      wizard.inputsuffix.set_text('')
+      self.wizard_first = False
+      if not self.wizard: wizard.close()
+    wizard.set_buttons([
+      ((self.wizard and not self.wizard_first) and '<< Back' or 'Cancel',
+                                                  lambda w: respond(w, 'back')),
+      (self.wizard and 'OK >>' or 'OK',
+                             lambda w: respond(w, wizard.textinput.get_text())),
+    ])
+
+  def ask_email(self, args):
+    return self.ask_question(args, '.*@.*$') # FIXME
+
+  def ask_kitename(self, args):
+    return self.ask_question(args, '.*') # FIXME
+
+  def ask_multiplechoice(self, args):
+    question, wizard = self.wizard_prepare(args)
+
+    choices = gtk.VBox(False, spacing=15)
+    clist = []
+    rb = None
+    for ch in sorted([k for k in args if k.startswith('choice_')]):
+      rb = gtk.RadioButton(rb, args[ch])  
+      clist.append((rb, int(ch[7:])))  
+      choices.pack_start(rb)
+    choices.show_all()
+    self.wizard.left.pack_start(choices)
+
+    def respond(window, choice=None):
+      if not choice:
+        choice = args.get('default', None)
+        for cw, cn in clist:
+          if cw.get_active(): choice = cn
+      print 'Choice is: %s' % choice
+      self.pkComm.pkThread.send('%s\n' % choice)
+      self.wizard_first = False
+      self.wizard.left.remove(choices)
+      if not self.wizard: wizard.close()
+    wizard.set_buttons([
+      ((self.wizard and not self.wizard_first) and '<< Back' or 'Cancel',
+                                                  lambda w: respond(w, 'back')),
+      (self.wizard and 'OK >>' or 'OK', lambda w: respond(w)),
+    ])
 
   def kite_toggle(self, kite_info):
     self.show_error_dialog('Unimplemented... %s' % (kite_info, ))
@@ -547,22 +705,6 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     except:
       self.show_error_dialog('Screenshot failed: %s' % (sys.exc_info(), ))
 
-  def ask_yesno(self, args):
-    if 'pre' in args:
-      question = '\n'.join(args['pre'])+'\n'+args['question']
-    else:
-      question = args['question']
-    dlg = gtk.MessageDialog(type=gtk.MESSAGE_QUESTION,
-                            buttons=gtk.BUTTONS_YES_NO,
-                            message_format=question)
-    response = dlg.get_widget_for_response(dlg.run()).get_label()
-    self.pkComm.pkThread.send(response[4]+'\n')
-    dlg.destroy()
-
-  def ask_email(self, args):
-    print 'FIXME: ask_email(%s)' % args
-    pass
-
   def show_about(self):
     dialog = gtk.AboutDialog()
     dialog.set_name('PageKite')
@@ -582,12 +724,16 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       self.kites = {}
 
   def start_wizard(self, title):
-    self.wizard = True
-    print 'FIXME: start_wizard(%s)' % title
+    if self.wizard:
+      self.wizard.set_title(title)
+    else:
+      self.wizard = PageKiteWizard(title=title)
+    self.wizard_first = True
 
   def end_wizard(self, message):
-    self.in_wizard = False
-    print 'FIXME: end_wizard(%s)' % message
+    if self.wizard:
+      self.wizard.close()
+    self.wizard = None
 
   def on_stub(self, data):
     print 'Stub'
