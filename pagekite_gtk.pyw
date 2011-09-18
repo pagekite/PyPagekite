@@ -112,6 +112,7 @@ class PageKiteThread(threading.Thread):
                       uiclass=remoteui.RemoteUi,
                       http_handler=httpd.UiRequestHandler,
                       http_server=httpd.UiHttpServer)
+        self.close()
         self.write('status_msg: Disabled\nstatus_tag: idle\n')
         self.pk = None
       time.sleep(1)
@@ -353,7 +354,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
        ('SharePath', None, 'Share _File or Folder', None, 'Make a file or folder visible to the Web', self.share_path),
        ('ShareClipboard', None, '_Paste to Web', None, 'Make the contents of the clipboard visible to the Web', self.share_clipboard),
        ('ShareScreenshot', None, 'Share _Screenshot', None, 'Put a screenshot of your desktop on the Web', self.share_screenshot),
-        ('AddKite', None, 'New _Kite', None, 'Add Another PageKite', self.on_stub),
+        ('AddKite', None, 'New _Kite', None, 'Add Another PageKite', self.new_kite),
        ('About', gtk.STOCK_ABOUT, '_About', None, 'About PageKite', self.on_about),
        ('AdvancedMenu', None, 'Ad_vanced ...'),
         ('ViewLog', None, 'PageKite _Log', None, 'Display PageKite event log', self.on_stub),
@@ -704,6 +705,9 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     except:
       self.show_error_dialog('Screenshot failed: %s' % (sys.exc_info(), ))
 
+  def new_kite(self, data):
+    self.pkComm.pkThread.send('addkite: None\n')
+
   def show_about(self):
     dialog = gtk.AboutDialog()
     dialog.set_name('PageKite')
@@ -727,7 +731,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       self.wizard.set_title(title)
     else:
       self.wizard = PageKiteWizard(title=title)
-    self.wizard_first = True
+      self.wizard_first = True
 
   def end_wizard(self, message):
     if self.wizard:

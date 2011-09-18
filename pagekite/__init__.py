@@ -822,6 +822,7 @@ class AuthThread(threading.Thread):
       except Exception, e:
         LogError('AuthThread died: %s' % e)
         time.sleep(5)
+    LogDebug('AuthThread: done')
 
   def _run(self):
     self.qc.acquire()
@@ -3209,9 +3210,8 @@ class HttpUiThread(threading.Thread):
         self.serve = False
       except Exception, e:
         LogInfo('HTTP UI caught exception: %s' % e)
+    if self.httpd: self.httpd.socket.close()
     LogDebug('HttpUiThread: done')
-    if self.httpd:
-      self.httpd.socket.close()
 
 
 class UiCommunicator(threading.Thread):
@@ -3242,26 +3242,42 @@ class UiCommunicator(threading.Thread):
         line = self.config.ui.rfile.readline().strip()
         if line: self.Parse(line)
 
+    LogDebug('UiCommunicator: done')
+
   def Parse(self, line):
-    LogDebug('UiComm: %s' % line)
     try:
       command, args = line.split(': ', 1)
+      LogDebug('UiComm: %s(%s)' % (command, args))
+
+      if args.lower() == 'none': args = None
+      elif args.lower() == 'true': args = True
+      elif args.lower() == 'false': args = False
 
       if command == 'exit':
         self.config.keep_looping = False
         self.config.main_loop = False
-      if command == 'restart':
+      elif command == 'restart':
         self.config.keep_looping = False
         self.config.main_loop = True
-      if command == 'config':
+      elif command == 'config':
+        command = 'change settings'
         self.config.Configure(['--%s' % args])
-      if command == 'addkite':
+      elif command == 'addkite':
+        command = 'create new kite'
         self.config.RegisterNewKite(kitename=args)
-      if command == 'save':
+      elif command == 'save':
+        command = 'save configuration'
         self.config.SaveUserConfig()
 
+    except ValueError:
+      LogDebug('UiComm: bogus: %s' % line)
+    except SystemExit:
+      self.config.keep_looping = False
+      self.config.main_loop = False
     except:
-      pass
+      LogDebug('UiComm: %s' % (sys.exc_info(), ))
+      self.config.ui.Tell(['Oops!', '', 'Failed to %s, details:' % command,
+                           '', '%s' % (sys.exc_info(), )], error=True)
 
   def quit(self):
     self.looping = False
@@ -3327,6 +3343,7 @@ class TunnelManager(threading.Thread):
         LogError('TunnelManager died: %s' % e)
         if DEBUG_IO: traceback.print_exc(file=sys.stderr)
         time.sleep(5)
+    LogDebug('TunnelManager: done')
 
   def _run(self):
     check_interval = 5
@@ -3402,8 +3419,6 @@ class TunnelManager(threading.Thread):
       else:
         self.pkite.ui.Status('flying', color=self.pkite.ui.GREEN,
                                    message='Kites are flying and all is well.')
-
-
 
       for i in xrange(0, check_interval):
         if self.keep_running:
@@ -3559,19 +3574,27 @@ class NullUi(object):
 
   def ExplainError(self, error, title, subject=None):
     if error == 'pleaselogin':
-      self.Tell([title, 'You already have an account. Log in to continue.'
+      self.Tell([title, '', 'You already have an account. Log in to continue.'
                  ], error=True)
     elif error == 'email':
-      self.Tell([title, 'Invalid e-mail address. Please try again?'
+      self.Tell([title, '', 'Invalid e-mail address. Please try again?'
                  ], error=True)
     elif error == 'honey':
-      self.Tell([title, 'Hmm. Somehow, you triggered the spam-filter.'
+      self.Tell([title, '', 'Hmm. Somehow, you triggered the spam-filter.'
                  ], error=True)
     elif error in ('domaintaken', 'domain', 'subdomain'):
-      self.Tell([title, 'Sorry, that domain (%s) is unavailable.' % subject
+      self.Tell([title, '',
+                 'Sorry, that domain (%s) is unavailable.' % subject
                  ], error=True)
     elif error == 'checkfailed':
-      self.Tell([title, 'That domain (%s) is not correctly set up.' % subject
+      self.Tell([title, '',
+                 'That domain (%s) is not correctly set up.' % subject
+                 ], error=True)
+    elif error == 'network':
+      self.Tell([title, '',
+                 'There was a problem communicating with %s.' % subject, '',
+                 'Please verify that you have a working'
+                 ' Internet connection and try again!'
                  ], error=True)
     else:
       self.Tell([title, 'Error code: %s' % error, 'Try again later?'
@@ -3984,8 +4007,8 @@ class PageKite(object):
   def FallDown(self, message, help=True, longhelp=False, noexit=False):
     if self.conns and self.conns.auth: self.conns.auth.quit()
     if self.ui_httpd: self.ui_httpd.quit()
-    if self.tunnel_manager: self.tunnel_manager.quit()
     if self.ui_comm: self.ui_comm.quit()
+    if self.tunnel_manager: self.tunnel_manager.quit()
     self.keep_looping = False
     self.conns = self.ui_httpd = self.ui_comm = self.tunnel_manager = None
     if help or longhelp:
@@ -4958,8 +4981,10 @@ class PageKite(object):
                 return (register, details['secret'])
               else:
                 error = details.get('error', 'unknown')
-            except Exception, e:
-              error = '%s' % e
+            except IOError:
+              error = 'network'
+            except:
+              error = '%s' % (sys.exc_info(), )
 
             if error == 'pleaselogin':
               self.ui.ExplainError(error,
@@ -4972,8 +4997,11 @@ class PageKite(object):
             elif error == 'domain':
               self.ui.ExplainError(error, 'Invalid domain!', subject=register)
               Goto('service_signup_kitename', back_skips_current=True)
+            elif error == 'network':
+              self.ui.ExplainError(error, 'Network error!', subject=self.service_provider)
+              Goto('abort')
             else:
-              self.ui.ExplainError(error, 'Network error!', subject=register)
+              self.ui.ExplainError(error, 'Unknown problem!')
               print 'FIXME!  Error is %s' % error
               Goto('abort')
 
@@ -5481,8 +5509,8 @@ class PageKite(object):
     self.ui.Status('exiting', message='Stopping...')
     Log([('stopping', 'pagekite.py')])
     if self.ui_httpd: self.ui_httpd.quit()
-    if self.tunnel_manager: self.tunnel_manager.quit()
     if self.ui_comm: self.ui_comm.quit()
+    if self.tunnel_manager: self.tunnel_manager.quit()
     if self.conns:
       if self.conns.auth: self.conns.auth.quit()
       for conn in self.conns.conns: conn.Cleanup()
