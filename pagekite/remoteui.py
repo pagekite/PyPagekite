@@ -147,7 +147,10 @@ class RemoteUi(NullUi):
 
       answer = self.rfile.readline().strip().lower()
       if back is not None and answer == 'back': return back
-      if answer: return answer
+      if answer:
+        for d in domains:
+          if answer.endswith(d) or answer.endswith(d): return answer
+        return answer+domains[0]
 
   def AskMultipleChoice(self, choices, question, pre=[], default=None,
                         wizard_hint=False, image=None, back=None):

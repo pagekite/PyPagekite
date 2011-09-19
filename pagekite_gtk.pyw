@@ -77,7 +77,7 @@ class PageKiteThread(threading.Thread):
   def send(self, data):
     if not data.endswith('\n') and data != '':
       raise ValueError('Please always send whole lines')
-#   print '<<PK<< %s' % data.strip()
+    print '<<PK<< %s' % data.strip()
     self.pk_readlock.acquire()
     if data:
       self.pk_incoming.append(data)
@@ -149,7 +149,7 @@ class CommThread(threading.Thread):
     self.cb = {}
 
   def parse_line(self, line):
-#   print '<< %s' % line[:-1]
+    print '<< %s' % line[:-1]
     if line.startswith('begin_'):
       self.multi = line[6:].strip()
       self.multi_args = {}
@@ -740,6 +740,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     if self.wizard:
       self.wizard.close()
     self.wizard = None
+    self.pkComm.pkThread.send('save: quietly\n')
 
   def on_stub(self, data):
     print 'Stub'

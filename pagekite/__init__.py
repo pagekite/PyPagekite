@@ -524,6 +524,26 @@ YamonD = MockYamonD
 gYamon = YamonD(())
 
 
+class MockPageKiteXmlRpc:
+  def __init__(self, config):
+    self.config = config
+
+  def getSharedSecret(self, email, p):
+    for be in self.config.backends.values():
+      if be[BE_SECRET]: return be[BE_SECRET]
+
+  def getAvailableDomains(self, a, b):
+    return ['.%s' % x for x in SERVICE_DOMAINS]
+
+  def signUp(self, a, b):
+    return {
+      'secret': self.getSharedSecret(a, b)
+    }
+
+  def addCnameKite(self, a, s, k): return {}
+  def addKite(self, a, s, k): return {}
+
+
 ##[ PageKite.py code starts here! ]############################################
 
 gSecret = None
@@ -3267,7 +3287,7 @@ class UiCommunicator(threading.Thread):
         self.config.RegisterNewKite(kitename=args, autoconfigure=True)
       elif command == 'save':
         command = 'save configuration'
-        self.config.SaveUserConfig()
+        self.config.SaveUserConfig(quiet=(args == 'quietly'))
 
     except ValueError:
       LogDebug('UiComm: bogus: %s' % line)
@@ -3990,14 +4010,15 @@ class PageKite(object):
   def PrintSettings(self, safe=False):
     print '\n'.join(self.GenerateConfig(safe=safe))
 
-  def SaveUserConfig(self):
+  def SaveUserConfig(self, quiet=False):
     self.savefile = self.savefile or self.rcfile
     try:
       fd = open(self.savefile, 'w')
       fd.write('\n'.join(self.GenerateConfig(safe=True)))
       fd.close()
-      self.ui.Tell(['Settings saved to: %s' % self.savefile])
-      self.ui.Spacer()
+      if not quiet:
+        self.ui.Tell(['Settings saved to: %s' % self.savefile])
+        self.ui.Spacer()
       Log([('saved', 'Settings saved to: %s' % self.savefile)])
     except Exception, e:
       self.ui.Tell(['Could not save to %s: %s' % (self.savefile, e)],
@@ -4753,7 +4774,10 @@ class PageKite(object):
 
   def GetServiceXmlRpc(self):
     service = self.service_xmlrpc
-    return xmlrpclib.ServerProxy(self.service_xmlrpc, None, None, False)
+    if service == 'mock':
+      return MockPageKiteXmlRpc(self)
+    else:
+      return xmlrpclib.ServerProxy(self.service_xmlrpc, None, None, False)
 
   def _KiteInfo(self, kitename):
     is_service_domain = kitename and SERVICE_DOMAIN_RE.search(kitename)
@@ -4835,6 +4859,7 @@ class PageKite(object):
             elif is_service_domain:
               register = is_cname_for or kitename
               if is_subdomain_of:
+                # FIXME: Shut up if parent is already in local config!
                 Goto('service_signup_is_subdomain')
               else:
                 Goto('service_signup_email')
@@ -4865,10 +4890,10 @@ class PageKite(object):
 
         elif ('service_signup_is_subdomain' in state):
           ch = self.ui.AskYesNo('Use this name?',
-                                pre=[('WARNING: %s is a sub-domain!'
-                                      ) % kitename, '',
-         'This process will FAIL if you have not already registered the parent',
-                                     'domain: %s' % is_subdomain_of],
+                                pre=['%s is a sub-domain.' % kitename, '',
+                                     'NOTE: This process will fail if you',
+                                     'have not already registered the parent',
+                                     'domain, %s.' % is_subdomain_of],
                                 default=True, back=-1)
           if ch is True:
             if account:
@@ -5620,7 +5645,7 @@ def Configure(pk):
       pk.SaveUserConfig()
     pk.servers_new_only = True
   elif pk.save:
-    pk.SaveUserConfig()
+    pk.SaveUserConfig(quiet=True)
 
   if ('--list' in sys.argv or
       pk.kite_add or pk.kite_remove or pk.kite_only or pk.kite_disable):
