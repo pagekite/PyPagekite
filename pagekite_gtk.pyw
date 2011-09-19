@@ -627,7 +627,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       (self.wizard and 'Yes >>' or 'Yes', lambda w: respond(w, 'y')),
     ])
 
-  def ask_question(self, args, valid_re):
+  def ask_question(self, args, valid_re, callback=None):
     question, wizard = self.wizard_prepare(args)
     wizard.textinput.set_text(args.get('default', ''))
     wizard.inputprefix.set_text('  ')
@@ -635,12 +635,15 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     wizard.input_hbox.show()
 
     def respond(window, what):
-      self.pkComm.pkThread.send('%s\n' % what)
       wizard.input_hbox.hide()
       wizard.inputprefix.set_text('')
       wizard.inputsuffix.set_text('')
       self.wizard_first = False
       if not self.wizard: wizard.close()
+      if callback:
+        callback(window, what)
+      else:
+        self.pkComm.pkThread.send('%s\n' % what)
     wizard.set_buttons([
       ((self.wizard and not self.wizard_first) and '<< Back' or 'Cancel',
                                                   lambda w: respond(w, 'back')),

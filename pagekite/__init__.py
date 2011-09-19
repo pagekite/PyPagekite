@@ -3264,7 +3264,7 @@ class UiCommunicator(threading.Thread):
         self.config.Configure(['--%s' % args])
       elif command == 'addkite':
         command = 'create new kite'
-        self.config.RegisterNewKite(kitename=args)
+        self.config.RegisterNewKite(kitename=args, autoconfigure=True)
       elif command == 'save':
         command = 'save configuration'
         self.config.SaveUserConfig()
@@ -4777,13 +4777,16 @@ class PageKite(object):
 
     return is_subdomain_of, is_service_domain, is_cname_for, is_cname_ready
 
-  def RegisterNewKite(self, kitename=None, autoconfigure=False):
+  def RegisterNewKite(self, kitename=None, first=False, autoconfigure=False):
     if kitename:
       self.ui.StartWizard('Creating kite: %s' % kitename)
       (is_subdomain_of, is_service_domain,
        is_cname_for, is_cname_ready) = self._KiteInfo(kitename)
     else:
-      self.ui.StartWizard('Create your first kite!')
+      if first:
+        self.ui.StartWizard('Create your first kite!')
+      else:
+        self.ui.StartWizard('Creating a new kite')
       is_subdomain_of = is_service_domain = False
       is_cname_for = is_cname_ready = False
 
@@ -4799,10 +4802,7 @@ class PageKite(object):
     service_account_list = service_accounts.keys()
 
     if service_account_list:
-      if kitename:
-        state = ['choose_kite_account']
-      else:
-        state = ['manual_abort']
+      state = ['choose_kite_account']
     else:
       state = ['use_service_question']
     history = []
@@ -4871,7 +4871,9 @@ class PageKite(object):
                                      'domain: %s' % is_subdomain_of],
                                 default=True, back=-1)
           if ch is True:
-            if email:
+            if account:
+              Goto('create_kite')
+            elif email:
               Goto('service_signup')
             else:
               Goto('service_signup_email')
@@ -4916,7 +4918,8 @@ class PageKite(object):
           else:
             Back()
 
-        elif 'service_signup_kitename' in state:
+        elif ('service_signup_kitename' in state or
+              'service_ask_kitename' in state):
           try:
             domains = service.getAvailableDomains(None, None)
           except:
@@ -4935,6 +4938,8 @@ class PageKite(object):
             self.ui.StartWizard('Creating kite: %s' % kitename)
             if is_subdomain_of:
               Goto('service_signup_is_subdomain')
+            elif account:
+              Goto('create_kite')
             elif email:
               Goto('service_signup')
             else:
@@ -4975,7 +4980,8 @@ class PageKite(object):
                 time.sleep(2) # Give the service side a moment to replicate...
                 self.ui.EndWizard()
                 if autoconfigure:
-                  self.backends.update(self.ArgToBackendSpecs(register,
+                  self.backends.update(self.ArgToBackendSpecs(
+                                                        '%s:builtin' % register,
                                                       secret=details['secret']))
                 self.added_kites = True
                 return (register, details['secret'])
@@ -5006,17 +5012,22 @@ class PageKite(object):
               Goto('abort')
 
         elif 'choose_kite_account' in state:
-          # FIXME: Make this a yes-no, just use the first account.
           choices = service_account_list[:]
           choices.append('Use another service provider')
-          ch = self.ui.AskMultipleChoice(choices, 'Register with',
-                                         pre=['Choose an account for this kite:'],
-                                         default=1)
+          justdoit = (len(service_account_list) == 1)
+          if justdoit:
+            ch = 1
+          else:
+            ch = self.ui.AskMultipleChoice(choices, 'Register with',
+                                       pre=['Choose an account for this kite:'],
+                                           default=1)
+          account = choices[ch-1]
           if ch == len(choices):
             Goto('manual_abort')
+          elif kitename:
+            Goto('create_kite', back_skips_current=justdoit)
           else:
-            account = choices[ch-1]
-            Goto('create_kite')
+            Goto('service_ask_kitename', back_skips_current=justdoit)
 
         elif 'create_kite' in state:
           secret = service_accounts[account]
@@ -5597,7 +5608,7 @@ def Configure(pk):
                      (sys.platform in ('win32', 'os2', 'os2emx',
                                        'darwin', 'darwin1', 'darwin2')))
     if '--signup' in sys.argv or friendly_mode:
-      pk.RegisterNewKite(autoconfigure=True)
+      pk.RegisterNewKite(autoconfigure=True, first=True)
     if friendly_mode: pk.save = True
 
   pk.CheckConfig()

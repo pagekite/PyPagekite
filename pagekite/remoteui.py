@@ -1,4 +1,4 @@
-import re, time
+import re, sys, time
 import pagekite
 from pagekite import NullUi
 
@@ -12,6 +12,12 @@ class RemoteUi(NullUi):
                          '(?:\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'
                          '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
                          '(?:[a-zA-Z]{2,4}|museum)$')
+
+  def __init__(self, welcome=None, wfile=sys.stderr, rfile=sys.stdin):
+    NullUi.__init__(self, welcome=welcome, wfile=wfile, rfile=rfile)
+    self.CLEAR = ''
+    self.NORM = self.WHITE = self.GREY = self.GREEN = self.YELLOW = ''
+    self.BLUE = self.RED = self.MAGENTA = self.CYAN = ''
 
   def StartListingBackEnds(self):
     self.wfile.write('be_list_start: now\n')
