@@ -1,7 +1,8 @@
 #!/usr/bin/env python
-import os
+import datetime
 import gobject
 import gtk
+import os
 import sys
 import socket
 import threading
@@ -9,7 +10,10 @@ import time
 import webbrowser
 
 import pagekite
+from pagekite import sha1hex, globalSecret
 
+
+SHARE_DIR = "~/PageKite"
 
 URL_HOME = ('https://pagekite.net/home/')
 
@@ -27,6 +31,101 @@ def GetScreenShot():
   pb = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False, 8, sz[0], sz[1])
   pb = pb.get_from_drawable(w, w.get_colormap(), 0,0,0,0, sz[0], sz[1])
   return pb
+
+
+class ShareBucket:
+
+  T_TEXT = 1
+  T_HTML = 2
+  T_MARKDOWN = 3
+
+  HTML_INDEX = """\
+<html><head>
+ <title>%(title)s</title>
+</head><body>
+ <h1 class='title'>%(title)s</h1>
+ <div class='content'>%(content)s</div>
+ <div class='files'>\n\t%(files)s\n\t</div>
+</body></html>
+  """
+
+  def __init__(self, kitename, kiteport, title=None, dirname=None, random=False):
+    share_dir = os.path.expanduser(SHARE_DIR)
+    kite_dir = os.path.join(share_dir, '%s_%s' % (kitename, kiteport))
+    if dirname:
+      self.fullpath = os.path.join(kite_dir, dirname)
+    else:
+      count = 0
+      while True:
+        count += 1
+        if random:
+          dirname = sha1hex('%s%s' % (random.randint(0, 0x7ffffffe),
+                                      globalSecret()))[:12]
+        else:
+          dirname = datetime.datetime.now().strftime("%Y-%m-%d")
+
+        if title: dirname += '.%s' % title.replace(' ', '_')
+        if count > 1: dirname += '.%3.3x' % count
+
+        self.fullpath = os.path.join(kite_dir, dirname)
+        if not os.path.exists(self.fullpath): break
+
+    self.dirname = os.path.join('.', dirname)[1:]
+    self.kitename = kitename
+    self.kiteport = kiteport
+
+    self.webpath = None
+
+    self.title = title or 'Shared with PageKite'
+    self.content = (self.T_TEXT, '')
+
+    # Create directory!
+    if not os.path.exists(share_dir): os.mkdir(share_dir, 0700)
+    if not os.path.exists(kite_dir): os.mkdir(kite_dir, 0700)
+    os.mkdir(self.fullpath, 0700)
+
+  def load(self):
+    return self
+
+  def fmt_content(self):
+    return '<pre>%s</pre>' % self.content[1]
+
+  def fmt_file(self, filename):
+    # FIXME: Do something friendly with file types/extensions
+    return ('<div class="file"><a href="%s">%s</a></div>'
+            ) % (filename, os.path.basename(filename))
+
+  def save(self):
+    filelist = []
+    for fn in os.listdir(self.fullpath):
+      if not fn.startswith('.') and fn != 'index.pk-html':
+        filelist.append(self.fmt_file(fn))
+
+    fd = open(os.path.join(self.fullpath, 'index.pk-html'), 'w')
+    fd.write(self.HTML_INDEX % {
+      'title': self.title,
+      'content': self.fmt_content(),
+      'files': '\n\t'.join(filelist)
+    })
+    fd.close()
+
+    return self
+
+  def set_title(self, title):
+    self.title = title
+    return self
+
+  def set_content(self, content, ctype=T_TEXT):
+    self.content = (ctype, content)
+    return self
+
+  def add_screenshot(self):
+    GetScreenShot().save(os.path.join(self.fullpath, 'screenshot.png'), 'png')
+    return self
+
+  def pk_config(self):
+    return ('webpath=%s/%s:%s:default:%s'
+            ) % (self.kitename, self.kiteport, self.dirname, self.fullpath)
 
 
 class PageKiteThread(threading.Thread):
@@ -416,7 +515,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
         for protoport in www:
           info = self.kites[domain][protoport]
           proto = protoport.split('/')[0]
-          secure = ('ssl' in info or info['proto'] == 'https'
+          secure = (('ssl' in info or info['proto'] == 'https')
                     and 'Secure ' or '')
           url = '%s://%s%s' % (secure and 'https' or 'http', domain,
                                info['port'] and ':%s' % info['port'] or '')
@@ -426,7 +525,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
           mc += a('menuitem', '%sWWW%s to %s' % (secure, pdesc, bdesc),
                   cb=make_cb(self.kite_toggle, info), toggle=True)
 
-          if pagekite.BE_STATUS_OK & int(info['status']):
+          if pagekite.BE_STATUS_OK & int(info['status'], 16):
             mc += a('menuitem', 'Open in Browser',
                     cb=make_cb(self.open_url, url), tooltip=url)
 
@@ -437,7 +536,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
           elif len(info['paths'].keys()):
             for path in sorted(info['paths'].keys()):
               mc += a('menu', '  ' + sn(info['paths'][path]['src']))
-              if pagekite.BE_STATUS_OK & int(info['status']):
+              if pagekite.BE_STATUS_OK & int(info['status'], 16):
                 mc += a('menuitem', 'Open in Browser',
                         cb=make_cb(self.open_url, url+path), tooltip=url+path)
               mc += a('menuitem', ('Copy Link to: %s'
@@ -701,12 +800,27 @@ class PageKiteStatusIcon(gtk.StatusIcon):
   def share_path(self, data):
     self.show_error_dialog('Unimplemented...')
 
-  def share_screenshot(self, data):
-    try:
-      pb = GetScreenShot()
-      pb.save('/tmp/pk-screenshot.png', 'png')
-    except:
-      self.show_error_dialog('Screenshot failed: %s' % (sys.exc_info(), ))
+  def share_screenshot(self, data, title='Screenshot',
+                                   content='',
+                                   kitename=None,
+                                   kiteport=None):
+    if kitename and kiteport:
+      try:
+        sb = (ShareBucket(kitename, kiteport, title=title)
+                         .add_screenshot()
+                         .save())
+        self.pkComm.pkThread.send('config: %s\n' % sb.pk_config())
+        self.pkComm.pkThread.send('save: quietly\n')
+        url = 'http://%s:%s%s' % (kitename, kiteport, sb.dirname)
+        self.copy_url(url)
+        self.open_url(url)
+      except:
+        self.show_error_dialog('Screenshot failed: %s' % (sys.exc_info(), ))
+    else:
+      # FIXME
+      self.share_screenshot(None, title=title, content=content,
+                                  kitename='b.pagekite.me',
+                                  kiteport=80)
 
   def new_kite(self, data):
     self.pkComm.pkThread.send('addkite: None\n')

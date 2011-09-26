@@ -4838,7 +4838,7 @@ class PageKite(object):
       state[0] = goto
 
     register = is_cname_for or kitename
-    email = None
+    account = email = None
     while 'end' not in state:
       try:
         if 'use_service_question' in state:
