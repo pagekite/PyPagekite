@@ -39,6 +39,12 @@ class ShareBucket:
   T_HTML = 2
   T_MARKDOWN = 3
 
+  JSON_INDEX = """\
+{"title": %(title)s,
+ "content": %(content)s,
+ "files": [\n\t%(files)s\n ]}\
+  """
+
   HTML_INDEX = """\
 <html><head>
  <title>%(title)s</title>
@@ -87,27 +93,48 @@ class ShareBucket:
   def load(self):
     return self
 
-  def fmt_content(self):
-    return '<pre>%s</pre>' % self.content[1]
+  def fmt_title(self, ftype='html'):
+    if ftype == 'json':
+      # FIXME: Escape better
+      return '"%s"' % self.content[1].replace('"', '\\"')
+    else:
+      # FIXME: Escape better
+      return '%s<' % self.content[1]
 
-  def fmt_file(self, filename):
+  def fmt_content(self, ftype='html'):
+    if ftype == 'json':
+      # FIXME: Escape better
+      return '"%s"' % self.content[1].replace('"', '\\"')
+    else:
+      # FIXME: Escape better
+      return '<pre>%s</pre>' % self.content[1]
+
+  def fmt_file(self, filename, ftype='html'):
     # FIXME: Do something friendly with file types/extensions
-    return ('<div class="file"><a href="%s">%s</a></div>'
-            ) % (filename, os.path.basename(filename))
+    if ftype == 'json':
+      # FIXME: Escape better
+      return '"%s"' % filename.replace('"', '\\"')
+    else:
+      # FIXME: Escape better
+      return ('<div class="file"><a href="%s">%s</a></div>'
+              ) % (filename, os.path.basename(filename))
 
   def save(self):
     filelist = []
     for fn in os.listdir(self.fullpath):
-      if not fn.startswith('.') and fn != 'index.pk-html':
-        filelist.append(self.fmt_file(fn))
+      if not (fn.startswith('.') or fn in ('index.pk-html', 'index.pk-json')):
+        filelist.append(fn)
 
-    fd = open(os.path.join(self.fullpath, 'index.pk-html'), 'w')
-    fd.write(self.HTML_INDEX % {
-      'title': self.title,
-      'content': self.fmt_content(),
-      'files': '\n\t'.join(filelist)
-    })
-    fd.close()
+    SEP = {'html': '\n\t', 'json': ',\n\t'}
+    for ft, tp in (('html', self.HTML_INDEX),
+                   ('json', self.JSON_INDEX)):
+      fd = open(os.path.join(self.fullpath, 'index.pk-%s' % ft), 'w')
+      fd.write(tp % {
+        'title': self.fmt_title(self.title),
+        'content': self.fmt_content(ft),
+        'files': SEP[ft].join([self.fmt_file(f, ft) for f in sorted(filelist)])
+      })
+      fd.close()
 
     return self
 
@@ -117,6 +144,11 @@ class ShareBucket:
 
   def set_content(self, content, ctype=T_TEXT):
     self.content = (ctype, content)
+    return self
+
+  def add_paths(self, paths):
+    for path in paths:
+      os.symlink(path, os.path.join(self.fullpath, os.path.basename(path)))
     return self
 
   def add_screenshot(self):
@@ -794,11 +826,48 @@ class PageKiteStatusIcon(gtk.StatusIcon):
   def open_url(self, url):
     webbrowser.open(url)
 
+  def share_clipboard_cb(self, clipboard, text, data):
+    print 'CB: %s / %s / %s' % (clipboard, text, data)
+    self.show_error_dialog('Unimplemented... %s [%s/%s]' % (text, clipboard, data))
+
   def share_clipboard(self, data):
-    self.show_error_dialog('Unimplemented...')
+    cb = gtk.clipboard_get(gtk.gdk.SELECTION_CLIPBOARD)
+    cb.request_text(self.share_clipboard_cb)
 
   def share_path(self, data):
-    self.show_error_dialog('Unimplemented...')
+    RESPONSE_SHARE = gtk.RESPONSE_CANCEL + gtk.RESPONSE_OK + 1000
+    self.wizard = fs = gtk.FileChooserDialog('Share Files or Folders', None,
+                                             gtk.FILE_CHOOSER_ACTION_OPEN,
+                                         (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL, 
+                                          "Share!", RESPONSE_SHARE))
+    expl = gtk.Label("Hint: You can share multiple files or folders "
+                     "by holding the <CTRL> key.")
+    expl.show()
+    fs.set_extra_widget(expl)
+   #ft = gtk.CheckButton("Copy to PageKite folder")
+   #ft.show()
+   #fs.set_extra_widget(ft)
+    fs.set_default_response(RESPONSE_SHARE)
+    fs.set_select_multiple(True)
+
+    # FIXME!
+    kitename = 'b.pagekite.me'
+    kiteport = 80
+    title = 'Shared'
+
+    response = fs.run()
+    if response == RESPONSE_SHARE:
+      sb = (ShareBucket(kitename, kiteport, title=title)
+                        .add_paths(fs.get_filenames())
+                        .save())
+      self.pkComm.pkThread.send('config: %s\n' % sb.pk_config())
+      self.pkComm.pkThread.send('save: quietly\n')
+      url = 'http://%s:%s%s' % (kitename, kiteport, sb.dirname)
+      self.copy_url(url)
+      self.open_url(url)
+    fs.destroy()
+    expl.destroy()
+    self.wizard = None
 
   def share_screenshot(self, data, title='Screenshot',
                                    content='',
