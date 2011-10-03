@@ -35,6 +35,10 @@ def GetScreenShot():
 
 class ShareBucket:
 
+  S_CLIPBOARD = 1
+  S_PATHS = 2
+  S_SCREENSHOT = 3
+
   T_TEXT = 1
   T_HTML = 2
   T_MARKDOWN = 3
@@ -151,8 +155,8 @@ class ShareBucket:
       os.symlink(path, os.path.join(self.fullpath, os.path.basename(path)))
     return self
 
-  def add_screenshot(self):
-    GetScreenShot().save(os.path.join(self.fullpath, 'screenshot.png'), 'png')
+  def add_screenshot(self, screenshot):
+    screenshot.save(os.path.join(self.fullpath, 'screenshot.png'), 'png')
     return self
 
   def pk_config(self):
@@ -331,6 +335,7 @@ class UiWizard(UiContainer):
 class PageKiteWizard:
   def __init__(self, title=''):
     self.window = gtk.Dialog()
+    self.window.set_size_request(500, 300)
 
     # Just keep window open forever and ever
     self.window.connect("delete_event", lambda w, e: True)
@@ -401,6 +406,76 @@ class PageKiteWizard:
     self.window.hide()
     self.window.destroy()
     self.window = self.buttons = None
+
+
+class SharingDialog(gtk.Dialog):
+
+  DEFAULT_EXPIRATION = 2
+  EXPIRATION = {
+    "Never expires": 0,
+    "Expires in 2 days": 2*24*3600,
+    "Expires in 7 days": 7*24*3600,
+    "Expires in 14 days": 14*24*3600,
+    "Expires in 30 days": 30*24*3600,
+    "Expires in 90 days": 90*24*3600,
+    "Expires in 180 days": 180*24*3600,
+    "Expires in 365 days": 365*24*3600
+  }
+
+  def __init__(self, kites, stype, sdata, title=''):
+    gtk.Dialog.__init__(self, title='Sharing Details',
+                        buttons=(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+                                 gtk.STOCK_OK, gtk.RESPONSE_OK))
+
+    preview_box = gtk.Label("FIXME: Cropper")
+
+    kitelist = []
+    for domain in kites:
+      for bid in kites[domain]:
+        if 'builtin' in kites[domain][bid] and bid.startswith('http/'):
+          kitelist.append('%s:%s' % (domain, bid[5:]))
+    if len(kitelist) > 1:
+      combo = gtk.combo_box_new_text()
+      kitelist.sort(key=lambda k: len(k))
+      for kite in kitelist: combo.append_text(kite)
+      combo.set_active(0)
+      kite_chooser_box = gtk.HBox()
+      kite_chooser_box.pack_start(gtk.Label("Share on:"), expand=True, fill=True, padding=10)
+      kite_chooser_box.pack_start(combo, expand=True, fill=True, padding=10)
+      self.kite_chooser = combo
+    elif len(kitelist) == 1:
+      kite_chooser_box = gtk.Label("Sharing on %s" % kitelist[0])
+      self.kite_chooser = kitelist[0]
+    else:
+      kite_chooser_box = gtk.Label("No kites!")
+      self.kite_chooser = None
+
+    elist = (self.EXPIRATION.keys()[:])
+    elist.sort(key=lambda k: self.EXPIRATION[k])
+    ecombo = gtk.combo_box_new_text()
+    for exp in elist: ecombo.append_text(exp)
+    ecombo.set_active(self.DEFAULT_EXPIRATION)
+
+    expiration_box = gtk.HBox()
+    expiration_box.pack_start(gtk.Label("Expiration:"), expand=True, fill=True, padding=10)
+    expiration_box.pack_start(ecombo, expand=True, fill=True, padding=10)
+    self.expiration = ecombo
+
+    for widget in (preview_box, kite_chooser_box, expiration_box):
+      self.vbox.pack_start(widget, expand=False, fill=False, padding=10)
+      widget.show_all()
+
+  def get_kiteinfo(self):
+    if str(type(self.kite_chooser)) == "<type 'gtk.ComboBox'>":
+      return self.kite_chooser.get_model()[self.kite_chooser.get_active()][0]
+    else:
+      return self.kite_chooser
+
+  def get_kitename(self):
+    return (self.get_kiteinfo() or ':').split(':')[0]
+
+  def get_kiteport(self):
+    return int((self.get_kiteinfo() or ':').split(':')[1])
 
 
 class PageKiteStatusIcon(gtk.StatusIcon):
@@ -795,8 +870,8 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     clist = []
     rb = None
     for ch in sorted([k for k in args if k.startswith('choice_')]):
-      rb = gtk.RadioButton(rb, args[ch])  
-      clist.append((rb, int(ch[7:])))  
+      rb = gtk.RadioButton(rb, args[ch])
+      clist.append((rb, int(ch[7:])))
       choices.pack_start(rb)
     choices.show_all()
     self.wizard.left.pack_start(choices)
@@ -834,62 +909,69 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     cb = gtk.clipboard_get(gtk.gdk.SELECTION_CLIPBOARD)
     cb.request_text(self.share_clipboard_cb)
 
-  def share_path(self, data):
-    RESPONSE_SHARE = gtk.RESPONSE_CANCEL + gtk.RESPONSE_OK + 1000
-    self.wizard = fs = gtk.FileChooserDialog('Share Files or Folders', None,
-                                             gtk.FILE_CHOOSER_ACTION_OPEN,
-                                         (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL, 
-                                          "Share!", RESPONSE_SHARE))
-    expl = gtk.Label("Hint: You can share multiple files or folders "
-                     "by holding the <CTRL> key.")
-    expl.show()
-    fs.set_extra_widget(expl)
-   #ft = gtk.CheckButton("Copy to PageKite folder")
-   #ft.show()
-   #fs.set_extra_widget(ft)
-    fs.set_default_response(RESPONSE_SHARE)
-    fs.set_select_multiple(True)
+  def get_sharebucket(self, title, dtype, data):
+    self.wizard = sd = SharingDialog(self.kites, dtype, data, title=title)
+    if sd.run() == gtk.RESPONSE_OK:
+      kitename = sd.get_kitename()
+      kiteport = sd.get_kiteport()
+    else:
+      kitename = kiteport = None
 
-    # FIXME!
-    kitename = 'b.pagekite.me'
-    kiteport = 80
-    title = 'Shared'
-
-    response = fs.run()
-    if response == RESPONSE_SHARE:
-      sb = (ShareBucket(kitename, kiteport, title=title)
-                        .add_paths(fs.get_filenames())
-                        .save())
-      self.pkComm.pkThread.send('config: %s\n' % sb.pk_config())
-      self.pkComm.pkThread.send('save: quietly\n')
-      url = 'http://%s:%s%s' % (kitename, kiteport, sb.dirname)
-      self.copy_url(url)
-      self.open_url(url)
-    fs.destroy()
-    expl.destroy()
     self.wizard = None
+    sd.destroy()
+    if not kitename: return None, None, None
 
-  def share_screenshot(self, data, title='Screenshot',
-                                   content='',
-                                   kitename=None,
-                                   kiteport=None):
-    if kitename and kiteport:
-      try:
-        sb = (ShareBucket(kitename, kiteport, title=title)
-                         .add_screenshot()
-                         .save())
+    return kitename, kiteport, ShareBucket(kitename, kiteport, title=title)
+
+  def share_path(self, data):
+    try:
+      RESPONSE_SHARE = gtk.RESPONSE_CANCEL + gtk.RESPONSE_OK + 1000
+      self.wizard = fs = gtk.FileChooserDialog('Share Files or Folders', None,
+                                               gtk.FILE_CHOOSER_ACTION_OPEN,
+                                         (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+                                          "Share!", RESPONSE_SHARE))
+      fs.set_default_response(RESPONSE_SHARE)
+      fs.set_select_multiple(True)
+      expl = gtk.Label("Hint: You can share multiple files or folders "
+                       "by holding the <CTRL> key.")
+      expl.show()
+      fs.set_extra_widget(expl)
+
+      paths = (fs.run() == RESPONSE_SHARE) and fs.get_filenames()
+
+      fs.destroy()
+      expl.destroy()
+      self.wizard = None
+
+      if paths:
+        kitename, kiteport, sb = self.get_sharebucket('Shared',
+                                                     ShareBucket.S_PATHS, paths)
+        if not sb: return
+
+        sb.add_paths(paths).save()
         self.pkComm.pkThread.send('config: %s\n' % sb.pk_config())
         self.pkComm.pkThread.send('save: quietly\n')
         url = 'http://%s:%s%s' % (kitename, kiteport, sb.dirname)
         self.copy_url(url)
         self.open_url(url)
-      except:
-        self.show_error_dialog('Screenshot failed: %s' % (sys.exc_info(), ))
-    else:
-      # FIXME
-      self.share_screenshot(None, title=title, content=content,
-                                  kitename='b.pagekite.me',
-                                  kiteport=80)
+    except:
+      self.show_error_dialog('Sharing failed: %s' % (sys.exc_info(), ))
+
+  def share_screenshot(self, data, title='Screenshot'):
+    try:
+      screenshot = GetScreenShot()
+      kitename, kiteport, sb = self.get_sharebucket('Screenshot',
+                                           ShareBucket.S_SCREENSHOT, screenshot)
+      if not sb: return
+
+      sb.add_screenshot(screenshot).save()
+      self.pkComm.pkThread.send('config: %s\n' % sb.pk_config())
+      self.pkComm.pkThread.send('save: quietly\n')
+      url = 'http://%s:%s%s' % (kitename, kiteport, sb.dirname)
+      self.copy_url(url)
+      self.open_url(url)
+    except:
+      self.show_error_dialog('Screenshot failed: %s' % (sys.exc_info(), ))
 
   def new_kite(self, data):
     self.pkComm.pkThread.send('addkite: None\n')
