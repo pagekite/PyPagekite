@@ -45,3 +45,20 @@ Main menu:
                         On-line support
    Quit
 
+
+## When Sharing ##
+
+1. One of:
+    - Create screenshot
+    - File/Directory chooser
+    - Grab data from clipboard
+
+2. DISPLAY A PREVIEW
+   If screenshot, allow cropping
+   If multiple kites, choose from a dropdown
+   Choose expiration from a dropdown
+   ADVANCED:
+     x Make URL private
+     x Require password: [ ... ]
+
+
