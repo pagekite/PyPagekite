@@ -33,6 +33,6 @@ Any other TCP-based service, including SSH and VNC, may be exposed
 as well to clients supporting HTTP Proxies.
 """,
    packages=['pagekite'],
-   scripts=['scripts/pagekite', 'scripts/lapcat', 'scripts/pagekite_gtk'],
+   scripts=['scripts/pagekite', 'scripts/lapcat'],
    install_requires=['SocksipyChain >= 2.0']
 )
