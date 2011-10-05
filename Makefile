@@ -18,6 +18,19 @@ combined: pagekite tools dev
 	@mv pagekite-tmp.py dist/pagekite-`python setup.py --version`.py
 	@ls -l dist/pagekite-*.py
 
+gtk: pagekite tools dev
+	@./scripts/breeder.py sockschain \
+	             pagekite/__init__.py \
+	             pagekite/basicui.py \
+	             pagekite/remoteui.py \
+	             pagekite/yamond.py \
+	             pagekite/httpd.py \
+	             pagekite_gtk.py \
+	             >pagekite-tmp.py
+	@chmod +x pagekite-tmp.py
+	@mv pagekite-tmp.py dist/pagekite-gtk-`python setup.py --version`.py
+	@ls -l dist/pagekite-*.py
+
 android: pagekite tools
 	@./scripts/breeder.py sockschain \
 	             pagekite/__init__.py \
@@ -32,7 +45,7 @@ android: pagekite tools
 	@mv pagekite-tmp.py dist/pk-android-`./pagekite-tmp.py --appver`.py
 	@ls -l dist/pk-android-*.py
 
-dist: combined allrpm android
+dist: combined gtk allrpm android
 
 allrpm: rpm_el4 rpm_el5 rpm_el6-fc13 rpm_fc14-15
 
@@ -95,6 +108,7 @@ pagekite: pagekite/__init__.py pagekite/httpd.py pagekite/__main__.py
 dev: sockschain
 	@rm -f .SELF
 	@ln -fs . .SELF
+	@ln -fs scripts/pagekite_gtk pagekite_gtk.py
 	@echo export PYTHONPATH=`pwd`
 	@echo export HTTP_PROXY=
 	@echo export http_proxy=
@@ -112,7 +126,7 @@ distclean: clean
 
 clean:
 	@rm -vf sockschain *.pyc */*.pyc scripts/breeder.py .SELF
-	@rm -vf .appver pagekite-tmp.py MANIFEST setup.cfg
+	@rm -vf .appver pagekite-tmp.py MANIFEST setup.cfg pagekite_gtk.py
 	@rm -vrf *.egg-info build/
 	@rm -vf debian/files debian/control debian/copyright debian/changelog
 	@rm -vrf debian/pagekite* debian/python* debian/init.d

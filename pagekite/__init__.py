@@ -5333,7 +5333,10 @@ class PageKite(object):
 
     global LogFile
     if filename in ('stdio', 'stdout'):
-      LogFile = sys.stdout
+      try:
+        LogFile = os.fdopen(sys.stdout.fileno(), 'w', 0)
+      except:
+        LogFile = sys.stdout
     else:
       try:
         LogFile = fd = open(filename, "a", 0)
