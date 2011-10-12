@@ -1,8 +1,8 @@
 #!/bin/bash
 # <h2>This is the PageKite mini-installer!</h2><p>
-#  Run with: <b>curl https://pagekite.net/pk/ |sudo bash</b>
+#  Run with: <b>curl http://pagekite.net/pk/ |sudo bash</b>
 # <br>
-#   or just: <b>curl https://pagekite.net/pk/ |bash</b>
+#   or just: <b>curl http://pagekite.net/pk/ |bash</b>
 # </p><hr><pre>
 
 DEST=/usr/local/bin
@@ -17,9 +17,9 @@ echo ":$PATH:" |grep -c :$DEST: >/dev/null 2>&1 && PAGEKITE=pagekite.py
 export DESTFILE
 
 (
-  set -x
-  curl https://pagekite.net/pk/pagekite.py >"$DESTFILE"  || exit 1
-  chmod +x "$DESTFILE"                                   || exit 2
+          set -x
+  curl http://pagekite.net/pk/pagekite.py >"$DESTFILE"  || exit 1
+  chmod +x "$DESTFILE"                                  || exit 2
 )\
  && cat <<tac
 
