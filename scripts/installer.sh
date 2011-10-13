@@ -7,15 +7,14 @@
 
 ###############################################################################
 # Check if SSL works
-[ "$METHOD" == "" ] && export METHOD=https
-if ! curl -s $METHOD://pagekite.net/pk/ >/dev/null; then
+if ! curl -s https://pagekite.net/pk/ >/dev/null; then
     cat <<tac
 
-WARNING: Your curl does not handle the pagekite.net SSL certificate"
-         properly.  Bailing out!  If you aren't afraid of the evil"
-         hax0rz, you can install over plain HTTP like so:"
+WARNING: Your curl does not handle the pagekite.net SSL certificate
+         properly.  Bailing out!  If you aren't afraid of the evil
+         hax0rz, you can install over plain HTTP like so:
 
-$ curl http://pagekite.net/pk/ | METHOD=http sudo bash"
+$ curl http://pagekite.net/pk/ |sed -e s/https:/http:/g | sudo bash
 
 tac
     exit 0
@@ -37,7 +36,7 @@ export DESTFILE
 # Install!
 (
           set -x
-  curl $METHOD://pagekite.net/pk/pagekite.py >"$DESTFILE"  || exit 1
+  curl https://pagekite.net/pk/pagekite.py >"$DESTFILE"  || exit 1
   chmod +x "$DESTFILE"                                     || exit 2
 )\
  && cat <<tac
