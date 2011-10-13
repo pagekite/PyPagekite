@@ -15,7 +15,7 @@ WARNING: Your curl does not handle the pagekite.net SSL certificate"
          properly.  Bailing out!  If you aren't afraid of the evil"
          hax0rz, you can install over plain HTTP like so:"
 
-$ curl http://pagekite.net/pk/ | sudo METHOD=http bash"
+$ curl http://pagekite.net/pk/ | METHOD=http sudo bash"
 
 tac
     exit 0
