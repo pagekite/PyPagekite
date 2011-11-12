@@ -457,7 +457,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     if files:
       for (fn, fpath) in files:
         fmimetype = self.getMimeType(fn)
-        fsize = os.path.getsize(fpath) or ''
+        try:
+          fsize = os.path.getsize(fpath) or ''
+        except OSError:
+          fsize = 0
         ops = [ ]
         if os.path.isdir(fpath):
           fclass = ['dir']
@@ -479,7 +482,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         ophtml = ', '.join([('<a class="%s" href="%s?%s=/%s">%s</a>'
                              ) % (op, qfn, op, qfn, op)
                             for op in sorted(ops)])
-        mtime = full_path and int(os.path.getmtime(fpath)) or time.time()
+        try:
+          mtime = full_path and int(os.path.getmtime(fpath) or time.time())
+        except OSError:
+          mtime = int(time.time())
         fhtml.append(('<tr class="%s">'
                        '<td class="ops">%s</td>'
                        '<td class="size">%s</td>'
