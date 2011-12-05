@@ -19,7 +19,7 @@ combined: pagekite tools dev
 	@ls -l dist/pagekite-*.py
 
 gtk: pagekite tools dev
-	@./scripts/breeder.py sockschain \
+	@./scripts/breeder.py --gtk-images sockschain gui \
 	             pagekite/__init__.py \
 	             pagekite/basicui.py \
 	             pagekite/remoteui.py \
