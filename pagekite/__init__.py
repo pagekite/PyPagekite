@@ -1455,11 +1455,11 @@ class Selectable(object):
         self.LogInfo('Error reading socket: %s (errno=%s)' % (msg, errno))
         return False
 
+    self.last_activity = time.time()
     if data is None or data == '':
       self.read_eof = True
       return self.ProcessData('')
     else:
-      self.last_activity = time.time()
       if not self.peeking:
         self.read_bytes += len(data)
         if self.read_bytes > LOG_THRESHOLD: self.LogTraffic()
@@ -2545,6 +2545,8 @@ class UserConn(Selectable):
     self.conns = None
     self.backend = BE_NONE[:]
     self.config = {}
+    # UserConn objects are considered active immediately
+    self.last_activity = time.time()
 
   def __html__(self):
     return ('<b>Tunnel</b>: <a href="/conn/%s">%s</a><br>'
