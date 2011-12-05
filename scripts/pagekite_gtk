@@ -20,9 +20,22 @@ URL_HOME = ('https://pagekite.net/home/')
 IMG_DIR_WINDOWS = 'gui/icons-16'
 IMG_DIR_DEFAULT = 'gui/icons-127'
 IMG_FILE_WIZARD  = 'pk-active.png'
+IMG_FILE_WIZBACK = '/home/bre/i-grey.jpg'
 ICON_FILE_ACTIVE  = 'pk-active.png'
 ICON_FILE_TRAFFIC = 'pk-traffic.png'
 ICON_FILE_IDLE    = 'pk-idle.png'
+
+
+PIXBUF_WIZBACK = gtk.gdk.pixbuf_new_from_file(IMG_FILE_WIZBACK)
+def ExposeFancyBackground(w, ev):
+  try:
+    w.window.draw_pixbuf(w.style.bg_gc[gtk.STATE_NORMAL],
+                         PIXBUF_WIZBACK, 0, 0, 0, 0)
+    if w.get_child() is not None:
+      w.propagate_expose(w.get_child(), ev)
+  except AttributeError:
+    return False
+  return True
 
 
 def GetScreenShot():
@@ -336,6 +349,7 @@ class PageKiteWizard:
   def __init__(self, title=''):
     self.window = gtk.Dialog()
     self.window.set_size_request(500, 300)
+    self.window.set_position(gtk.WIN_POS_CENTER)
 
     # Just keep window open forever and ever
     self.window.connect("delete_event", lambda w, e: True)
@@ -350,6 +364,7 @@ class PageKiteWizard:
     self.decoration.set_from_file(os.path.join(IMG_DIR_DEFAULT, IMG_FILE_WIZARD))
     self.inputprefix = gtk.Label('')
     self.textinput = gtk.Entry()
+    self.textinput.set_activates_default(True)
     self.inputsuffix = gtk.Label('')
 
     # Set up our packing...
@@ -357,24 +372,36 @@ class PageKiteWizard:
     self.left = gtk.VBox(False, spacing=5)
     self.hbox = gtk.HBox(False, spacing=0)
     self.input_hbox = gtk.HBox(False, spacing=0)
-    self.hbox.pack_start(self.right, expand=True, fill=True, padding=10)
+    self.hbox.pack_start(self.right, expand=False, fill=False, padding=10)
     self.hbox.pack_start(self.left, expand=True, fill=True, padding=10)
 
-    self.right.pack_start(self.decoration, expand=False, fill=False)
+    self.right.pack_start(self.decoration, expand=True, fill=True)
     self.left.pack_start(self.question, expand=True, fill=True)
     self.input_hbox.pack_start(self.inputprefix, expand=False, fill=False)
     self.input_hbox.pack_start(self.textinput, expand=True, fill=True)
     self.input_hbox.pack_start(self.inputsuffix, expand=False, fill=False)
     self.left.pack_start(self.input_hbox, expand=True, fill=True)
 
-    self.window.vbox.pack_start(self.title, expand=False,fill=False, padding=5)
-    self.window.vbox.pack_start(self.hbox, expand=True, fill=True, padding=10)
+    self.window.vbox.pack_start(self.title, expand=False, fill=False, padding=5)
+    self.window.vbox.pack_start(self.hbox, expand=True, fill=True, padding=0)
+
+    # Draw a fancy background!
+    self.window.vbox.connect('expose-event', ExposeFancyBackground)
 
     if title: self.set_title(title)
 
     self.buttons = []
     self.window.show_all()
-    self.input_hbox.hide()
+    self.show_input_area(False)
+
+  def show_input_area(self, really):
+    if really:
+      self.input_hbox.show()
+      self.textinput.grab_focus()
+      self.question.set_alignment(0, 1)
+    else:
+      self.input_hbox.hide()
+      self.question.set_alignment(0, 0.5)
 
   def set_title(self, title):
     self.title.set_markup('<big> <b>%s</b> </big>' % title)
@@ -393,13 +420,17 @@ class PageKiteWizard:
 
   def set_buttons(self, buttonlist):
     self.clear_buttons()
+    last = None
     for label, callback in buttonlist:
       button = gtk.Button(label)
       button.connect('clicked', callback)
       button.show()
+      last = button
       self.window.action_area.pack_start(button)
       self.buttons.append(button)
-    # FIXME: we want to make the LAST button the 'default' action.
+    if last:
+      last.set_flags(gtk.CAN_DEFAULT)
+      last.grab_default()
 
   def close(self):
     self.clear_buttons()
@@ -802,8 +833,10 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     dlg = gtk.MessageDialog(type=d_type,
                             buttons=gtk.BUTTONS_CLOSE,
                             message_format=message.replace('  ', '\n'))
+    dlg.set_position(gtk.WIN_POS_CENTER)
     dlg.get_action_area().children()[0].connect('clicked',
                                                 lambda w: dlg.destroy())
+    dlg.connect('expose-event', ExposeFancyBackground)
     dlg.show()
 
   def show_error_dialog(self, message):
@@ -823,6 +856,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
   def ask_yesno(self, args):
     question, wizard = self.wizard_prepare(args)
+    wizard.show_input_area(False)
 
     def respond(window, what):
       self.pkComm.pkThread.send('%s\n' % what)
@@ -830,7 +864,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       if not self.wizard: wizard.close()
     wizard.set_buttons([
       ('No', lambda w: respond(w, 'n')),
-      (self.wizard and 'Yes >>' or 'Yes', lambda w: respond(w, 'y')),
+      ('Yes', lambda w: respond(w, 'y')),
     ])
 
   def ask_question(self, args, valid_re, callback=None):
@@ -838,10 +872,9 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     wizard.textinput.set_text(args.get('default', ''))
     wizard.inputprefix.set_text('  ')
     wizard.inputsuffix.set_text(args.get('domain', '')+'     ')
-    wizard.input_hbox.show()
+    wizard.show_input_area(True)
 
     def respond(window, what):
-      wizard.input_hbox.hide()
       wizard.inputprefix.set_text('')
       wizard.inputsuffix.set_text('')
       self.wizard_first = False
@@ -851,9 +884,9 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       else:
         self.pkComm.pkThread.send('%s\n' % what)
     wizard.set_buttons([
-      ((self.wizard and not self.wizard_first) and '<< Back' or 'Cancel',
+      ((self.wizard and not self.wizard_first) and '<<' or 'Cancel',
                                                   lambda w: respond(w, 'back')),
-      (self.wizard and 'Next >>' or 'OK',
+      (self.wizard and 'Next' or 'OK',
                              lambda w: respond(w, wizard.textinput.get_text())),
     ])
 
@@ -865,14 +898,15 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
   def ask_multiplechoice(self, args):
     question, wizard = self.wizard_prepare(args)
+    wizard.show_input_area(False)
 
-    choices = gtk.VBox(False, spacing=15)
+    choices = gtk.VBox(False, spacing=5)
     clist = []
     rb = None
     for ch in sorted([k for k in args if k.startswith('choice_')]):
       rb = gtk.RadioButton(rb, args[ch])
       clist.append((rb, int(ch[7:])))
-      choices.pack_start(rb)
+      choices.pack_start(rb, expand=False, fill=False)
     choices.show_all()
     self.wizard.left.pack_start(choices)
 
@@ -881,15 +915,16 @@ class PageKiteStatusIcon(gtk.StatusIcon):
         choice = args.get('default', None)
         for cw, cn in clist:
           if cw.get_active(): choice = cn
-      print 'Choice is: %s' % choice
-      self.pkComm.pkThread.send('%s\n' % choice)
       self.wizard_first = False
       self.wizard.left.remove(choices)
+      self.wizard.set_question('... one moment please ...')
+      print 'Choice is: %s' % choice
+      self.pkComm.pkThread.send('%s\n' % choice)
       if not self.wizard: wizard.close()
     wizard.set_buttons([
-      ((self.wizard and not self.wizard_first) and '<< Back' or 'Cancel',
+      ((self.wizard and not self.wizard_first) and '<<' or 'Cancel',
                                                   lambda w: respond(w, 'back')),
-      (self.wizard and 'Next >>' or 'OK', lambda w: respond(w)),
+      (self.wizard and 'Next' or 'OK', lambda w: respond(w)),
     ])
 
   def kite_toggle(self, kite_info):
