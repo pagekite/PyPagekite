@@ -5204,8 +5204,9 @@ class PageKite(object):
             try:
               (hn, al, ips) = self.GetHostDetails(bdom)
               for ip in ips:
-                server = '%s:%s' % (ip, port)
-                if server not in self.servers: self.servers.append(server)
+                if not ip.startswith('127.'):
+                  server = '%s:%s' % (ip, port)
+                  if server not in self.servers: self.servers.append(server)
             except Exception, e:
               LogDebug('DNS lookup failed for %s' % bdom)
 
