@@ -1607,16 +1607,20 @@ class Connections(object):
     return domain
 
   def Remove(self, conn):
-    if conn.alt_id and conn.alt_id in self.conns_by_id:
-      del self.conns_by_id[conn.alt_id]
-    if conn in self.conns:
-      self.conns.remove(conn)
-    if conn in self.idle:
-      self.idle.remove(conn)
-    for tid in self.tunnels.keys():
-      if conn in self.tunnels[tid]:
-        self.tunnels[tid].remove(conn)
-        if not self.tunnels[tid]: del self.tunnels[tid]
+    try:
+      if conn.alt_id and conn.alt_id in self.conns_by_id:
+        del self.conns_by_id[conn.alt_id]
+      if conn in self.conns:
+        self.conns.remove(conn)
+      if conn in self.idle:
+        self.idle.remove(conn)
+      for tid in self.tunnels.keys():
+        if conn in self.tunnels[tid]:
+          self.tunnels[tid].remove(conn)
+          if not self.tunnels[tid]: del self.tunnels[tid]
+    except ValueError:
+      # Let's not asplode if another thread races us for this.
+      pass
 
   def Readable(self):
     # FIXME: This is O(n)
