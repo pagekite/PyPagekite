@@ -1910,6 +1910,9 @@ class ChunkParser(Selectable):
         result = self.ProcessChunk(self.chunk)
       self.chunk = ''
       if result and leftover:
+        # FIXME: This blows the stack from time to time.  We need a loop
+        #        or better yet, to just process more in a subsequent
+        #        iteration of the main select() loop.
         result = self.ProcessData(leftover)
 
     if self.read_eof: result = self.ProcessEofRead() and result
