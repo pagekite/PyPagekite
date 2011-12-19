@@ -180,3 +180,6 @@ class RemoteUi(NullUi):
     dialog = error and 'error' or 'message'
     self.wfile.write('tell_%s: %s\n' % (dialog, '  '.join(lines)))
 
+  def Working(self, message):
+    self.wfile.write('working: %s\n' % message)
+

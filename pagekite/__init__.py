@@ -3530,6 +3530,8 @@ class NullUi(object):
                         wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
+  def Working(self, message): pass
+
   def Tell(self, lines, error=False, back=None):
     if error:
       LogError(' '.join(lines))
@@ -4817,7 +4819,7 @@ class PageKite(object):
        is_cname_for, is_cname_ready) = self._KiteInfo(kitename)
     else:
       if first:
-        self.ui.StartWizard('Create your first kite!')
+        self.ui.StartWizard('Create your first kite')
       else:
         self.ui.StartWizard('Creating a new kite')
       is_subdomain_of = is_service_domain = False
@@ -4840,11 +4842,14 @@ class PageKite(object):
       state = ['use_service_question']
     history = []
 
-    def Back():
-      state[0] = history.pop(-1)
     def Goto(goto, back_skips_current=False):
       if not back_skips_current: history.append(state[0])
       state[0] = goto
+    def Back():
+      if history:
+        state[0] = history.pop(-1)
+      else:
+        Goto('abort')
 
     register = is_cname_for or kitename
     account = email = None
@@ -4852,7 +4857,7 @@ class PageKite(object):
       try:
         if 'use_service_question' in state:
           ch = self.ui.AskYesNo('Use the service?',
-                                pre=['Welcome to PageKite!',
+                                pre=['<b>Welcome to PageKite!</b>',
                                      '',
                                      'If you plan to use the %s service,' % self.service_provider,
                                      'please answer a few quick questions to',
@@ -4882,9 +4887,10 @@ class PageKite(object):
           while not email or not p:
             (email, p) = self.ui.AskLogin('Please type in your %s account '
                                           'details.' % self.service_provider,
-                                          email=email, back=(False, -1))
+                                          email=email, back=(email, False))
             if email and p:
               try:
+                self.ui.Working('Logging on to your account')
                 service_accounts[email] = service.getSharedSecret(email, p)
                 # FIXME: Should get the list of preconfigured kites via. RPC
                 #        so we don't try to create something that already
@@ -4894,13 +4900,14 @@ class PageKite(object):
               except:
                 email = p = None
                 self.ui.Tell(['Login failed! Try again?'], error=True)
-            if email is False:
+            if p is False:
               Back()
+              break
 
         elif ('service_signup_is_subdomain' in state):
           ch = self.ui.AskYesNo('Use this name?',
                                 pre=['%s is a sub-domain.' % kitename, '',
-                                     'NOTE: This process will fail if you',
+                                     '<b>NOTE:</b> This process will fail if you',
                                      'have not already registered the parent',
                                      'domain, %s.' % is_subdomain_of],
                                 default=True, back=-1)
@@ -4938,7 +4945,7 @@ class PageKite(object):
             Back()
 
         elif 'service_signup_email' in state:
-          email = self.ui.AskEmail('What is your e-mail address?',
+          email = self.ui.AskEmail('<b>What is your e-mail address?</b>',
                                    pre=['The service operators need to be able',
                                         'to contact you now and then with news',
                                         'about the service and your account.',
@@ -4955,6 +4962,7 @@ class PageKite(object):
         elif ('service_signup_kitename' in state or
               'service_ask_kitename' in state):
           try:
+            self.ui.Working('Fetching list of available domains')
             domains = service.getAvailableDomains(None, None)
           except:
             domains = ['.%s' % x for x in SERVICE_DOMAINS]
@@ -4999,6 +5007,7 @@ class PageKite(object):
             Goto('manual_abort')
           else:
             try:
+              self.ui.Working('Signing up')
               details = service.signUp(email, register)
               if details.get('secret', False):
                 service_accounts[email] = details['secret']
@@ -5070,6 +5079,7 @@ class PageKite(object):
           result = {}
           error = None
           try:
+            self.ui.Working('Creating your kite')
             if is_cname_for and is_cname_ready:
               subject = kitename
               result = service.addCnameKite(account, secret, kitename)
@@ -5097,7 +5107,6 @@ class PageKite(object):
             if autoconfigure: self.backends.update(cfgs)
             self.added_kites = True
             return (register or kitename, secret)
-
 
         elif 'manual_abort' in state:
           if self.ui.Tell(['Aborted!', '',

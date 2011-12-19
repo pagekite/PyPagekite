@@ -554,12 +554,14 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       'status_msg': self.set_status_msg,
       'tell_message': self.show_info_dialog,
       'tell_error': self.show_error_dialog,
+      'working': self.show_working,
       'start_wizard': self.start_wizard,
       'end_wizard': self.end_wizard,
       'ask_yesno': self.ask_yesno,
       'ask_email': self.ask_email,
       'ask_kitename': self.ask_kitename,
       'ask_multiplechoice': self.ask_multiplechoice,
+      'ask_login': self.ask_login,
       'be_list_start': self.reset_status,
       'be_status': self.parse_status,
       'be_path': self.parse_status,
@@ -844,17 +846,29 @@ class PageKiteStatusIcon(gtk.StatusIcon):
                             buttons=gtk.BUTTONS_CLOSE,
                             message_format=message.replace('  ', '\n'))
     dlg.set_position(gtk.WIN_POS_CENTER)
-    dlg.get_action_area().children()[0].connect('clicked',
+    dlg.get_action_area().get_children()[0].connect('clicked',
                                                 lambda w: dlg.destroy())
     dlg.connect('expose-event', ExposeFancyBackground)
     dlg.show()
+    if d_type != gtk.MESSAGE_ERROR:
+      def killit():
+        dlg.destroy()
+        return False
+      gobject.timeout_add(5000, killit)
 
   def show_error_dialog(self, message):
     self.show_info_dialog(message, d_type=gtk.MESSAGE_ERROR)
 
+  def show_working(self, message):
+    self.wizard.set_question('Communicating with PageKite.net.\n'
+                             'This may take a moment or two.\n\n'
+                             '<b>%s ...</b>' % message)
+    self.wizard.show_input_area(False)
+
   def wizard_prepare(self, args):
     if 'preamble' in args:
-      question = args['preamble'].replace('  ', '\n')+'\n\n'+args['question']
+      question = ''.join([args['preamble'].replace('  ', '\n'),
+                          '\n\n<b>', args['question'], '</b>'])
     else:
       question = args['question']
 
@@ -877,10 +891,12 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       ('Yes', lambda w: respond(w, 'y')),
     ])
 
-  def ask_question(self, args, valid_re, callback=None):
+  def ask_question(self, args,
+                   valid_re, prefix='  ', callback=None, password=False):
     question, wizard = self.wizard_prepare(args)
     wizard.textinput.set_text(args.get('default', ''))
-    wizard.inputprefix.set_text('  ')
+    wizard.textinput.set_visibility(not password)
+    wizard.inputprefix.set_text(prefix)
     wizard.inputsuffix.set_text(args.get('domain', '')+'     ')
     wizard.show_input_area(True)
 
@@ -906,6 +922,16 @@ class PageKiteStatusIcon(gtk.StatusIcon):
   def ask_kitename(self, args):
     return self.ask_question(args, '.*') # FIXME
 
+  def ask_login(self, args):
+    def askpass(window, what):
+      if 'default' in args: del args['default']
+      self.pkComm.pkThread.send('%s\n' % what)
+      self.ask_question(args, '.*', prefix='Password: ', password=True)
+    if 'default' in args:
+      return askpass(None, args['default'])
+    else:
+      return self.ask_question(args, '.*', prefix='E-mail: ', callback=askpass)
+
   def ask_multiplechoice(self, args):
     question, wizard = self.wizard_prepare(args)
     wizard.show_input_area(False)
@@ -927,7 +953,6 @@ class PageKiteStatusIcon(gtk.StatusIcon):
           if cw.get_active(): choice = cn
       self.wizard_first = False
       self.wizard.left.remove(choices)
-      self.wizard.set_question('... one moment please ...')
       print 'Choice is: %s' % choice
       self.pkComm.pkThread.send('%s\n' % choice)
       if not self.wizard: wizard.close()
@@ -1023,12 +1048,14 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
   def show_about(self):
     dialog = gtk.AboutDialog()
+    dialog.set_position(gtk.WIN_POS_CENTER)
     dialog.set_name('PageKite')
     dialog.set_version(pagekite.APPVER)
     dialog.set_comments('PageKite is a tool for running personal servers, '
                         'sharing work and communicating over the WWW.')
     dialog.set_website(pagekite.WWWHOME)
     dialog.set_license(pagekite.LICENSE)
+    dialog.connect('expose-event', ExposeFancyBackground)
     dialog.run()
     dialog.destroy()
 
