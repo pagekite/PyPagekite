@@ -54,10 +54,12 @@ def GetScreenShot():
   return pb
 
 
-def mkdirs(path, perms):
+def mkdirs(path, perms, touch=None):
   if not os.path.exists(path):
-    mkdirs(os.path.dirname(path), perms)
+    mkdirs(os.path.dirname(path), perms, touch=touch)
     os.mkdir(path, perms)
+    for fn in [os.path.join(path, c) for c in (touch or [])]:
+      open(fn, 'a').close()
 
 
 class ShareBucket:
@@ -120,7 +122,7 @@ class ShareBucket:
     self.content = (self.T_TEXT, '')
 
     # Create directory!
-    mkdirs(self.fullpath, 0700)
+    mkdirs(self.fullpath, 0700, touch=['pagekite.html'])
 
   def load(self):
     return self
@@ -192,8 +194,8 @@ class ShareBucket:
   def pk_config(self):
     # This is just one config line per PageKite hostname, finer granularity
     # just makes things more confusing.
-    return ('webpath=%s/%s:%s:default:%s'
-            ) % (self.kitename, 80, '/', self.kite_dir)
+    return ['webpath=%s/80:/:default:%s' % (self.kitename, self.kite_dir),
+            'be_config=%s/80:indexes:True' % self.kitename]
 
 
 class PageKiteThread(threading.Thread):
@@ -1069,7 +1071,8 @@ class PageKiteStatusIcon(gtk.StatusIcon):
         if not sb: return
 
         sb.add_paths(paths).save()
-        self.pkComm.pkThread.send('config: %s\n' % sb.pk_config())
+        for line in sb.pk_config():
+          self.pkComm.pkThread.send('config: %s\n' % line)
         self.pkComm.pkThread.send('save: quietly\n')
         url = 'http://%s:%s%s' % (kitename, kiteport, sb.dirname)
         self.copy_url(url)
@@ -1085,7 +1088,8 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       if not sb: return
 
       sb.add_screenshot(screenshot).save()
-      self.pkComm.pkThread.send('config: %s\n' % sb.pk_config())
+      for line in sb.pk_config():
+        self.pkComm.pkThread.send('config: %s\n' % line)
       self.pkComm.pkThread.send('save: quietly\n')
       url = 'http://%s:%s%s' % (kitename, kiteport, sb.dirname)
       self.copy_url(url)
