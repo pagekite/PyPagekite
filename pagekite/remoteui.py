@@ -114,10 +114,14 @@ class RemoteUi(NullUi):
       if self.EMAIL_RE.match(answer_email) and answer_pass:
         return (answer_email, answer_pass)
 
-  def AskYesNo(self, question, default=None, pre=[],
+  def AskYesNo(self, question, default=None, pre=[], yes='Yes', no='No',
                wizard_hint=False, image=None, back=None):
     while self.Retry():
       self.wfile.write('begin_ask_yesno\n')
+      if yes:
+        self.wfile.write(' yes: %s\n' % yes)
+      if no:
+        self.wfile.write(' no: %s\n' % no)
       if pre:
         self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       if default:
@@ -151,6 +155,26 @@ class RemoteUi(NullUi):
         for d in domains:
           if answer.endswith(d) or answer.endswith(d): return answer
         return answer+domains[0]
+
+  def AskBackends(self, choices, question, pre=[], default=None,
+                  wizard_hint=False, image=None, back=None):
+    while self.Retry():
+      self.wfile.write('begin_ask_backends\n')
+      if pre:
+        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
+      count = 0
+      for choice in choices:
+        count += 1
+        self.wfile.write(' be_%s: %s %s\n' % (count, choice[1], choice[0]))
+      if default:
+        self.wfile.write(' default: %s\n' % default)
+      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
+      self.wfile.write(' expect: backends\n')
+      self.wfile.write('end_ask_backends\n')
+
+      answer = self.rfile.readline().strip().lower()
+      if back is not None and answer == 'back': return back
+      return answer
 
   def AskMultipleChoice(self, choices, question, pre=[], default=None,
                         wizard_hint=False, image=None, back=None):

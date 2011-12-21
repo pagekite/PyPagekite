@@ -3,6 +3,7 @@ import datetime
 import gobject
 import gtk
 import os
+from random import randint
 import sys
 import socket
 import threading
@@ -19,7 +20,7 @@ URL_HOME = ('https://pagekite.net/home/')
 
 IMG_DIR_WINDOWS = '.SELF/gui/icons-16'
 IMG_DIR_DEFAULT = '.SELF/gui/icons-127'
-IMG_FILE_WIZARD  = 'pk-active.png'
+IMG_FILE_WIZARD  = '.SELF/gui/dreki.png'
 IMG_FILE_WIZBACK = '.SELF/gui/background.jpg'
 ICON_FILE_ACTIVE  = 'pk-active.png'
 ICON_FILE_TRAFFIC = 'pk-traffic.png'
@@ -53,6 +54,12 @@ def GetScreenShot():
   return pb
 
 
+def mkdirs(path, perms):
+  if not os.path.exists(path):
+    mkdirs(os.path.dirname(path), perms)
+    os.mkdir(path, perms)
+
+
 class ShareBucket:
 
   S_CLIPBOARD = 1
@@ -65,39 +72,42 @@ class ShareBucket:
 
   JSON_INDEX = """\
 {"title": %(title)s,
+ "date": %(date)s,
  "content": %(content)s,
  "files": [\n\t%(files)s\n ]}\
   """
 
   HTML_INDEX = """\
+<!DOCTYPE html><!-- PageKite expire=%(expires)s -->
 <html><head>
+ <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
  <title>%(title)s</title>
 </head><body>
  <h1 class='title'>%(title)s</h1>
+ <h2 class='date'>Last modified on %(date)s</h2>
  <div class='content'>%(content)s</div>
- <div class='files'>\n\t%(files)s\n\t</div>
+ <ul class='files'>\n  %(files)s\n </ul>
 </body></html>
   """
 
   def __init__(self, kitename, kiteport, title=None, dirname=None, random=False):
-    share_dir = os.path.expanduser(SHARE_DIR)
-    kite_dir = os.path.join(share_dir, '%s_%s' % (kitename, kiteport))
+    self.share_dir = os.path.expanduser(SHARE_DIR)
+    self.kite_dir = os.path.join(self.share_dir, kitename)
     if dirname:
-      self.fullpath = os.path.join(kite_dir, dirname)
+      self.fullpath = os.path.join(self.kite_dir, dirname)
     else:
-      count = 0
       while True:
-        count += 1
-        if random:
-          dirname = sha1hex('%s%s' % (random.randint(0, 0x7ffffffe),
-                                      globalSecret()))[:12]
-        else:
-          dirname = datetime.datetime.now().strftime("%Y-%m-%d")
+        randcrap = sha1hex('%s%s' % (randint(0, 0x7ffffffe), globalSecret()))
 
-        if title: dirname += '.%s' % title.replace(' ', '_')
-        if count > 1: dirname += '.%3.3x' % count
+        dirparts = datetime.datetime.now().strftime("%Y/%m-%d").split('/')
+        if random: dirparts[-1] = randcrap[:16]
 
-        self.fullpath = os.path.join(kite_dir, dirname)
+        dirparts = [os.path.join(*dirparts)]
+        if title: dirparts.append(title.replace(' ', '_'))
+        dirparts.append(randcrap[-4:])
+
+        dirname = '.'.join(dirparts)
+        self.fullpath = os.path.join(self.kite_dir, dirname)
         if not os.path.exists(self.fullpath): break
 
     self.dirname = os.path.join('.', dirname)[1:]
@@ -110,9 +120,7 @@ class ShareBucket:
     self.content = (self.T_TEXT, '')
 
     # Create directory!
-    if not os.path.exists(share_dir): os.mkdir(share_dir, 0700)
-    if not os.path.exists(kite_dir): os.mkdir(kite_dir, 0700)
-    os.mkdir(self.fullpath, 0700)
+    mkdirs(self.fullpath, 0700)
 
   def load(self):
     return self
@@ -123,7 +131,7 @@ class ShareBucket:
       return '"%s"' % self.content[1].replace('"', '\\"')
     else:
       # FIXME: Escape better
-      return '%s<' % self.content[1]
+      return '%s' % self.content[1]
 
   def fmt_content(self, ftype='html'):
     if ftype == 'json':
@@ -140,21 +148,23 @@ class ShareBucket:
       return '"%s"' % filename.replace('"', '\\"')
     else:
       # FIXME: Escape better
-      return ('<div class="file"><a href="%s">%s</a></div>'
+      return ('<li class="file"><a href="%s">%s</a></li>'
               ) % (filename, os.path.basename(filename))
 
   def save(self):
     filelist = []
     for fn in os.listdir(self.fullpath):
-      if not (fn.startswith('.') or fn in ('index.pk-html', 'index.pk-json')):
+      if not (fn.startswith('.') or fn in ('pagekite.html', 'pagekite.json')):
         filelist.append(fn)
 
-    SEP = {'html': '\n\t', 'json': ',\n\t'}
+    SEP = {'html': '\n  ', 'json': ',\n  '}
     for ft, tp in (('html', self.HTML_INDEX),
                    ('json', self.JSON_INDEX)):
-      fd = open(os.path.join(self.fullpath, 'index.pk-%s' % ft), 'w')
+      fd = open(os.path.join(self.fullpath, 'pagekite.%s' % ft), 'w')
       fd.write(tp % {
         'title': self.fmt_title(self.title),
+        'date': 0,
+        'expires': 0,
         'content': self.fmt_content(ft),
         'files': SEP[ft].join([self.fmt_file(f, ft) for f in sorted(filelist)])
       })
@@ -180,8 +190,10 @@ class ShareBucket:
     return self
 
   def pk_config(self):
+    # This is just one config line per PageKite hostname, finer granularity
+    # just makes things more confusing.
     return ('webpath=%s/%s:%s:default:%s'
-            ) % (self.kitename, self.kiteport, self.dirname, self.fullpath)
+            ) % (self.kitename, 80, '/', self.kite_dir)
 
 
 class PageKiteThread(threading.Thread):
@@ -368,8 +380,7 @@ class PageKiteWizard:
     self.question = gtk.Label('Welcome to PageKite!')
     self.question.set_justify(gtk.JUSTIFY_LEFT)
     self.decoration = gtk.Image()
-    self.decoration.set_from_pixbuf(gtk_open_image(os.path.join(IMG_DIR_DEFAULT,
-                                                                IMG_FILE_WIZARD)))
+    self.decoration.set_from_pixbuf(gtk_open_image(IMG_FILE_WIZARD))
     self.inputprefix = gtk.Label('')
     self.textinput = gtk.Entry()
     self.textinput.set_activates_default(True)
@@ -465,6 +476,7 @@ class SharingDialog(gtk.Dialog):
     gtk.Dialog.__init__(self, title='Sharing Details',
                         buttons=(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
                                  gtk.STOCK_OK, gtk.RESPONSE_OK))
+    self.set_position(gtk.WIN_POS_CENTER)
 
     preview_box = gtk.Label("FIXME: Cropper")
 
@@ -527,16 +539,20 @@ class PageKiteStatusIcon(gtk.StatusIcon):
          <menuitem action="ShareScreenshot"/>
         <separator/>
          %(kitelist)s
-         <menuitem action="AddKite"/>
+         <menuitem action="CfgKites"/>
+         <!-- menuitem action="AddKite"/ -->
         <separator/>
-         <menuitem action="About"/>
          <menu action="AdvancedMenu">
           <menuitem action="ViewLog"/>
-          <menuitem action="VerboseLog"/>
           <menuitem action="ConfigFile"/>
           <separator/>
+          <menuitem action="VerboseLog"/>
           <menuitem action="EnablePageKite"/>
           <!-- menuitem action="ConnectTo"/ -->
+         </menu>
+         <menu action="HelpMenu">
+          <menuitem action="OpenHelp"/>
+          <menuitem action="About"/>
          </menu>
          <menuitem action="Quit"/>
         </menu>
@@ -560,11 +576,11 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       'ask_yesno': self.ask_yesno,
       'ask_email': self.ask_email,
       'ask_kitename': self.ask_kitename,
+      'ask_backends': self.ask_backends,
       'ask_multiplechoice': self.ask_multiplechoice,
       'ask_login': self.ask_login,
       'be_list_start': self.reset_status,
       'be_status': self.parse_status,
-      'be_path': self.parse_status,
     })
     self.set_tooltip('PageKite')
 
@@ -602,12 +618,15 @@ class PageKiteStatusIcon(gtk.StatusIcon):
        ('SharePath', None, 'Share _File or Folder', None, 'Make a file or folder visible to the Web', self.share_path),
        ('ShareClipboard', None, '_Paste to Web', None, 'Make the contents of the clipboard visible to the Web', self.share_clipboard),
        ('ShareScreenshot', None, 'Share _Screenshot', None, 'Put a screenshot of your desktop on the Web', self.share_screenshot),
+        ('CfgKites', None, '_Add or _Edit ...', None, 'Configure your PageKites', self.configure_kites),
         ('AddKite', None, 'New _Kite', None, 'Add Another PageKite', self.new_kite),
-       ('About', gtk.STOCK_ABOUT, '_About', None, 'About PageKite', self.on_about),
-       ('AdvancedMenu', None, 'Ad_vanced ...'),
-        ('ViewLog', None, 'PageKite _Log', None, 'Display PageKite event log', self.on_stub),
-        ('ConfigFile', None, '_Configuration', None, 'Edit the PageKite configuration file', self.on_stub),
+       ('AdvancedMenu', None, '_Tech Stuff'),
+        ('ViewLog', None, 'PageKite Log', None, 'Display PageKite event log', self.on_stub),
+        ('ConfigFile', None, 'Config File', None, 'Edit the PageKite configuration file', self.on_stub),
         ('ConnectTo', None, 'Connect To ...', None, 'Connect to a remote PageKite'),
+       ('HelpMenu', None, '_Help'),
+        ('OpenHelp', None, '_PageKite.net Support', None, 'Access the PageKite.net support site', self.on_stub),
+        ('About', gtk.STOCK_ABOUT, '_About', None, 'About PageKite', self.on_about),
        ('Quit', None, '_Quit PageKite', None, 'Turn PageKite off completely', self.quit),
     ])
     ag.add_toggle_actions([
@@ -620,7 +639,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       'kitelist': self.kite_menu(action_group=ag),
     })
     #self.manager.get_widget('/Menubar/Menu/QuotaDisplay').set_sensitive(False)
-    self.menu = self.manager.get_widget('/Menubar/Menu/About').props.parent
+    self.menu = self.manager.get_widget('/Menubar/Menu/Quit').props.parent
 
   def kite_menu(self, action_group=None):
     xml, actions, toggles = [], [], []
@@ -674,12 +693,12 @@ class PageKiteStatusIcon(gtk.StatusIcon):
           mc += a('menuitem', '%sWWW%s to %s' % (secure, pdesc, bdesc),
                   cb=make_cb(self.kite_toggle, info), toggle=True)
 
-          if pagekite.BE_STATUS_OK & int(info['status'], 16):
-            mc += a('menuitem', 'Open in Browser',
-                    cb=make_cb(self.open_url, url), tooltip=url)
+#         if pagekite.BE_STATUS_OK & int(info['status'], 16):
+#           mc += a('menuitem', 'Open in Browser',
+#                   cb=make_cb(self.open_url, url), tooltip=url)
 
           if 'paths' not in info:
-            mc += a('menuitem', 'Copy Link',
+            mc += a('menuitem', 'Copy Link To',
                     cb=make_cb(self.copy_url, url), tooltip=url)
 
           elif len(info['paths'].keys()):
@@ -704,9 +723,6 @@ class PageKiteStatusIcon(gtk.StatusIcon):
           proto = protoport.split('/')[0]
           mc += a('menuitem', '%s' % protoport, toggle=True)
 
-        xml.append('<separator/>')
-        mc += a('menuitem', 'Configure ...')
-        mc += a('menuitem', 'Delete %s' % domain)
         xml.append('</menu>')
     else:
       a('menuitem', 'No Kites Yet', action='PageKiteList')
@@ -788,7 +804,8 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
     for item in (#'/Menubar/Menu/QuotaDisplay',
                  #'/Menubar/Menu/GetQuota',
-                 '/Menubar/Menu/AddKite',
+                 #'/Menubar/Menu/AddKite',
+                 '/Menubar/Menu/CfgKites',
                  ):
       try:
         if self.pkComm.pkThread.stopped:
@@ -798,7 +815,8 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       except:
         pass
 
-    self.menu.popup(None, None, None, button, when)
+    self.menu.popup(None, None, gtk.status_icon_position_menu, 
+                    button, when, self)
 
   def reset_status(self, argtext):
     self.kites = {}
@@ -870,7 +888,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       question = ''.join([args['preamble'].replace('  ', '\n'),
                           '\n\n<b>', args['question'], '</b>'])
     else:
-      question = args['question']
+      question = '<b>%s</b>' % args['question']
 
     wizard = self.wizard
     if not wizard: wizard = PageKiteWizard(title='A question!')
@@ -886,10 +904,10 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       self.pkComm.pkThread.send('%s\n' % what)
       self.wizard_first = False
       if not self.wizard: wizard.close()
-    wizard.set_buttons([
-      ('No', lambda w: respond(w, 'n')),
-      ('Yes', lambda w: respond(w, 'y')),
-    ])
+    buttons = []
+    if 'no' in args: buttons.append((args['no'], lambda w: respond(w, 'n')))
+    if 'yes' in args: buttons.append((args['yes'], lambda w: respond(w, 'y')))
+    wizard.set_buttons(buttons)
 
   def ask_question(self, args,
                    valid_re, prefix='  ', callback=None, password=False):
@@ -931,6 +949,38 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       return askpass(None, args['default'])
     else:
       return self.ask_question(args, '.*', prefix='E-mail: ', callback=askpass)
+
+  def ask_backends(self, args):
+    question, wizard = self.wizard_prepare(args)
+    wizard.show_input_area(False)
+
+    choices = gtk.VBox(False, spacing=5)
+    clist = []
+    for ch in sorted([k for k in args if k.startswith('be_')]):
+      spec, text = args[ch].split(' ', 1)
+      cb = gtk.CheckButton(text)
+      if not clist: cb.set_active(True)
+      clist.append((cb, spec))
+      choices.pack_start(cb, expand=False, fill=False)
+    choices.show_all()
+    self.wizard.left.pack_start(choices)
+
+    def respond(window, chlist=None):
+      if not chlist:
+        chlist = []
+        for cw, spec in clist:
+          if cw.get_active():
+            chlist.append(spec.replace('[', '').replace(']', ''))
+      choice = ','.join(chlist) or args.get('default', None)
+      self.wizard_first = False
+      self.wizard.left.remove(choices)
+      self.pkComm.pkThread.send('%s\n' % choice)
+      if not self.wizard: wizard.close()
+    wizard.set_buttons([
+      ((self.wizard and not self.wizard_first) and '<<' or 'Cancel',
+                                                lambda w: respond(w, ['back'])),
+      (self.wizard and 'Next' or 'OK', lambda w: respond(w)),
+    ])
 
   def ask_multiplechoice(self, args):
     question, wizard = self.wizard_prepare(args)
@@ -1045,6 +1095,9 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
   def new_kite(self, data):
     self.pkComm.pkThread.send('addkite: None\n')
+
+  def configure_kites(self, data):
+    self.show_error_dialog('FIXME: Unimplemented')
 
   def show_about(self):
     dialog = gtk.AboutDialog()

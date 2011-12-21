@@ -558,7 +558,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                           ])
         return True
 
-      indexes = ['index.html', 'index.htm']
+      indexes = ['index.html', 'index.htm', 'pagekite.html']
 
       dynamic_suffixes = []
       if self.host_config.get('pk-shtml'):
