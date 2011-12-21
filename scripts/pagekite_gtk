@@ -75,6 +75,7 @@ class ShareBucket:
   JSON_INDEX = """\
 {"title": %(title)s,
  "date": %(date)s,
+ "expires": %(expires)s,
  "content": %(content)s,
  "files": [\n\t%(files)s\n ]}\
   """
@@ -160,8 +161,8 @@ class ShareBucket:
         filelist.append(fn)
 
     SEP = {'html': '\n  ', 'json': ',\n  '}
-    for ft, tp in (('html', self.HTML_INDEX),
-                   ('json', self.JSON_INDEX)):
+    for ft, tp in (#('html', self.HTML_INDEX),
+                   ('json', self.JSON_INDEX), ):
       fd = open(os.path.join(self.fullpath, 'pagekite.%s' % ft), 'w')
       fd.write(tp % {
         'title': self.fmt_title(self.title),
