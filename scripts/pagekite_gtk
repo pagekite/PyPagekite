@@ -17,6 +17,7 @@ from pagekite import sha1hex, globalSecret
 SHARE_DIR = "~/PageKite"
 
 URL_HOME = ('https://pagekite.net/home/')
+URL_HELP = ('https://pagekite.net/support/')  # FIXME: App specific help!
 
 IMG_DIR_WINDOWS = '.SELF/gui/icons-16'
 IMG_DIR_DEFAULT = '.SELF/gui/icons-127'
@@ -45,6 +46,24 @@ def ExposeFancyBackground(w, ev):
     return False
   return True
 
+def ShowInfoDialog(message, d_type=gtk.MESSAGE_INFO):
+  dlg = gtk.MessageDialog(type=d_type,
+                          buttons=gtk.BUTTONS_CLOSE,
+                          message_format=message.replace('  ', '\n'))
+  dlg.set_position(gtk.WIN_POS_CENTER)
+  dlg.get_action_area().get_children()[0].connect('clicked',
+                                                lambda w: dlg.destroy())
+  dlg.connect('expose-event', ExposeFancyBackground)
+  dlg.show()
+  if d_type != gtk.MESSAGE_ERROR:
+    def killit():
+      dlg.destroy()
+      return False
+    gobject.timeout_add(5000, killit)
+
+def ShowErrorDialog(message):
+  ShowInfoDialog(message, d_type=gtk.MESSAGE_ERROR)
+
 
 def GetScreenShot():
   w = gtk.gdk.get_default_root_window()
@@ -54,9 +73,9 @@ def GetScreenShot():
   return pb
 
 
-def mkdirs(path, perms, touch=None):
+def mkdirs(path, perms, touch=None, touchparents=None):
   if not os.path.exists(path):
-    mkdirs(os.path.dirname(path), perms, touch=touch)
+    mkdirs(os.path.dirname(path), perms, touch=(touch or touchparents))
     os.mkdir(path, perms)
     for fn in [os.path.join(path, c) for c in (touch or [])]:
       open(fn, 'a').close()
@@ -123,7 +142,7 @@ class ShareBucket:
     self.content = (self.T_TEXT, '')
 
     # Create directory!
-    mkdirs(self.fullpath, 0700, touch=['pagekite.html'])
+    mkdirs(self.fullpath, 0700, touchparents=['_pagekite.html'])
 
   def load(self):
     return self
@@ -131,10 +150,10 @@ class ShareBucket:
   def fmt_title(self, ftype='html'):
     if ftype == 'json':
       # FIXME: Escape better
-      return '"%s"' % self.content[1].replace('"', '\\"')
+      return '"%s"' % self.title.replace('"', '\\"')
     else:
       # FIXME: Escape better
-      return '%s' % self.content[1]
+      return '%s' % self.title
 
   def fmt_content(self, ftype='html'):
     if ftype == 'json':
@@ -157,15 +176,15 @@ class ShareBucket:
   def save(self):
     filelist = []
     for fn in os.listdir(self.fullpath):
-      if not (fn.startswith('.') or fn in ('pagekite.html', 'pagekite.json')):
+      if not (fn.startswith('.') or fn in ('_pagekite.html', '_pagekite.json')):
         filelist.append(fn)
 
     SEP = {'html': '\n  ', 'json': ',\n  '}
     for ft, tp in (#('html', self.HTML_INDEX),
                    ('json', self.JSON_INDEX), ):
-      fd = open(os.path.join(self.fullpath, 'pagekite.%s' % ft), 'w')
+      fd = open(os.path.join(self.fullpath, '_pagekite.%s' % ft), 'w')
       fd.write(tp % {
-        'title': self.fmt_title(self.title),
+        'title': self.fmt_title(ft),
         'date': 0,
         'expires': 0,
         'content': self.fmt_content(ft),
@@ -365,6 +384,62 @@ class UiContainer(gtk.Window):
 class UiWizard(UiContainer):
   def __init__(self):
     pass
+
+
+class PageKiteConfigEditor:
+  def __init__(self, pkt):
+    self.pkt = pkt
+
+    self.window = gtk.Window()
+    self.window.set_size_request(500, 400)
+    self.window.set_position(gtk.WIN_POS_CENTER)
+    self.window.set_title('PageKite Configuration File')
+
+    self.menu = gtk.HBox(False, spacing=2)
+    for stock_id, action, add in (
+      (gtk.STOCK_SAVE,    self.on_save,    self.menu.pack_start),
+      (gtk.STOCK_REFRESH, self.on_refresh, self.menu.pack_start),
+      (gtk.STOCK_CLOSE,   self.on_close,   self.menu.pack_end),
+    ):
+      b = gtk.Button()
+      b.add(gtk.image_new_from_stock(stock_id, gtk.ICON_SIZE_MENU))
+      b.connect('clicked', action)
+      add(b, expand=False, fill=False, padding=0)
+
+    self.edit = gtk.TextView()
+    ebox = gtk.ScrolledWindow()
+    ebox.add(self.edit)
+
+    vbox = gtk.VBox(False, spacing=2)
+    vbox.pack_start(self.menu, expand=False, fill=False, padding=0)
+    vbox.pack_start(ebox, expand=True, fill=True, padding=0)
+
+    self.on_refresh(None)
+    self.window.add(vbox)
+    self.window.show_all()
+
+  def on_refresh(self, ev):
+    self.edit.get_buffer().set_text('\n'.join(self.pkt.pk.GenerateConfig()))
+
+  def on_close(self, ev):
+    self.window.destroy()
+    self.window = None
+
+  def on_save(self, ev):
+    ShowInfoDialog('Saving changes and restarting ...')
+    self.pkt.stop()
+    try:
+      buf = self.edit.get_buffer()
+      new_pk = pagekite.PageKite()
+      new_pk.ConfigureFromFile(data=buf.get_text(buf.get_start_iter(),
+                                                 buf.get_end_iter()).split('\n'))
+      new_pk.CheckConfig()
+      new_pk.SaveUserConfig()
+      self.on_close(ev)
+    except pagekite.ConfigError, e:
+      ShowInfoDialog('Invalid configuration, not saved.\n(%s)' % e)
+    # FIXME: Save modified config
+    self.pkt.toggle()
 
 
 class PageKiteWizard:
@@ -567,12 +642,13 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     gtk.StatusIcon.__init__(self)
 
     self.wizard = None
+    self.config_editor = None
     self.pkComm = pkComm
     self.pkComm.cb.update({
       'status_tag': self.set_status_tag,
       'status_msg': self.set_status_msg,
-      'tell_message': self.show_info_dialog,
-      'tell_error': self.show_error_dialog,
+      'tell_message': ShowInfoDialog,
+      'tell_error': ShowErrorDialog,
       'working': self.show_working,
       'start_wizard': self.start_wizard,
       'end_wizard': self.end_wizard,
@@ -625,10 +701,10 @@ class PageKiteStatusIcon(gtk.StatusIcon):
         ('AddKite', None, 'New _Kite', None, 'Add Another PageKite', self.new_kite),
        ('AdvancedMenu', None, '_Tech Stuff'),
         ('ViewLog', None, 'PageKite Log', None, 'Display PageKite event log', self.on_stub),
-        ('ConfigFile', None, 'Config File', None, 'Edit the PageKite configuration file', self.on_stub),
+        ('ConfigFile', None, 'Config File', None, 'Edit the PageKite configuration file', self.on_edit_config),
         ('ConnectTo', None, 'Connect To ...', None, 'Connect to a remote PageKite'),
        ('HelpMenu', None, '_Help'),
-        ('OpenHelp', None, '_PageKite.net Support', None, 'Access the PageKite.net support site', self.on_stub),
+        ('OpenHelp', None, '_PageKite.net Support', None, 'Access the PageKite.net support site', self.on_help),
         ('About', gtk.STOCK_ABOUT, '_About', None, 'About PageKite', self.on_about),
        ('Quit', None, '_Quit PageKite', None, 'Turn PageKite off completely', self.quit),
     ])
@@ -736,12 +812,12 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
   def on_activate(self, data):
     if self.wizard:
-      self.wizard.window.hide()
-      self.wizard.window.show()
+      self.wizard.window.present()
+      #self.wizard.window.hide()
+      #self.wizard.window.show()
     else:
       self.create_menu()
       self.show_menu(0, 0)
-    return False
 
   def set_status_msg(self, message):
     self.set_tooltip('PageKite: %s' % message)
@@ -861,24 +937,6 @@ class PageKiteStatusIcon(gtk.StatusIcon):
               backend_info[i] = args[i]
           domain_info[bid] = backend_info
       self.kites[args['domain']] = domain_info
-
-  def show_info_dialog(self, message, d_type=gtk.MESSAGE_INFO):
-    dlg = gtk.MessageDialog(type=d_type,
-                            buttons=gtk.BUTTONS_CLOSE,
-                            message_format=message.replace('  ', '\n'))
-    dlg.set_position(gtk.WIN_POS_CENTER)
-    dlg.get_action_area().get_children()[0].connect('clicked',
-                                                lambda w: dlg.destroy())
-    dlg.connect('expose-event', ExposeFancyBackground)
-    dlg.show()
-    if d_type != gtk.MESSAGE_ERROR:
-      def killit():
-        dlg.destroy()
-        return False
-      gobject.timeout_add(5000, killit)
-
-  def show_error_dialog(self, message):
-    self.show_info_dialog(message, d_type=gtk.MESSAGE_ERROR)
 
   def show_working(self, message):
     self.wizard.set_question('Communicating with PageKite.net.\n'
@@ -1016,7 +1074,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     ])
 
   def kite_toggle(self, kite_info):
-    self.show_error_dialog('Unimplemented... %s' % (kite_info, ))
+    ShowErrorDialog('Unimplemented... %s' % (kite_info, ))
 
   def copy_url(self, url):
     gtk.clipboard_get('CLIPBOARD').set_text(url, len=-1)
@@ -1026,7 +1084,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
   def share_clipboard_cb(self, clipboard, text, data):
     print 'CB: %s / %s / %s' % (clipboard, text, data)
-    self.show_error_dialog('Unimplemented... %s [%s/%s]' % (text, clipboard, data))
+    ShowErrorDialog('Unimplemented... %s [%s/%s]' % (text, clipboard, data))
 
   def share_clipboard(self, data):
     cb = gtk.clipboard_get(gtk.gdk.SELECTION_CLIPBOARD)
@@ -1079,7 +1137,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
         self.copy_url(url)
         self.open_url(url)
     except:
-      self.show_error_dialog('Sharing failed: %s' % (sys.exc_info(), ))
+      ShowErrorDialog('Sharing failed: %s' % (sys.exc_info(), ))
 
   def share_screenshot(self, data, title='Screenshot'):
     try:
@@ -1096,13 +1154,13 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       self.copy_url(url)
       self.open_url(url)
     except:
-      self.show_error_dialog('Screenshot failed: %s' % (sys.exc_info(), ))
+      ShowErrorDialog('Screenshot failed: %s' % (sys.exc_info(), ))
 
   def new_kite(self, data):
     self.pkComm.pkThread.send('addkite: None\n')
 
   def configure_kites(self, data):
-    self.show_error_dialog('FIXME: Unimplemented')
+    ShowErrorDialog('FIXME: Unimplemented')
 
   def show_about(self):
     dialog = gtk.AboutDialog()
@@ -1116,6 +1174,9 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     dialog.connect('expose-event', ExposeFancyBackground)
     dialog.run()
     dialog.destroy()
+
+  def toggle_verboselog(self, data):
+    pass
 
   def toggle_enable(self, data):
     pkt = self.pkComm.pkThread
@@ -1139,6 +1200,17 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
   def on_stub(self, data):
     print 'Stub'
+
+  def on_edit_config(self, data):
+    if self.config_editor and self.config_editor.window:
+      self.config_editor.window.present()
+    else:
+      self.config_editor = PageKiteConfigEditor(self.pkComm.pkThread)
+    return False
+
+  def on_help(self, data):
+    ShowInfoDialog('Opening %s in your web browser ...' % URL_HELP)
+    self.open_url(URL_HELP)
 
   def on_about(self, data):
     self.show_about()

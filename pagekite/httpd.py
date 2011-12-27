@@ -449,9 +449,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     files = files or [(f, os.path.join(full_path, f))
                       for f in sorted(os.listdir(full_path))]
 
-    # Remove dot-files
+    # Remove dot-files and PageKite metadata files
     if self.host_config.get('indexes') != pagekite.WEB_INDEX_ALL:
-      files = [f for f in files if not f[0].startswith('.')]
+      files = [f for f in files if not (f[0].startswith('.') or
+                                        f[0].startswith('_pagekite'))]
 
     fhtml = ['<table>']
     if files:
@@ -558,7 +559,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                           ])
         return True
 
-      indexes = ['index.html', 'index.htm', 'pagekite.html']
+      indexes = ['index.html', 'index.htm', '_pagekite.html']
 
       dynamic_suffixes = []
       if self.host_config.get('pk-shtml'):

@@ -3642,6 +3642,12 @@ class PageKite(object):
   def __init__(self, ui=None, http_handler=None, http_server=None):
     self.progname = ((sys.argv[0] or 'pagekite.py').split('/')[-1]
                                                    .split('\\')[-1])
+    self.ui = ui or NullUi()
+    self.ui_request_handler = http_handler
+    self.ui_http_server = http_server
+    self.ResetConfiguration()
+
+  def ResetConfiguration(self):
     self.isfrontend = False
     self.motd = None
     self.upgrade_info = []
@@ -3668,8 +3674,6 @@ class PageKite(object):
     self.logfile = None
     self.setuid = None
     self.setgid = None
-    self.ui_request_handler = http_handler
-    self.ui_http_server = http_server
     self.ui_httpd = None
     self.ui_sspec = None
     self.ui_socket = None
@@ -3715,7 +3719,6 @@ class PageKite(object):
     self.autosave = 0
     self.reloadfile = None
     self.added_kites = False
-    self.ui = ui or NullUi()
     self.ui_wfile = sys.stderr
     self.ui_rfile = sys.stdin
     self.ui_port = None
@@ -4184,14 +4187,14 @@ class PageKite(object):
     LogInfo('No authentication found for: %s (%s)' % (domain, protoport))
     return (None, auth_error_type or 'unauthorized')
 
-  def ConfigureFromFile(self, filename=None):
+  def ConfigureFromFile(self, filename=None, data=None):
     if not filename: filename = self.rcfile
 
     if self.rcfile_recursion > 25:
       raise ConfigError('Nested too deep: %s' % filename)
 
     self.rcfiles_loaded.append(filename)
-    optfile = open(filename)
+    optfile = data or open(filename)
     args = []
     for line in optfile:
       line = line.strip()
