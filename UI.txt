@@ -5,17 +5,19 @@ UNFINISHED IN GUI:
    * Paste to Web
    * Share file/folder behavior on Windows (.lnk instead of symlinks)
    * Sharing dialog:
-       * Cropper
-       * Access controls
-       * Title
-       * Description
+      * Cropper
+      * Title
+      * Password
+      * Description
    * Kite list:
-       * Toggling should disable kite
+      * Toggling should disable kite
    * Add / edit kites: need UI
-   * Config File editor
    * PageKite Log display
    * Verbose log toggle
 
+NEEDS POLISH:
+
+   * Config File editor
 
 BUILT IN WEBSERVER WORK:
 

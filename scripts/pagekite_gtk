@@ -126,7 +126,7 @@ class ShareBucket:
 
         dirparts = [os.path.join(*dirparts)]
         if title: dirparts.append(title.replace(' ', '_'))
-        dirparts.append(randcrap[-4:])
+        dirparts.append(randcrap[-5:])
 
         dirname = '.'.join(dirparts)
         self.fullpath = os.path.join(self.kite_dir, dirname)
@@ -538,7 +538,7 @@ class PageKiteWizard:
 
 class SharingDialog(gtk.Dialog):
 
-  DEFAULT_EXPIRATION = 2
+  DEFAULT_EXPIRATION = 0
   EXPIRATION = {
     "Never expires": 0,
     "Expires in 2 days": 2*24*3600,
@@ -556,6 +556,27 @@ class SharingDialog(gtk.Dialog):
                                  gtk.STOCK_OK, gtk.RESPONSE_OK))
     self.set_position(gtk.WIN_POS_CENTER)
 
+    horizontal = gtk.HBox()
+    table = gtk.Table()
+    t_row = 0
+
+    def ta_factory(tr):
+      def ta(left, right=None, hint=None, yalign=0.5, rright=2, **rargs):
+        left = gtk.Label('%s ' % left)
+        table.attach(left, 0, right and 1 or rright, tr[0], tr[0]+1)
+        if right:
+          left.set_alignment(1, yalign)
+          table.attach(right, 1, rright, tr[0], tr[0]+1, **rargs)
+          if hint:
+            hint = gtk.Label(' %s' % hint)
+            hint.set_alignment(0, yalign)
+            table.attach(hint, rright, rright+1, tr[0], tr[0]+1)
+        else:
+          left.set_alignment(0.5, yalign)
+        tr[0] += 1
+      return ta
+    table_append = ta_factory([t_row])
+
     preview_box = gtk.Label("FIXME: Cropper")
 
     kitelist = []
@@ -568,31 +589,49 @@ class SharingDialog(gtk.Dialog):
       kitelist.sort(key=lambda k: len(k))
       for kite in kitelist: combo.append_text(kite)
       combo.set_active(0)
-      kite_chooser_box = gtk.HBox()
-      kite_chooser_box.pack_start(gtk.Label("Share on:"), expand=True, fill=True, padding=10)
-      kite_chooser_box.pack_start(combo, expand=True, fill=True, padding=10)
+      table_append("Share on:", combo)
       self.kite_chooser = combo
     elif len(kitelist) == 1:
-      kite_chooser_box = gtk.Label("Sharing on %s" % kitelist[0])
+      table_append("Sharing on %s" % kitelist[0])
       self.kite_chooser = kitelist[0]
     else:
-      kite_chooser_box = gtk.Label("No kites!")
+      table_append("No kites!")
       self.kite_chooser = None
+
+    self.title_box = gtk.Entry()
+    self.title_box.set_text(title)
+    table_append("Title:", self.title_box)
+
+    self.description = gtk.TextView()
+    self.description.set_wrap_mode(gtk.WRAP_WORD)
+    self.description.set_border_width(1)
+    dbox = gtk.ScrolledWindow()
+    dbox.set_size_request(250, 75)
+    dbox.set_policy('automatic', 'always')
+    dbox.set_shadow_type('out')
+    dbox.add(self.description)
+    table_append("Description:", dbox,
+                 rright=3, yalign=0.1, xpadding=2, ypadding=2)
 
     elist = (self.EXPIRATION.keys()[:])
     elist.sort(key=lambda k: self.EXPIRATION[k])
-    ecombo = gtk.combo_box_new_text()
+    self.expiration = ecombo = gtk.combo_box_new_text()
     for exp in elist: ecombo.append_text(exp)
     ecombo.set_active(self.DEFAULT_EXPIRATION)
+    table_append("Expiration:", ecombo)
 
-    expiration_box = gtk.HBox()
-    expiration_box.pack_start(gtk.Label("Expiration:"), expand=True, fill=True, padding=10)
-    expiration_box.pack_start(ecombo, expand=True, fill=True, padding=10)
-    self.expiration = ecombo
+    self.password_box = gtk.Entry()
+    table_append("Password:", self.password_box, 'optional')
 
-    for widget in (preview_box, kite_chooser_box, expiration_box):
-      self.vbox.pack_start(widget, expand=False, fill=False, padding=10)
-      widget.show_all()
+    self.open_browser = gtk.CheckButton('Open in browser')
+    self.open_browser.set_active(True)
+    self.action_area.pack_start(self.open_browser, expand=True, fill=True, padding=0)
+    self.action_area.reorder_child(self.open_browser, 0)
+
+    horizontal.pack_start(preview_box, expand=False, fill=False, padding=10)
+    horizontal.pack_end(table, expand=True, fill=True, padding=0)
+    self.vbox.pack_start(horizontal, expand=True, fill=True, padding=0)
+    self.show_all()
 
   def get_kiteinfo(self):
     if str(type(self.kite_chooser)) == "<type 'gtk.ComboBox'>":
@@ -605,6 +644,19 @@ class SharingDialog(gtk.Dialog):
 
   def get_kiteport(self):
     return int((self.get_kiteinfo() or ':').split(':')[1])
+
+  def get_password(self):
+    return self.password_box.get_text()
+
+  def get_expiration(self):
+    return self.password_box.get_text()
+
+  def get_title(self):
+    return self.title_box.get_text()
+
+  def get_description(self):
+    buf = self.description.get_buffer()
+    return buf.get_text(buf.get_start_iter(), buf.get_end_iter())
 
 
 class PageKiteStatusIcon(gtk.StatusIcon):
@@ -818,6 +870,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     else:
       self.create_menu()
       self.show_menu(0, 0)
+    return False
 
   def set_status_msg(self, message):
     self.set_tooltip('PageKite: %s' % message)
@@ -1098,11 +1151,12 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     else:
       kitename = kiteport = None
 
+    sd.hide()
     self.wizard = None
-    sd.destroy()
-    if not kitename: return None, None, None
+    if not kitename: return None, None, None, None
 
-    return kitename, kiteport, ShareBucket(kitename, kiteport, title=title)
+    sb = ShareBucket(kitename, kiteport, title=title)
+    return kitename, kiteport, sb, sd
 
   def share_path(self, data):
     try:
@@ -1125,7 +1179,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       self.wizard = None
 
       if paths:
-        kitename, kiteport, sb = self.get_sharebucket('Shared',
+        kitename, kiteport, sb, sd = self.get_sharebucket('Shared',
                                                      ShareBucket.S_PATHS, paths)
         if not sb: return
 
@@ -1142,7 +1196,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
   def share_screenshot(self, data, title='Screenshot'):
     try:
       screenshot = GetScreenShot()
-      kitename, kiteport, sb = self.get_sharebucket('Screenshot',
+      kitename, kiteport, sb, sd = self.get_sharebucket('Screenshot',
                                            ShareBucket.S_SCREENSHOT, screenshot)
       if not sb: return
 
