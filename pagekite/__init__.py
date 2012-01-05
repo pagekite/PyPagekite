@@ -2941,10 +2941,15 @@ class UnknownConn(MagicProtocolParser):
               self.Send(HTTP_ConnectOK(), try_flush=True)
               return True
 
+          whost = chost
+          if '.' in whost:
+            whost = '*.' + '.'.join(whost.split('.')[1:])
+
           if cport == 443:
             if (('https'+sid1) in tunnels) or (
                 ('https'+sid2) in tunnels) or (
-                chost in self.conns.config.tls_endpoints):
+                chost in self.conns.config.tls_endpoints) or (
+                whost in self.conns.config.tls_endpoints):
               (self.on_port, self.host) = (cport, chost)
               self.parser = HttpLineParser()
               self.Send(HTTP_ConnectOK(), try_flush=True)
