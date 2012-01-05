@@ -1,7 +1,14 @@
 Version history - highlights
 ============================
 
-v0.4.5    ??
+v0.4.6   ??
+------
+   - Improved new kite wizard a bit
+   - Fixed bug in front-end HTTP CONNECT for wild-card TLS endpoints
+   - Behave gracefully when X.pagekite.me is in /etc/hosts as 127.x.x.x
+
+
+v0.4.5   2011.08.22
 ------
    - Finalize and document finger and IRC support.
    - Support wild-card backends (*.domain.com).
