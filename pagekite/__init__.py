@@ -4876,8 +4876,9 @@ class PageKite(object):
                                      'Please answer a few quick questions to',
                                      'create your first kite.',
                                      '',
-                                     'Also note that all %s users' % self.service_provider,
-                                     'must abide by the <a href="%s">Terms of Service</a>.' % LICENSE_URL],
+                                     'By continuing, you agree to play nice',
+                                     'and abide by the Terms of Service at:',
+                                     '- <a href="%s">%s</a>' % (SERVICE_TOS_URL, SERVICE_TOS_URL)],
                                 default=True, back=-1, no='Abort')
           if ch is True:
             self.SetServiceDefaults(clobber=False)

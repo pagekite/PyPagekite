@@ -126,7 +126,7 @@ class BasicUi(NullUi):
     self.wfile.write(' => ')
     return (email, getpass.getpass() or def_pass)
 
-  def AskYesNo(self, question, default=None, pre=[],
+  def AskYesNo(self, question, default=None, pre=[], yes='yes', no='no',
                wizard_hint=False, image=None, back=None):
     self.Welcome(pre)
     yn = ((default is True) and '[Y/n]'
