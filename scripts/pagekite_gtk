@@ -64,28 +64,37 @@ def ShowInfoDialog(message, d_type=gtk.MESSAGE_INFO):
 def ShowErrorDialog(message):
   ShowInfoDialog(message, d_type=gtk.MESSAGE_ERROR)
 
+def Button(stock_id, text, action):
+  b = gtk.Button()
+  hb = gtk.HBox()
+  hb.pack_start(gtk.image_new_from_stock(stock_id, gtk.ICON_SIZE_MENU))
+  hb.pack_start(gtk.Label(text), padding=5)
+  b.add(hb)
+  b.connect('clicked', action)
+  return b
+
 def DescribeKite(domain, protoport, info):
   proto = protoport.split('/')[0]
   fdesc = protoport
   url = None
 
   if proto.startswith('https'):
-    fdesc = 'Secure WWW (end-to-end)'
+    fdesc = 'Secure Website (end-to-end)'
     url = 'https://%s%s' % (domain, info['port'] and ':%s' % info['port'] or '')
   elif proto.startswith('http'):
     secure = (('ssl' in info or info['proto'] == 'https')
               and 'Secure ' or '')
-    pdesc = info['port'] and ' (port %s)' % info['port'] or ''
-    fdesc = '%sWWW%s' % (secure, pdesc)
+    pdesc = info['port'] and ' on port %s' % info['port'] or ''
+    fdesc = '%sWebsite%s' % (secure, pdesc)
     url = '%s://%s%s' % (secure and 'https' or 'http', domain,
                          info['port'] and ':%s' % info['port'] or '')
   elif proto in ('ssh', 'raw'):
     if info['port'] == '22':
-      fdesc = 'SSH (HTTP proxied)'
+      fdesc = 'HTTP Proxied SSH'
     else:
-      fdesc = 'TCP port %s (HTTP proxied)' % info['port']
+      fdesc = 'HTTP Proxied TCP Port %s' % info['port']
 
-  bdesc = ('builtin' in info and 'PageKite'
+  bdesc = ('builtin' in info and 'PageKite Sharing'
                               or '%s:%s' % (info['bhost'], info['bport']))
 
   status = ['Unknown']
@@ -420,75 +429,28 @@ class CommThread(threading.Thread):
     self.looping = False
 
 
-class UiContainer(gtk.Window):
-  pass
+class UiContainer:
+  def cfg(self, title, width, height):
+    self.window.set_size_request(width, height)
+    self.window.set_position(gtk.WIN_POS_CENTER)
+    if title: self.window.set_title(title)
+
+  def win(self, title=None, child=None, width=500, height=400, cls=gtk.Window):
+    self.window = cls()
+    self.cfg(title, width, height)
+    if child: self.window.add(child)
+    self.window.show_all()
+    return self
 
 class UiWizard(UiContainer):
   def __init__(self):
     pass
 
 
-class PageKiteConfigEditor:
-  def __init__(self, pkt):
-    self.pkt = pkt
-
-    self.window = gtk.Window()
-    self.window.set_size_request(500, 400)
-    self.window.set_position(gtk.WIN_POS_CENTER)
-    self.window.set_title('PageKite Configuration File')
-
-    self.menu = gtk.HBox(False, spacing=2)
-    for stock_id, action, add in (
-      (gtk.STOCK_SAVE,    self.on_save,    self.menu.pack_start),
-      (gtk.STOCK_REFRESH, self.on_refresh, self.menu.pack_start),
-      (gtk.STOCK_CLOSE,   self.on_close,   self.menu.pack_end),
-    ):
-      b = gtk.Button()
-      b.add(gtk.image_new_from_stock(stock_id, gtk.ICON_SIZE_MENU))
-      b.connect('clicked', action)
-      add(b, expand=False, fill=False, padding=0)
-
-    self.edit = gtk.TextView()
-    ebox = gtk.ScrolledWindow()
-    ebox.add(self.edit)
-
-    vbox = gtk.VBox(False, spacing=2)
-    vbox.pack_start(self.menu, expand=False, fill=False, padding=0)
-    vbox.pack_start(ebox, expand=True, fill=True, padding=0)
-
-    self.on_refresh(None)
-    self.window.add(vbox)
-    self.window.show_all()
-
-  def on_refresh(self, ev):
-    self.edit.get_buffer().set_text('\n'.join(self.pkt.pk.GenerateConfig()))
-
-  def on_close(self, ev):
-    self.window.destroy()
-    self.window = None
-
-  def on_save(self, ev):
-    ShowInfoDialog('Saving changes and restarting ...')
-    self.pkt.stop()
-    try:
-      buf = self.edit.get_buffer()
-      new_pk = pagekite.PageKite()
-      new_pk.ConfigureFromFile(data=buf.get_text(buf.get_start_iter(),
-                                                 buf.get_end_iter()).split('\n'))
-      new_pk.CheckConfig()
-      new_pk.SaveUserConfig()
-      self.on_close(ev)
-    except pagekite.ConfigError, e:
-      ShowInfoDialog('Invalid configuration, not saved.\n(%s)' % e)
-    # FIXME: Save modified config
-    self.pkt.toggle()
-
-
 class PageKiteWizard:
   def __init__(self, title=''):
-    self.window = gtk.Dialog()
-    self.window.set_size_request(500, 300)
-    self.window.set_position(gtk.WIN_POS_CENTER)
+    self.window = UiContainer().win(width=500, height=300,
+                                    cls=gtk.Dialog).window
 
     # Just keep window open forever and ever
     self.window.connect("delete_event", lambda w, e: True)
@@ -701,79 +663,107 @@ class SharingDialog(gtk.Dialog):
     return buf.get_text(buf.get_start_iter(), buf.get_end_iter())
 
 
-class PageKiteManager:
-  def __init__(self, pkt):
-    self.pkt = pkt
+class PageKiteManagerPage:
+  def __init__(self, parent):
+    self.parent = parent
+    self.cancel = Button(gtk.STOCK_CLOSE, 'Close', self.parent.close)
+    self.quit = Button(gtk.STOCK_QUIT, 'Quit', self.parent.quit)
 
-    self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
-    self.window.set_title('PageKite Manager')
-    self.window.set_position(gtk.WIN_POS_CENTER)
-    self.window.set_size_request(450, 200)
-    self.window.connect("delete_event", self.close)
-    self.window.connect("destroy", self.close)
+    self.actions = gtk.HBox()
+    self.actions.pack_end(self.cancel, expand=False, fill=False)
+    self.actions.pack_end(self.quit, expand=False, fill=False)
 
-    self.notebook = gtk.Notebook()
-    self.notebook.set_tab_pos(gtk.POS_TOP)
+    self.content = gtk.VBox()
+    self.content.pack_end(self.actions, expand=False, fill=False)
 
-    self.kiteframe = gtk.VBox()
-    self.kiteactions = gtk.HBox()
-    self.kitestatus = gtk.Label('Loading kite information ...')
-    self.kitecancel = gtk.Button('Close')
-    self.kitecancel.connect('clicked', self.close)
-    self.kiteaddkite = gtk.Button('+ Add kite')
-    self.kiteaddkite.connect('clicked', self.add_kite)
-    self.kiteaddsvc = gtk.Button('+ Add service')
-    self.kiteaddsvc.connect('clicked', self.add_service)
+  def update(self, kites):
+    pass
+
+
+class PageKiteConfigEditor(PageKiteManagerPage):
+  def __init__(self, parent):
+    PageKiteManagerPage.__init__(self, parent)
+
+    self.save = Button(gtk.STOCK_SAVE, 'Save', self.on_save)
+    self.refresh = Button(gtk.STOCK_REFRESH, 'Reload', self.on_refresh)
+
+    self.edit = gtk.TextView()
+    ebox = gtk.ScrolledWindow()
+    ebox.add(self.edit)
+
+    self.actions.pack_start(self.save, expand=False, fill=False, padding=0)
+    self.actions.pack_start(self.refresh, expand=False, fill=False, padding=0)
+    self.content.pack_start(ebox, expand=True, fill=True, padding=0)
+    self.on_refresh(None)
+
+  def on_refresh(self, ev):
+    self.edit.get_buffer().set_text('\n'.join(self.parent.pkt.pk.GenerateConfig()))
+
+  def on_save(self, ev):
+    ShowInfoDialog('Saving changes and restarting ...')
+    self.parent.pkt.stop()
+    try:
+      buf = self.edit.get_buffer()
+      new_pk = pagekite.PageKite()
+      new_pk.ConfigureFromFile(data=buf.get_text(buf.get_start_iter(),
+                                                 buf.get_end_iter()).split('\n'))
+      new_pk.CheckConfig()
+      new_pk.SaveUserConfig()
+      self.close(ev)
+    except pagekite.ConfigError, e:
+      ShowInfoDialog('Invalid configuration, not saved.\n(%s)' % e)
+    self.parent.pkt.toggle()
+
+
+class PageKiteKiteList(PageKiteManagerPage):
+  def __init__(self, parent):
+    PageKiteManagerPage.__init__(self, parent)
+
+    self.addkite = Button(gtk.STOCK_NEW, 'New Kite', self.add_kite)
+    self.addsvc = Button(gtk.STOCK_ADD, 'Add Service', self.add_service)
+    self.actions.pack_start(self.addkite, expand=False, fill=False)
+    self.actions.pack_start(self.addsvc, expand=False, fill=False)
 
     self.kites = {}
-    self.kitestore = gtk.TreeStore(str, str, str, str)
-    self.kitetextcell = gtk.CellRendererText()
-    self.kiteview = gtk.TreeView(self.kitestore)
+    self.store = gtk.TreeStore(str, str, str, str)
+    self.textcell = gtk.CellRendererText()
+    self.view = gtk.TreeView(self.store)
     for order, title, cell, attrs in (
-      ( 0, 'Kites',    self.kitetextcell, [('text', 0)]),
-      ( 1, 'Services', self.kitetextcell, [('text', 1)]),
-      ( 2, 'Status',   self.kitetextcell, [('text', 2)]),
-      (-1, '',         self.kitetextcell, [('text', 3)]),
+      ( 0, 'Kites',    self.textcell, [('text', 0)]),
+      ( 1, 'Services', self.textcell, [('text', 1)]),
+      ( 2, 'Status',   self.textcell, [('text', 2)]),
+      (-1, '',         self.textcell, [('text', 3)]),
     ):
       kc = gtk.TreeViewColumn(title, cell)
       if title and order >= 0:
         kc.set_sort_column_id(order)
       for attname, attorder in attrs:
         kc.add_attribute(cell, attname, attorder)
-      self.kiteview.append_column(kc)
+      self.view.append_column(kc)
 
     sw = gtk.ScrolledWindow()
     sw.set_policy('automatic', 'automatic')
-    sw.add(self.kiteview)
-    self.kiteframe.pack_start(self.kitestatus, expand=True, fill=True)
-    self.kiteframe.pack_start(sw, expand=True, fill=True)
-    self.kiteframe.pack_end(self.kiteactions, expand=False, fill=False)
-    self.kiteactions.pack_start(self.kiteaddkite, expand=False, fill=False)
-    self.kiteactions.pack_start(self.kiteaddsvc, expand=False, fill=False)
-    self.kiteactions.pack_end(self.kitecancel, expand=False, fill=False)
+    sw.add(self.view)
 
-    self.shareframe = gtk.VBox()
-    self.shareactions = gtk.HBox()
-    self.sharestatus = gtk.Label('Loading kite information ...')
-    self.sharecancel = gtk.Button('Close')
-    self.sharecancel.connect('clicked', self.close)
-    self.shareframe.pack_start(self.sharestatus, expand=True, fill=True)
-    self.shareframe.pack_end(self.shareactions, expand=False, fill=False)
-    self.shareactions.pack_end(self.sharecancel, expand=False, fill=False)
+    self.status = gtk.Label('Loading kite information ...')
+    self.content.pack_start(self.status, expand=True, fill=True)
+    self.content.pack_start(sw, expand=True, fill=True)
 
-    for f, t in ((self.kiteframe, 'Kites'),
-                 (self.shareframe, 'Sharing')):
-      self.notebook.append_page(f, gtk.Label(t))
-    self.window.add(self.notebook)
-    self.window.show_all()
-    self.kiteview.hide()
+  def delete_kite(self, kite):
+    print 'FIXME: delete %s' % kite
+
+  def add_kite(self, w, kite=None):
+    self.parent.pkt.send('addkite: None\n')
+
+  def add_service(self, w, kite=None):
+    print 'FIXME: add kite service to %s' % (kite or 'some kite')
 
   def update(self, kites):
-    self.kitestore.clear()
+    self.store.clear()
     kcount = 0
 
     for k in kites:
-      pid = self.kitestore.append(None, ['%s' % k, '', '', 'Add, Del'])
+      pid = self.store.append(None, ['%s' % k, '', '', 'Add, Del'])
       print 'Got kite: %s' % kites[k]
       for key in sorted(kites[k]):
         svc = kites[k][key]
@@ -781,30 +771,76 @@ class PageKiteManager:
 
         # FIXME: Report if front-end HTTPS is available for WWW services
 
-        self.kitestore.append(pid, [fdesc, bdesc, status, 'Edit, Del'])
+        self.store.append(pid, [fdesc, bdesc, status, 'Edit, Del'])
       kcount += 1
 
     if kcount:
-      self.kitestatus.hide()
-      self.kiteview.show_all()
+      self.status.hide()
+      self.view.show_all()
     else:
-      self.kitestatus.set_text('No kites are configured.')
-      self.kitestatus.show()
-      self.kiteview.hide()
+      self.status.set_text('No kites are configured.')
+      self.status.show()
+      self.view.hide()
 
-  def delete_kite(self, kite):
-    print 'FIXME: delete %s' % kite
 
-  def add_kite(self, w, kite=None):
-    print 'FIXME: add kite to %s' % (kite or 'pagekite')
+class PageKiteShareList(PageKiteManagerPage):
+  def __init__(self, parent):
+    PageKiteManagerPage.__init__(self, parent)
 
-  def add_service(self, w, kite=None):
-    print 'FIXME: add kite service to %s' % (kite or 'some kite')
+    self.status = gtk.Label('Loading kite information ...')
+    self.content.pack_start(self.status, expand=True, fill=True)
+
+
+class PageKiteHome(PageKiteManagerPage):
+  def __init__(self, parent):
+    PageKiteManagerPage.__init__(self, parent)
+    self.status = gtk.Label('Welcome to PageKite!')
+    self.content.pack_start(self.status, expand=True, fill=True)
+#   self.content.connect('expose-event', ExposeFancyBackground)
+
+
+class PageKiteManager:
+  def __init__(self, pkm, pkt):
+    self.pkm = pkm
+    self.pkt = pkt
+
+    self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
+    self.window.set_title('PageKite Manager')
+    self.window.set_position(gtk.WIN_POS_CENTER)
+    self.window.set_size_request(450, 250)
+    self.window.connect("delete_event", self.close)
+    self.window.connect("destroy", self.close)
+
+    self.notebook = gtk.Notebook()
+    self.notebook.set_tab_pos(gtk.POS_TOP)
+
+    self.home = PageKiteHome(self)
+    self.kitelist = PageKiteKiteList(self)
+    self.sharelist = PageKiteShareList(self)
+    self.configeditor = PageKiteConfigEditor(self)
+
+    for f, t in ((self.home.content, 'PageKite'),
+                 (self.kitelist.content, 'Kites'),
+#                (self.sharelist.content, 'Sharing'),
+                 (self.configeditor.content, 'Config file')):
+      self.notebook.append_page(f, gtk.Label(t))
+    self.window.add(self.notebook)
+    self.window.show_all()
+    self.kitelist.view.hide()
+
+  def update(self, kites):
+    for page in (self.home, self.kitelist, self.sharelist):
+      page.update(kites)
 
   def close(self, a, aa=None):
     self.window.destroy()
-    self.window = self.kiteframe = self.shareframe = self.notebook = None
+    self.window = self.kitelist = self.configeditor = None
+    self.shareframe = self.home = self.notebook = None
     return True
+
+  def quit(self, a, aa=None):
+    self.pkm.quit(a)
+    self.close(a)
 
 
 class PageKiteStatusIcon(gtk.StatusIcon):
@@ -818,16 +854,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
         <separator/>
          %(kitelist)s
          <menuitem action="CfgKites"/>
-         <!-- menuitem action="AddKite"/ -->
         <separator/>
-         <menu action="AdvancedMenu">
-          <menuitem action="ViewLog"/>
-          <menuitem action="ConfigFile"/>
-          <separator/>
-          <menuitem action="VerboseLog"/>
-          <menuitem action="EnablePageKite"/>
-          <!-- menuitem action="ConnectTo"/ -->
-         </menu>
          <menu action="HelpMenu">
           <menuitem action="OpenHelp"/>
           <menuitem action="About"/>
@@ -899,12 +926,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
        ('SharePath', None, 'Share _File or Folder', None, 'Make a file or folder visible to the Web', self.share_path),
        ('ShareClipboard', None, '_Paste to Web', None, 'Make the contents of the clipboard visible to the Web', self.share_clipboard),
        ('ShareScreenshot', None, 'Share _Screenshot', None, 'Put a screenshot of your desktop on the Web', self.share_screenshot),
-        ('CfgKites', None, '_Add or _Edit ...', None, 'Configure your PageKites', self.manage_kites),
-        ('AddKite', None, 'New _Kite', None, 'Add Another PageKite', self.new_kite),
-       ('AdvancedMenu', None, '_Tech Stuff'),
-        ('ViewLog', None, 'PageKite Log', None, 'Display PageKite event log', self.on_stub),
-        ('ConfigFile', None, 'Config File', None, 'Edit the PageKite configuration file', self.on_edit_config),
-        ('ConnectTo', None, 'Connect To ...', None, 'Connect to a remote PageKite'),
+        ('CfgKites', None, '_Manage ...', None, 'Manage Kites and Sharing', self.manage_kites),
        ('HelpMenu', None, '_Help'),
         ('OpenHelp', None, '_PageKite.net Support', None, 'Access the PageKite.net support site', self.on_help),
         ('About', gtk.STOCK_ABOUT, '_About', None, 'About PageKite', self.on_about),
@@ -1080,10 +1102,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       w('/Menubar/Menu/ShareClipboard').hide()
       w('/Menubar/Menu/SharePath').hide()
 
-    for item in (#'/Menubar/Menu/QuotaDisplay',
-                 #'/Menubar/Menu/GetQuota',
-                 #'/Menubar/Menu/AddKite',
-                 '/Menubar/Menu/CfgKites',
+    for item in ('/Menubar/Menu/CfgKites',
                  ):
       try:
         if self.pkComm.pkThread.stopped:
@@ -1367,7 +1386,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     if self.kite_manager and self.kite_manager.window:
       self.kite_manager.window.present()
     else:
-      self.kite_manager = PageKiteManager(self.pkComm.pkThread)
+      self.kite_manager = PageKiteManager(self, self.pkComm.pkThread)
     self.kite_manager.update(self.kites)
     return False
 
@@ -1411,13 +1430,6 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
   def on_stub(self, data):
     print 'Stub'
-
-  def on_edit_config(self, data):
-    if self.config_editor and self.config_editor.window:
-      self.config_editor.window.present()
-    else:
-      self.config_editor = PageKiteConfigEditor(self.pkComm.pkThread)
-    return False
 
   def on_help(self, data):
     ShowInfoDialog('Opening %s in your web browser ...' % URL_HELP)
