@@ -24,6 +24,31 @@ BUILT IN WEBSERVER WORK:
    * Javier's everything!
 
 
+## Add / Edit UI / Main window ##
+
+Use cases:
+  - Want to create a new kite
+  - Want to add services to a kite
+  - Want to edit a kite service
+  - Want to remove a kite service
+  - Want to stop sharing something
+
+Kite view:
+
+  KITE             SERVICE             SERVERS
+  b.pagekite.me    www (port 80)       localhost:80   [up]   [edit] [del]
+                   www (default)       built-in       [down] [edit] [del]
+                   ssh (HTTP proxied   localhost:22   [down] [edit] [del]
+                   [new service]
+
+  [new kite]
+
+Sharing view:
+
+  KITE           URL PATH     LOCAL PATH          EXPIRES
+  b.pagekite.me  /            /home/bre/PageKite  never    [open] [del]
+
+
 ## UI! ##
 
 Indicator icon:  down / connecting / flying / traffic

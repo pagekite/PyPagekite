@@ -342,15 +342,15 @@ BE_BPORT = 4
 BE_SECRET = 5
 BE_STATUS = 6
 
-BE_STATUS_REMOTE_SSL   = 0x10000
-BE_STATUS_OK           = 0x01000
-BE_STATUS_ERR_DNS      = 0x00100
-BE_STATUS_ERR_BE       = 0x00010
-BE_STATUS_ERR_TUNNEL   = 0x00001
-BE_STATUS_ERR_ANY      = 0x00fff
+BE_STATUS_REMOTE_SSL   = 0x0010000
+BE_STATUS_OK           = 0x0001000
+BE_STATUS_ERR_DNS      = 0x0000100
+BE_STATUS_ERR_BE       = 0x0000010
+BE_STATUS_ERR_TUNNEL   = 0x0000001
+BE_STATUS_ERR_ANY      = 0x0000fff
 BE_STATUS_UNKNOWN      = 0
-BE_STATUS_DISABLED     = -1
-BE_STATUS_DISABLE_ONCE = -3
+BE_STATUS_DISABLED     = 0x8000000
+BE_STATUS_DISABLE_ONCE = 0x4000000
 BE_INACTIVE = (BE_STATUS_DISABLED, BE_STATUS_DISABLE_ONCE)
 
 BE_NONE = ['', '', None, None, None, '', BE_STATUS_UNKNOWN]
@@ -3410,29 +3410,29 @@ class TunnelManager(threading.Thread):
       self.pkite.ui.StartListingBackEnds()
       for bid in self.pkite.backends:
         be = self.pkite.backends[bid]
-        if be[BE_STATUS] not in BE_INACTIVE:
-          # Do we have auto-SSL at the front-end?
-          protoport, domain = bid.split(':', 1)
-          tunnels = self.conns.Tunnel(protoport, domain)
-          if be[BE_PROTO] in ('http', 'http2', 'http3') and tunnels:
-            has_ssl = True
-            for t in tunnels:
-              if (protoport, domain) not in t.remote_ssl: has_ssl = False
-          else:
-            has_ssl = False
+        # Do we have auto-SSL at the front-end?
+        protoport, domain = bid.split(':', 1)
+        tunnels = self.conns.Tunnel(protoport, domain)
+        if be[BE_PROTO] in ('http', 'http2', 'http3') and tunnels:
+          has_ssl = True
+          for t in tunnels:
+            if (protoport, domain) not in t.remote_ssl: has_ssl = False
+        else:
+          has_ssl = False
 
-          # Get list of webpaths...
-          domainp = '%s/%s' % (domain, be[BE_PORT] or '80')
-          if (self.pkite.ui_sspec and
-              be[BE_BHOST] == self.pkite.ui_sspec[0] and
-              be[BE_BPORT] == self.pkite.ui_sspec[1]):
-            builtin = True
-            dpaths = self.pkite.ui_paths.get(domainp, {})
-          else:
-            builtin = False
-            dpaths = {}
+        # Get list of webpaths...
+        domainp = '%s/%s' % (domain, be[BE_PORT] or '80')
+        if (self.pkite.ui_sspec and
+            be[BE_BHOST] == self.pkite.ui_sspec[0] and
+            be[BE_BPORT] == self.pkite.ui_sspec[1]):
+          builtin = True
+          dpaths = self.pkite.ui_paths.get(domainp, {})
+        else:
+          builtin = False
+          dpaths = {}
 
-          self.pkite.ui.NotifyBE(be, has_ssl, dpaths, is_builtin=builtin)
+        self.pkite.ui.NotifyBE(be, has_ssl, dpaths, is_builtin=builtin)
+      self.pkite.ui.EndListingBackEnds()
 
       tunnel_count = len(self.pkite.conns and
                          self.pkite.conns.TunnelServers() or [])
@@ -3582,6 +3582,7 @@ class NullUi(object):
                 prefix='~<>', color=self.CYAN)
 
   def StartListingBackEnds(self): pass
+  def EndListingBackEnds(self): pass
 
   def NotifyBE(self, be, has_ssl, dpaths, is_builtin=False):
     domain, port, proto = be[BE_DOMAIN], be[BE_PORT], be[BE_PROTO]

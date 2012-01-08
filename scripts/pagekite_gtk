@@ -64,6 +64,48 @@ def ShowInfoDialog(message, d_type=gtk.MESSAGE_INFO):
 def ShowErrorDialog(message):
   ShowInfoDialog(message, d_type=gtk.MESSAGE_ERROR)
 
+def DescribeKite(domain, protoport, info):
+  proto = protoport.split('/')[0]
+  fdesc = protoport
+  url = None
+
+  if proto.startswith('https'):
+    fdesc = 'Secure WWW (end-to-end)'
+    url = 'https://%s%s' % (domain, info['port'] and ':%s' % info['port'] or '')
+  elif proto.startswith('http'):
+    secure = (('ssl' in info or info['proto'] == 'https')
+              and 'Secure ' or '')
+    pdesc = info['port'] and ' (port %s)' % info['port'] or ''
+    fdesc = '%sWWW%s' % (secure, pdesc)
+    url = '%s://%s%s' % (secure and 'https' or 'http', domain,
+                         info['port'] and ':%s' % info['port'] or '')
+  elif proto in ('ssh', 'raw'):
+    if info['port'] == '22':
+      fdesc = 'SSH (HTTP proxied)'
+    else:
+      fdesc = 'TCP port %s (HTTP proxied)' % info['port']
+
+  bdesc = ('builtin' in info and 'PageKite'
+                              or '%s:%s' % (info['bhost'], info['bport']))
+
+  status = ['Unknown']
+  code = int(info['status'], 16)
+  if code in pagekite.BE_INACTIVE:
+    status = ['Disabled']
+  else:
+    if code & pagekite.BE_STATUS_OK:
+      status = ['Flying']
+    elif code & pagekite.BE_STATUS_ERR_ANY:
+      status = ['Error']
+      if code & pagekite.BE_STATUS_ERR_DNS:
+        status.append('DNS')
+      if code & pagekite.BE_STATUS_ERR_BE:
+        status.append('Server down')
+      if code & pagekite.BE_STATUS_ERR_TUNNEL:
+        status.append('Rejected')
+
+  return fdesc, bdesc, ', '.join(status), url
+
 
 def GetScreenShot():
   w = gtk.gdk.get_default_root_window()
@@ -607,7 +649,7 @@ class SharingDialog(gtk.Dialog):
     self.description.set_border_width(1)
     dbox = gtk.ScrolledWindow()
     dbox.set_size_request(250, 75)
-    dbox.set_policy('automatic', 'always')
+    dbox.set_policy('automatic', 'automatic')
     dbox.set_shadow_type('out')
     dbox.add(self.description)
     table_append("Description:", dbox,
@@ -659,6 +701,112 @@ class SharingDialog(gtk.Dialog):
     return buf.get_text(buf.get_start_iter(), buf.get_end_iter())
 
 
+class PageKiteManager:
+  def __init__(self, pkt):
+    self.pkt = pkt
+
+    self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
+    self.window.set_title('PageKite Manager')
+    self.window.set_position(gtk.WIN_POS_CENTER)
+    self.window.set_size_request(450, 200)
+    self.window.connect("delete_event", self.close)
+    self.window.connect("destroy", self.close)
+
+    self.notebook = gtk.Notebook()
+    self.notebook.set_tab_pos(gtk.POS_TOP)
+
+    self.kiteframe = gtk.VBox()
+    self.kiteactions = gtk.HBox()
+    self.kitestatus = gtk.Label('Loading kite information ...')
+    self.kitecancel = gtk.Button('Close')
+    self.kitecancel.connect('clicked', self.close)
+    self.kiteaddkite = gtk.Button('+ Add kite')
+    self.kiteaddkite.connect('clicked', self.add_kite)
+    self.kiteaddsvc = gtk.Button('+ Add service')
+    self.kiteaddsvc.connect('clicked', self.add_service)
+
+    self.kites = {}
+    self.kitestore = gtk.TreeStore(str, str, str, str)
+    self.kitetextcell = gtk.CellRendererText()
+    self.kiteview = gtk.TreeView(self.kitestore)
+    for order, title, cell, attrs in (
+      ( 0, 'Kites',    self.kitetextcell, [('text', 0)]),
+      ( 1, 'Services', self.kitetextcell, [('text', 1)]),
+      ( 2, 'Status',   self.kitetextcell, [('text', 2)]),
+      (-1, '',         self.kitetextcell, [('text', 3)]),
+    ):
+      kc = gtk.TreeViewColumn(title, cell)
+      if title and order >= 0:
+        kc.set_sort_column_id(order)
+      for attname, attorder in attrs:
+        kc.add_attribute(cell, attname, attorder)
+      self.kiteview.append_column(kc)
+
+    sw = gtk.ScrolledWindow()
+    sw.set_policy('automatic', 'automatic')
+    sw.add(self.kiteview)
+    self.kiteframe.pack_start(self.kitestatus, expand=True, fill=True)
+    self.kiteframe.pack_start(sw, expand=True, fill=True)
+    self.kiteframe.pack_end(self.kiteactions, expand=False, fill=False)
+    self.kiteactions.pack_start(self.kiteaddkite, expand=False, fill=False)
+    self.kiteactions.pack_start(self.kiteaddsvc, expand=False, fill=False)
+    self.kiteactions.pack_end(self.kitecancel, expand=False, fill=False)
+
+    self.shareframe = gtk.VBox()
+    self.shareactions = gtk.HBox()
+    self.sharestatus = gtk.Label('Loading kite information ...')
+    self.sharecancel = gtk.Button('Close')
+    self.sharecancel.connect('clicked', self.close)
+    self.shareframe.pack_start(self.sharestatus, expand=True, fill=True)
+    self.shareframe.pack_end(self.shareactions, expand=False, fill=False)
+    self.shareactions.pack_end(self.sharecancel, expand=False, fill=False)
+
+    for f, t in ((self.kiteframe, 'Kites'),
+                 (self.shareframe, 'Sharing')):
+      self.notebook.append_page(f, gtk.Label(t))
+    self.window.add(self.notebook)
+    self.window.show_all()
+    self.kiteview.hide()
+
+  def update(self, kites):
+    self.kitestore.clear()
+    kcount = 0
+
+    for k in kites:
+      pid = self.kitestore.append(None, ['%s' % k, '', '', 'Add, Del'])
+      print 'Got kite: %s' % kites[k]
+      for key in sorted(kites[k]):
+        svc = kites[k][key]
+        fdesc, bdesc, status, url = DescribeKite(k, key, svc)
+
+        # FIXME: Report if front-end HTTPS is available for WWW services
+
+        self.kitestore.append(pid, [fdesc, bdesc, status, 'Edit, Del'])
+      kcount += 1
+
+    if kcount:
+      self.kitestatus.hide()
+      self.kiteview.show_all()
+    else:
+      self.kitestatus.set_text('No kites are configured.')
+      self.kitestatus.show()
+      self.kiteview.hide()
+
+  def delete_kite(self, kite):
+    print 'FIXME: delete %s' % kite
+
+  def add_kite(self, w, kite=None):
+    print 'FIXME: add kite to %s' % (kite or 'pagekite')
+
+  def add_service(self, w, kite=None):
+    print 'FIXME: add kite service to %s' % (kite or 'some kite')
+
+  def close(self, a, aa=None):
+    self.window.destroy()
+    self.window = self.kiteframe = self.shareframe = self.notebook = None
+    return True
+
+
 class PageKiteStatusIcon(gtk.StatusIcon):
   MENU_TEMPLATE = '''
       <ui>
@@ -695,6 +843,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
     self.wizard = None
     self.config_editor = None
+    self.kite_manager = None
     self.pkComm = pkComm
     self.pkComm.cb.update({
       'status_tag': self.set_status_tag,
@@ -712,6 +861,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       'ask_login': self.ask_login,
       'be_list_start': self.reset_status,
       'be_status': self.parse_status,
+      'be_list_end': self.update_status,
     })
     self.set_tooltip('PageKite')
 
@@ -749,7 +899,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
        ('SharePath', None, 'Share _File or Folder', None, 'Make a file or folder visible to the Web', self.share_path),
        ('ShareClipboard', None, '_Paste to Web', None, 'Make the contents of the clipboard visible to the Web', self.share_clipboard),
        ('ShareScreenshot', None, 'Share _Screenshot', None, 'Put a screenshot of your desktop on the Web', self.share_screenshot),
-        ('CfgKites', None, '_Add or _Edit ...', None, 'Configure your PageKites', self.configure_kites),
+        ('CfgKites', None, '_Add or _Edit ...', None, 'Configure your PageKites', self.manage_kites),
         ('AddKite', None, 'New _Kite', None, 'Add Another PageKite', self.new_kite),
        ('AdvancedMenu', None, '_Tech Stuff'),
         ('ViewLog', None, 'PageKite Log', None, 'Display PageKite event log', self.on_stub),
@@ -801,7 +951,6 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       def tmp(what): return func(data)
       return tmp
 
-#   print '%s' % self.kites
     domains = sorted(self.kites.keys())
     if len(domains):
       a('menuitem', 'My Kites:', action='PageKiteList')
@@ -813,36 +962,32 @@ class PageKiteStatusIcon(gtk.StatusIcon):
                                    self.kites[domain][x]['bport'] or 0))
         for protoport in www:
           info = self.kites[domain][protoport]
-          proto = protoport.split('/')[0]
-          secure = (('ssl' in info or info['proto'] == 'https')
-                    and 'Secure ' or '')
-          url = '%s://%s%s' % (secure and 'https' or 'http', domain,
-                               info['port'] and ':%s' % info['port'] or '')
-          pdesc = info['port'] and ' (port %s)' % info['port'] or ''
-          bdesc = 'builtin' in info and 'PageKite' or '%s:%s' % (info['bhost'], info['bport'])
+          fdesc, bdesc, status, url = DescribeKite(domain, protoport, info)
 
-          mc += a('menuitem', '%sWWW%s to %s' % (secure, pdesc, bdesc),
-                  cb=make_cb(self.kite_toggle, info), toggle=True)
+          live = (status != 'Disabled')
+          mc += a('menuitem', '%s to %s' % (fdesc, bdesc),
+                  cb=make_cb(self.kite_toggle, info), toggle=live)
 
 #         if pagekite.BE_STATUS_OK & int(info['status'], 16):
 #           mc += a('menuitem', 'Open in Browser',
 #                   cb=make_cb(self.open_url, url), tooltip=url)
 
-          if 'paths' not in info:
-            mc += a('menuitem', 'Copy Link To',
-                    cb=make_cb(self.copy_url, url), tooltip=url)
+          if live:
+            if 'paths' not in info:
+              mc += a('menuitem', 'Copy Link to Site',
+                      cb=make_cb(self.copy_url, url), tooltip=url)
 
-          elif len(info['paths'].keys()):
-            for path in sorted(info['paths'].keys()):
-              mc += a('menu', '  ' + sn(info['paths'][path]['src']))
-              if pagekite.BE_STATUS_OK & int(info['status'], 16):
-                mc += a('menuitem', 'Open in Browser',
-                        cb=make_cb(self.open_url, url+path), tooltip=url+path)
-              mc += a('menuitem', ('Copy Link to: %s'
-                                   ) % (path == '/' and 'Home page' or path),
-                      cb=make_cb(self.copy_url, url+path), tooltip=url+path)
-              mc += a('menuitem', 'Stop Sharing')
-              xml.append('</menu>')
+            elif len(info['paths'].keys()):
+              for path in sorted(info['paths'].keys()):
+                mc += a('menu', '  ' + sn(info['paths'][path]['src']))
+                if pagekite.BE_STATUS_OK & int(info['status'], 16):
+                  mc += a('menuitem', 'Open in Browser',
+                          cb=make_cb(self.open_url, url+path), tooltip=url+path)
+                mc += a('menuitem', ('Copy Link to: %s'
+                                     ) % (path == '/' and 'Home page' or path),
+                        cb=make_cb(self.copy_url, url+path), tooltip=url+path)
+                mc += a('menuitem', 'Stop Sharing')
+                xml.append('</menu>')
 
           xml.append('<separator/>')
 
@@ -851,8 +996,9 @@ class PageKiteStatusIcon(gtk.StatusIcon):
                                       self.kites[domain][x]['bport'] or 0))
         for protoport in others:
           info = self.kites[domain][protoport]
-          proto = protoport.split('/')[0]
-          mc += a('menuitem', '%s' % protoport, toggle=True)
+          fdesc, bdesc, status, url = DescribeKite(domain, protoport, info)
+          mc += a('menuitem', '%s to %s' % (fdesc, bdesc),
+                  toggle=(status != 'Disabled'))
 
         xml.append('</menu>')
     else:
@@ -947,12 +1093,16 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       except:
         pass
 
-    self.menu.popup(None, None, gtk.status_icon_position_menu, 
+    self.menu.popup(None, None, gtk.status_icon_position_menu,
                     button, when, self)
 
   def reset_status(self, argtext):
     self.kites = {}
     self.have_sharing = False
+
+  def update_status(self, argtext):
+    if self.kite_manager and self.kite_manager.window:
+      self.kite_manager.update(self.kites)
 
   def parse_status(self, argtext):
     args = {}
@@ -1213,7 +1363,14 @@ class PageKiteStatusIcon(gtk.StatusIcon):
   def new_kite(self, data):
     self.pkComm.pkThread.send('addkite: None\n')
 
-  def configure_kites(self, data):
+  def manage_kites(self, data):
+    if self.kite_manager and self.kite_manager.window:
+      self.kite_manager.window.present()
+    else:
+      self.kite_manager = PageKiteManager(self.pkComm.pkThread)
+    self.kite_manager.update(self.kites)
+    return False
+
     ShowErrorDialog('FIXME: Unimplemented')
 
   def show_about(self):

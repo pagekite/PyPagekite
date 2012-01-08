@@ -18,9 +18,17 @@ class RemoteUi(NullUi):
     self.CLEAR = ''
     self.NORM = self.WHITE = self.GREY = self.GREEN = self.YELLOW = ''
     self.BLUE = self.RED = self.MAGENTA = self.CYAN = ''
+    self.be_list_sent = ''
+    self.be_list = []
 
   def StartListingBackEnds(self):
-    self.wfile.write('be_list_start: now\n')
+    self.be_list = []
+
+  def EndListingBackEnds(self):
+    be_list = '\n'.join(self.be_list)
+    if be_list != self.be_list_sent:
+      self.wfile.write('be_list_start: now\n%s\nbe_list_end: now\n' % be_list)
+      self.be_list_sent = be_list
 
   def NotifyBE(self, be, has_ssl, dpaths, is_builtin=False, now=None):
     domain = be[pagekite.BE_DOMAIN]
@@ -37,13 +45,13 @@ class RemoteUi(NullUi):
                         be[pagekite.BE_BHOST], be[pagekite.BE_BPORT],
                         has_ssl and '; ssl=1' or '',
                         is_builtin and '; builtin=1' or '')
-    self.wfile.write(message)
+    self.be_list.append(message)
 
     for path in dpaths:
       message = ('be_path: domain=%s; port=%s; path=%s; policy=%s; src=%s\n'
                  ) % (domain, port or 80, path,
                       dpaths[path][0], dpaths[path][1])
-      self.wfile.write(message)
+      self.be_list.append(message)
 
   def Notify(self, message, prefix=' ',
              popup=False, color=None, now=None, alignright=''):
