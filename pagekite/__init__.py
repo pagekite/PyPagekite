@@ -309,6 +309,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
 
 DEBUG_IO = False
 DEFAULT_CHARSET = 'utf-8'
+DEFAULT_BUFFER_MAX = 1024
 
 AUTH_ERRORS           = '255.255.255.'
 AUTH_ERR_USER_UNKNOWN = '.0'
@@ -3690,7 +3691,7 @@ class PageKite(object):
     self.be_config = {}
     self.disable_zchunks = False
     self.enable_sslzlib = False
-    self.buffer_max = 1024
+    self.buffer_max = DEFAULT_BUFFER_MAX
     self.error_url = None
     self.finger_path = '/~%s/.finger'
 
@@ -3794,7 +3795,7 @@ class PageKite(object):
 
   def GenerateConfig(self, safe=False):
     config = [
-      '######[ Current settings for pagekite.py v%s. ]######' % APPVER,
+      '###[ Current settings for pagekite.py v%s. ]#########' % APPVER,
       '#',
       '## NOTE: This file may be rewritten/reordered by pagekite.py.',
       '#',
@@ -3824,6 +3825,7 @@ class PageKite(object):
         config.append('##[ Manual front-ends ]##')
         for server in sorted(self.servers_manual):
           config.append('frontend=%s' % server)
+        config.append('')
     else:
       if not self.servers_auto and not self.servers_manual:
         new = True
@@ -3969,11 +3971,11 @@ class PageKite(object):
 
     config.extend([
       '',
-      '######[ The following stuff can usually be ignored. ]######',
+      '###[ Anything below this line can usually be ignored. ]#########',
       '',
       '##[ Miscellaneous settings ]##',
       p('logfile=%s', self.logfile, '/path/to/file'),
-      'buffers=%s' % self.buffer_max,
+      p('buffers=%s', self.buffer_max, DEFAULT_BUFFER_MAX),
       (self.servers_new_only and 'new' or '# new'),
       (self.require_all and 'all' or '# all'),
       (self.no_probes and 'noprobes' or '# noprobes'),
@@ -3999,13 +4001,23 @@ class PageKite(object):
 
     config.extend([
       '',
-      '####[ End of pagekite.py configuration ]####',
+      '###[ End of pagekite.py configuration ]#########',
       'END',
       ''
     ])
     if not new:
-      return [l for l in config if not l.startswith('# ')]
-    return config
+      config = [l for l in config if not l.startswith('# ')]
+      clean_config = []
+      for i in range(0, len(config)-1):
+        if i > 0 and (config[i].startswith('#') or config[i] == ''):
+          if config[i+1] != '' or clean_config[-1].startswith('#'):
+            clean_config.append(config[i])
+        else:
+          clean_config.append(config[i])
+      clean_config.append(config[-1])
+      return clean_config
+    else:
+      return config
 
   def ConfigSecret(self, new=False):
     # This method returns a stable secret for the lifetime of this process.
