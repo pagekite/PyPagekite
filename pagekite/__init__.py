@@ -834,6 +834,7 @@ class AuthThread(threading.Thread):
     self.keep_running = False
     self.qc.notify()
     self.qc.release()
+    self.join()
 
   def run(self):
     self.keep_running = True
@@ -3234,8 +3235,9 @@ class HttpUiThread(threading.Thread):
       knock = rawsocket(socket.AF_INET, socket.SOCK_STREAM)
       knock.connect(self.ui_sspec)
       knock.close()
-    except Exception:
+    except:
       pass
+    self.join()
 
   def run(self):
     while self.serve:
@@ -3316,7 +3318,8 @@ class UiCommunicator(threading.Thread):
 
   def quit(self):
     self.looping = False
-    self.config = self.conns = None
+    self.conns = None
+    self.join()
 
 
 class TunnelManager(threading.Thread):
@@ -4287,7 +4290,7 @@ class PageKite(object):
 
     # Allow easy referencing of built-in HTTPD
     if be_port.startswith('built'):
-      self.BindUiSspec()
+      if not self.ui_httpd: self.BindUiSspec()
       be_host, be_port = self.ui_sspec
 
     # Specs define what we are searching for...
@@ -5183,10 +5186,12 @@ class PageKite(object):
             Back()
           else:
             self.ui.EndWizard()
+            if self.ui.DAEMON_FRIENDLY: return
             sys.exit(0)
 
         elif 'abort' in state:
           self.ui.EndWizard()
+          if self.ui.DAEMON_FRIENDLY: return
           sys.exit(0)
 
         else:
@@ -5204,7 +5209,7 @@ class PageKite(object):
   def CheckConfig(self):
     if self.ui_sspec: self.BindUiSspec()
     if not self.servers_manual and not self.servers_auto and not self.isfrontend:
-      if not self.servers:
+      if not self.servers and not self.ui.DAEMON_FRIENDLY:
         raise ConfigError('Nothing to do!  List some servers, or run me as one.')
     return self
 
