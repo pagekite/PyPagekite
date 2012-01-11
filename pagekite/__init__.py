@@ -834,7 +834,10 @@ class AuthThread(threading.Thread):
     self.keep_running = False
     self.qc.notify()
     self.qc.release()
-    self.join()
+    try:
+      self.join()
+    except RuntimeError:
+      pass
 
   def run(self):
     self.keep_running = True
@@ -3237,7 +3240,10 @@ class HttpUiThread(threading.Thread):
       knock.close()
     except:
       pass
-    self.join()
+    try:
+      self.join()
+    except RuntimeError:
+      pass
 
   def run(self):
     while self.serve:
@@ -3301,7 +3307,10 @@ class UiCommunicator(threading.Thread):
         self.config.Configure(['--%s' % args])
       elif command == 'addkite':
         command = 'create new kite'
-        self.config.RegisterNewKite(kitename=args, autoconfigure=True)
+        if self.config.RegisterNewKite(kitename=args, autoconfigure=True):
+          if self.config.tunnel_manager:
+            self.config.ui.Status('reconnecting')
+            self.config.tunnel_manager.CloseTunnels()
       elif command == 'save':
         command = 'save configuration'
         self.config.SaveUserConfig(quiet=(args == 'quietly'))
@@ -3319,7 +3328,10 @@ class UiCommunicator(threading.Thread):
   def quit(self):
     self.looping = False
     self.conns = None
-    self.join()
+    try:
+      self.join()
+    except RuntimeError:
+      pass
 
 
 class TunnelManager(threading.Thread):
@@ -3365,6 +3377,16 @@ class TunnelManager(threading.Thread):
 
     for tunnel in dead.values():
       Log([('dead', tunnel.server_info[tunnel.S_NAME])])
+      self.conns.Remove(tunnel)
+      tunnel.Cleanup()
+
+  def CloseTunnels(self):
+    close = []
+    for tid in self.conns.tunnels:
+      for tunnel in self.conns.tunnels[tid]:
+        close.append(tunnel)
+    for tunnel in close:
+      Log([('closing', tunnel.server_info[tunnel.S_NAME])])
       self.conns.Remove(tunnel)
       tunnel.Cleanup()
 
@@ -5170,9 +5192,9 @@ class PageKite(object):
                                  subject=subject)
             Goto('abort')
           else:
+            time.sleep(2) # Give the service side a moment to replicate...
             self.ui.Tell(['Success!'])
             self.ui.EndWizard()
-            time.sleep(2) # Give the service side a moment to replicate...
             if autoconfigure: self.backends.update(cfgs)
             self.added_kites = True
             return (register or kitename, secret)
@@ -5186,12 +5208,12 @@ class PageKite(object):
             Back()
           else:
             self.ui.EndWizard()
-            if self.ui.DAEMON_FRIENDLY: return
+            if self.ui.DAEMON_FRIENDLY: return None
             sys.exit(0)
 
         elif 'abort' in state:
           self.ui.EndWizard()
-          if self.ui.DAEMON_FRIENDLY: return
+          if self.ui.DAEMON_FRIENDLY: return None
           sys.exit(0)
 
         else:
@@ -5205,6 +5227,7 @@ class PageKite(object):
           raise KeyboardInterrupt()
 
     self.ui.EndWizard()
+    return None
 
   def CheckConfig(self):
     if self.ui_sspec: self.BindUiSspec()

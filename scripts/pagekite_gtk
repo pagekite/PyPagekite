@@ -8,6 +8,7 @@ from random import randint
 import sys
 import socket
 import threading
+import traceback
 import time
 import webbrowser
 
@@ -711,14 +712,30 @@ class PageKiteManagerPage:
 
     self.actions = gtk.HBox()
     self.actions.pack_end(self.cancel, expand=False, fill=False, padding=1)
-    aframe = gtk.Frame()
-    aframe.add(self.actions)
+    action_frame = gtk.Frame()
+    action_frame.add(self.actions)
 
     self.content = gtk.VBox()
-    self.content.pack_end(aframe, expand=False, fill=False)
+    self.inactive = gtk.Label('Loading ...')
+
+    self.page = gtk.VBox()
+    self.page.pack_start(self.inactive, expand=True, fill=True)
+    self.page.pack_start(self.content, expand=True, fill=True)
+    self.page.pack_end(action_frame, expand=False, fill=False)
+
+  def set_active(self):
+    self.inactive.hide()
+    self.content.show_all()
+    self.actions.show_all()
+
+  def set_inactive(self, reason):
+    self.inactive.set_text(reason)
+    self.inactive.show()
+    self.content.hide()
+    self.actions.hide()
 
   def update(self, kites, visible=False):
-    pass
+    self.set_active()
 
   def update_status(self, status):
     pass
@@ -750,28 +767,33 @@ class PageKiteConfigEditor(PageKiteManagerPage):
       if not self.config or not visible or self.get_text() == self.config:
         self.config = config
         self.edit.get_buffer().set_text(self.config)
-      else:
-        print 'Uh oh, ignoring config update...'
+    self.set_active()
 
   def on_refresh(self, ev):
     self.config = ''
     self.update()
 
   def on_save(self, ev):
-    ShowInfoDialog('Saving changes and restarting ...')
+    self.parent.set_all_inactive('Saving changes and restarting ...')
     self.parent.pkt.stop(then=self.do_save)
 
   def do_save(self):
+    ln = None
+    lines = self.get_text().split('\n')
     try:
       new_pk = pagekite.PageKite()
-      new_pk.ConfigureFromFile(data=self.get_text().split('\n'))
+      for ln in range(1, len(lines)+1):
+        new_pk.ConfigureFromFile(data=[lines[ln-1]])
+      ln = None
       new_pk.CheckConfig()
       new_pk.SaveUserConfig()
       # We are definitely not clean anymore!
       if '--clean' in sys.argv: sys.argv.remove('--clean')
       self.config = ''
-    except (getopt.GetoptError, pagekite.ConfigError), e:
-      ShowInfoDialog('Invalid configuration, not saved.\n(%s)' % e)
+    except (IndexError, ValueError, getopt.GetoptError, pagekite.ConfigError), e:
+      ShowInfoDialog(('Oops! Invalid configuration, not saved.\n'
+                      '%s') % (ln and 'Bad line %s: %s\n' % (ln, lines[ln-1])
+                                   or str(e)))
     self.parent.pkt.restart()
 
 
@@ -806,8 +828,6 @@ class PageKiteKiteList(PageKiteManagerPage):
     sw.set_policy('automatic', 'automatic')
     sw.add(self.view)
 
-    self.status = gtk.Label('Loading kite information ...')
-    self.content.pack_start(self.status, expand=True, fill=True)
     self.content.pack_start(sw, expand=True, fill=True)
 
   def delete_kite(self, kite):
@@ -837,12 +857,9 @@ class PageKiteKiteList(PageKiteManagerPage):
       kcount += 1
 
     if kcount:
-      self.status.hide()
-      self.view.show_all()
+      self.set_active()
     else:
-      self.status.set_text('No kites are configured.')
-      self.status.show()
-      self.view.hide()
+      self.set_inactive('No kites are configured.')
 
 
 class PageKiteShareList(PageKiteManagerPage):
@@ -875,6 +892,9 @@ class PageKiteHome(PageKiteManagerPage):
   def update_status(self, status):
     self.info.set_text(status)
 
+  def set_inactive(self, message):
+    pass
+
 
 class PageKiteManager:
   def __init__(self, pkm, pkt):
@@ -899,7 +919,7 @@ class PageKiteManager:
     ]
 
     for t, p in self.pages:
-      self.notebook.append_page(p.content, gtk.Label(t))
+      self.notebook.append_page(p.page, gtk.Label(t))
 
     self.menubar = gtk.MenuBar()
 
@@ -920,6 +940,10 @@ class PageKiteManager:
   def update_status(self, status):
     for title, page in self.pages:
       page.update_status(status)
+
+  def set_all_inactive(self, reason):
+    for title, page in self.pages:
+      page.set_inactive(reason)
 
   def close(self, a, aa=None):
     self.window.destroy()
@@ -959,6 +983,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     self.menu = None
     self.wizard = None
     self.kite_manager = None
+    self.suppress_updates = False
     self.pkComm = pkComm
     self.pkComm.cb.update({
       'status_tag': self.set_status_tag,
@@ -1137,19 +1162,36 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
   def set_status_tag(self, status):
     old_if = self.icon_file
-    if status == 'traffic': self.icon_file = ICON_FILE_TRAFFIC
-    elif status == 'serving': self.icon_file = ICON_FILE_TRAFFIC
+    if status in ('traffic', 'serving'):
+      self.icon_file = ICON_FILE_TRAFFIC
+      self.set_suppress_updates(False)
     # Connecting..
-    elif status == 'startup': self.icon_file = ICON_FILE_IDLE
     elif status == 'connect': self.icon_file = ICON_FILE_ACTIVE
     elif status == 'dyndns': self.icon_file = ICON_FILE_IDLE
+    elif status == 'startup':
+      self.icon_file = ICON_FILE_IDLE
+      self.set_suppress_updates(False)
+      if self.kite_manager:
+        self.kite_manager.set_all_inactive('Starting up ...')
+    elif status == 'reconnecting':
+      self.icon_file = ICON_FILE_ACTIVE
+      self.set_suppress_updates(True)
+      if self.kite_manager:
+        self.kite_manager.set_all_inactive('Reconnecting ...')
     # Inactive, boo
-    elif status == 'idle': self.icon_file = ICON_FILE_IDLE
-    elif status == 'down': self.icon_file = ICON_FILE_IDLE
-    elif status == 'exiting': self.icon_file = ICON_FILE_IDLE
+    elif status in ('idle', 'down'):
+      self.icon_file = ICON_FILE_IDLE
+      self.set_suppress_updates(False)
+    elif status == 'exiting':
+      self.icon_file = ICON_FILE_IDLE
+      self.set_suppress_updates(True)
+      if self.kite_manager:
+        self.kite_manager.set_all_inactive('Disconnecting ...')
     # Ready and waiting
-    elif status == 'flying': self.icon_file = ICON_FILE_ACTIVE
-    elif status == 'active': self.icon_file = ICON_FILE_ACTIVE
+    elif status in ('active', 'flying'):
+      self.set_suppress_updates(False)
+      self.icon_file = ICON_FILE_ACTIVE
+
     if self.icon_file != old_if:
       self.set_from_pixbuf(gtk_open_image(os.path.join(self.icon_dir,
                                                        self.icon_file)))
@@ -1208,10 +1250,18 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     self.menu.popup(None, None, gtk.status_icon_position_menu,
                     button, when, self)
 
+  def set_suppress_updates(self, yesno):
+    if self.suppress_updates != yesno:
+      self.kites_sig = ''
+    self.suppress_updates = yesno
+
   def update_be_list(self, args):
+    if self.suppress_updates: return
+
     ks = self.kites_sig
     self.kites_sig = '\n'.join(args.get('_raw', []))
-    if ks == self.kites_sig: return
+    if ks == self.kites_sig:
+      return
 
     self.menu = None
     self.kites = {}
@@ -1576,7 +1626,7 @@ if __name__ == '__main__':
     if open_manager: pksi.manage_kites(None)
     gtk.main()
   except:
-    print '%s' % (sys.exc_info(), )
+    traceback.print_exc()
 
   finally:
     if pkt: pkt.quit()
