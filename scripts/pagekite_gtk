@@ -38,15 +38,19 @@ except NameError:
   PIXBUF_WIZBACK = gtk_open_image(IMG_FILE_WIZBACK)
 
 
-def ExposeFancyBackground(w, ev):
+def ExposeFancyBackground(widget, ev):
   try:
-    w.window.draw_pixbuf(w.style.bg_gc[gtk.STATE_NORMAL],
-                         PIXBUF_WIZBACK, 0, 0, 0, 0)
-    if w.get_child() is not None:
-      w.propagate_expose(w.get_child(), ev)
-  except AttributeError:
-    return False
-  return True
+    alloc = widget.get_allocation()
+    pixbuf = PIXBUF_WIZBACK.scale_simple(alloc.width, alloc.height,
+                                         gtk.gdk.INTERP_BILINEAR)
+    widget.window.draw_pixbuf(widget.style.bg_gc[gtk.STATE_NORMAL],
+                              pixbuf, 0, 0, alloc.x, alloc.y)
+    if hasattr(widget, 'get_child') and widget.get_child() is not None:
+      widget.propagate_expose(widget.get_child(), ev)
+      return True
+  except:
+    traceback.print_exc()
+  return False
 
 
 def ShowInfoDialog(message, d_type=gtk.MESSAGE_INFO):
@@ -842,7 +846,8 @@ class PageKiteKiteList(PageKiteManagerPage):
   def add_service(self, w):
     model, row = self.view.get_selection().get_selected()
     if not row:
-      return self.add_kite(w)
+      # FIXME: If there is only one kite, just use it.
+      return ShowErrorDialog('Please choose a kite from the list above.')
     parent = model.iter_parent(row) or row
     self.parent.pkt.send('addkite: %s\n' % model.get_value(parent, 0))
 
@@ -893,7 +898,7 @@ class PageKiteHome(PageKiteManagerPage):
     self.actions.pack_end(self.quit, expand=False, fill=False, padding=1)
 
     self.actions.pack_start(self.info, expand=True, fill=True, padding=5)
-#   self.content.connect('expose-event', ExposeFancyBackground)
+    self.content.connect('expose-event', ExposeFancyBackground)
 
   def update_status(self, status):
     self.info.set_text(status)
@@ -905,7 +910,7 @@ class PageKiteHome(PageKiteManagerPage):
 class PageKiteManager:
 
   PAGE_HOME = '_PageKite'
-  PAGE_KITES = '_Kites'
+  PAGE_KITES = 'My _Kites'
   PAGE_SHARING = 'S_haring'
   PAGE_CONFIG = 'Config _File'
   PAGE_LOG = '_Log'
@@ -1661,7 +1666,8 @@ if __name__ == '__main__':
     ct = CommThread(pkt)
     pksi = PageKiteStatusIcon(ct)
     gobject.threads_init()
-    if open_manager: pksi.manage_kites(None)
+    if open_manager:
+      pksi.manage_kites(None, page=0)
     gtk.main()
   except:
     traceback.print_exc()
