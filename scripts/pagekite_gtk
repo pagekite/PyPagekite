@@ -836,12 +836,15 @@ class PageKiteKiteList(PageKiteManagerPage):
   def delete_kite(self, kite):
     print 'FIXME: delete %s' % kite
 
-  def add_kite(self, w, kite=None):
+  def add_kite(self, w):
     self.parent.pkt.send('addkite: None\n')
 
-  def add_service(self, w, kite=None):
-    print 'FIXME: add kite service to %s' % (kite or 'some kite')
-    ShowInfoDialog('FIXME: This does not work yet.')
+  def add_service(self, w):
+    model, row = self.view.get_selection().get_selected()
+    if not row:
+      return self.add_kite(w)
+    parent = model.iter_parent(row) or row
+    self.parent.pkt.send('addkite: %s\n' % model.get_value(parent, 0))
 
   def update(self, kites, visible=False):
     self.store.clear()
@@ -849,7 +852,6 @@ class PageKiteKiteList(PageKiteManagerPage):
 
     for k in kites:
       pid = self.store.append(None, ['%s' % k, '', '', ''])
-#     print 'Got kite: %s' % kites[k]
       for key in sorted(kites[k]):
         svc = kites[k][key]
         fdesc, bdesc, status, url = DescribeKite(k, key, svc)
@@ -859,11 +861,8 @@ class PageKiteKiteList(PageKiteManagerPage):
         self.store.append(pid, [fdesc, bdesc, status, 'Edit, Del'])
       kcount += 1
 
-    if kcount:
-      self.view.expand_all()
-      self.set_active()
-    else:
-      self.set_inactive('No kites are configured.')
+    self.view.expand_all()
+    self.set_active()
 
 
 class PageKiteShareList(PageKiteManagerPage):
@@ -937,10 +936,10 @@ class PageKiteManager:
       self.notebook.append_page(p.page, l)
       l.set_markup_with_mnemonic(t)
 
-    self.menubar = gtk.MenuBar()
+    #self.menubar = gtk.MenuBar()
 
     vbox = gtk.VBox()
-    vbox.pack_start(self.menubar, expand=False, fill=False)
+    #vbox.pack_start(self.menubar, expand=False, fill=False)
     vbox.pack_start(self.notebook, expand=True, fill=True)
 
     self.window.add(vbox)
@@ -1110,8 +1109,8 @@ class PageKiteStatusIcon(gtk.StatusIcon):
           p = '\\'.join(('...', p.split('\\', 1)[1]))
       return p
 
-    def make_cb(func, data):
-      def tmp(what): return func(data)
+    def make_cb(func, *data):
+      def tmp(what): return func(what, *data)
       return tmp
 
     domains = sorted(self.kites.keys())
@@ -1129,7 +1128,8 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
           live = (status != 'Disabled')
           mc += a('menuitem', '%s to %s' % (fdesc, bdesc),
-                  cb=make_cb(self.kite_toggle, info), toggle=live)
+                  cb=make_cb(self.kite_toggle, info, live),
+                  toggle=live)
 
 #         if pagekite.BE_STATUS_OK & int(info['status'], 16):
 #           mc += a('menuitem', 'Open in Browser',
@@ -1160,8 +1160,10 @@ class PageKiteStatusIcon(gtk.StatusIcon):
         for protoport in others:
           info = self.kites[domain][protoport]
           fdesc, bdesc, status, url = DescribeKite(domain, protoport, info)
+          live = (status != 'Disabled')
           mc += a('menuitem', '%s to %s' % (fdesc, bdesc),
-                  toggle=(status != 'Disabled'))
+                  cb=make_cb(self.kite_toggle, info, live),
+                  toggle=live)
 
         xml.append('</menu>')
     else:
@@ -1333,7 +1335,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
         else:
           if 'builtin' in args: self.have_sharing = True
           for i in ('proto', 'port', 'status', 'bhost', 'bport',
-                    'ssl', 'builtin'):
+                    'bid', 'ssl', 'builtin'):
             if i in args:
               backend_info[i] = args[i]
           domain_info[bid] = backend_info
@@ -1418,12 +1420,13 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
     choices = gtk.VBox(False, spacing=5)
     clist = []
+    rb = None
     for ch in sorted([k for k in args if k.startswith('be_')]):
       spec, text = args[ch].split(' ', 1)
-      cb = gtk.CheckButton(text)
-      if not clist: cb.set_active(True)
-      clist.append((cb, spec))
-      choices.pack_start(cb, expand=False, fill=False)
+      rb = gtk.RadioButton(rb, text)
+      if not clist: rb.set_active(True)
+      clist.append((rb, spec))
+      choices.pack_start(rb, expand=False, fill=False, padding=1)
     choices.show_all()
     self.wizard.left.pack_start(choices)
 
@@ -1474,8 +1477,15 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       (self.wizard and 'Next' or 'OK', lambda w: respond(w)),
     ])
 
-  def kite_toggle(self, kite_info):
-    ShowErrorDialog('Unimplemented... %s' % (kite_info, ))
+  def kite_toggle(self, ev, kite_info, live):
+    bid = kite_info['bid']
+    if live:
+      self.pkComm.pkThread.send('disablekite: %s\n' % bid)
+      ShowInfoDialog('Disabling %s ...' % bid)
+    else:
+      self.pkComm.pkThread.send('enablekite: %s\n' % bid)
+      ShowInfoDialog('Enabling %s ...' % bid)
+    return False
 
   def copy_url(self, url):
     gtk.clipboard_get('CLIPBOARD').set_text(url, len=-1)
@@ -1571,8 +1581,6 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     self.kite_manager.update(self.kites)
     self.kite_manager.show_page(page)
     return False
-
-    ShowErrorDialog('FIXME: Unimplemented')
 
   def show_about(self):
     dialog = gtk.AboutDialog()

@@ -3287,6 +3287,11 @@ class UiCommunicator(threading.Thread):
 
     LogDebug('UiCommunicator: done')
 
+  def Reconnect(self):
+    if self.config.tunnel_manager:
+      self.config.ui.Status('reconnecting')
+      self.config.tunnel_manager.CloseTunnels()
+
   def Parse(self, line):
     try:
       command, args = line.split(': ', 1)
@@ -3305,12 +3310,33 @@ class UiCommunicator(threading.Thread):
       elif command == 'config':
         command = 'change settings'
         self.config.Configure(['--%s' % args])
+      elif command == 'enablekite':
+        command = 'enable kite'
+        if args and args in self.config.backends:
+          self.config.backends[args][BE_STATUS] = BE_STATUS_UNKNOWN
+          self.Reconnect()
+        else:
+          raise Exception('No such kite: %s' % args)
+      elif command == 'disablekite':
+        command = 'disable kite'
+        if args and args in self.config.backends:
+          self.config.backends[args][BE_STATUS] = BE_STATUS_DISABLED
+          self.Reconnect()
+        else:
+          raise Exception('No such kite: %s' % args)
+      elif command == 'delkite':
+        command = 'remove kite'
+        if args and args in self.config.backends:
+          del self.config.backends[args]
+          self.Reconnect()
+        else:
+          raise Exception('No such kite: %s' % args)
       elif command == 'addkite':
         command = 'create new kite'
-        if self.config.RegisterNewKite(kitename=args, autoconfigure=True):
-          if self.config.tunnel_manager:
-            self.config.ui.Status('reconnecting')
-            self.config.tunnel_manager.CloseTunnels()
+        args = (args or '').strip().split() or ['']
+        if self.config.RegisterNewKite(kitename=args[0],
+                                       autoconfigure=True, ask_be=True):
+          self.Reconnect()
       elif command == 'save':
         command = 'save configuration'
         self.config.SaveUserConfig(quiet=(args == 'quietly'))
@@ -3457,7 +3483,7 @@ class TunnelManager(threading.Thread):
           builtin = False
           dpaths = {}
 
-        self.pkite.ui.NotifyBE(be, has_ssl, dpaths, is_builtin=builtin)
+        self.pkite.ui.NotifyBE(bid, be, has_ssl, dpaths, is_builtin=builtin)
       self.pkite.ui.EndListingBackEnds()
 
       tunnel_count = len(self.pkite.conns and
@@ -3610,7 +3636,7 @@ class NullUi(object):
   def StartListingBackEnds(self): pass
   def EndListingBackEnds(self): pass
 
-  def NotifyBE(self, be, has_ssl, dpaths, is_builtin=False):
+  def NotifyBE(self, bid, be, has_ssl, dpaths, is_builtin=False):
     domain, port, proto = be[BE_DOMAIN], be[BE_PORT], be[BE_PROTO]
     prox = (proto == 'raw') and ' (HTTP proxied)' or ''
     if proto == 'raw' and port in ('22', 22): proto = 'ssh'
@@ -3827,6 +3853,12 @@ class PageKite(object):
       '',
     ]
 
+    if not self.kitename:
+      for be in self.backends.values():
+        if not self.kitename or len(self.kitename) < len(be[BE_DOMAIN]):
+          self.kitename = be[BE_DOMAIN]
+          self.kitesecret = be[BE_SECRET]
+
     new = not (self.kitename or self.kitesecret or self.backends)
     def p(vfmt, value, dval):
       return '%s%s' % (value and value != dval
@@ -3839,7 +3871,7 @@ class PageKite(object):
         p('kitesecret=%s', self.kitesecret, 'SECRET'),
         ''
       ])
- 
+
     if self.SetServiceDefaults(check=True):
       config.extend([
         '##[ Front-end settings: use service defaults ]##',
@@ -4001,7 +4033,7 @@ class PageKite(object):
       '##[ Miscellaneous settings ]##',
       p('logfile=%s', self.logfile, '/path/to/file'),
       p('buffers=%s', self.buffer_max, DEFAULT_BUFFER_MAX),
-      (self.servers_new_only and 'new' or '# new'),
+      (self.servers_new_only is True) and 'new' or '# new',
       (self.require_all and 'all' or '# all'),
       (self.no_probes and 'noprobes' or '# noprobes'),
       (self.crash_report_url and '# nocrashreport' or 'nocrashreport'),
@@ -4573,11 +4605,11 @@ class PageKite(object):
                                              and BE_STATUS_DISABLED
                                              or BE_STATUS_UNKNOWN))
         for bid in bes:
+          if bid in self.backends:
+            raise ConfigError("Same backend/domain defined twice: %s" % bid)
           if not self.kitename:
             self.kitename = bes[bid][BE_DOMAIN]
             self.kitesecret = bes[bid][BE_SECRET]
-          if bid in self.backends:
-            raise ConfigError("Same backend/domain defined twice: %s" % bid)
         self.backends.update(bes)
       elif opt == '--be_config':
         host, key, val = arg.split(':', 2)
@@ -4648,7 +4680,9 @@ class PageKite(object):
     if self.ca_certs: socks.setdefaultcertfile(self.ca_certs)
 
     # Handle the user-friendly argument stuff and simple registration.
+    return self.ParseFriendlyBackendSpecs(args)
 
+  def ParseFriendlyBackendSpecs(self, args):
     just_these_backends = {}
     just_these_webpaths = {}
     just_these_be_configs = {}
@@ -4862,6 +4896,11 @@ class PageKite(object):
   def _KiteInfo(self, kitename):
     is_service_domain = kitename and SERVICE_DOMAIN_RE.search(kitename)
     is_subdomain_of = is_cname_for = is_cname_ready = False
+    secret = None
+
+    for be in self.backends.values():
+      if be[BE_SECRET] and (be[BE_DOMAIN] == kitename):
+        secret = be[BE_SECRET]
 
     if is_service_domain:
       parts = kitename.split('.')
@@ -4879,13 +4918,20 @@ class PageKite(object):
       except:
         pass
 
-    return is_subdomain_of, is_service_domain, is_cname_for, is_cname_ready
+    return (secret, is_subdomain_of, is_service_domain,
+            is_cname_for, is_cname_ready)
 
-  def RegisterNewKite(self, kitename=None, first=False, autoconfigure=False):
+  def RegisterNewKite(self, kitename=None, first=False,
+                            ask_be=False, autoconfigure=False):
+    registered = False
     if kitename:
-      self.ui.StartWizard('Creating kite: %s' % kitename)
-      (is_subdomain_of, is_service_domain,
+      (secret, is_subdomain_of, is_service_domain,
        is_cname_for, is_cname_ready) = self._KiteInfo(kitename)
+      if secret:
+        self.ui.StartWizard('Updating kite: %s' % kitename)
+        registered = True
+      else:
+        self.ui.StartWizard('Creating kite: %s' % kitename)
     else:
       if first:
         self.ui.StartWizard('Create your first kite')
@@ -4907,6 +4953,8 @@ class PageKite(object):
           service_accounts[be[BE_DOMAIN]] = be[BE_SECRET]
     service_account_list = service_accounts.keys()
 
+    if registered:
+      state = ['choose_backends']
     if service_account_list:
       state = ['choose_kite_account']
     else:
@@ -5053,15 +5101,19 @@ class PageKite(object):
                                  back=False)
           if ch:
             kitename = register = ch
-            (is_subdomain_of, is_service_domain,
+            (secret, is_subdomain_of, is_service_domain,
              is_cname_for, is_cname_ready) = self._KiteInfo(ch)
-            self.ui.StartWizard('Creating kite: %s' % kitename)
+            if secret:
+              self.ui.StartWizard('Updating kite: %s' % kitename)
+              registered = True
+            else:
+              self.ui.StartWizard('Creating kite: %s' % kitename)
             Goto('choose_backends')
           else:
             Back()
 
         elif 'choose_backends' in state:
-          if False and autoconfigure:
+          if ask_be and autoconfigure:
             ch = self.ui.AskBackends([
               ('Sharing files and folders',     '%s:builtin'),
               ('A web server (Apache, nginx)',  'http:%s:localhost:[80]'),
@@ -5077,8 +5129,10 @@ class PageKite(object):
             ch = True
 
           if ch:
-            skip = not autoconfigure
-            if is_subdomain_of:
+            skip = not (autoconfigure and ask_be)
+            if registered:
+              Goto('create_kite', back_skips_current=skip)
+            elif is_subdomain_of:
               Goto('service_signup_is_subdomain', back_skips_current=skip)
             elif account:
               Goto('create_kite', back_skips_current=skip)
@@ -5153,7 +5207,7 @@ class PageKite(object):
           if ch == len(choices):
             Goto('manual_abort')
           elif kitename:
-            Goto('create_kite', back_skips_current=justdoit)
+            Goto('choose_backends', back_skips_current=justdoit)
           else:
             Goto('service_ask_kitename', back_skips_current=justdoit)
 
@@ -5164,26 +5218,30 @@ class PageKite(object):
           result = {}
           error = None
           try:
-            self.ui.Working('Creating your kite')
-            if is_cname_for and is_cname_ready:
+            if registered and kitename and secret:
+              pass
+            elif is_cname_for and is_cname_ready:
+              self.ui.Working('Creating your kite')
               subject = kitename
               result = service.addCnameKite(account, secret, kitename)
-              for be_spec in be_specs:
-                cfgs.update(self.ArgToBackendSpecs(be_spec % kitename,
-                                                   secret=secret))
+              time.sleep(2) # Give the service side a moment to replicate...
             else:
+              self.ui.Working('Creating your kite')
               subject = register
               result = service.addKite(account, secret, register)
+              time.sleep(2) # Give the service side a moment to replicate...
               for be_spec in be_specs:
                 cfgs.update(self.ArgToBackendSpecs(be_spec % register,
                                                    secret=secret))
               if is_cname_for == register and 'error' not in result:
                 subject = kitename
                 result.update(service.addCnameKite(account, secret, kitename))
-                for be_spec in be_specs:
-                  cfgs.update(self.ArgToBackendSpecs(be_spec % kitename,
-                                                     secret=secret))
+
             error = result.get('error', None)
+            if not error:
+              for be_spec in be_specs:
+                cfgs.update(self.ArgToBackendSpecs(be_spec % kitename,
+                                                   secret=secret))
           except Exception, e:
             error = '%s' % e
 
@@ -5192,7 +5250,6 @@ class PageKite(object):
                                  subject=subject)
             Goto('abort')
           else:
-            time.sleep(2) # Give the service side a moment to replicate...
             self.ui.Tell(['Success!'])
             self.ui.EndWizard()
             if autoconfigure: self.backends.update(cfgs)
@@ -5759,7 +5816,7 @@ def Configure(pk):
         pk.ui.AskYesNo('Save settings to %s?' % pk.rcfile,
                        default=(len(pk.backends.keys()) > 0))):
       pk.SaveUserConfig()
-    pk.servers_new_only = True
+    pk.servers_new_only = 'Once'
   elif pk.save:
     pk.SaveUserConfig(quiet=True)
 

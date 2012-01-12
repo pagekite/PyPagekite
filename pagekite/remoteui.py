@@ -25,7 +25,7 @@ class RemoteUi(NullUi):
   def EndListingBackEnds(self):
     self.wfile.write('end_be_list\n')
 
-  def NotifyBE(self, be, has_ssl, dpaths, is_builtin=False, now=None):
+  def NotifyBE(self, bid, be, has_ssl, dpaths, is_builtin=False, now=None):
     domain = be[pagekite.BE_DOMAIN]
     port = be[pagekite.BE_PORT]
     proto = be[pagekite.BE_PROTO]
@@ -34,9 +34,9 @@ class RemoteUi(NullUi):
     url = '%s://%s%s' % (proto, domain, port and (':%s' % port) or '')
 
     message = (' be_status:'
-               ' status=%x; domain=%s; port=%s; proto=%s;'
+               ' status=%x; bid=%s; domain=%s; port=%s; proto=%s;'
                ' bhost=%s; bport=%s%s%s'
-               '\n') % (be[pagekite.BE_STATUS], domain, port, proto,
+               '\n') % (be[pagekite.BE_STATUS], bid, domain, port, proto,
                         be[pagekite.BE_BHOST], be[pagekite.BE_BPORT],
                         has_ssl and '; ssl=1' or '',
                         is_builtin and '; builtin=1' or '')
