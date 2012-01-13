@@ -60,7 +60,7 @@ def ShowInfoDialog(message, d_type=gtk.MESSAGE_INFO):
   dlg.set_position(gtk.WIN_POS_CENTER)
   dlg.get_action_area().get_children()[0].connect('clicked',
                                                 lambda w: dlg.destroy())
-  dlg.connect('expose-event', ExposeFancyBackground)
+# dlg.connect('expose-event', ExposeFancyBackground)
   dlg.show()
   if d_type != gtk.MESSAGE_ERROR:
     def killit():
@@ -981,36 +981,35 @@ class PageKiteManager:
   PAGE_CONFIG = 'Config _File'
   PAGE_LOG = '_Log'
 
-  def __init__(self, pkm, pkt):
+  def __init__(self, pkm, pkt, development=False):
     self.pkm = pkm
     self.pkt = pkt
+    self.development = development
 
     self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
     self.window.set_title('PageKite Manager')
     self.window.set_position(gtk.WIN_POS_CENTER)
-    self.window.set_size_request(500, 270)
+    self.window.set_size_request(520, 320)
     self.window.connect("delete_event", self.close)
     self.window.connect("destroy", self.close)
 
     self.notebook = gtk.Notebook()
     self.notebook.set_tab_pos(gtk.POS_TOP)
     self.pages = [
-      (self.PAGE_HOME,    PageKiteHome(self, status=pkm.status)),
-      (self.PAGE_KITES,   PageKiteKiteList(self, status=pkm.status)),
-#     (self.PAGE_SHARING, PageKiteShareList(self, status=pkm.status)),
-      (self.PAGE_CONFIG,  PageKiteConfigEditor(self, status=pkm.status)),
-#     (self.PAGE_LOG,     PageKiteLogView(self, status=pkm.status)),
+      (self.PAGE_HOME,    PageKiteHome(self, status=pkm.status),        False),
+      (self.PAGE_KITES,   PageKiteKiteList(self, status=pkm.status),    False),
+      (self.PAGE_SHARING, PageKiteShareList(self, status=pkm.status),   True),
+      (self.PAGE_CONFIG,  PageKiteConfigEditor(self, status=pkm.status),False),
+      (self.PAGE_LOG,     PageKiteLogView(self, status=pkm.status),     True),
     ]
 
-    for t, p in self.pages:
-      l = gtk.Label()
-      self.notebook.append_page(p.page, l)
-      l.set_markup_with_mnemonic(t)
-
-    #self.menubar = gtk.MenuBar()
+    for t, p, dev in self.pages:
+      if not dev or development:
+        l = gtk.Label()
+        self.notebook.append_page(p.page, l)
+        l.set_markup_with_mnemonic(t)
 
     vbox = gtk.VBox()
-    #vbox.pack_start(self.menubar, expand=False, fill=False)
     vbox.pack_start(self.notebook, expand=True, fill=True)
 
     self.window.add(vbox)
@@ -1021,21 +1020,24 @@ class PageKiteManager:
 
   def show_page(self, which):
     for i in range(0, len(self.pages)):
-      title, page = self.pages[i]
+      title, page, dev = self.pages[i]
       if i == which or title == which or page == which:
         self.notebook.set_current_page(i)
 
   def update(self, kites):
-    for title, page in self.pages:
-      page.update(kites, visible=self.is_visible(page))
+    for title, page, dev in self.pages:
+      if self.development or not dev:
+        page.update(kites, visible=self.is_visible(page))
 
   def update_status(self, status):
-    for title, page in self.pages:
-      page.update_status(status)
+    for title, page, dev in self.pages:
+      if self.development or not dev:
+        page.update_status(status)
 
   def set_all_inactive(self, reason):
-    for title, page in self.pages:
-      page.set_inactive(reason)
+    for title, page, dev in self.pages:
+      if self.development or not dev:
+        page.set_inactive(reason)
 
   def close(self, a, aa=None):
     self.window.destroy()
@@ -1074,13 +1076,14 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       </ui>
   '''
 
-  def __init__(self, pkComm):
+  def __init__(self, pkComm, development=False):
     gtk.StatusIcon.__init__(self)
 
     self.menu = None
     self.wizard = None
     self.kite_manager = None
     self.suppress_updates = False
+    self.development = development
     self.pkComm = pkComm
     self.pkComm.cb.update({
       'status_tag': self.set_status_tag,
@@ -1207,7 +1210,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 #                   cb=make_cb(self.open_url, url), tooltip=url)
 
           if live:
-            if 'paths' not in info:
+            if ('paths' not in info) or not development:
               mc += a('menuitem', 'Copy Link to Site',
                       cb=make_cb(self.copy_url, url), tooltip=url)
 
@@ -1334,7 +1337,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     if not self.have_screenshots:
       w('/Menubar/Menu/ShareScreenshot').hide()
 
-    if not self.have_sharing:
+    if not self.have_sharing or not self.development:
       w('/Menubar/Menu/ShareScreenshot').hide()
       w('/Menubar/Menu/ShareClipboard').hide()
       w('/Menubar/Menu/SharePath').hide()
@@ -1648,7 +1651,8 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     if self.kite_manager and self.kite_manager.pages:
       self.kite_manager.window.present()
     else:
-      self.kite_manager = PageKiteManager(self, self.pkComm.pkThread)
+      self.kite_manager = PageKiteManager(self, self.pkComm.pkThread,
+                                          development=self.development)
     self.kite_manager.update(self.kites)
     self.kite_manager.show_page(page)
     return False
@@ -1723,6 +1727,12 @@ if __name__ == '__main__':
     else:
       pkt.stopped = False
 
+    if '--dev' in sys.argv:
+      sys.argv.remove('--dev')
+      development = True
+    else:
+      development = False
+
     if '--nomanager' in sys.argv:
       sys.argv.remove('--nomanager')
       open_manager = False
@@ -1730,7 +1740,7 @@ if __name__ == '__main__':
       open_manager = True
 
     ct = CommThread(pkt)
-    pksi = PageKiteStatusIcon(ct)
+    pksi = PageKiteStatusIcon(ct, development=development)
     gobject.threads_init()
     if open_manager:
       pksi.manage_kites(None, page=0)
