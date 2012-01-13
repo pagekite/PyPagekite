@@ -808,7 +808,9 @@ class PageKiteKiteList(PageKiteManagerPage):
   def __init__(self, parent, status=None):
     PageKiteManagerPage.__init__(self, parent)
 
+    self.kite_count  = 0
     self.kite_add    = Button(gtk.STOCK_NEW,    '_New Kite',    self.add_kite)
+    self.hint        = gtk.Label('Select a kite or service for more options.')
     self.kite_remove = Button(gtk.STOCK_DELETE, '_Delete Kite', self.remove_kite)
     self.svc_add     = Button(gtk.STOCK_ADD,    '_Add Service', self.add_service)
     self.svc_remove  = Button(gtk.STOCK_REMOVE, '_Remove',      self.remove_service)
@@ -816,6 +818,7 @@ class PageKiteKiteList(PageKiteManagerPage):
     self.svc_enable  = Button(gtk.STOCK_YES,    '_Enable',      self.enable_service)
 
     self.actions.pack_start(self.kite_add,    expand=False, fill=False, padding=1)
+    self.actions.pack_start(self.hint,        expand=False, fill=False, padding=5)
     self.actions.pack_start(self.svc_add,     expand=False, fill=False, padding=1)
     self.actions.pack_start(self.svc_enable,  expand=False, fill=False, padding=1)
     self.actions.pack_start(self.svc_disable, expand=False, fill=False, padding=1)
@@ -867,9 +870,10 @@ class PageKiteKiteList(PageKiteManagerPage):
   def update_buttons(self, w=None, hide=False):
     svc = self.get_service()
     if svc and not hide:
-      self.kite_remove.hide()
-      self.svc_add.hide()
+      for w in (self.hint, self.kite_remove, self.svc_add):
+        w.hide()
       self.svc_remove.show()
+      self.svc_remove.set_sensitive(self.kite_count > 1)
       if svc[1].lower() == 'disabled':
         self.svc_enable.show()
         self.svc_disable.hide()
@@ -877,20 +881,23 @@ class PageKiteKiteList(PageKiteManagerPage):
         self.svc_enable.hide()
         self.svc_disable.show()
     else:
-      self.svc_remove.hide()
-      self.svc_enable.hide()
-      self.svc_disable.hide()
+      for w in (self.svc_remove, self.svc_enable, self.svc_disable):
+        w.hide()
       if self.get_kite() and not hide:
+        self.hint.hide()
         self.svc_add.show()
 #       self.kite_remove.show()
       else:
-        self.svc_add.hide()
-        self.kite_remove.hide()
+        for w in (self.svc_add, self.kite_remove):
+          w.hide()
+        if self.kite_count:
+          self.hint.show()
+        else:
+          self.hint.hide()
 
   def update(self, kites, visible=False):
     self.store.clear()
-    kcount = 0
-
+    self.kite_count = 0
     for k in kites:
       pid = self.store.append(None, ['%s' % k, '', '', ''])
       for key in sorted(kites[k]):
@@ -900,7 +907,7 @@ class PageKiteKiteList(PageKiteManagerPage):
         # FIXME: Report if front-end HTTPS is available for WWW services
 
         self.store.append(pid, [fdesc, bdesc, status, svc['bid']])
-      kcount += 1
+        self.kite_count += 1
 
     self.view.expand_all()
     self.set_active()
