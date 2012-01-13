@@ -3291,6 +3291,7 @@ class UiCommunicator(threading.Thread):
     if self.config.tunnel_manager:
       self.config.ui.Status('reconnecting')
       self.config.tunnel_manager.CloseTunnels()
+      self.config.tunnel_manager.HurryUp()
 
   def Parse(self, line):
     try:
@@ -3432,18 +3433,18 @@ class TunnelManager(threading.Thread):
     LogDebug('TunnelManager: done')
 
   def _run(self):
-    check_interval = 5
+    self.check_interval = 5
     while self.keep_running:
 
       # Reconnect if necessary, randomized exponential fallback.
       problem = False
       if self.pkite.CreateTunnels(self.conns) > 0:
-        check_interval += int(random.random()*check_interval)
-        if check_interval > 300: check_interval = 300
+        self.check_interval += int(1+random.random()*self.check_interval)
+        if self.check_interval > 300: self.check_interval = 300
         problem = True
         time.sleep(1)
       else:
-        check_interval = 5
+        self.check_interval = 5
 
         # If all connected, make sure tunnels are really alive.
         if self.pkite.isfrontend:
@@ -3506,11 +3507,15 @@ class TunnelManager(threading.Thread):
         self.pkite.ui.Status('flying', color=self.pkite.ui.GREEN,
                                    message='Kites are flying and all is well.')
 
-      for i in xrange(0, check_interval):
+      for i in xrange(0, self.check_interval):
         if self.keep_running:
           time.sleep(1)
+          if i > self.check_interval: break
           if self.pkite.isfrontend:
             self.CheckIdleConns(time.time())
+
+  def HurryUp(self):
+    self.check_interval = 0
 
 
 class NullUi(object):
