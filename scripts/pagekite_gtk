@@ -808,10 +808,19 @@ class PageKiteKiteList(PageKiteManagerPage):
   def __init__(self, parent, status=None):
     PageKiteManagerPage.__init__(self, parent)
 
-    self.addkite = Button(gtk.STOCK_NEW, '_New Kite', self.add_kite)
-    self.addsvc = Button(gtk.STOCK_ADD, 'Add _Service', self.add_service)
-    self.actions.pack_start(self.addkite, expand=False, fill=False, padding=1)
-    self.actions.pack_start(self.addsvc, expand=False, fill=False, padding=1)
+    self.kite_add    = Button(gtk.STOCK_NEW,    '_New Kite',    self.add_kite)
+    self.kite_remove = Button(gtk.STOCK_DELETE, '_Delete Kite', self.remove_kite)
+    self.svc_add     = Button(gtk.STOCK_ADD,    '_Add Service', self.add_service)
+    self.svc_remove  = Button(gtk.STOCK_REMOVE, '_Remove',      self.remove_service)
+    self.svc_disable = Button(gtk.STOCK_STOP,   '_Disable',     self.disable_service)
+    self.svc_enable  = Button(gtk.STOCK_YES,    '_Enable',      self.enable_service)
+
+    self.actions.pack_start(self.kite_add,    expand=False, fill=False, padding=1)
+    self.actions.pack_start(self.svc_add,     expand=False, fill=False, padding=1)
+    self.actions.pack_start(self.svc_enable,  expand=False, fill=False, padding=1)
+    self.actions.pack_start(self.svc_disable, expand=False, fill=False, padding=1)
+    self.actions.pack_end(self.svc_remove,  expand=False, fill=False, padding=1)
+    self.actions.pack_end(self.kite_remove, expand=False, fill=False, padding=1)
 
     self.kites, self.kites_sig = {}, None
     # FIXME: name, backend, status, actions
@@ -831,25 +840,52 @@ class PageKiteKiteList(PageKiteManagerPage):
         kc.add_attribute(cell, attname, attorder)
       self.view.append_column(kc)
 
+    self.view.connect('cursor-changed', self.update_buttons)
+
     sw = gtk.ScrolledWindow()
     sw.set_policy('automatic', 'automatic')
     sw.add(self.view)
 
     self.content.pack_start(sw, expand=True, fill=True)
 
-  def delete_kite(self, kite):
-    print 'FIXME: delete %s' % kite
-
   def add_kite(self, w):
     self.parent.pkt.send('addkite: None\n')
 
-  def add_service(self, w):
+  def remove_kite(self, w):
+    print 'FIXME: delete %s' % self.get_kite()
+
+  def get_kite(self):
     model, row = self.view.get_selection().get_selected()
-    if not row:
-      # FIXME: If there is only one kite, just use it.
-      return ShowErrorDialog('Please choose a kite from the list above.')
-    parent = model.iter_parent(row) or row
-    self.parent.pkt.send('addkite: %s\n' % model.get_value(parent, 0))
+    if not row: return None
+    return model.get_value(model.iter_parent(row) or row, 0)
+
+  def get_service(self):
+    model, row = self.view.get_selection().get_selected()
+    if not row or not model.iter_parent(row): return None
+    return (model.get_value(row, 3), model.get_value(row, 2))
+
+  def update_buttons(self, w=None, hide=False):
+    svc = self.get_service()
+    if svc and not hide:
+      self.kite_remove.hide()
+      self.svc_add.hide()
+      self.svc_remove.show()
+      if svc[1].lower() == 'disabled':
+        self.svc_enable.show()
+        self.svc_disable.hide()
+      else:
+        self.svc_enable.hide()
+        self.svc_disable.show()
+    else:
+      self.svc_remove.hide()
+      self.svc_enable.hide()
+      self.svc_disable.hide()
+      if self.get_kite() and not hide:
+        self.svc_add.show()
+#       self.kite_remove.show()
+      else:
+        self.svc_add.hide()
+        self.kite_remove.hide()
 
   def update(self, kites, visible=False):
     self.store.clear()
@@ -863,11 +899,34 @@ class PageKiteKiteList(PageKiteManagerPage):
 
         # FIXME: Report if front-end HTTPS is available for WWW services
 
-        self.store.append(pid, [fdesc, bdesc, status, 'Edit, Del'])
+        self.store.append(pid, [fdesc, bdesc, status, svc['bid']])
       kcount += 1
 
     self.view.expand_all()
     self.set_active()
+
+  def add_service(self, w):
+    kite = self.get_kite()
+    if not kite:
+      return ShowErrorDialog('Please choose a kite from the list above.')
+    self.parent.pkt.send('addkite: %s\n' % kite)
+
+  def set_active(self):
+    PageKiteManagerPage.set_active(self)
+    self.update_buttons()
+
+  def set_inactive(self, reason):
+    PageKiteManagerPage.set_inactive(self, reason)
+    self.update_buttons(hide=True)
+
+  def remove_service(self, w):
+    self.parent.pkt.send('delkite: %s\n' % self.get_service()[0])
+
+  def disable_service(self, w):
+    self.parent.pkt.send('disablekite: %s\n' % self.get_service()[0])
+
+  def enable_service(self, w):
+    self.parent.pkt.send('enablekite: %s\n' % self.get_service()[0])
 
 
 class PageKiteShareList(PageKiteManagerPage):
