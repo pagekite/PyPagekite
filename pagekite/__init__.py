@@ -3941,8 +3941,8 @@ class PageKite(object):
       if self.ui_pemfile: config.append('pemfile=%s' % self.pemfile)
       for http_host in sorted(self.ui_paths.keys()):
         for path in sorted(self.ui_paths[http_host].keys()):
-          p = self.ui_paths[http_host][path]
-          config.append('webpath=%s:%s:%s:%s' % (http_host, path, p[0], p[1]))
+          up = self.ui_paths[http_host][path]
+          config.append('webpath=%s:%s:%s:%s' % (http_host, path, up[0], up[1]))
       config.append('')
 
     config.append('##[ Back-ends and local services ]##')
