@@ -5115,11 +5115,11 @@ class PageKite(object):
         elif 'choose_backends' in state:
           if ask_be and autoconfigure:
             ch = self.ui.AskBackends([
-              ('Sharing files and folders',     '%s:builtin'),
-              ('A web server (Apache, nginx)',  'http:%s:localhost:[80]'),
-              ('A secure web server (TLS/SSL)', 'https:%s:localhost:[443]'),
-              ('Remote SSH access',             'ssh:%s:localhost:[22]')
-            ], 'What is this kite for?', pre=[
+#             ('Sharing files and folders',         '%s:builtin'),
+              ('A web server (Apache, nginx, ...)', 'http:%s:localhost:[80]'),
+              ('A secure web server (TLS/SSL)',     'https:%s:localhost:[443]'),
+              ('Remote SSH access',                 'ssh:%s:localhost:22')
+            ], 'Enable which service?', pre=[
               'You control which of your files or',
               'servers PageKite brings on-line. ',
             ], default=','.join(be_specs), back=False)
