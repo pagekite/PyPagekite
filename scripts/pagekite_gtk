@@ -1308,18 +1308,24 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     elif status in ('active', 'flying'):
       self.icon_file = ICON_FILE_ACTIVE
 
+    # Ignore bogus updates which would cause the screen to flicker.
     self.set_suppress_updates(status in ('reconnecting', 'exiting'))
+
     if self.icon_file != old_if:
       self.set_from_pixbuf(gtk_open_image(os.path.join(self.icon_dir,
                                                        self.icon_file)))
     if self.open_manager:
+      # This will open the manager on first run...
       self.manage_kites(None, page=0)
       self.open_manager = False
+
     elif not self.is_embedded():
-      if self.kite_manager and not self.kite_manager.window:
-        self.quit(None, set_status_tag=False)
-      else:
+      # This will also open the manager if we fail to embed the icon and
+      # in that case, we also quit the programmer when the manager is closed.
+      if not self.kite_manager:
         self.manage_kites(None, page=0)
+      elif not self.kite_manager.window:
+        self.quit(None, set_status_tag=False)
 
   def set_motd(self, args):
     frontend, message = args.split(' ', 1)
