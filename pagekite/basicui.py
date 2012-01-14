@@ -2,6 +2,20 @@ import re, sys, time
 import pagekite
 from pagekite import NullUi
 
+HTML_BR_RE = re.compile(r'<(br|/p|/li|/tr|/h\d)>\s*')
+HTML_LI_RE = re.compile(r'<li>\s*')
+HTML_NBSP_RE = re.compile(r'&nbsp;')
+HTML_TAGS_RE = re.compile(r'<[^>\s][^>]*>')
+
+def clean_html(text):
+  return HTML_LI_RE.sub(' * ',
+          HTML_NBSP_RE.sub('_',
+           HTML_BR_RE.sub('\n', text)))
+
+def Q(text):
+  return HTML_TAGS_RE.sub('', clean_html(text))
+
+
 class BasicUi(NullUi):
   """Stdio based user interface."""
 
@@ -11,17 +25,6 @@ class BasicUi(NullUi):
                          '(?:\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'
                          '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
                          '(?:[a-zA-Z]{2,4}|museum)$')
-  HTML_BR_RE = re.compile(r'<(br|/p|/li|/tr|/h\d)>\s*')
-  HTML_LI_RE = re.compile(r'<li>\s*')
-  HTML_NBSP_RE = re.compile(r'&nbsp;')
-  HTML_TAGS_RE = re.compile(r'<[^>\s][^>]+>')
-
-  def Q(self, text):
-    return self.HTML_TAGS_RE.sub('',
-            self.HTML_LI_RE.sub(' * ',
-             self.HTML_NBSP_RE.sub('_',
-              self.HTML_BR_RE.sub('\n', text))))
-
   def Notify(self, message, prefix=' ',
              popup=False, color=None, now=None, alignright=''):
     now = int(now or time.time())
@@ -58,7 +61,7 @@ class BasicUi(NullUi):
   def NotifyMOTD(self, frontend, motd_message):
     self.Notify('Message of the day:', prefix=' ++', color=self.WHITE)
     lc = 1
-    for line in self.Q(motd_message).splitlines():
+    for line in Q(motd_message).splitlines():
       self.Notify((line.strip() or ' ' * (lc+2)))
       lc += 1
     self.Notify(' ' * (lc+2), alignright='[from %s]' % frontend)
@@ -80,15 +83,15 @@ class BasicUi(NullUi):
     if self.in_wizard:
       self.wfile.write('%s%s%s' % (self.CLEAR, self.WHITE, self.in_wizard))
     if self.welcome:
-      self.wfile.write('%s\r%s\n' % (self.NORM, self.Q(self.welcome)))
+      self.wfile.write('%s\r%s\n' % (self.NORM, Q(self.welcome)))
       self.welcome = None
     if self.in_wizard and self.wizard_tell:
       self.wfile.write('\n%s\r' % self.NORM)
-      for line in self.wizard_tell: self.wfile.write('*** %s\n' % self.Q(line))
+      for line in self.wizard_tell: self.wfile.write('*** %s\n' % Q(line))
       self.wizard_tell = None
     if pre:
       self.wfile.write('\n%s\r' % self.NORM)
-      for line in pre: self.wfile.write('    %s\n' % self.Q(line))
+      for line in pre: self.wfile.write('    %s\n' % Q(line))
     self.wfile.write('\n%s\r' % self.NORM)
 
   def StartWizard(self, title):
@@ -116,7 +119,7 @@ class BasicUi(NullUi):
                wizard_hint=False, image=None, back=None, welcome=True):
     if welcome: self.Welcome(pre)
     while self.Retry():
-      self.wfile.write(' => %s ' % (self.Q(question), ))
+      self.wfile.write(' => %s ' % (Q(question), ))
       answer = self.rfile.readline().strip()
       if default and answer == '': return default
       if self.EMAIL_RE.match(answer): return answer
@@ -128,7 +131,7 @@ class BasicUi(NullUi):
     self.Welcome(pre)
 
     def_email, def_pass = default or (email, None)
-    self.wfile.write('    %s\n' % (self.Q(question), ))
+    self.wfile.write('    %s\n' % (Q(question), ))
 
     if not email:
       email = self.AskEmail('Your e-mail:',
@@ -146,7 +149,7 @@ class BasicUi(NullUi):
           ) or ((default is False) and '[y/N]'
                 ) or ('[y/n]')
     while self.Retry():
-      self.wfile.write(' => %s %s ' % (self.Q(question), yn))
+      self.wfile.write(' => %s %s ' % (Q(question), yn))
       answer = self.rfile.readline().strip().lower()
       if default is not None and answer == '': answer = default and 'y' or 'n'
       if back is not None and answer.startswith('b'): return back
@@ -165,7 +168,7 @@ class BasicUi(NullUi):
         self.wfile.write('\n     *%s' % domain)
       self.wfile.write('\n')
     while self.Retry():
-      self.wfile.write('\n => %s ' % self.Q(question))
+      self.wfile.write('\n => %s ' % Q(question))
       answer = self.rfile.readline().strip().lower()
       if back is not None and answer == 'back':
         return back
@@ -191,7 +194,7 @@ class BasicUi(NullUi):
     self.wfile.write('\n')
     while self.Retry():
       d = default and (', default=%d' % default) or ''
-      self.wfile.write(' => %s [1-%d%s] ' % (self.Q(question), len(choices), d))
+      self.wfile.write(' => %s [1-%d%s] ' % (Q(question), len(choices), d))
       try:
         answer = self.rfile.readline().strip()
         if back is not None and answer.startswith('b'): return back

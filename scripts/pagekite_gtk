@@ -13,7 +13,8 @@ import time
 import webbrowser
 
 import pagekite
-from pagekite import sha1hex, globalSecret
+from pagekite import sha1hex, globalSecret, remoteui, httpd
+from pagekite.basicui import clean_html
 
 
 SHARE_DIR = "~/PageKite"
@@ -103,9 +104,9 @@ def DescribeKite(domain, protoport, info):
                          info['port'] and ':%s' % info['port'] or '')
   elif proto in ('ssh', 'raw'):
     if info['port'] == '22':
-      fdesc = 'HTTP Proxied SSH'
+      fdesc = 'SSH (HTTP proxied)'
     else:
-      fdesc = 'HTTP Proxied TCP Port %s' % info['port']
+      fdesc = 'TCP Port %s (HTTP proxied)' % info['port']
 
   bdesc = ('builtin' in info and 'PageKite Sharing'
                               or '%s:%s' % (info['bhost'], info['bport']))
@@ -126,7 +127,7 @@ def DescribeKite(domain, protoport, info):
       if code & pagekite.BE_STATUS_ERR_TUNNEL:
         status.append('Rejected')
 
-  return fdesc, bdesc, ', '.join(status), url
+  return (url and 'WWW, %s/' % url or fdesc), bdesc, ', '.join(status), url
 
 
 def GetScreenShot():
@@ -386,7 +387,6 @@ class PageKiteThread(threading.Thread):
       last_loop = int(time.time())
       if not self.stopped:
         self.reset()
-        from pagekite import remoteui, httpd
         pagekite.Main(pagekite.PageKite, self.Configure,
                       uiclass=remoteui.RemoteUi,
                       http_handler=httpd.UiRequestHandler,
@@ -747,6 +747,9 @@ class PageKiteManagerPage:
   def update_status(self, status):
     pass
 
+  def update_motd(self, motd):
+    pass
+
 
 class PageKiteConfigEditor(PageKiteManagerPage):
   def __init__(self, parent, status=None):
@@ -788,12 +791,16 @@ class PageKiteConfigEditor(PageKiteManagerPage):
     ln = None
     lines = self.get_text().split('\n')
     try:
-      new_pk = pagekite.PageKite()
+      new_pk = pagekite.PageKite(http_handler=httpd.UiRequestHandler,
+                                 http_server=httpd.UiHttpServer)
       for ln in range(1, len(lines)+1):
         new_pk.ConfigureFromFile(data=[lines[ln-1]])
       ln = None
       new_pk.CheckConfig()
       new_pk.SaveUserConfig()
+      if new_pk.ui_httpd: new_pk.ui_httpd.quit()
+      new_pk = None
+
       # We are definitely not clean anymore!
       if '--clean' in sys.argv: sys.argv.remove('--clean')
       self.config = ''
@@ -873,7 +880,7 @@ class PageKiteKiteList(PageKiteManagerPage):
       for w in (self.hint, self.kite_remove, self.svc_add):
         w.hide()
       self.svc_remove.show()
-      self.svc_remove.set_sensitive(self.kite_count > 1)
+      #self.svc_remove.set_sensitive(self.kite_count > 1)
       if svc[1].lower() == 'disabled':
         self.svc_enable.show()
         self.svc_disable.hide()
@@ -928,12 +935,15 @@ class PageKiteKiteList(PageKiteManagerPage):
 
   def remove_service(self, w):
     self.parent.pkt.send('delkite: %s\n' % self.get_service()[0])
+    self.parent.pkt.send('save: quietly\n')
 
   def disable_service(self, w):
     self.parent.pkt.send('disablekite: %s\n' % self.get_service()[0])
+    self.parent.pkt.send('save: quietly\n')
 
   def enable_service(self, w):
     self.parent.pkt.send('enablekite: %s\n' % self.get_service()[0])
+    self.parent.pkt.send('save: quietly\n')
 
 
 class PageKiteShareList(PageKiteManagerPage):
@@ -965,6 +975,12 @@ class PageKiteHome(PageKiteManagerPage):
 
     self.actions.pack_start(self.info, expand=True, fill=True, padding=5)
     self.content.connect('expose-event', ExposeFancyBackground)
+
+  def update_motd(self, motd):
+    if motd:
+      self.status.set_markup(clean_html(motd))
+    else:
+      self.status.set_markup('Welcome to PageKite!')
 
   def update_status(self, status):
     self.info.set_text(status)
@@ -1034,6 +1050,10 @@ class PageKiteManager:
       if self.development or not dev:
         page.update_status(status)
 
+  def update_motd(self, motd):
+    for title, page, dev in self.pages:
+      page.update_motd(motd)
+
   def set_all_inactive(self, reason):
     for title, page, dev in self.pages:
       if self.development or not dev:
@@ -1080,6 +1100,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     gtk.StatusIcon.__init__(self)
 
     self.menu = None
+    self.motd = None
     self.wizard = None
     self.kite_manager = None
     self.suppress_updates = False
@@ -1088,6 +1109,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     self.pkComm.cb.update({
       'status_tag': self.set_status_tag,
       'status_msg': self.set_status_msg,
+      'motd': self.set_motd,
       'tell_message': ShowInfoDialog,
       'tell_error': ShowErrorDialog,
       'working': self.show_working,
@@ -1255,39 +1277,41 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
   def set_status_tag(self, status):
     old_if = self.icon_file
+    km = self.kite_manager
+
     if status in ('traffic', 'serving'):
       self.icon_file = ICON_FILE_TRAFFIC
-      self.set_suppress_updates(False)
     # Connecting..
-    elif status == 'connect': self.icon_file = ICON_FILE_ACTIVE
+    elif status == 'connect':
+      self.icon_file = ICON_FILE_ACTIVE
+      if km: km.set_all_inactive('Connecting ...')
     elif status == 'dyndns': self.icon_file = ICON_FILE_IDLE
     elif status == 'startup':
       self.icon_file = ICON_FILE_IDLE
-      self.set_suppress_updates(False)
-      if self.kite_manager:
-        self.kite_manager.set_all_inactive('Starting up ...')
-    elif status == 'reconnecting':
+      if km: km.set_all_inactive('Starting up ...')
+    elif status == 'reconfig':
       self.icon_file = ICON_FILE_ACTIVE
-      self.set_suppress_updates(True)
-      if self.kite_manager:
-        self.kite_manager.set_all_inactive('Reconnecting ...')
+      if km: km.set_all_inactive('Updating configuration ...')
     # Inactive, boo
     elif status in ('idle', 'down'):
       self.icon_file = ICON_FILE_IDLE
-      self.set_suppress_updates(False)
     elif status == 'exiting':
       self.icon_file = ICON_FILE_IDLE
-      self.set_suppress_updates(True)
-      if self.kite_manager:
-        self.kite_manager.set_all_inactive('Disconnecting ...')
+      if km: km.set_all_inactive('Disconnecting ...')
     # Ready and waiting
     elif status in ('active', 'flying'):
-      self.set_suppress_updates(False)
       self.icon_file = ICON_FILE_ACTIVE
 
+    self.set_suppress_updates(status in ('reconnecting', 'exiting'))
     if self.icon_file != old_if:
       self.set_from_pixbuf(gtk_open_image(os.path.join(self.icon_dir,
                                                        self.icon_file)))
+
+  def set_motd(self, args):
+    frontend, message = args.split(' ', 1)
+    self.motd = message.strip()
+    if self.kite_manager:
+      self.kite_manager.update_motd(self.motd)
 
   def on_activate(self, ignored):
     if self.wizard:
@@ -1357,7 +1381,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
   def set_suppress_updates(self, yesno):
     if self.suppress_updates != yesno:
-      self.kites_sig = ''
+      self.kites_sig = '-reload-'
     self.suppress_updates = yesno
 
   def update_be_list(self, args):
@@ -1491,29 +1515,110 @@ class PageKiteStatusIcon(gtk.StatusIcon):
   def ask_backends(self, args):
     question, wizard = self.wizard_prepare(args)
     wizard.show_input_area(False)
-
     choices = gtk.VBox(False, spacing=5)
-    clist = []
-    rb = None
-    for ch in sorted([k for k in args if k.startswith('be_')]):
-      spec, text = args[ch].split(' ', 1)
-      rb = gtk.RadioButton(rb, text)
-      if not clist: rb.set_active(True)
-      clist.append((rb, spec))
-      choices.pack_start(rb, expand=False, fill=False, padding=1)
+
+    protos = args.get('protos', '').split(', ')
+    ports = args.get('ports', '').split(', ')
+    rawports = args.get('rawports', '').split(', ')
+
+    ktypes = []
+    if 'http' in args['protos']:
+      if self.development:
+        ktypes.append(('builtin', 'PageKite Sharing',  None, ports))
+      ktypes.append(('http',           'HTTP server',  '80', ports))
+    if 'https' in args['protos']:
+      ktypes.append(('https',         'HTTPS server', '443', ports))
+    if 'raw' in args['protos']:
+      ktypes.append(('ssh',             'SSH server',  '22', rawports))
+      ktypes.append(('raw',         'Raw TCP server','1234', rawports))
+
+    fly, flyb = gtk.HBox(), gtk.HBox()
+    fly_cb = gtk.combo_box_new_text()
+    for t, o, bp, fpl in ktypes:
+      fly_cb.append_text(o)
+
+    fly_on = gtk.Label()
+    fly_on.set_markup(' on <b>localhost:</b>')
+    fly_port = gtk.Entry()
+    fly_port.set_width_chars(5)
+
+    fly_asbb, fly_asb = gtk.HBox(), gtk.HBox()
+    fly_ast = gtk.Label()
+    fly_as = gtk.combo_box_new_text()
+
+    hint = gtk.Label()
+    hint.set_markup('<b>Note:</b> New services may replace old ones.')
+    hint.set_alignment(0, 1)
+
+    flyb.pack_start(fly_cb, expand=False, fill=False, padding=0)
+    flyb.pack_start(fly_on, expand=False, fill=False, padding=0)
+    flyb.pack_start(fly_port, expand=False, fill=False, padding=0)
+    fly.pack_start(flyb, expand=True, fill=False, padding=0)
+    fly_asbb.pack_start(fly_ast, expand=False, fill=False, padding=0)
+    fly_asbb.pack_start(fly_as, expand=False, fill=False, padding=0)
+    fly_asb.pack_start(fly_asbb, expand=True, fill=False, padding=0)
+    choices.pack_start(fly, expand=False, fill=False, padding=5)
+    choices.pack_start(fly_asb, expand=True, fill=False, padding=5)
+    choices.pack_end(hint, expand=True, fill=True, padding=5)
+
+    # FIXME: update() should set the backend string for our reponse
+    def update(w, choice):
+      chosen = fly_cb.get_active_text()
+      kitename = args['kitename']
+      for t, o, bp, fpl in ktypes:
+        if o == chosen:
+          if w != fly_port:
+            fly_port.set_sensitive(bp is not None)
+            fly_port.set_text(bp or '--')
+          proto = (t == 'builtin') and 'http' or t
+          lport = fly_port.get_text()
+          if proto in ('raw', 'ssh'):
+            fly_as.hide()
+            if 'virtual' in rawports or lport in rawports:
+              fly_ast.set_markup(('Fly as <b>%s:%s</b> (HTTP proxied)'
+                                  ) % (kitename, lport))
+            choice[0] = 'raw-%s:%%s:localhost:%s' % (lport, lport)
+          elif w == fly_cb:
+            fly_ast.set_text('Fly as: ')
+            fly_as.get_model().clear()
+            fly_as.show()
+            if proto.startswith('http'):
+              fly_as.append_text('%s://%s' % (proto, kitename))
+              if t == 'builtin':
+                choice[0] = '%s:builtin'
+              else:
+                choice[0] = '%s:%%s:localhost:%s' % (proto, lport)
+              for port in fpl:
+                fly_as.append_text('%s://%s:%s' % (proto, kitename, port))
+            fly_as.set_active(0)
+          elif w == fly_as:
+            fly_as_text = (fly_as.get_active_text() or '').split(':')
+            if len(fly_as_text) > 2:
+              port = fly_as_text[2]
+              if t == 'builtin':
+                choice[0] = 'http-%s:%%s:builtin' % port
+              else:
+                choice[0] = '%s-%s:%%s:localhost:%s' % (proto, port, lport)
+            else:
+              if t == 'builtin':
+                choice[0] = '%s:builtin'
+              else:
+                choice[0] = '%s:%%s:localhost:%s' % (proto, lport)
+
+    choice = [None]
     choices.show_all()
+    update(None, choice)
+    fly_cb.connect('changed', lambda w: update(w, choice))
+    fly_as.connect('changed', lambda w: update(w, choice))
+    fly_port.connect('changed', lambda w: update(w, choice))
+    fly_cb.set_active(0)
+
     self.wizard.left.pack_start(choices)
 
-    def respond(window, chlist=None):
-      if not chlist:
-        chlist = []
-        for cw, spec in clist:
-          if cw.get_active():
-            chlist.append(spec.replace('[', '').replace(']', ''))
-      choice = ','.join(chlist) or args.get('default', None)
+    def respond(window, ch=None):
       self.wizard_first = False
       self.wizard.left.remove(choices)
-      self.pkComm.pkThread.send('%s\n' % choice)
+      self.pkComm.pkThread.send('%s\n' % (ch or choice)[0])
       if not self.wizard: wizard.close()
     wizard.set_buttons([
       ((self.wizard and not self.wizard_first) and '<<' or 'Cancel',
@@ -1561,10 +1666,10 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       ShowInfoDialog('Enabling %s ...' % bid)
     return False
 
-  def copy_url(self, url):
+  def copy_url(self, junk, url):
     gtk.clipboard_get('CLIPBOARD').set_text(url, len=-1)
 
-  def open_url(self, url):
+  def open_url(self, junk, url):
     webbrowser.open(url)
 
   def share_clipboard_cb(self, clipboard, text, data):
@@ -1624,12 +1729,13 @@ class PageKiteStatusIcon(gtk.StatusIcon):
         sb.add_paths(paths).save()
         self.save_configuration(sb.pk_config())
         url = 'http://%s:%s%s' % (kitename, kiteport, sb.dirname)
-        self.copy_url(url)
-        self.open_url(url)
+        self.copy_url(None, url)
+        self.open_url(None, url)
     except:
       ShowErrorDialog('Sharing failed: %s' % (sys.exc_info(), ))
 
   def share_screenshot(self, data, title='Screenshot'):
+    self.menu.hide()
     try:
       screenshot = GetScreenShot()
       kitename, kiteport, sb, sd = self.get_sharebucket('Screenshot',
@@ -1639,8 +1745,8 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       sb.add_screenshot(screenshot).save()
       self.save_configuration(sb.pk_config())
       url = 'http://%s:%s%s' % (kitename, kiteport, sb.dirname)
-      self.copy_url(url)
-      self.open_url(url)
+      self.copy_url(None, url)
+      self.open_url(None, url)
     except:
       ShowErrorDialog('Screenshot failed: %s' % (sys.exc_info(), ))
 
@@ -1654,6 +1760,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       self.kite_manager = PageKiteManager(self, self.pkComm.pkThread,
                                           development=self.development)
     self.kite_manager.update(self.kites)
+    self.kite_manager.update_motd(self.motd)
     self.kite_manager.show_page(page)
     return False
 
@@ -1699,7 +1806,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
 
   def on_help(self, data):
     ShowInfoDialog('Opening %s in your web browser ...' % URL_HELP)
-    self.open_url(URL_HELP)
+    self.open_url(None, URL_HELP)
 
   def on_about(self, data):
     self.show_about()

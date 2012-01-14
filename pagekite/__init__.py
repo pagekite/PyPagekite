@@ -3252,12 +3252,16 @@ class HttpUiThread(threading.Thread):
       knock = rawsocket(socket.AF_INET, socket.SOCK_STREAM)
       knock.connect(self.ui_sspec)
       knock.close()
-    except:
+    except IOError:
       pass
     try:
       self.join()
     except RuntimeError:
-      pass
+      try:
+        if self.httpd and self.httpd.socket:
+          self.httpd.socket.close()
+      except IOError:
+        pass
 
   def run(self):
     while self.serve:
@@ -3303,7 +3307,7 @@ class UiCommunicator(threading.Thread):
 
   def Reconnect(self):
     if self.config.tunnel_manager:
-      self.config.ui.Status('reconnecting')
+      self.config.ui.Status('reconfig')
       self.config.tunnel_manager.CloseTunnels()
       self.config.tunnel_manager.HurryUp()
 
@@ -3510,6 +3514,9 @@ class TunnelManager(threading.Thread):
       if tunnel_count == 0:
         if self.pkite.isfrontend:
           self.pkite.ui.Status('idle', message='Waiting for back-ends.')
+        elif tunnel_total == 0:
+          self.pkite.ui.Status('down', color=self.pkite.ui.GREY,
+                       message='No kites ready to fly.  Boring...')
         else:
           self.pkite.ui.Status('down', color=self.pkite.ui.RED,
                        message='Not connected to any front-ends, will retry...')
@@ -3571,6 +3578,7 @@ class NullUi(object):
     self.status_msg = ''
     self.welcome = welcome
     self.tries = 200
+    self.server_info = None
     self.Splash()
 
   def Splash(self): pass
@@ -3609,8 +3617,8 @@ class NullUi(object):
                         wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
-  def AskBackends(self, choices, question, pre=[], default=None,
-                  wizard_hint=False, image=None, back=None):
+  def AskBackends(self, kitename, protos, ports, rawports, question, pre=[],
+                  default=None, wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
   def Working(self, message): pass
@@ -3637,6 +3645,7 @@ class NullUi(object):
                 prefix='!', color=(crit and self.RED or self.YELLOW))
 
   def NotifyServer(self, obj, server_info):
+    self.server_info = server_info
     self.Notify('Connecting to front-end %s ...' % server_info[obj.S_NAME],
                 color=self.GREY)
     self.Notify(' - Protocols: %s' % ' '.join(server_info[obj.S_PROTOS]),
@@ -3758,6 +3767,7 @@ class PageKite(object):
     self.setuid = None
     self.setgid = None
     self.ui_httpd = None
+    self.ui_sspec_cfg = None
     self.ui_sspec = None
     self.ui_socket = None
     self.ui_password = None
@@ -3901,7 +3911,7 @@ class PageKite(object):
       config.extend([
         '##[ Front-end settings: use service defaults ]##',
         'defaults',
-        '',
+        ''
       ])
       if self.servers_manual:
         config.append('##[ Manual front-ends ]##')
@@ -3914,7 +3924,7 @@ class PageKite(object):
         config.extend([
           '##[ Use this to just use service defaults ]##',
           '# defaults',
-          '',
+          ''
         ])
       config.append('##[ Custom front-end and dynamic DNS settings ]##')
       if self.servers_auto:
@@ -3960,7 +3970,7 @@ class PageKite(object):
     if self.ui_sspec or self.ui_password or self.ui_pemfile:
       config.extend([
         '##[ Built-in HTTPD settings ]##',
-        p('httpd=%s:%s', self.ui_sspec, ('host', 'port'))
+        p('httpd=%s:%s', self.ui_sspec_cfg, ('host', 'port'))
       ])
       if self.ui_password: config.append('httppass=%s' % self.ui_password)
       if self.ui_pemfile: config.append('pemfile=%s' % self.pemfile)
@@ -3976,11 +3986,12 @@ class PageKite(object):
       be = self.backends[bid]
       proto, domain = bid.split(':')
       if be[BE_BHOST]:
-        config.append(('%s=%s:%s:%s:%s:%s'
+        be_spec = (be[BE_BHOST], be[BE_BPORT])
+        config.append(('%s=%s:%s:%s:%s'
                        ) % ((be[BE_STATUS] == BE_STATUS_DISABLED
                              ) and 'define_backend' or 'backend',
                    proto, ((domain == self.kitename) and '@kitename' or domain),
-              be[BE_BHOST], be[BE_BPORT],
+         (be_spec == self.ui_sspec) and 'localhost:builtin' or ('%s:%s' % be_spec),
          (be[BE_SECRET] == self.kitesecret) and '@kitesecret' or be[BE_SECRET]))
         bprinted += 1
     if bprinted == 0:
@@ -4349,8 +4360,8 @@ class PageKite(object):
     elif len(parts) == 3:
       protos, fe_domain, be_port = parts
     elif len(parts) == 2:
-      if parts[1].startswith('built') or ('.' in parts[0] and
-                                          os.path.exists(parts[1])):
+      if (parts[1] == 'builtin') or ('.' in parts[0] and
+                                            os.path.exists(parts[1])):
         fe_domain, be_port = parts[0], parts[1]
         protos = 'http'
       else:
@@ -4369,8 +4380,8 @@ class PageKite(object):
     fe_domain = fe_domain.replace('/', '').lower()
 
     # Allow easy referencing of built-in HTTPD
-    if be_port.startswith('built'):
-      if not self.ui_httpd: self.BindUiSspec()
+    if be_port == 'builtin':
+      self.BindUiSspec()
       be_host, be_port = self.ui_sspec
 
     # Specs define what we are searching for...
@@ -4431,10 +4442,12 @@ class PageKite(object):
 
     return backends
 
-  def BindUiSspec(self):
+  def BindUiSspec(self, force=False):
     # Create the UI thread
-    if self.ui_httpd:
+    if self.ui_httpd and self.ui_httpd.httpd:
+      if not force: return self.ui_sspec
       self.ui_httpd.httpd.socket.close()
+
     self.ui_sspec = self.ui_sspec or ('localhost', 0)
     self.ui_httpd = HttpUiThread(self, self.conns,
                                  handler=self.ui_request_handler,
@@ -4512,9 +4525,9 @@ class PageKite(object):
         parts = arg.split(':')
         host = parts[0] or 'localhost'
         if len(parts) > 1:
-          self.ui_sspec = (host, int(parts[1]))
+          self.ui_sspec = self.ui_sspec_cfg = (host, int(parts[1]))
         else:
-          self.ui_sspec = (host, 0)
+          self.ui_sspec = self.ui_sspec_cfg = (host, 0)
 
       elif opt == '--nowebpath':
         host, path = arg.split(':', 1)
@@ -4980,6 +4993,8 @@ class PageKite(object):
 
     service = self.GetServiceXmlRpc()
     service_accounts = {}
+    if self.kitename and self.kitesecret:
+      service_accounts[self.kitename] = self.kitesecret
 
     for be in self.backends.values():
       if SERVICE_DOMAIN_RE.search(be[BE_DOMAIN]):
@@ -5150,22 +5165,18 @@ class PageKite(object):
 
         elif 'choose_backends' in state:
           if ask_be and autoconfigure:
-            ch = self.ui.AskBackends([
-#             ('Sharing files and folders',         '%s:builtin'),
-              ('A web server (Apache, nginx, ...)', 'http:%s:localhost:[80]'),
-              ('A secure web server (TLS/SSL)',     'https:%s:localhost:[443]'),
-              ('Remote SSH access',                 'ssh:%s:localhost:22')
-            ], 'Enable which service?', pre=[
-              'You control which of your files or',
-              'servers PageKite brings on-line. ',
-            ], default=','.join(be_specs), back=False)
+            skip = False
+            ch = self.ui.AskBackends(kitename, ['http'], ['80'], [],
+                                     'Enable which service?', back=False, pre=[
+                                  'You control which of your files or servers',
+                                  'PageKite exposes to the Internet. ',
+                                     ], default=','.join(be_specs))
             if ch:
               be_specs = ch.split(',')
           else:
-            ch = True
+            skip = ch = True
 
           if ch:
-            skip = not (autoconfigure and ask_be)
             if registered:
               Goto('create_kite', back_skips_current=skip)
             elif is_subdomain_of:
@@ -5196,6 +5207,7 @@ class PageKite(object):
               ], yes='Finish', no=False)
               self.ui.EndWizard()
               if autoconfigure:
+                print 'Backends: %s (register=%s)' % (be_specs, register)
                 for be_spec in be_specs:
                   self.backends.update(self.ArgToBackendSpecs(
                                                     be_spec % register,
@@ -5301,12 +5313,12 @@ class PageKite(object):
             Back()
           else:
             self.ui.EndWizard()
-            if self.ui.DAEMON_FRIENDLY: return None
+            if self.ui.ALLOWS_INPUT: return None
             sys.exit(0)
 
         elif 'abort' in state:
           self.ui.EndWizard()
-          if self.ui.DAEMON_FRIENDLY: return None
+          if self.ui.ALLOWS_INPUT: return None
           sys.exit(0)
 
         else:
@@ -5325,7 +5337,7 @@ class PageKite(object):
   def CheckConfig(self):
     if self.ui_sspec: self.BindUiSspec()
     if not self.servers_manual and not self.servers_auto and not self.isfrontend:
-      if not self.servers and not self.ui.DAEMON_FRIENDLY:
+      if not self.servers and not self.ui.ALLOWS_INPUT:
         raise ConfigError('Nothing to do!  List some servers, or run me as one.')
     return self
 
@@ -5368,6 +5380,16 @@ class PageKite(object):
   def GetHostDetails(self, host):
     return socket.gethostbyname_ex(host)
 
+  def GetActiveBackends(self):
+    active = []
+    for bid in self.backends:
+      (proto, bdom) = bid.split(':')
+      if (self.backends[bid][BE_STATUS] not in BE_INACTIVE and
+          self.backends[bid][BE_SECRET] and
+          not bdom.startswith('*')):
+        active.append(bid)
+    return active
+
   def ChooseFrontEnds(self):
     self.servers = []
     self.servers_preferred = []
@@ -5399,19 +5421,16 @@ class PageKite(object):
 
       # First, check for old addresses and always connect to those.
       if not self.servers_new_only:
-        for bid in self.backends:
+        for bid in self.GetActiveBackends():
           (proto, bdom) = bid.split(':')
-          if (self.backends[bid][BE_STATUS] not in BE_INACTIVE and
-              self.backends[bid][BE_SECRET] and
-              not bdom.startswith('*')):
-            try:
-              (hn, al, ips) = self.GetHostDetails(bdom)
-              for ip in ips:
-                if not ip.startswith('127.'):
-                  server = '%s:%s' % (ip, port)
-                  if server not in self.servers: self.servers.append(server)
-            except Exception, e:
-              LogDebug('DNS lookup failed for %s' % bdom)
+          try:
+            (hn, al, ips) = self.GetHostDetails(bdom)
+            for ip in ips:
+              if not ip.startswith('127.'):
+                server = '%s:%s' % (ip, port)
+                if server not in self.servers: self.servers.append(server)
+          except Exception, e:
+            LogDebug('DNS lookup failed for %s' % bdom)
 
       try:
         (hn, al, ips) = socket.gethostbyname_ex(domain)
@@ -5436,9 +5455,12 @@ class PageKite(object):
     failures = 0
     connections = 0
 
-    if self.backends:
+    if len(self.GetActiveBackends()) > 0:
       if not self.servers or len(self.servers) > len(live_servers):
         self.ChooseFrontEnds()
+    else:
+      self.servers_preferred = []
+      self.servers = []
 
     for server in self.servers:
       if server not in live_servers:

@@ -53,6 +53,10 @@ class RemoteUi(NullUi):
     message = '%s' % message
     self.wfile.write('notify: %s\n' % message)
 
+  def NotifyMOTD(self, frontend, message):
+    self.wfile.write('motd: %s %s\n' % (frontend,
+                                        message.replace('\n', '  ')))
+
   def Status(self, tag, message=None, color=None):
     self.status_tag = tag
     self.status_msg = '%s' % (message or self.status_msg)
@@ -159,16 +163,21 @@ class RemoteUi(NullUi):
           if answer.endswith(d) or answer.endswith(d): return answer
         return answer+domains[0]
 
-  def AskBackends(self, choices, question, pre=[], default=None,
-                  wizard_hint=False, image=None, back=None):
+  def AskBackends(self, kitename, protos, ports, rawports, question, pre=[],
+                  default=None, wizard_hint=False, image=None, back=None):
     while self.Retry():
       self.wfile.write('begin_ask_backends\n')
       if pre:
         self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       count = 0
-      for choice in choices:
-        count += 1
-        self.wfile.write(' be_%s: %s %s\n' % (count, choice[1], choice[0]))
+      if self.server_info:
+        protos = self.server_info[pagekite.Tunnel.S_PROTOS]
+        ports = self.server_info[pagekite.Tunnel.S_PORTS]
+        rawports = self.server_info[pagekite.Tunnel.S_RAW_PORTS]
+      self.wfile.write(' kitename: %s\n' % kitename)
+      self.wfile.write(' protos: %s\n' % ', '.join(protos))
+      self.wfile.write(' ports: %s\n' % ', '.join(ports))
+      self.wfile.write(' rawports: %s\n' % ', '.join(rawports))
       if default:
         self.wfile.write(' default: %s\n' % default)
       self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
