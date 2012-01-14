@@ -179,6 +179,7 @@ Front-end Options:
 
  --isfrontend   -f      Enable front-end mode.
  --authdomain=X -A X    Use X as a remote authentication domain.
+ --motd=/path/to/motd   Send the contents of this file to new back-ends.
  --host=H       -h H    Listen on H (hostname).
  --ports=A,B,C  -p A,B  Listen on ports A, B, C, ...
  --portalias=A:B        Report port A as port B to backends.
@@ -294,8 +295,8 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings',
             'defaults', 'local=', 'domain=',
-            'authdomain=', 'authhelpurl=', 'register=', 'host=',
-            'noupgradeinfo', 'upgradeinfo=', 'motd=',
+            'authdomain=', 'motd=', 'register=', 'host=',
+            'noupgradeinfo', 'upgradeinfo=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
             'tls_default=', 'tls_endpoint=',
             'fe_certname=', 'jakenoia', 'ca_certs=',
@@ -901,8 +902,9 @@ class AuthThread(threading.Thread):
 
         results.append(('%s-SessionID' % prefix,
                         '%x:%s' % (now, sha1hex(session))))
-        if self.conns.config.motd:
-          results.append(('%s-MOTD' % prefix, self.conns.config.motd))
+        results.append(('%s-Misc' % prefix, urllib.urlencode({
+                          'motd': (self.conns.config.motd_message or ''),
+                        })))
         for upgrade in self.conns.config.upgrade_info:
           results.append(('%s-Upgrade' % prefix, ';'.join(upgrade)))
 
@@ -2182,6 +2184,15 @@ class Tunnel(ChunkParser):
         if data and parse:
           sname = self.server_info[self.S_NAME]
           conns.config.ui.NotifyServer(self, self.server_info)
+
+          for misc in parse.Header('X-PageKite-Misc'):
+            args = parse_qs(misc)
+            logdata = [('FE', sname)]
+            for arg in args:
+              logdata.append((arg, args[arg][0]))
+            Log(logdata)
+            if 'motd' in args and args['motd'][0]:
+              conns.config.ui.NotifyMOTD(sname, args['motd'][0])
 
           for quota in parse.Header('X-PageKite-Quota'):
             self.quota = [int(quota), None, None]
@@ -3490,6 +3501,9 @@ class TunnelManager(threading.Thread):
         self.pkite.ui.NotifyBE(bid, be, has_ssl, dpaths, is_builtin=builtin)
       self.pkite.ui.EndListingBackEnds()
 
+      if self.pkite.isfrontend:
+        self.pkite.LoadMOTD()
+
       tunnel_count = len(self.pkite.conns and
                          self.pkite.conns.TunnelServers() or [])
       tunnel_total = len(self.pkite.servers)
@@ -3615,6 +3629,9 @@ class NullUi(object):
                                         alignright and ' ' or '',
                                         alignright))])
 
+  def NotifyMOTD(self, message):
+    pass
+
   def NotifyKiteRejected(self, proto, domain, reason, crit=False):
     self.Notify('REJECTED: %s:%s (%s)' % (proto, domain, reason),
                 prefix='!', color=(crit and self.RED or self.YELLOW))
@@ -3715,10 +3732,10 @@ class PageKite(object):
 
   def ResetConfiguration(self):
     self.isfrontend = False
-    self.motd = None
     self.upgrade_info = []
     self.auth_domain = None
-    self.auth_help_url = None
+    self.motd = None
+    self.motd_message = None
     self.server_host = ''
     self.server_ports = [80]
     self.server_raw_ports = []
@@ -4005,7 +4022,8 @@ class PageKite(object):
       config.extend([
         '%srawports=%s' % (comment or (not self.server_raw_ports) and '# ' or '',
                            ','.join(['%s' % x for x in sorted(self.server_raw_ports)] or [VIRTUAL_PN])),
-        p('authdomain=%s', self.isfrontend and self.auth_domain, 'foo.com')
+        p('authdomain=%s', self.isfrontend and self.auth_domain, 'foo.com'),
+        p('motd=%s', self.isfrontend and self.motd, '/path/to/motd.txt')
       ])
       dprinted = 0
       for bid in sorted(self.backends.keys()):
@@ -4424,6 +4442,15 @@ class PageKite(object):
                                  ssl_pem_filename = self.ui_pemfile)
     return self.ui_sspec
 
+  def LoadMOTD(self):
+    if self.motd:
+      try:
+        f = open(self.motd, 'r')
+        self.motd_message = ''.join(f.readlines()).strip()[:8192]
+        f.close()
+      except (OSError, IOError):
+        pass
+
   def Configure(self, argv):
     self.conns = self.conns or Connections(self)
     opts, args = getopt.getopt(argv, OPT_FLAGS, OPT_ARGS)
@@ -4547,8 +4574,9 @@ class PageKite(object):
         self.server_raw_ports = [(x == VIRTUAL_PN and x or int(x)) for x in arg.split(',')]
       elif opt in ('-h', '--host'): self.server_host = arg
       elif opt in ('-A', '--authdomain'): self.auth_domain = arg
-      elif opt == '--authhelpurl': self.auth_help_url = arg
-      elif opt == '--motd': self.motd = arg
+      elif opt == '--motd':
+        self.motd = arg
+        self.LoadMOTD()
       elif opt == '--noupgradeinfo': self.upgrade_info = []
       elif opt == '--upgradeinfo':
         version, tag, md5, human_url, file_url = arg.split(';')

@@ -11,11 +11,16 @@ class BasicUi(NullUi):
                          '(?:\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'
                          '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
                          '(?:[a-zA-Z]{2,4}|museum)$')
-  HTML_BR_RE = re.compile(r'<br|/p>')
-  HTML_TAGS_RE = re.compile(r'<[^>]+>')
+  HTML_BR_RE = re.compile(r'<(br|/p|/li|/tr|/h\d)>\s*')
+  HTML_LI_RE = re.compile(r'<li>\s*')
+  HTML_NBSP_RE = re.compile(r'&nbsp;')
+  HTML_TAGS_RE = re.compile(r'<[^>\s][^>]+>')
 
   def Q(self, text):
-    return self.HTML_TAGS_RE.sub('', self.HTML_BR_RE.sub('\n', text))
+    return self.HTML_TAGS_RE.sub('',
+            self.HTML_LI_RE.sub(' * ',
+             self.HTML_NBSP_RE.sub('_',
+              self.HTML_BR_RE.sub('\n', text))))
 
   def Notify(self, message, prefix=' ',
              popup=False, color=None, now=None, alignright=''):
@@ -49,6 +54,14 @@ class BasicUi(NullUi):
                                    alignright)
       self.wfile.write(msg)
       self.Status(self.status_tag, self.status_msg)
+
+  def NotifyMOTD(self, frontend, motd_message):
+    self.Notify('Message of the day:', prefix=' ++', color=self.WHITE)
+    lc = 1
+    for line in self.Q(motd_message).splitlines():
+      self.Notify((line.strip() or ' ' * (lc+2)))
+      lc += 1
+    self.Notify(' ' * (lc+2), alignright='[from %s]' % frontend)
 
   def Status(self, tag, message=None, color=None):
     self.status_tag = tag
