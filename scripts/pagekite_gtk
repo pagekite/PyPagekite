@@ -1028,6 +1028,10 @@ class PageKiteManager:
     vbox = gtk.VBox()
     vbox.pack_start(self.notebook, expand=True, fill=True)
 
+    if not self.pkm.is_embedded():
+      for title, page, dev in self.pages:
+        page.actions.remove(page.cancel)
+
     self.window.add(vbox)
     self.window.show_all()
 
@@ -1096,15 +1100,17 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       </ui>
   '''
 
-  def __init__(self, pkComm, development=False):
+  def __init__(self, pkComm, development=False, open_manager=False):
     gtk.StatusIcon.__init__(self)
+
+    self.development = development
+    self.open_manager = open_manager
 
     self.menu = None
     self.motd = None
     self.wizard = None
     self.kite_manager = None
     self.suppress_updates = False
-    self.development = development
     self.pkComm = pkComm
     self.pkComm.cb.update({
       'status_tag': self.set_status_tag,
@@ -1306,6 +1312,14 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     if self.icon_file != old_if:
       self.set_from_pixbuf(gtk_open_image(os.path.join(self.icon_dir,
                                                        self.icon_file)))
+    if self.open_manager:
+      self.manage_kites(None, page=0)
+      self.open_manager = False
+    elif not self.is_embedded():
+      if self.kite_manager and not self.kite_manager.window:
+        self.quit(None, set_status_tag=False)
+      else:
+        self.manage_kites(None, page=0)
 
   def set_motd(self, args):
     frontend, message = args.split(' ', 1)
@@ -1811,8 +1825,9 @@ class PageKiteStatusIcon(gtk.StatusIcon):
   def on_about(self, data):
     self.show_about()
 
-  def quit(self, data):
-    self.set_status_tag('exiting')
+  def quit(self, data, set_status_tag=True):
+    if set_status_tag:
+      self.set_status_tag('exiting')
     self.set_status_msg('Shutting down...')
     gobject.timeout_add_seconds(1, self.quitting)
     self.pkComm.quit()
@@ -1847,10 +1862,9 @@ if __name__ == '__main__':
       open_manager = True
 
     ct = CommThread(pkt)
-    pksi = PageKiteStatusIcon(ct, development=development)
+    pksi = PageKiteStatusIcon(ct, development=development,
+                                  open_manager=open_manager)
     gobject.threads_init()
-    if open_manager:
-      pksi.manage_kites(None, page=0)
     gtk.main()
   except:
     traceback.print_exc()

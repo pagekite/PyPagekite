@@ -4989,7 +4989,8 @@ class PageKite(object):
       is_subdomain_of = is_service_domain = False
       is_cname_for = is_cname_ready = False
 
-    be_specs = ['%s:builtin']
+    # This is the default...
+    be_specs = ['http:%s:localhost:80']
 
     service = self.GetServiceXmlRpc()
     service_accounts = {}
