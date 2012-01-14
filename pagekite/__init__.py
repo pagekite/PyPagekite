@@ -752,8 +752,11 @@ LOG_LENGTH = 300
 LOG_THRESHOLD = 256 * 1024
 
 def LogValues(values, testtime=None):
-  global LOG_LINE
-  words = [('ts', '%x' % (testtime or time.time())), ('ll', '%x' % LOG_LINE)]
+  global LOG_LINE, LOG_LAST_TIME
+  now = int(testtime or time.time())
+  words = [('ts', '%x' % now),
+           ('t',  '%s' % datetime.datetime.fromtimestamp(now).isoformat()),
+           ('ll', '%x' % LOG_LINE)]
   words.extend([(kv[0], ('%s' % kv[1]).replace('\t', ' ')
                                       .replace('\r', ' ')
                                       .replace('\n', ' ')
