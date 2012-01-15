@@ -3637,7 +3637,7 @@ class NullUi(object):
                                         alignright and ' ' or '',
                                         alignright))])
 
-  def NotifyMOTD(self, message):
+  def NotifyMOTD(self, frontend, message):
     pass
 
   def NotifyKiteRejected(self, proto, domain, reason, crit=False):
