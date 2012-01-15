@@ -1587,17 +1587,20 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       kitename = args['kitename']
       for t, o, bp, fpl in ktypes:
         if o == chosen:
-          if w != fly_port:
+          if w == fly_cb:
             fly_port.set_sensitive(bp is not None)
             fly_port.set_text(bp or '--')
-          proto = (t == 'builtin') and 'http' or t
+
           lport = fly_port.get_text()
+          proto = (t == 'builtin') and 'http' or t
+
           if proto in ('raw', 'ssh'):
             fly_as.hide()
             if 'virtual' in rawports or lport in rawports:
               fly_ast.set_markup(('Fly as <b>%s:%s</b> (HTTP proxied)'
                                   ) % (kitename, lport))
             choice[0] = 'raw-%s:%%s:localhost:%s' % (lport, lport)
+
           elif w == fly_cb:
             fly_ast.set_text('Fly as: ')
             fly_as.get_model().clear()
@@ -1611,7 +1614,8 @@ class PageKiteStatusIcon(gtk.StatusIcon):
               for port in fpl:
                 fly_as.append_text('%s://%s:%s' % (proto, kitename, port))
             fly_as.set_active(0)
-          elif w == fly_as:
+
+          else:
             fly_as_text = (fly_as.get_active_text() or '').split(':')
             if len(fly_as_text) > 2:
               port = fly_as_text[2]
