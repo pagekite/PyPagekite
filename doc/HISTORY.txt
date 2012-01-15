@@ -1,7 +1,7 @@
 Version history - highlights
 ============================
 
-v0.4.6   ??
+v0.4.6   2012.01.15
 ------
    - Improved new kite wizard a bit
    - Added human readable date/time to log output
