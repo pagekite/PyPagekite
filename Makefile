@@ -47,12 +47,12 @@ android: pagekite tools
 
 dist: combined gtk allrpm android
 
-allrpm: rpm_el4 rpm_el5 rpm_el6-fc13 rpm_fc14-15
+allrpm: rpm_el4 rpm_el5 rpm_el6-fc13 rpm_fc14-15-16
 
 alldeb: .deb
 
-rpm_fc14-15:
-	@./rpm/rpm-setup.sh 0pagekite_fc14fc15 /usr/lib/python2.7/site-packages
+rpm_fc14-15-16:
+	@./rpm/rpm-setup.sh 0pagekite_fc14fc15fc16 /usr/lib/python2.7/site-packages
 	@make .rpm
 
 rpm_el4:
