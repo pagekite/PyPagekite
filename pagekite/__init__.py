@@ -94,7 +94,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.4.6a'
+APPVER = '0.4.6a+github'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -864,6 +864,7 @@ class AuthThread(threading.Thread):
 
         quotas = []
         results = []
+        log_info = []
         session = '%x:%s:' % (now, globalSecret())
         for request in requests:
           try:
@@ -891,14 +892,14 @@ class AuthThread(threading.Thread):
               results.append(('%s-Invalid' % prefix, what))
               results.append(('%s-Invalid-Why' % prefix,
                               '%s;%s' % (what, reason)))
-              Log([('rejected', domain),
-                   ('quota', quota),
-                   ('reason', reason)])
+              log_info.extend([('rejected', domain),
+                               ('quota', quota),
+                               ('reason', reason)])
             elif self.conns.Tunnel(proto, domain):
               # FIXME: Allow multiple backends?
               results.append(('%s-Duplicate' % prefix, what))
-              Log([('rejected', domain),
-                   ('duplicate', 'yes')])
+              log_info.extend([('rejected', domain),
+                               ('duplicate', 'yes')])
             else:
               results.append(('%s-OK' % prefix, what))
               quotas.append(quota)
@@ -928,7 +929,7 @@ class AuthThread(threading.Thread):
               conn.quota[2] = time.time()
 
         if DEBUG_IO: print '=== AUTH RESULTS\n%s\n===' % results
-        callback(results)
+        callback(results, log_info)
         self.qc.acquire()
       else:
         self.qc.wait()
@@ -2015,7 +2016,7 @@ class Tunnel(ChunkParser):
     self.last_activity = time.time()
     self.CountAs('backends_live')
     self.SetConn(conn)
-    conns.auth.check(requests[:], conn, lambda r: self.AuthCallback(conn, r))
+    conns.auth.check(requests[:], conn, lambda r, l: self.AuthCallback(conn, r, l))
 
     return self
 
@@ -2028,9 +2029,9 @@ class Tunnel(ChunkParser):
       self.quota[2] = when
       LogDebug('Rechecking: %s' % (self.quota, ))
       conns.auth.check([self.quota[1]], self,
-                       lambda r: self.QuotaCallback(conns, r))
+                       lambda r, l: self.QuotaCallback(conns, r, l))
 
-  def QuotaCallback(self, conns, results):
+  def QuotaCallback(self, conns, results, log_info):
     # Report new values to the back-end...
     if self.quota and (self.quota[0] >= 0): self.SendQuota()
 
@@ -2038,12 +2039,15 @@ class Tunnel(ChunkParser):
       if r[0] in ('X-PageKite-OK', 'X-PageKite-Duplicate'):
         return self
 
+    self.Log(log_info)
     self.LogInfo('Ran out of quota or account deleted, closing tunnel.')
     conns.Remove(self)
     self.Cleanup()
     return None
 
-  def AuthCallback(self, conn, results):
+  def AuthCallback(self, conn, results, log_info):
+
+    if log_info: Log(log_info)
 
     output = [HTTP_ResponseHeader(200, 'OK'),
               HTTP_Header('Transfer-Encoding', 'chunked'),
