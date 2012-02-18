@@ -25,7 +25,7 @@
 import os
 import sys
 import time
- 
+
 
 class PageKiteLogParser(object):
   def __init__(self):
@@ -48,7 +48,7 @@ class PageKiteLogParser(object):
     self.ProcessData(self.ParseLine(line, data))
 
   def Follow(self, fd, filename):
-    # Record last position...      
+    # Record last position...
     pos = fd.tell()
 
     try:
@@ -75,9 +75,13 @@ class PageKiteLogParser(object):
     first = True
     while first or follow:
       for line in fd:
-        data = self.ParseLine(line.strip())
-        if after is None or ('ts' in data and int(data['ts'], 16) > after):
-          self.ProcessData(data)
+        if line.endswith('\n'):
+          data = self.ParseLine(line.strip())
+          if after is None or ('ts' in data and int(data['ts'], 16) > after):
+            self.ProcessData(data)
+        else:
+          fd.seek(fd.tell() - len(line))
+          break
 
       if follow: fd = self.Follow(fd, filename)
       first = False
@@ -88,14 +92,18 @@ class PageKiteLogParser(object):
     first = True
     while first or follow:
       for line in fd:
-        try:
-          parts = line.split(':', 3)
-          if parts[2].find(tag) > -1:
-            data = self.ParseLine(parts[3].strip())
-            if after is None or int(data['ts'], 16) > after:
-              self.ProcessData(data) 
-        except ValueError, e:
-          pass
+        if line.endswith('\n'):
+          try:
+            parts = line.split(':', 3)
+             if parts[2].find(tag) > -1:
+               data = self.ParseLine(parts[3].strip())
+               if after is None or int(data['ts'], 16) > after:
+                self.ProcessData(data)
+          except ValueError, e:
+            pass
+        else:
+          fd.seek(fd.tell() - len(line))
+          break
 
       if follow: fd = self.Follow(fd, filename)
       first = False
@@ -129,7 +137,7 @@ class PageKiteLogTracker(PageKiteLogParser):
   def ProcessData(self, data):
     if 'id' in data:
       # This is info about a specific stream...
-      sid = data['id'] 
+      sid = data['id']
 
       if 'proto' in data and 'domain' in data and sid not in self.streams:
         self.ProcessNewStream(data, data)
