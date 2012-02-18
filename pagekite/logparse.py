@@ -95,9 +95,9 @@ class PageKiteLogParser(object):
         if line.endswith('\n'):
           try:
             parts = line.split(':', 3)
-             if parts[2].find(tag) > -1:
-               data = self.ParseLine(parts[3].strip())
-               if after is None or int(data['ts'], 16) > after:
+            if parts[2].find(tag) > -1:
+              data = self.ParseLine(parts[3].strip())
+              if after is None or int(data['ts'], 16) > after:
                 self.ProcessData(data)
           except ValueError, e:
             pass
