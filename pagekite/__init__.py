@@ -1876,7 +1876,7 @@ class ChunkParser(Selectable):
       self.chunk = ''
 
     if self.want_bytes == 0:
-      self.header += (data || '')
+      self.header += (data or '')
       if self.header.find('\r\n') < 0:
         if self.read_eof: return self.ProcessEofRead()
         return True
