@@ -1,6 +1,10 @@
 Version history - highlights
 ============================
 
+v0.4.7   ???
+------
+   - Added better probe diagnostics, using json returns and CORS headers.
+
 v0.4.6   2012.01.15
 ------
    - Improved new kite wizard a bit

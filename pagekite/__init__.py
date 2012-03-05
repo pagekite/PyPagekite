@@ -679,50 +679,62 @@ def HTTP_Response(code, title, body, mimetype='text/html', headers=None):
   data.extend([HTTP_StartBody(), ''.join(body)])
   return ''.join(data)
 
-def HTTP_NoFeConnection():
-  return HTTP_Response(200, 'OK', base64.decodestring(
-    'R0lGODlhCgAKAMQCAN4hIf/+/v///+EzM+AuLvGkpORISPW+vudgYOhiYvKpqeZY'
-    'WPbAwOdaWup1dfOurvW7u++Rkepycu6PjwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAACH5BAEAAAIALAAAAAAKAAoAAAUtoCAcyEA0jyhEQOs6AuPO'
-    'QJHQrjEAQe+3O98PcMMBDAdjTTDBSVSQEmGhEIUAADs='),
-      headers=[HTTP_Header('X-PageKite-Status', 'Down-FE')],
-      mimetype='image/gif')
+def HTTP_NoFeConnection(proto):
+  if proto.endswith('.json'):
+    (mt, content) = ('application/json', '{"pagekite-status": "down-fe"}')
+  else:
+    (mt, content) = ('image/gif', base64.decodestring(
+      'R0lGODlhCgAKAMQCAN4hIf/+/v///+EzM+AuLvGkpORISPW+vudgYOhiYvKpqeZY'
+      'WPbAwOdaWup1dfOurvW7u++Rkepycu6PjwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAACH5BAEAAAIALAAAAAAKAAoAAAUtoCAcyEA0jyhEQOs6AuPO'
+      'QJHQrjEAQe+3O98PcMMBDAdjTTDBSVSQEmGhEIUAADs='))
+  return HTTP_Response(200, 'OK', content, mimetype=mt,
+      headers=[HTTP_Header('X-PageKite-Status', 'Down-FE'),
+               HTTP_Header('Access-Control-Allow-Origin', '*')])
 
-def HTTP_NoBeConnection():
-  return HTTP_Response(200, 'OK', base64.decodestring(
-    'R0lGODlhCgAKAPcAAI9hE6t2Fv/GAf/NH//RMf/hd7u6uv/mj/ntq8XExMbFxc7N'
-    'zc/Ozv/xwfj31+jn5+vq6v///////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAACH5BAEAABIALAAAAAAKAAoAAAhDACUIlBAgwMCDARo4MHiQ'
-    '4IEGDAcGKAAAAESEBCoiiBhgQEYABzYK7OiRQIEDBgMIEDCgokmUKlcOKFkgZcGb'
-    'BSUEBAA7'),
-      headers=[HTTP_Header('X-PageKite-Status', 'Down-BE')],
-      mimetype='image/gif')
+def HTTP_NoBeConnection(proto):
+  if proto.endswith('.json'):
+    (mt, content) = ('application/json', '{"pagekite-status": "down-be"}')
+  else:
+    (mt, content) = ('image/gif', base64.decodestring(
+      'R0lGODlhCgAKAPcAAI9hE6t2Fv/GAf/NH//RMf/hd7u6uv/mj/ntq8XExMbFxc7N'
+      'zc/Ozv/xwfj31+jn5+vq6v///////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAACH5BAEAABIALAAAAAAKAAoAAAhDACUIlBAgwMCDARo4MHiQ'
+      '4IEGDAcGKAAAAESEBCoiiBhgQEYABzYK7OiRQIEDBgMIEDCgokmUKlcOKFkgZcGb'
+      'BSUEBAA7'))
+  return HTTP_Response(200, 'OK', content, mimetype=mt,
+      headers=[HTTP_Header('X-PageKite-Status', 'Down-BE'),
+               HTTP_Header('Access-Control-Allow-Origin', '*')])
 
-def HTTP_GoodBeConnection():
-  return HTTP_Response(200, 'OK', base64.decodestring(
-    'R0lGODlhCgAKANUCAEKtP0StQf8AAG2/a97w3qbYpd/x3mu/aajZp/b79vT69Mnn'
-    'yK7crXTDcqraqcfmxtLr0VG0T0ivRpbRlF24Wr7jveHy4Pv9+53UnPn8+cjnx4LI'
-    'gNfu1v///37HfKfZpq/crmG6XgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    'AAAAAAAAAAAAAAAAACH5BAEAAAIALAAAAAAKAAoAAAZIQIGAUDgMEASh4BEANAGA'
-    'xRAaaHoYAAPCCZUoOIDPAdCAQhIRgJGiAG0uE+igAMB0MhYoAFmtJEJcBgILVU8B'
-    'GkpEAwMOggJBADs='),
-      headers=[HTTP_Header('X-PageKite-Status', 'OK')],
-      mimetype='image/gif')
+def HTTP_GoodBeConnection(proto):
+  if proto.endswith('.json'):
+    (mt, content) = ('application/json', '{"pagekite-status": "ok"}')
+  else:
+    (mt, content) = ('image/gif', base64.decodestring(
+      'R0lGODlhCgAKANUCAEKtP0StQf8AAG2/a97w3qbYpd/x3mu/aajZp/b79vT69Mnn'
+      'yK7crXTDcqraqcfmxtLr0VG0T0ivRpbRlF24Wr7jveHy4Pv9+53UnPn8+cjnx4LI'
+      'gNfu1v///37HfKfZpq/crmG6XgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      'AAAAAAAAAAAAAAAAACH5BAEAAAIALAAAAAAKAAoAAAZIQIGAUDgMEASh4BEANAGA'
+      'xRAaaHoYAAPCCZUoOIDPAdCAQhIRgJGiAG0uE+igAMB0MhYoAFmtJEJcBgILVU8B'
+      'GkpEAwMOggJBADs='))
+  return HTTP_Response(200, 'OK', content, mimetype=mt,
+      headers=[HTTP_Header('X-PageKite-Status', 'OK'),
+               HTTP_Header('Access-Control-Allow-Origin', '*')])
 
 def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None,
                      code=503, status='Unavailable', headers=None):
@@ -2437,21 +2449,21 @@ class Tunnel(ChunkParser):
 #           if host in self.conns.config.tls_endpoints:
 #             print 'Should unwrap SSL from %s' % host
 
-          if proto == 'probe':
+          if proto.startswith('probe'):
             if self.conns.config.no_probes:
               LogDebug('Responding to probe for %s: rejected' % host)
               if not self.SendChunked('SID: %s\r\n\r\n%s' % (
-                                        sid, HTTP_NoFeConnection() )):
+                                        sid, HTTP_NoFeConnection(proto) )):
                 return False
             elif self.Probe(host):
               LogDebug('Responding to probe for %s: good' % host)
               if not self.SendChunked('SID: %s\r\n\r\n%s' % (
-                                        sid, HTTP_GoodBeConnection() )):
+                                        sid, HTTP_GoodBeConnection(proto) )):
                 return False
             else:
               LogDebug('Responding to probe for %s: back-end down' % host)
               if not self.SendChunked('SID: %s\r\n\r\n%s' % (
-                                        sid, HTTP_NoBeConnection() )):
+                                        sid, HTTP_NoBeConnection(proto) )):
                 return False
           else:
             conn = UserConn.BackEnd(proto, host, sid, self, port,
@@ -2625,7 +2637,7 @@ class UserConn(Selectable):
     # Try and find the right tunnel. We prefer proto/port specifications first,
     # then the just the proto. If the protocol is WebSocket and no tunnel is
     # found, look for a plain HTTP tunnel.
-    if proto == 'probe':
+    if proto.startswith('probe'):
       protos = ['http', 'https', 'websocket', 'raw', 'irc',
                 'finger', 'httpfinger']
       ports = conns.config.server_ports[:]
@@ -2683,7 +2695,7 @@ class UserConn(Selectable):
     backend = None
 
     if proto == 'http': protos = [proto, 'http2', 'http3']
-    elif proto == 'probe': protos = ['http', 'http2', 'http3']
+    elif proto.startswith('probe'): protos = ['http', 'http2', 'http3']
     elif proto == 'websocket': protos = [proto, 'http', 'http2', 'http3']
     else: protos = [proto]
 
@@ -3017,7 +3029,10 @@ class UnknownConn(MagicProtocolParser):
       if self.parser.path.startswith(MAGIC_PREFIX):
         try:
           self.host = self.parser.path.split('/')[2]
-          self.proto = 'probe'
+          if self.parser.path.endswith('.json'):
+            self.proto = 'probe.json'
+          else:
+            self.proto = 'probe'
         except ValueError:
           pass
 
@@ -3038,8 +3053,8 @@ class UnknownConn(MagicProtocolParser):
       if UserConn.FrontEnd(self, address,
                            self.proto, self.host, self.on_port,
                            self.parser.lines + lines, self.conns) is None:
-        if self.proto == 'probe':
-          self.Send(HTTP_NoFeConnection(),
+        if self.proto.startswith('probe'):
+          self.Send(HTTP_NoFeConnection(self.proto),
                     try_flush=True)
         else:
           self.Send(HTTP_Unavailable('fe', self.proto, self.host,
