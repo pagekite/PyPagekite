@@ -4286,7 +4286,11 @@ class PageKite(object):
 
     # If not an authentication error, quota should be encoded as an IP.
     ip = ips[0]
-    if not ip.startswith(AUTH_ERRORS):
+    if ip.startswith(AUTH_ERRORS):
+      if not error and (ip.endswith(AUTH_ERR_USER_UNKNOWN) or
+                        ip.endswith(AUTH_ERR_INVALID)):
+        error = 'unauthorized'
+    else:
       o = [int(x) for x in ip.split('.')]
       return ((((o[0]*256 + o[1])*256 + o[2])*256 + o[3]), None)
 
