@@ -179,6 +179,7 @@ Front-end Options:
 
  --isfrontend   -f      Enable front-end mode.
  --authdomain=X -A X    Use X as a remote authentication domain.
+ --authdomain=D:X       Use X as a remote authentication domain for *.D.
  --motd=/path/to/motd   Send the contents of this file to new back-ends.
  --host=H       -h H    Listen on H (hostname).
  --ports=A,B,C  -p A,B  Listen on ports A, B, C, ...
@@ -3777,6 +3778,7 @@ class PageKite(object):
     self.isfrontend = False
     self.upgrade_info = []
     self.auth_domain = None
+    self.auth_domains = {}
     self.motd = None
     self.motd_message = None
     self.server_host = ''
@@ -4070,6 +4072,8 @@ class PageKite(object):
         p('authdomain=%s', self.isfrontend and self.auth_domain, 'foo.com'),
         p('motd=%s', self.isfrontend and self.motd, '/path/to/motd.txt')
       ])
+      for d in sorted(self.auth_domains.keys()):
+        config.append('authdomain=%s:%s' % (d, self.auth_domains[d]))
       dprinted = 0
       for bid in sorted(self.backends.keys()):
         be = self.backends[bid]
@@ -4344,8 +4348,12 @@ class PageKite(object):
           return (None, auth_error_type or 'signature')
 
       if self.auth_domain:
+        adom = self.auth_domain
+        for dom in self.auth_domains:
+          if domain.endswith('.%s' % dom):
+            adom = self.auth_domains[dom]
         try:
-          lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
+          lookup = '.'.join([srand, token, sign, protoport, domain, adom])
           (rv, auth_error_type) = self.LookupDomainQuota(lookup)
           if rv is None or rv >= 0:
             return (rv, auth_error_type)
@@ -4625,7 +4633,14 @@ class PageKite(object):
       elif opt == '--rawports':
         self.server_raw_ports = [(x == VIRTUAL_PN and x or int(x)) for x in arg.split(',')]
       elif opt in ('-h', '--host'): self.server_host = arg
-      elif opt in ('-A', '--authdomain'): self.auth_domain = arg
+      elif opt in ('-A', '--authdomain'):
+        if ':' in arg:
+          d, a = arg.split(':')
+          self.auth_domains[d.lower()] = a
+          if not self.auth_domain: self.auth_domain = a
+        else:
+          self.auth_domains = {}
+          self.auth_domain = arg
       elif opt == '--motd':
         self.motd = arg
         self.LoadMOTD()

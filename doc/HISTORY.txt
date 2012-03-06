@@ -5,6 +5,8 @@ v0.4.7   ???
 ------
    - Added better probe diagnostics, using json returns and CORS headers.
    - Corrected error messages when using an invalid shared secret.
+   - Added support for multiple auth domains at the front-end.
+
 
 v0.4.6   2012.01.15
 ------
