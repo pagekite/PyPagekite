@@ -614,10 +614,10 @@ def checkSignature(sign='', secret='', payload=''):
 
 
 class ConfigError(Exception):
-  pass
+  """This error gets thrown on configuration errors."""
 
 class ConnectError(Exception):
-  pass
+  """This error gets thrown on connection errors."""
 
 
 def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
