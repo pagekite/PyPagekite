@@ -4353,7 +4353,8 @@ class PageKite(object):
           if domain.endswith('.%s' % dom):
             adom = self.auth_domains[dom]
         try:
-          lookup = '.'.join([srand, token, sign, protoport, domain, adom])
+          lookup = '.'.join([srand, token, sign, protoport,
+                             domain.replace('*', '_any_'), adom])
           (rv, auth_error_type) = self.LookupDomainQuota(lookup)
           if rv is None or rv >= 0:
             return (rv, auth_error_type)
