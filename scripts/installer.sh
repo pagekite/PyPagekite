@@ -7,8 +7,27 @@
 
 ###############################################################################
 # Check if SSL works
-if ! curl -s https://pagekite.net/pk/ >/dev/null; then
+if [ "$(which curl)" == "" ]; then
     cat <<tac
+
+WARNING: You don't seem to have curl installed!
+         This script depends on it.  Sorry. :-(
+
+  You can manually download pagekite.py from these URLs instead:
+
+      Basic version:  https://pagekite.net/pk/pagekite.py
+
+      Alpha GTK GUI:  https://pagekite.net/pk/pagekite-gtk.py
+       Android/SL4A:  https://pagekite.net/pk/pagekite-android.py
+
+  Remember to run 'chmod +x pagekite*.py' after downloading.
+  There are also Debian and RPM packages on: https://pagekite.net/downloads/
+
+tac
+    exit 0
+else
+    if ! curl -s https://pagekite.net/pk/ >/dev/null; then
+        cat <<tac
 
 WARNING: Your curl does not handle the pagekite.net SSL certificate
          properly.  Bailing out!  If you aren't afraid of the evil
@@ -17,8 +36,9 @@ WARNING: Your curl does not handle the pagekite.net SSL certificate
 $ curl http://pagekite.net/pk/ |sed -e s/https:/http:/g | sudo bash
 
 tac
-    exit 0
-fi 
+        exit 0
+    fi
+fi
 
 ###############################################################################
 # Choose our destination
