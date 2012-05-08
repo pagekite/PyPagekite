@@ -1,4 +1,4 @@
-# `pagekite.py` #
+# pagekite.py #
 
 PageKite implements a tunneled reverse proxy which makes it easy make a
 service (such as an HTTP or HTTPS server) on localhost visible to the wider
@@ -8,7 +8,7 @@ as a specialized HTTP proxy.
 Try `./pagekite.py --help` for instructions (or read the source).
 
 Managed front-end relay service is available at <https://pagekite.net/>, or
-you can run your own using `pagekite.py`.
+you can run your own using pagekite.py.
 
 
 <a                                                              name=toc></a>
@@ -51,13 +51,13 @@ you can run your own using `pagekite.py`.
 more commonly used to expose other HTTP servers running on localhost (such
 as Apache or a Django development server) to the wider Internet.
 
-In order for `pagekite.py` to terminate SSL connections or encrypt the built
+In order for pagekite.py to terminate SSL connections or encrypt the built
 in HTTPserver, you will need openssl and either python 2.6+ or the pyOpenSSL
 module. These are not required if you just want to route HTTPS requests.
 
-You can download `pagekite.py` from <http://pagekite.net/downloads/>.
+You can download pagekite.py from <http://pagekite.net/downloads/>.
 
-**Note:** `pagekite.py` uses a customized version of SocksiPy (named
+**Note:** pagekite.py uses a customized version of SocksiPy (named
 SocksipyChain) to handle SSL compatibility and connecting over Tor or
 other proxy servers.  If you are downloading the "all-in-one" .py file
 from <http://pagekite.net/downloads/>, this library is included and built
@@ -71,7 +71,7 @@ download SocksipyChain.  For further details, please see
 <a                                                              name=qs></a>
 ### 1.2. Getting started ###
 
-The quickest way to get started with `pagekite.py`, is to download a
+The quickest way to get started with pagekite.py, is to download a
 prebuilt package (combined .py file, .deb or .rpm) from
 <http://pagekite.net/downloads/>.
 
@@ -104,7 +104,7 @@ configuration saved as your default, like so:
       localhost:22 ssh://FOO.pagekite.me
 
 After running that (admittedly longish) command, you can simply type
-`pagekite.py` at any time to make all three services visible to the
+pagekite.py at any time to make all three services visible to the
 Internet. If you have configured multiple services, but only want to
 expose one of them, you can use the following short-hand:
 
@@ -116,7 +116,7 @@ Please consult the pagekite.net quick-start and wiki for more examples:
    * <https://pagekite.net/wiki/>
 
 **Note:** If using the .deb or .rpm packages, the command is simply
-`pagekite`, not `pagekite.py`.
+`pagekite`, not pagekite.py.
 
 [ [up](#toc) ]
 
@@ -156,12 +156,12 @@ PageKite works more or less like this:
 
    1. Your **services**, typically one or more HTTP servers, run on localhost.
 
-   2. You run `pagekite.py` as a **back-end connector**, on the same machine.
+   2. You run pagekite.py as a **back-end connector**, on the same machine.
 
-   3. Another instance of `pagekite.py` runs as a **front-end relay** on a
+   3. Another instance of pagekite.py runs as a **front-end relay** on a
       machine with a public IP address, in "the cloud".
 
-   4. The **back-end** `pagekite.py` connects to the **front-end**, and
+   4. The **back-end** pagekite.py connects to the **front-end**, and
       creates a tunnel for the configured **services**.
 
    5. Clients, typically web browsers, connect to the **front-end** and
@@ -182,10 +182,10 @@ re-establish a connection, either with the same server or another one.
 
 A **service** is a local server, for example a website or SSH server.
 
-A **front-end** is an instance of `pagekite.py` which is configured to act
+A **front-end** is an instance of pagekite.py which is configured to act
 as a public, client-facing visible relay server.
 
-A **back-end** is an instance of `pagekite.py` which is configured to
+A **back-end** is an instance of pagekite.py which is configured to
 establish and maintain the tunnels and DNS records required to make a local
 **service** visible to the wider Internet.  The **back-end** must be able
 to make direct connections to local servers.
@@ -194,7 +194,7 @@ A **service** which is exposed to the wider Internet using PageKite is
 sometimes called **a kite**.
 
 To avoid confusion, we prefer not to use the terms "client" and "server" to
-describe the different roles of `pagekite.py`.
+describe the different roles of pagekite.py.
 
 [ [up](#toc) ]
 
@@ -217,7 +217,7 @@ still recognized by the program and will be for the forseeable future.
 <a                                                              name=bes></a>
 ### 2.1. Running the back-end, using pagekite.net ###
 
-The most common use of `pagekite.py`, is to make a web server visible to
+The most common use of pagekite.py, is to make a web server visible to
 the outside world.  Assuming you are using the pagekite.net service and
 your web server runs on port 80, a command like this should get you up
 and running:
@@ -262,7 +262,7 @@ If you prefer to run your own front-ends, you will need to follow the
 instructions in this section on your back-ends, and the instructions in
 the next section on your front-end.
 
-When running your own front-end, you need to tell `pagekite.py` where it
+When running your own front-end, you need to tell pagekite.py where it
 is, using the `--frontend` argument:
 
     backend$ pagekite.py \
@@ -279,12 +279,12 @@ supports TLS-encrypted tunnels, add the --fe_certname=HOST argument as well.
 <a                                                               name=fe></a>
 ### 2.3. Running your own front-end relay ###
 
-To configure `pagekite.py` as a front-end server, you will need to have a
+To configure pagekite.py as a front-end server, you will need to have a
 server with a publicly visible IP address, and you will need to configure
 DNS correctly, [as discussed below](#dns).
 
 Assuming you are not already running a web server on that machine, the
-optimal configuration is to run `pagekite.py` so it listens on a few ports
+optimal configuration is to run pagekite.py so it listens on a few ports
 (80 and 443 at least), like so:
 
     frontend$ sudo pagekite.py \
@@ -298,7 +298,7 @@ shared secret of your choosing - it has to match on the back-end, or the
 connection will be rejected.
 
 Perceptive readers will have noticed a few problems with this though.
-One, is that you are running `pagekite.py` as root, which is generally
+One, is that you are running pagekite.py as root, which is generally
 frowned upon by those concerned with security.  Another, is you have only
 enabled a single back-end, which is a bit limited.
 
@@ -313,7 +313,7 @@ as you like. So something like this might make sense:
       --domain=http,https:*.YOUROTHERDOMAIN.NET:YOUROTHERSECRET
 
 Unfortunately, root permissions are required in order to bind ports 80
-and 443, but it is possible to instruct `pagekite.py` to drop all privileges
+and 443, but it is possible to instruct pagekite.py to drop all privileges
 as soon as possible, like so:
 
     frontend$ sudo pagekite.py \
@@ -325,7 +325,7 @@ as soon as possible, like so:
 This assumes the *nobody* user and *nogroup* group exist on your system.
 Replace with other values as necessary.  See the section on [Unix/Linux
 systems integration](#unx) for more useful flags for running a production
-`pagekite.py`.
+pagekite.py.
 
 [ [up](#toc) ]
 
@@ -366,24 +366,24 @@ to use as a PageKite front-end?  Generally only one process can run on a
 given IP:PORT pair, which is why this poses a problem.
 
 The simplest solution, is to get another IP address for the machine, and
-use one for `pagekite.py`, and the other for your web-server. In that case
-you would add the `--host=IP` argument to your `pagekite.py` configuration.
+use one for pagekite.py, and the other for your web-server. In that case
+you would add the `--host=IP` argument to your pagekite.py configuration.
 
 If, however, you have to share a single IP, things get slightly more
 complicated. Either the web-server will have to forward connections to
-`pagekite.py`, or the other way around.
+pagekite.py, or the other way around.
 
-#### `pagekite.py` on port 80 (recommended) ####
+#### pagekite.py on port 80 (recommended) ####
 
-As of `pagekite.py` 0.3.6, it is possible for front-ends to have direct local
-back-ends, so just letting `pagekite.py` have port 80 (and 443) is the simplest
+As of pagekite.py 0.3.6, it is possible for front-ends to have direct local
+back-ends, so just letting pagekite.py have port 80 (and 443) is the simplest
 way to get the two to coexist:
 
    1. Move your old web-server to another port (such as 8080)
-   2. Configure `pagekite.py` [as a front-end](#fe) on port 80
+   2. Configure pagekite.py [as a front-end](#fe) on port 80
    3. Add `--backend` specifications for your old web-server.
 
-As of 0.3.14, you can make `pagekite.py` use a local back-end as a catch-all
+As of 0.3.14, you can make pagekite.py use a local back-end as a catch-all
 for any unrecongized domains, by using the special hostname "unknown" in
 the `--backend` line (remember to specify a protocol).
 
@@ -404,8 +404,8 @@ Note that no password is required for configuring local back-ends.
 #### Another HTTP server on port 80 ####
 
 The other option, assuming your web-server supports proxying, is to configure
-it to proxy requests for your PageKite domains to `pagekite.py`, and run
-`pagekite.py` on an alternate port.  How this is done depends on your HTTP
+it to proxy requests for your PageKite domains to pagekite.py, and run
+pagekite.py on an alternate port.  How this is done depends on your HTTP
 server software, but Apache and lighttpd at least are both capable of
 forwarding requests to alternate ports.
 
@@ -415,17 +415,17 @@ unlikely to work for HTTPS.
 **Warning:** If you have more than one domain behind PageKite, it is
 of critical importance that the HTTP server *not* re-use the same proxy
 connection for multiple requests.  For performance and compatibility
-reasons, `pagekite.py` does not currently continue parsing the HTTP/1.1
+reasons, pagekite.py does not currently continue parsing the HTTP/1.1
 request stream once it has chosen a back-end: it blindly forwards packets
 back and forth. This means that if the web server proxy code sends a request
 for *a.foo.com* first, and then requests *b.foo.com* over the same
 connection, the second request will be routed to the wrong back-end.
 
-Unfortunately, this means putting `pagekite.py` behind a high-performance
+Unfortunately, this means putting pagekite.py behind a high-performance
 load-balancer may cause unpredictable (and quite undesirable) results:
 Varnish at least is known to cause problems in this configuration.
 
-Please send reports of success (or failure) configuring `pagekite.py` behind
+Please send reports of success (or failure) configuring pagekite.py behind
 another HTTP server, proxy or load-balancer to our Google Group:
 <http://groups.google.com/group/pagekite-discuss>.
 
@@ -473,7 +473,7 @@ First of all, the back-end will need a way to receive the list of available
 front-ends. Secondly, the back-end will need to be able to dynamically update
 the DNS records for the sites it is connecting.
 
-The list of front-ends should be provided to `pagekite.py` as a DNS name
+The list of front-ends should be provided to pagekite.py as a DNS name
 with multiple A records.  As an example, the default for the PageKite
 service, is the name **frontends.b5p.us**:
 
@@ -484,7 +484,7 @@ service, is the name **frontends.b5p.us**:
     ...
 
 When started up with a `--frontends` argument (note the trailing s),
-`pagekite.py` will measure the distance of each of these IP addresses and
+pagekite.py will measure the distance of each of these IP addresses and
 pick the one closest. (It will also perform DNS lookups on its own name
 and connect to any old back-ends as well, to guarantee reachability while
 the old DNS records expire.)
@@ -498,7 +498,7 @@ using `dyndns.org`, running the back-end like this might work in that case:
       --dyndns=USER:PASS@dyndns.org \
       --service_on=http:YOURNAME.dyndns.org:localhost:80:YOURSECRET
 
-Instead of dyndns.org above, `pagekite.py` also has built-in support for
+Instead of dyndns.org above, pagekite.py also has built-in support for
 no-ip.com and of course pagekite.net. Other providers can be used by
 providing a full HTTP or HTTPS URL, with the following python formatting
 tokens in the appropriate places:
@@ -519,7 +519,7 @@ lines for readability):
 <a                                                              name=tor></a>
 ### 2.7. Connecting over Socks or Tor ###
 
-If you want to run `pagekite.py` from behind a restrictive firewall which
+If you want to run pagekite.py from behind a restrictive firewall which
 does not even allow outgoing connections, you might be able to work around
 the problem by using a Socks proxy.
 
@@ -541,8 +541,6 @@ connect to localhost, on port 9050.
 With `--torify`, some behavior is modified slightly in order to avoid leaking
 information about which domains you are hosting through DNS side channels.
 
-**Note:** This requires SocksiPy: <http://code.google.com/p/socksipy-branch/>
-
 [ [up](#toc) ]
 
 
@@ -554,7 +552,7 @@ bind a back-end to a raw port.  This may be useful for all sorts of things,
 but was primarily designed as a "good enough" hack for tunneling SSH
 connections.
 
-As the `pagekite.py` front-end, and all the ports it listens on, are assumed
+As the pagekite.py front-end, and all the ports it listens on, are assumed
 to be shared by multiple back-ends, raw ports do not work like normal ports,
 they must be accessed using an HTTP Proxy CONNECT request.
 
@@ -571,7 +569,7 @@ the client to use the PageKite front-end (and a normal port, not a raw port)
 as an HTTP Proxy.
 
 As an example, the following lines in **.ssh/config** provide reliable direct
-access to an SSH server exposed via. `pagekite.py` and the pagekite.net service:
+access to an SSH server exposed via. pagekite.py and the pagekite.net service:
 
     Host HOME.pagekite.me
     CheckHostIP no
@@ -602,7 +600,7 @@ The most secure use of TLS involves encrypted back-ends, registered with a
 `--service_on=https:NAME:...` argument.
 
 These back-ends themselves take care of the encryption and decryption, so
-all `pagekite.py` sees is an incomprehensible stream of binary - this is as
+all pagekite.py sees is an incomprehensible stream of binary - this is as
 secure as it gets!
 
 How to obtain certificates and configure your back-ends is outside the
@@ -611,7 +609,7 @@ scope of this document.
 
 #### Encrypted tunnels ####
 
-As of `pagekite.py` version 0.3.8, it is possible to connect to the front-end
+As of pagekite.py version 0.3.8, it is possible to connect to the front-end
 using a TLS-encrypted tunnel.
 
 This is much more secure and is highly recommended: not only does this
@@ -668,17 +666,17 @@ back-ends and used with the `--ca_certs` parameter.
 #### Encrypting unencrypted back-ends ####
 
 If you want to enable encryption for back-ends which do not themselves
-support HTTPS, you can use the `--tls_endpoint` flag to ask `pagekite.py`
+support HTTPS, you can use the `--tls_endpoint` flag to ask pagekite.py
 itself to handle TLS for a given domain.
 
 In this configuration, clients will communicate securely with the
-`pagekite.py` front-end, which will in turn forward decrypted requests to its
+pagekite.py front-end, which will in turn forward decrypted requests to its
 backends, encrypting any replies as they are sent to the client.
 
 As the tunnel between pagekite front- and back-ends itself is generally
 encapsulated in a secure TLS connection, this provides almost the same level
 of security as end-to-end encryption above, with the exception that the
-`pagekite.py` front-end has access to unencrypted data. So back-ends have to
+pagekite.py front-end has access to unencrypted data. So back-ends have to
 trust the person running their front-end!
 
 Although not perfect, for those concerned with casual snooping on shared
@@ -721,8 +719,8 @@ protocol which does not support the SNI extension.  The same is true for
 certain older browsers under Linux (such as lynx), Android 1.6, and
 generally any old or poorly maintained HTTPS clients.
 
-Without SNI, `pagekite.py` can not reliably detect which domain is being
-requested.  In its absence, `pagekite.py` employs the following fall-back
+Without SNI, pagekite.py can not reliably detect which domain is being
+requested.  In its absence, pagekite.py employs the following fall-back
 strategies to facilitate access:
 
    1. Obey the TLS/SNI extension, if present.
@@ -734,7 +732,7 @@ This means the common pattern of a clear-text HTTP website "upgrading" to
 HTTPS on certain pages is quite likely to work even for older browsers. But
 it is *not* guaranteed if the guest IP address is shared by multiple users,
 or if the browser is idle for too long (so the SSL connection times out and
-the IP expires from the tracking map maintained by `pagekite.py`).
+the IP expires from the tracking map maintained by pagekite.py).
 
 When the above measures all fail and the wrong domain is chosen for routing
 the TLS request, browsers should detect a certificate mismatch and abort the
@@ -755,16 +753,16 @@ upgrade script from the HTTPS version of your site.
 <a                                                              name=unx></a>
 ### 2.10. Unix/Linux systems integration ###
 
-When deploying `pagekite.py` as a system component on Unix, there are quite
+When deploying pagekite.py as a system component on Unix, there are quite
 a few specialized arguments which can come in handy.
 
-In addtion to `--runas` and `--host` (discussed above), `pagekite.py`
+In addtion to `--runas` and `--host` (discussed above), pagekite.py
 understands these: `--pidfile`, `--logfile` and `--daemonize`, each of
 which does more or less what you would expect.  Special cases worth noting
 are `--logfile=syslog`, which instead of writing to a file, logs to the system
 log service and `--logfile=stdio` which logs to standard output.
 
-Putting these all together, a real production invocation of `pagekite.py` at
+Putting these all together, a real production invocation of pagekite.py at
 the front-end might look something like this:
 
     frontend$ sudo pagekite.py \
@@ -805,7 +803,7 @@ Windows it is usually either `C:\\Users\\USERNAME\\pagekite.cfg` or
 `C:\\Documents and Settings\\USERNAME\\pagekite.cfg`.
 
 If you save your settings to this location, they will be loaded by default
-whenever you run `pagekite.py` - which may not always be what you want if you
+whenever you run pagekite.py - which may not always be what you want if you
 are experimenting. To *skip* the configuration file, you can use the
 `--clean` argument, and to load an alternate configuration, you can use
 `--optfile`. Combining both, you might end up with something like this:
@@ -821,7 +819,7 @@ you want to "include" a one configuration into another for some reason.
 <a                                                              name=sec></a>
 ### 2.12. A word about security and logs ###
 
-When exposing services to the wider Internet, as `pagekite.py` is designed to
+When exposing services to the wider Internet, as pagekite.py is designed to
 do, it is always important to keep some basic security principles in mind.
 
 Pagekite.py itself should be quite secure - it never invokes any external
@@ -842,7 +840,7 @@ PageKite will appear to originate from **localhost**, with the IP address
 For logging purposes, the HTTP and WebSocket protocols, the "standard"
 X-Forwarded-For header is added to initial requests (if HTTP 1.1 persistent
 connections are used, subsequent requests may be lacking the header), in all
-cases `pagekite.py` will report the actual remote IP in its own log.
+cases pagekite.py will report the actual remote IP in its own log.
 
 [ [up](#toc) ]
 
@@ -861,7 +859,7 @@ HTTPS support depends on recent additions to the TLS protocol, which are
 unsupported by older browsers and operating systems - most importantly
 including the still common Windows XP.
 
-The mechanisms employed by `pagekite.py` to work around these problems are
+The mechanisms employed by pagekite.py to work around these problems are
 discussed in [the TLS/SSL section](#tls).
 
 
@@ -882,7 +880,7 @@ around this limitation.
 ## 4. Credits and licence ##
 
 Please see individual files for details on their licensing; as a rule
-Python source code falls under the same license as `pagekite.py`,
+Python source code falls under the same license as pagekite.py,
 documentation (including this document) under the Creative Commons
 Attribution-ShareAlike (CC-BY-SA) 3.0, and sample configuration files are
 placed in the Public Domain.
@@ -903,7 +901,7 @@ Creative Commons, 171 Second Street, Suite 300, San Francisco,
 California, 94105, USA.
 
 
-#### `pagekite.py` ####
+#### pagekite.py ####
 
 Pagekite.py is (C) Copyright 2010-2011, Bjarni Rúnar Einarsson and The
 Beanstalks Project ehf.
