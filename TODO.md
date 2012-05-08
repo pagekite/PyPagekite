@@ -1,5 +1,13 @@
 # TODOS #
 
+## Known bugs ##
+
+   * XML-RPC CNAME creation fail
+   * SSL verification fail
+   * Signup message weirdness
+   * Poor handling of reconfiguration
+
+
 ## General ##
 
    * 0.4.7/launch: COMPLETE DOCUMENTATION. Bugfixes.
@@ -33,4 +41,17 @@
    * Need docstrings all over pagekite source
    * Unneeded ( ) in a few places
    * Bad form: if this: thenfoo
+
+### Optimization ###
+
+   * Add QoS and bandwidth shaping
+   * Add a scheduler for deferred/periodic processing
+   * Replace string concatenation ops with lists of buffers
+
+### Protocols ###
+
+   * Make tunnel creation more stubborn, try multiple ports, etc.
+   * Add XMPP and incoming SMTP support
+   * Replace/augment current tunnel auth with SSL certificates
+
 

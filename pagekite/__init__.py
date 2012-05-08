@@ -1,7 +1,7 @@
 #!/usr/bin/python -u
 LICENSE = """\
-pagekite.py, Copyright 2010, 2011, the Beanstalks Project ehf.
-                                   and Bjarni Runar Einarsson
+pagekite.py, Copyright 2010-2012, the Beanstalks Project ehf.
+                                  and Bjarni Runar Einarsson
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the  GNU  Affero General Public License as published by the Free
@@ -17,30 +17,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 
 """
-##[ Maybe TODO: ]##############################################################
-#
-# Optimization:
-#  - Implement epoll() support.
-#  - Stress test this thing: when do we need a C rewrite?
-#  - Make multi-process, use the FD-over-socket trick? Threads=>GIL=>bleh
-#  - Add QoS and bandwidth shaping
-#  - Add a scheduler for deferred/periodic processing.
-#  - Replace string concatenation ops with lists of buffers.
-#
-# Protocols:
-#  - Make tunnel creation more stubborn (try multiple ports etc.)
-#  - Add XMPP and incoming SMTP support.
-#  - Replace/augment current tunnel auth scheme with SSL certificates.
-#
-# User interface:
-#  - Enable (re)configuration from within HTTP UI.
-#  - More human readable console output?
-#
-# Bugs?
-#  - Front-ends should time-out dead back-ends.
-#  - Gzip-related memory issues.
-#
-#
 ##[ Hacking guide! ]###########################################################
 #
 # Hello! Welcome to my source code.
