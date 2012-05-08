@@ -3435,14 +3435,15 @@ class PageKite(object):
     def_dyndns    = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
     def_frontends = (1, 'frontends.b5p.us', 443)
     def_ca_certs  = sys.argv[0]
-    def_fe_certs  = ['b5p.us'] + SERVICE_CERTS
+    def_fe_certs  = ['b5p.us'] + [c for c in SERVICE_CERTS if c != 'b5p.us']
     def_error_url = 'https://pagekite.net/offline/?'
     if check:
       return (self.dyndns == def_dyndns and
               self.servers_auto == def_frontends and
               self.error_url == def_error_url and
               self.ca_certs == def_ca_certs and
-              (self.fe_certname == def_fe_certs or not socks.HAVE_SSL))
+              (sorted(self.fe_certname) == sorted(def_fe_certs) or
+               not socks.HAVE_SSL))
     else:
       self.dyndns = (not clobber and self.dyndns) or def_dyndns
       self.servers_auto = (not clobber and self.servers_auto) or def_frontends
@@ -3541,6 +3542,7 @@ class PageKite(object):
           p('fingerpath = %s', self.finger_path, '/~%s/.finger'),
           '',
         ])
+      config.append('')
 
     if self.ui_sspec or self.ui_password or self.ui_pemfile:
       config.extend([
@@ -3924,7 +3926,7 @@ class PageKite(object):
       if line and not line.startswith('#'):
         if line.startswith('END'): break
         if not line.startswith('-'): line = '--%s' % line
-        args.append(re.sub(':\s*', ':', re.sub('\s*=\s*', '=', line)))
+        args.append(re.sub(r'\s*:\s*', ':', re.sub(r'\s*=\s*', '=', line)))
 
     self.rcfile_recursion += 1
     self.Configure(args)
@@ -4248,12 +4250,13 @@ class PageKite(object):
 
       elif opt in ('--service_on', '--service_off',
                    '--backend', '--define_backend'):
-        disabled = (opt not in ('--backend', '--service_on'))
+        if opt in ('--backend', '--service_on'):
+          status = BE_STATUS_UNKNOWN
+        else:
+          status = BE_STATUS_DISABLED
         bes = self.ArgToBackendSpecs(arg.replace('@kitesecret', self.kitesecret)
                                         .replace('@kitename', self.kitename),
-                                     status=(disabled
-                                             and BE_STATUS_DISABLED
-                                             or BE_STATUS_UNKNOWN))
+                                     status=status)
         for bid in bes:
           if bid in self.backends:
             raise ConfigError("Same service/domain defined twice: %s" % bid)
@@ -4261,7 +4264,7 @@ class PageKite(object):
             self.kitename = bes[bid][BE_DOMAIN]
             self.kitesecret = bes[bid][BE_SECRET]
         self.backends.update(bes)
-      elif opt == '--be_config':
+      elif opt in ('--be_config', '--service_cfg'):
         host, key, val = arg.split(':', 2)
         if key.startswith('user/'): key = key.replace('user/', 'password/')
         hostc = self.be_config.get(host, {})
