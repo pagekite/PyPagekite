@@ -42,7 +42,6 @@ import Cookie
 from pagekite.common import *
 from pagekite.compat import *
 import pagekite.logging as logging
-import pagekite.pk as pagekite
 import sockschain as socks
 
 
@@ -190,7 +189,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                '<div id=body>%(body)s</div>\n'
                '<div id=footer><hr><i>Powered by <b>pagekite.py'
                 ' v%(ver)s</b> and'
-                ' <a href="'+ pagekite.WWWHOME +'"><i>PageKite.net</i></a>.<br>'
+                ' <a href="'+ WWWHOME +'"><i>PageKite.net</i></a>.<br>'
                 'Local time is %(now)s.</i></div>\n'
               '</body></html>\n')
 
@@ -215,7 +214,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   def sendStdHdrs(self, header_list=[], cachectrl='private',
                                         mimetype='text/html'):
     if mimetype.startswith('text/') and ';' not in mimetype:
-      mimetype += ('; charset=%s' % pagekite.DEFAULT_CHARSET)
+      mimetype += ('; charset=%s' % DEFAULT_CHARSET)
     self.send_header('Cache-Control', cachectrl)
     self.send_header('Content-Type', mimetype)
     for header in header_list:
@@ -224,12 +223,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def sendChunk(self, chunk):
     if self.chunked:
-      if pagekite.DEBUG_IO: print '<== SENDING CHUNK ===\n%s\n' % chunk
+      if DEBUG_IO: print '<== SENDING CHUNK ===\n%s\n' % chunk
       self.wfile.write('%x\r\n' % len(chunk))
       self.wfile.write(chunk)
       self.wfile.write('\r\n')
     else:
-      if pagekite.DEBUG_IO: print '<== SENDING ===\n%s\n' % chunk
+      if DEBUG_IO: print '<== SENDING ===\n%s\n' % chunk
       self.wfile.write(chunk)
 
   def sendEof(self):
@@ -327,10 +326,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       http_host = None
       for bid in sorted(self.server.pkite.backends.keys()):
         be = self.server.pkite.backends[bid]
-        if (be[pagekite.BE_BPORT] == self.server.pkite.ui_sspec[1] and
-            be[pagekite.BE_STATUS] not in pagekite.BE_INACTIVE):
-          http_host = '%s:%s' % (be[pagekite.BE_DOMAIN],
-                                 be[pagekite.BE_PORT] or 80)
+        if (be[BE_BPORT] == self.server.pkite.ui_sspec[1] and
+            be[BE_STATUS] not in BE_INACTIVE):
+          http_host = '%s:%s' % (be[BE_DOMAIN],
+                                 be[BE_PORT] or 80)
     if not http_host:
       if self.server.pkite.be_config.keys():
         http_host = sorted(self.server.pkite.be_config.keys()
@@ -355,7 +354,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                                     qs, None)
     except Exception, e:
       logging.Log([('err', 'GET error at %s: %s' % (path, e))])
-      if pagekite.DEBUG_IO: print '=== ERROR\n%s\n===' % traceback.format_exc()
+      if DEBUG_IO: print '=== ERROR\n%s\n===' % traceback.format_exc()
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
   def do_HEAD(self):
@@ -456,7 +455,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                       for f in sorted(os.listdir(full_path))]
 
     # Remove dot-files and PageKite metadata files
-    if self.host_config.get('indexes') != pagekite.WEB_INDEX_ALL:
+    if self.host_config.get('indexes') != WEB_INDEX_ALL:
       files = [f for f in files if not (f[0].startswith('.') or
                                         f[0].startswith('_pagekite'))]
 
@@ -650,8 +649,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
     elif shtml_vars and not self.suppress_body:
       shtml_vars['title'] = '//%s%s' % (shtml_vars['http_host'], path)
-      if self.host_config.get('indexes') in (True, pagekite.WEB_INDEX_ON,
-                                                   pagekite.WEB_INDEX_ALL):
+      if self.host_config.get('indexes') in (True, WEB_INDEX_ON,
+                                                   WEB_INDEX_ALL):
         shtml_vars['body'] = self.renderIndex(full_path, files=index_list)
       else:
         shtml_vars['body'] = ('<p><i>Directory listings disabled and</i> '
@@ -688,7 +687,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       'body': '',
       'msg': 'OK',
       'now': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
-      'ver': pagekite.APPVER
+      'ver': APPVER
     }
     for key in self.headers.keys():
       data['http_'+key.lower()] = self.headers.get(key)
@@ -710,8 +709,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     console = self.host_config.get('console', False)
 
     if path == self.host_config.get('yamon', False):
-      if pagekite.gYamon:
-        data['body'] = pagekite.gYamon.render_vars_text()
+      if gYamon:
+        data['body'] = gYamon.render_vars_text()
       else:
         data['body'] = ''
 
@@ -952,11 +951,11 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     self.server_port = sspec[1]
 
     if ssl_pem_filename:
-      ctx = pagekite.SSL.Context(pagekite.SSL.SSLv3_METHOD)
+      ctx = socks.SSL.Context(socks.SSL.SSLv3_METHOD)
       ctx.use_privatekey_file (ssl_pem_filename)
       ctx.use_certificate_chain_file(ssl_pem_filename)
-      self.socket = pagekite.SSL_Connect(ctx, socket.socket(self.address_family,
-                                                            self.socket_type),
+      self.socket = socks.SSL_Connect(ctx, socket.socket(self.address_family,
+                                                         self.socket_type),
                                          server_side=True)
       self.server_bind()
       self.server_activate()
@@ -966,9 +965,9 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
 
     try:
       from pagekite import yamond
-      gYamon = pagekite.gYamon = yamond.YamonD(sspec)
+      gYamon = common.gYamon = yamond.YamonD(sspec)
       gYamon.vset('started', int(time.time()))
-      gYamon.vset('version', pagekite.APPVER)
+      gYamon.vset('version', APPVER)
       gYamon.vset('httpd_ssl_enabled', self.enable_ssl)
       gYamon.vset('errors', 0)
       gYamon.vset("bytes_all", 0)

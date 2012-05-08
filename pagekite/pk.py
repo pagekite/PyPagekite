@@ -1665,8 +1665,7 @@ class PageKite(object):
       elif opt == '--uiport': self.ui_port = int(arg)
       elif opt == '--sslzlib': self.enable_sslzlib = True
       elif opt == '--debugio':
-        global DEBUG_IO
-        DEBUG_IO = True
+        common.DEBUG_IO = True
       elif opt == '--buffers': self.buffer_max = int(arg)
       elif opt == '--nocrashreport': self.crash_report_url = None
       elif opt == '--noloop': self.main_loop = False

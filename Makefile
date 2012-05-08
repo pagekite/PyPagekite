@@ -15,9 +15,9 @@ BREED_PAGEKITE = pagekite/__init__.py \
 	         pagekite/ui/nullui.py \
 	         pagekite/ui/basic.py \
 	         pagekite/ui/remote.py \
-	         pagekite/pk.py \
 	         pagekite/yamond.py \
 	         pagekite/httpd.py \
+	         pagekite/pk.py \
 
 
 combined: pagekite tools dev
