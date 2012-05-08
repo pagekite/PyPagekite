@@ -1,4 +1,4 @@
-# `pagekite.py` #
+# pagekite.py #
 
 This is `pagekite.py`, a fast and reliable tool to make localhost servers
 visible to the public Internet.
