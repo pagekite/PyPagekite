@@ -15,6 +15,7 @@ combined: pagekite tools dev
 	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py --nopyopenssl \
 	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py --nossl \
 	        || rm pagekite-tmp.py .combined-did-not-run
+	@killall pagekite-tmp.py
 	@mv pagekite-tmp.py dist/pagekite-`python setup.py --version`.py
 	@ls -l dist/pagekite-*.py
 
