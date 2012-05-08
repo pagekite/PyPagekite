@@ -104,7 +104,7 @@ configuration saved as your default, like so:
       localhost:22 ssh://FOO.pagekite.me
 
 After running that (admittedly longish) command, you can simply type
-pagekite.py at any time to make all three services visible to the
+`pagekite.py` at any time to make all three services visible to the
 Internet. If you have configured multiple services, but only want to
 expose one of them, you can use the following short-hand:
 
@@ -180,18 +180,20 @@ re-establish a connection, either with the same server or another one.
 
 #### Terminology ####
 
-A **service** is a local server, for example a website or SSH server.
+The following terms are use throughout the rest of this document:
 
-A **front-end** is an instance of pagekite.py which is configured to act
-as a public, client-facing visible relay server.
+   * A **service** is a local server, for example a website or SSH server.
 
-A **back-end** is an instance of pagekite.py which is configured to
-establish and maintain the tunnels and DNS records required to make a local
-**service** visible to the wider Internet.  The **back-end** must be able
-to make direct connections to local servers.
+   * A **front-end** is an instance of pagekite.py which is configured to act
+     as a public, client-facing visible relay server.
 
-A **service** which is exposed to the wider Internet using PageKite is
-sometimes called **a kite**.
+   * A **back-end** is an instance of pagekite.py which is configured to
+     establish and maintain the tunnels and DNS records required to make a local
+     **service** visible to the wider Internet.  The **back-end** must be able
+     to make direct connections to local servers.
+
+   * A **service** which is exposed to the wider Internet using PageKite is
+     sometimes called **a kite**.
 
 To avoid confusion, we prefer not to use the terms "client" and "server" to
 describe the different roles of pagekite.py.
@@ -279,8 +281,8 @@ supports TLS-encrypted tunnels, add the --fe_certname=HOST argument as well.
 <a                                                               name=fe></a>
 ### 2.3. Running your own front-end relay ###
 
-To configure pagekite.py as a front-end server, you will need to have a
-server with a publicly visible IP address, and you will need to configure
+To configure pagekite.py as a front-end relay, you will need to have a
+host with a publicly visible IP address, and you will need to configure
 DNS correctly, [as discussed below](#dns).
 
 Assuming you are not already running a web server on that machine, the
@@ -293,7 +295,7 @@ optimal configuration is to run pagekite.py so it listens on a few ports
       --domain=http,https:YOURNAME:YOURSECRET
 
 In this case, YOURNAME must be a DNS name which points to the IP of the
-front-end server (either an A or CNAME record), and YOURSECRET is a
+front-end relay (either an A or CNAME record), and YOURSECRET is a
 shared secret of your choosing - it has to match on the back-end, or the
 connection will be rejected.
 
