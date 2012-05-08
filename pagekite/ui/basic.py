@@ -21,8 +21,11 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 #############################################################################
-import re, sys, time
-import pagekite.pk as pk
+import re
+import sys
+import time
+
+from nullui import NullUi
 
 
 HTML_BR_RE = re.compile(r'<(br|/p|/li|/tr|/h\d)>\s*')
@@ -39,7 +42,7 @@ def Q(text):
   return HTML_TAGS_RE.sub('', clean_html(text))
 
 
-class BasicUi(pk.NullUi):
+class BasicUi(NullUi):
   """Stdio based user interface."""
 
   DAEMON_FRIENDLY = False

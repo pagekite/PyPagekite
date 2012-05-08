@@ -26,9 +26,9 @@ import os
 import random
 import time
 
-from pagekite.state import *
 from pagekite.compat import *
-from pagekite.logging import *
+from pagekite.common import *
+import pagekite.logging as logging
 
 
 gSecret = None
@@ -44,14 +44,14 @@ def globalSecret():
     try:
       newSecret = sha1hex(open('/dev/urandom').read(64) + gSecret)
       gSecret = newSecret
-      LogDebug('Seeded signatures using /dev/urandom, hooray!')
+      logging.LogDebug('Seeded signatures using /dev/urandom, hooray!')
     except:
       try:
         newSecret = sha1hex(os.urandom(64) + gSecret)
         gSecret = newSecret
-        LogDebug('Seeded signatures using os.urandom(), hooray!')
+        logging.LogDebug('Seeded signatures using os.urandom(), hooray!')
       except:
-        LogInfo('WARNING: Seeding signatures with time.time() and random.randint()')
+        logging.LogInfo('WARNING: Seeding signatures with time.time() and random.randint()')
 
   return gSecret
 
@@ -93,13 +93,6 @@ def checkSignature(sign='', secret='', payload=''):
   else:
     valid = signToken(token=sign, secret=secret, payload=payload)
     return sign == valid
-
-
-class ConfigError(Exception):
-  """This error gets thrown on configuration errors."""
-
-class ConnectError(Exception):
-  """This error gets thrown on connection errors."""
 
 
 def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,

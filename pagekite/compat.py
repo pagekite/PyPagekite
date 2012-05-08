@@ -21,12 +21,21 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+from common import *
+
 
 # System logging on Unix
 try:
-  import syslog as syslog
+  import syslog
 except ImportError:
-  syslog = None
+  class mockSyslog:
+    def openlog(*args): raise ConfigError('No Syslog on this machine')
+    def syslog(*args): raise ConfigError('No Syslog on this machine')
+    LOG_DAEMON = 0
+    LOG_DEBUG = 0
+    LOG_ERROR = 0
+    LOG_PID = 0
+  syslog = mockSyslog()
 
 
 # Backwards compatibility for old Pythons.

@@ -2,9 +2,9 @@ import errno
 import time
 import zlib
 
-from pagekite.state import *
 from pagekite.compat import *
-from pagekite.logging import *
+from pagekite.common import *
+import pagekite.logging as logging
 
 
 def obfuIp(ip):
@@ -72,7 +72,7 @@ class Selectable(object):
     self.zlevel = 1
     self.zreset = False
 
-    # Logging
+    # logging.Logging
     self.logged = []
     global selectable_id
     selectable_id += 1
@@ -169,25 +169,25 @@ class Selectable(object):
 
   def Log(self, values):
     if self.log_id: values.append(('id', self.log_id))
-    Log(values)
+    logging.Log(values)
     self.logged.append(('', values))
 
   def LogError(self, error, params=None):
     values = params or []
     if self.log_id: values.append(('id', self.log_id))
-    LogError(error, values)
+    logging.LogError(error, values)
     self.logged.append((error, values))
 
   def LogDebug(self, message, params=None):
     values = params or []
     if self.log_id: values.append(('id', self.log_id))
-    LogDebug(message, values)
+    logging.LogDebug(message, values)
     self.logged.append((message, values))
 
   def LogInfo(self, message, params=None):
     values = params or []
     if self.log_id: values.append(('id', self.log_id))
-    LogInfo(message, values)
+    logging.LogInfo(message, values)
     self.logged.append((message, values))
 
   def LogTraffic(self, final=False):
@@ -309,7 +309,7 @@ class Selectable(object):
     else:
       if not self.peeking:
         self.read_bytes += len(data)
-        if self.read_bytes > LOG_THRESHOLD: self.LogTraffic()
+        if self.read_bytes > logging.LOG_THRESHOLD: self.LogTraffic()
       return self.ProcessData(data)
 
   def Throttle(self, max_speed=None, remote=False, delay=0.2):
@@ -372,7 +372,7 @@ class Selectable(object):
 
     self.write_blocked = sending[sent_bytes:]
     buffered_bytes += len(self.write_blocked)
-    if self.wrote_bytes >= LOG_THRESHOLD: self.LogTraffic()
+    if self.wrote_bytes >= logging.LOG_THRESHOLD: self.LogTraffic()
 
     if self.write_eof and not self.write_blocked: self.ProcessEofWrite()
     return True
@@ -395,7 +395,7 @@ class Selectable(object):
           zhistory[1] = len(zdata)
         return self.Send(['%xZ%x%s\r\n%s' % (len(sdata), len(zdata), rst, zdata)])
       except zlib.error:
-        LogError('Error compressing, resetting ZChunks.')
+        logging.LogError('Error compressing, resetting ZChunks.')
         self.ResetZChunks()
 
     return self.Send(['%x%s\r\n%s' % (len(sdata), rst, sdata)])
@@ -405,7 +405,7 @@ class Selectable(object):
                                                                 try_flush=True):
       if wait and len(self.write_blocked) > 0:
         time.sleep(0.1)
-      LogDebug('Flushing...')
+      logging.LogDebug('Flushing...')
       loops -= 1
 
     if self.write_blocked: return False

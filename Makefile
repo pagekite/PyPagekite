@@ -1,37 +1,39 @@
 # Makefile for building combined pagekite.py files.
 export PYTHONPATH := .
 
+BREED_PAGEKITE = pagekite/__init__.py \
+	         pagekite/common.py \
+	         pagekite/compat.py \
+	         pagekite/logging.py \
+	         pagekite/proto/__init__.py \
+	         pagekite/proto/proto.py \
+	         pagekite/proto/parsers.py \
+	         pagekite/proto/selectables.py \
+	         pagekite/proto/conns.py \
+	         pagekite/proto/filters.py \
+	         pagekite/ui/__init__.py \
+	         pagekite/ui/nullui.py \
+	         pagekite/ui/basic.py \
+	         pagekite/ui/remote.py \
+	         pagekite/pk.py \
+	         pagekite/yamond.py \
+	         pagekite/httpd.py \
+
+
 combined: pagekite tools dev
-	@./scripts/breeder.py sockschain \
-	             pagekite/__init__.py \
-	             pagekite/state.py \
-	             pagekite/compat.py \
-	             pagekite/pk.py \
-	             pagekite/basicui.py \
-	             pagekite/remoteui.py \
-	             pagekite/yamond.py \
-	             pagekite/httpd.py \
+	@./scripts/breeder.py sockschain $(BREED_PAGEKITE) \
 	             pagekite/__main__.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
 	@./scripts/blackbox-test.sh ./pagekite-tmp.py \
 	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py --nopyopenssl \
-	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py --nossl \
-	        || rm pagekite-tmp.py .combined-did-not-run
+	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py --nossl
 	@killall pagekite-tmp.py
 	@mv pagekite-tmp.py dist/pagekite-`python setup.py --version`.py
 	@ls -l dist/pagekite-*.py
 
 gtk: pagekite tools dev
-	@./scripts/breeder.py --gtk-images sockschain gui \
-	             pagekite/__init__.py \
-	             pagekite/state.py \
-	             pagekite/compat.py \
-	             pagekite/pk.py \
-	             pagekite/basicui.py \
-	             pagekite/remoteui.py \
-	             pagekite/yamond.py \
-	             pagekite/httpd.py \
+	@./scripts/breeder.py --gtk-images sockschain $(BREED_PAGEKITE) gui \
 	             pagekite_gtk.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
@@ -39,15 +41,7 @@ gtk: pagekite tools dev
 	@ls -l dist/pagekite-*.py
 
 android: pagekite tools
-	@./scripts/breeder.py sockschain \
-	             pagekite/__init__.py \
-	             pagekite/state.py \
-	             pagekite/compat.py \
-	             pagekite/pk.py \
-	             pagekite/basicui.py \
-	             pagekite/remoteui.py \
-	             pagekite/yamond.py \
-	             pagekite/httpd.py \
+	@./scripts/breeder.py sockschain $(BREED_PAGEKITE) \
 	             pagekite/__main__.py \
 	             pagekite/__android__.py \
 	             >pagekite-tmp.py

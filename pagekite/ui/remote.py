@@ -20,10 +20,14 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
-import re, sys, time
-import pagekite.pk
-from pagekite.pk import NullUi
+import re
+import sys
+import time
 
+from pagekite.compat import *
+from pagekite.common import *
+
+from nullui import NullUi
 
 class RemoteUi(NullUi):
   """Stdio based user interface for interacting with other processes."""

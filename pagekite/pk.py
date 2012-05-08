@@ -48,9 +48,11 @@ from CGIHTTPServer import CGIHTTPRequestHandler
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 import Cookie
 
-from state import *
 from compat import *
-from logging import *
+from common import *
+import compat
+import logging
+
 
 # Enable system proxies
 # This will all fail if we don't have PySocksipyChain available.
@@ -99,6 +101,7 @@ from proto.parsers import *
 from proto.selectables import *
 from proto.filters import *
 from proto.conns import *
+from ui.nullui import NullUi
 
 
 # FIXME: This could easily be a pool of threads to let us handle more
@@ -136,9 +139,9 @@ class AuthThread(threading.Thread):
       try:
         self._run()
       except Exception, e:
-        LogError('AuthThread died: %s' % e)
+        logging.LogError('AuthThread died: %s' % e)
         time.sleep(5)
-    LogDebug('AuthThread: done')
+    logging.LogDebug('AuthThread: done')
 
   def _run(self):
     self.qc.acquire()
@@ -157,7 +160,7 @@ class AuthThread(threading.Thread):
           try:
             proto, domain, srand, token, sign, prefix = request
           except:
-            LogError('Invalid request: %s' % (request, ))
+            logging.LogError('Invalid request: %s' % (request, ))
             continue
 
           what = '%s:%s:%s' % (proto, domain, srand)
@@ -306,7 +309,7 @@ class Connections(object):
       except Exception:
         evil.append(s)
     for s in evil:
-      LogDebug('Removing broken Selectable: %s' % s)
+      logging.LogDebug('Removing broken Selectable: %s' % s)
       self.Remove(s)
 
   def Connection(self, fd):
@@ -393,9 +396,9 @@ class HttpUiThread(threading.Thread):
       except KeyboardInterrupt:
         self.serve = False
       except Exception, e:
-        LogInfo('HTTP UI caught exception: %s' % e)
+        logging.LogInfo('HTTP UI caught exception: %s' % e)
     if self.httpd: self.httpd.socket.close()
-    LogDebug('HttpUiThread: done')
+    logging.LogDebug('HttpUiThread: done')
 
 
 class UiCommunicator(threading.Thread):
@@ -406,7 +409,7 @@ class UiCommunicator(threading.Thread):
     self.looping = False
     self.config = config
     self.conns = conns
-    LogDebug('UiComm: Created')
+    logging.LogDebug('UiComm: Created')
 
   def run(self):
     self.looping = True
@@ -426,7 +429,7 @@ class UiCommunicator(threading.Thread):
         line = self.config.ui.rfile.readline().strip()
         if line: self.Parse(line)
 
-    LogDebug('UiCommunicator: done')
+    logging.LogDebug('UiCommunicator: done')
 
   def Reconnect(self):
     if self.config.tunnel_manager:
@@ -437,7 +440,7 @@ class UiCommunicator(threading.Thread):
   def Parse(self, line):
     try:
       command, args = line.split(': ', 1)
-      LogDebug('UiComm: %s(%s)' % (command, args))
+      logging.LogDebug('UiComm: %s(%s)' % (command, args))
 
       if args.lower() == 'none': args = None
       elif args.lower() == 'true': args = True
@@ -484,12 +487,12 @@ class UiCommunicator(threading.Thread):
         self.config.SaveUserConfig(quiet=(args == 'quietly'))
 
     except ValueError:
-      LogDebug('UiComm: bogus: %s' % line)
+      logging.LogDebug('UiComm: bogus: %s' % line)
     except SystemExit:
       self.config.keep_looping = False
       self.config.main_loop = False
     except:
-      LogDebug('UiComm: %s' % (sys.exc_info(), ))
+      logging.LogDebug('UiComm: %s' % (sys.exc_info(), ))
       self.config.ui.Tell(['Oops!', '', 'Failed to %s, details:' % command,
                            '', '%s' % (sys.exc_info(), )], error=True)
 
@@ -518,7 +521,7 @@ class TunnelManager(threading.Thread):
       if conn.last_activity:
         active.append(conn)
       elif conn.created < now - 10:
-        LogDebug('Removing idle connection: %s' % conn)
+        logging.LogDebug('Removing idle connection: %s' % conn)
         self.conns.Remove(conn)
         conn.Cleanup()
       elif conn.created < now - 1:
@@ -544,7 +547,7 @@ class TunnelManager(threading.Thread):
           tunnel.SendPing()
 
     for tunnel in dead.values():
-      Log([('dead', tunnel.server_info[tunnel.S_NAME])])
+      logging.Log([('dead', tunnel.server_info[tunnel.S_NAME])])
       self.conns.Remove(tunnel)
       tunnel.Cleanup()
 
@@ -554,7 +557,7 @@ class TunnelManager(threading.Thread):
       for tunnel in self.conns.tunnels[tid]:
         close.append(tunnel)
     for tunnel in close:
-      Log([('closing', tunnel.server_info[tunnel.S_NAME])])
+      logging.Log([('closing', tunnel.server_info[tunnel.S_NAME])])
       self.conns.Remove(tunnel)
       tunnel.Cleanup()
 
@@ -568,15 +571,14 @@ class TunnelManager(threading.Thread):
       try:
         self._run()
       except Exception, e:
-        LogError('TunnelManager died: %s' % e)
+        logging.LogError('TunnelManager died: %s' % e)
         if DEBUG_IO: traceback.print_exc(file=sys.stderr)
         time.sleep(5)
-    LogDebug('TunnelManager: done')
+    logging.LogDebug('TunnelManager: done')
 
   def _run(self):
     self.check_interval = 5
     while self.keep_running:
-      print 'RUNNING'
 
       # Reconnect if necessary, randomized exponential fallback.
       problem = False
@@ -664,201 +666,6 @@ class TunnelManager(threading.Thread):
 
   def HurryUp(self):
     self.check_interval = 0
-
-
-class NullUi(object):
-  """This is a UI that always returns default values or raises errors."""
-
-  DAEMON_FRIENDLY = True
-  ALLOWS_INPUT = False
-  WANTS_STDERR = False
-  REJECTED_REASONS = {
-    'quota': 'You are out of quota',
-    'nodays': 'Your subscription has expired',
-    'noquota': 'You are out of quota',
-    'noconns': 'You are flying too many kites',
-    'unauthorized': 'Invalid account or shared secret'
-  }
-
-  def __init__(self, welcome=None, wfile=sys.stderr, rfile=sys.stdin):
-    if sys.platform in ('win32', 'os2', 'os2emx'):
-      self.CLEAR = '\n\n'
-      self.NORM = self.WHITE = self.GREY = self.GREEN = self.YELLOW = ''
-      self.BLUE = self.RED = self.MAGENTA = self.CYAN = ''
-    else:
-      self.CLEAR = '\033[H\033[J'
-      self.NORM = '\033[0m'
-      self.WHITE = '\033[1m'
-      self.GREY =  '\033[0m' #'\033[30;1m'
-      self.RED = '\033[31;1m'
-      self.GREEN = '\033[32;1m'
-      self.YELLOW = '\033[33;1m'
-      self.BLUE = '\033[34;1m'
-      self.MAGENTA = '\033[35;1m'
-      self.CYAN = '\033[36;1m'
-
-    self.wfile = wfile
-    self.rfile = rfile
-
-    self.in_wizard = False
-    self.wizard_tell = None
-    self.last_tick = 0
-    self.notify_history = {}
-    self.status_tag = ''
-    self.status_col = self.NORM
-    self.status_msg = ''
-    self.welcome = welcome
-    self.tries = 200
-    self.server_info = None
-    self.Splash()
-
-  def Splash(self): pass
-
-  def Welcome(self): pass
-  def StartWizard(self, title): pass
-  def EndWizard(self): pass
-  def Spacer(self): pass
-
-  def Browse(self, url):
-    import webbrowser
-    self.Tell(['Opening %s in your browser...' % url])
-    webbrowser.open(url)
-
-  def DefaultOrFail(self, question, default):
-    if default is not None: return default
-    raise ConfigError('Unanswerable question: %s' % question)
-
-  def AskLogin(self, question, default=None, email=None,
-               wizard_hint=False, image=None, back=None):
-    return self.DefaultOrFail(question, default)
-
-  def AskEmail(self, question, default=None, pre=None,
-               wizard_hint=False, image=None, back=None):
-    return self.DefaultOrFail(question, default)
-
-  def AskYesNo(self, question, default=None, pre=None, yes='Yes', no='No',
-               wizard_hint=False, image=None, back=None):
-    return self.DefaultOrFail(question, default)
-
-  def AskKiteName(self, domains, question, pre=[], default=None,
-                  wizard_hint=False, image=None, back=None):
-    return self.DefaultOrFail(question, default)
-
-  def AskMultipleChoice(self, choices, question, pre=[], default=None,
-                        wizard_hint=False, image=None, back=None):
-    return self.DefaultOrFail(question, default)
-
-  def AskBackends(self, kitename, protos, ports, rawports, question, pre=[],
-                  default=None, wizard_hint=False, image=None, back=None):
-    return self.DefaultOrFail(question, default)
-
-  def Working(self, message): pass
-
-  def Tell(self, lines, error=False, back=None):
-    if error:
-      LogError(' '.join(lines))
-      raise ConfigError(' '.join(lines))
-    else:
-      Log(['message', ' '.join(lines)])
-      return True
-
-  def Notify(self, message, prefix=' ',
-             popup=False, color=None, now=None, alignright=''):
-    if popup: Log([('info', '%s%s%s' % (message,
-                                        alignright and ' ' or '',
-                                        alignright))])
-
-  def NotifyMOTD(self, frontend, message):
-    pass
-
-  def NotifyKiteRejected(self, proto, domain, reason, crit=False):
-    if reason in self.REJECTED_REASONS:
-      reason = self.REJECTED_REASONS[reason]
-    self.Notify('REJECTED: %s:%s (%s)' % (proto, domain, reason),
-                prefix='!', color=(crit and self.RED or self.YELLOW))
-
-  def NotifyServer(self, obj, server_info):
-    self.server_info = server_info
-    self.Notify('Connecting to front-end %s ...' % server_info[obj.S_NAME],
-                color=self.GREY)
-    self.Notify(' - Protocols: %s' % ' '.join(server_info[obj.S_PROTOS]),
-                color=self.GREY)
-    self.Notify(' - Ports: %s' % ' '.join(server_info[obj.S_PORTS]),
-                color=self.GREY)
-    if 'raw' in server_info[obj.S_PROTOS]:
-      self.Notify(' - Raw ports: %s' % ' '.join(server_info[obj.S_RAW_PORTS]),
-                  color=self.GREY)
-
-  def NotifyQuota(self, quota):
-    qMB = 1024
-    self.Notify('You have %.2f MB of quota left.' % (quota / qMB),
-                prefix=(int(quota) < qMB) and '!' or ' ',
-                color=self.MAGENTA)
-
-  def NotifyFlyingFE(self, proto, port, domain, be=None):
-    self.Notify(('Flying: %s://%s%s/'
-                 ) % (proto, domain, port and ':'+port or ''),
-                prefix='~<>', color=self.CYAN)
-
-  def StartListingBackEnds(self): pass
-  def EndListingBackEnds(self): pass
-
-  def NotifyBE(self, bid, be, has_ssl, dpaths, is_builtin=False):
-    domain, port, proto = be[BE_DOMAIN], be[BE_PORT], be[BE_PROTO]
-    prox = (proto == 'raw') and ' (HTTP proxied)' or ''
-    if proto == 'raw' and port in ('22', 22): proto = 'ssh'
-    url = '%s://%s%s' % (proto, domain, port and (':%s' % port) or '')
-
-    if be[BE_STATUS] == BE_STATUS_UNKNOWN: return
-    if be[BE_STATUS] & BE_STATUS_OK:
-      if be[BE_STATUS] & BE_STATUS_ERR_ANY:
-        status = 'Trying'
-        color = self.YELLOW
-        prefix = '   '
-      else:
-        status = 'Flying'
-        color = self.CYAN
-        prefix = '~<>'
-    else:
-      return
-
-    self.Notify(('%s %s:%s as %s/%s'
-                 ) % (status, be[BE_BHOST], be[BE_BPORT], url, prox),
-                prefix=prefix, color=color)
-
-    if status == 'Flying':
-      for dp in sorted(dpaths.keys()):
-        self.Notify(' - %s%s' % (url, dp), color=self.BLUE)
-
-  def Status(self, tag, message=None, color=None): pass
-
-  def ExplainError(self, error, title, subject=None):
-    if error == 'pleaselogin':
-      self.Tell([title, '', 'You already have an account. Log in to continue.'
-                 ], error=True)
-    elif error == 'email':
-      self.Tell([title, '', 'Invalid e-mail address. Please try again?'
-                 ], error=True)
-    elif error == 'honey':
-      self.Tell([title, '', 'Hmm. Somehow, you triggered the spam-filter.'
-                 ], error=True)
-    elif error in ('domaintaken', 'domain', 'subdomain'):
-      self.Tell([title, '',
-                 'Sorry, that domain (%s) is unavailable.' % subject
-                 ], error=True)
-    elif error == 'checkfailed':
-      self.Tell([title, '',
-                 'That domain (%s) is not correctly set up.' % subject
-                 ], error=True)
-    elif error == 'network':
-      self.Tell([title, '',
-                 'There was a problem communicating with %s.' % subject, '',
-                 'Please verify that you have a working'
-                 ' Internet connection and try again!'
-                 ], error=True)
-    else:
-      self.Tell([title, 'Error code: %s' % error, 'Try again later?'
-                 ], error=True)
 
 
 class PageKite(object):
@@ -1310,7 +1117,7 @@ class PageKite(object):
       if not quiet:
         self.ui.Tell(['Settings saved to: %s' % self.savefile])
         self.ui.Spacer()
-      Log([('saved', 'Settings saved to: %s' % self.savefile)])
+      logging.Log([('saved', 'Settings saved to: %s' % self.savefile)])
     except Exception, e:
       self.ui.Tell(['Could not save to %s: %s' % (self.savefile, e)],
                    error=True)
@@ -1352,7 +1159,7 @@ class PageKite(object):
         status = self.backends[bid][BE_STATUS]
         if add: self.backends[bid][BE_STATUS] |= add
         if sub and (status & sub): self.backends[bid][BE_STATUS] -= sub
-        Log([('bid', bid),
+        logging.Log([('bid', bid),
              ('status', '0x%x' % self.backends[bid][BE_STATUS])])
 
   def GetBackendData(self, proto, domain, recurse=True):
@@ -1421,17 +1228,17 @@ class PageKite(object):
         porti = int(port)
         if porti in self.server_aliasport: porti = self.server_aliasport[porti]
         if porti not in port_list and VIRTUAL_PN not in port_list:
-          LogInfo('Unsupported port request: %s (%s:%s)' % (porti, protoport, domain))
+          logging.LogInfo('Unsupported port request: %s (%s:%s)' % (porti, protoport, domain))
           return (None, 'port')
 
       except ValueError:
-        LogError('Invalid port request: %s:%s' % (protoport, domain))
+        logging.LogError('Invalid port request: %s:%s' % (protoport, domain))
         return (None, 'port')
     else:
       proto, port = protoport, None
 
     if proto not in self.server_protos:
-      LogInfo('Invalid proto request: %s:%s' % (protoport, domain))
+      logging.LogInfo('Invalid proto request: %s:%s' % (protoport, domain))
       return (None, 'proto')
 
     data = '%s:%s:%s' % (protoport, domain, srand)
@@ -1448,7 +1255,7 @@ class PageKite(object):
         if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
           return (-1, None)
         elif not self.auth_domain:
-          LogError('Invalid signature for: %s (%s)' % (domain, protoport))
+          logging.LogError('Invalid signature for: %s (%s)' % (domain, protoport))
           return (None, auth_error_type or 'signature')
 
       if self.auth_domain:
@@ -1464,10 +1271,10 @@ class PageKite(object):
             return (rv, auth_error_type)
         except Exception, e:
           # Lookup failed, fail open.
-          LogError('Quota lookup failed: %s' % e)
+          logging.LogError('Quota lookup failed: %s' % e)
           return (-2, None)
 
-    LogInfo('No authentication found for: %s (%s)' % (domain, protoport))
+    logging.LogInfo('No authentication found for: %s (%s)' % (domain, protoport))
     return (None, auth_error_type or 'unauthorized')
 
   def ConfigureFromFile(self, filename=None, data=None):
@@ -1755,8 +1562,7 @@ class PageKite(object):
         self.upgrade_info.append((version, tag, md5, human_url, file_url))
       elif opt in ('-f', '--isfrontend'):
         self.isfrontend = True
-        global LOG_THRESHOLD
-        LOG_THRESHOLD *= 4
+        logging.LOG_THRESHOLD *= 4
 
       elif opt in ('-a', '--all'): self.require_all = True
       elif opt in ('-N', '--new'): self.servers_new_only = True
@@ -1887,7 +1693,7 @@ class PageKite(object):
         self.HelpAndExit()
 
     # Make sure these are configured before we try and do XML-RPC stuff.
-    socks.DEBUG = (DEBUG_IO or socks.DEBUG) and LogDebug
+    socks.DEBUG = (DEBUG_IO or socks.DEBUG) and logging.LogDebug
     if self.ca_certs: socks.setdefaultcertfile(self.ca_certs)
 
     # Handle the user-friendly argument stuff and simple registration.
@@ -2529,11 +2335,11 @@ class PageKite(object):
       fd.close()
 
     except Exception, e:
-      LogDebug('Ping %s:%s failed: %s' % (host, port, e))
+      logging.LogDebug('Ping %s:%s failed: %s' % (host, port, e))
       return 100000
 
     elapsed = (time.time() - start)
-    LogDebug('Pinged %s:%s: %f' % (host, port, elapsed))
+    logging.LogDebug('Pinged %s:%s: %f' % (host, port, elapsed))
     return elapsed
 
   def GetHostIpAddr(self, host):
@@ -2575,7 +2381,7 @@ class PageKite(object):
           self.servers.append(server)
           self.servers_preferred.append(ipaddr)
       except Exception, e:
-        LogDebug('DNS lookup failed for %s' % host)
+        logging.LogDebug('DNS lookup failed for %s' % host)
 
     # Lookup and choose from the auto-list (and our old domain).
     if self.servers_auto:
@@ -2592,13 +2398,13 @@ class PageKite(object):
                 server = '%s:%s' % (ip, port)
                 if server not in self.servers: self.servers.append(server)
           except Exception, e:
-            LogDebug('DNS lookup failed for %s' % bdom)
+            logging.LogDebug('DNS lookup failed for %s' % bdom)
 
       try:
         (hn, al, ips) = socket.gethostbyname_ex(domain)
         times = [self.Ping(ip, port) for ip in ips]
       except Exception, e:
-        LogDebug('Unreachable: %s, %s' % (domain, e))
+        logging.LogDebug('Unreachable: %s, %s' % (domain, e))
         ips = times = []
 
       while count > 0 and ips:
@@ -2632,11 +2438,11 @@ class PageKite(object):
           self.ui.Status('connect', color=self.ui.YELLOW,
                          message='Connecting to front-end: %s' % server)
           if Tunnel.BackEnd(server, self.backends, self.require_all, conns):
-            Log([('connect', server)])
+            logging.Log([('connect', server)])
             connections += 1
           else:
             failures += 1
-            LogInfo('Failed to connect', [('FE', server)])
+            logging.LogInfo('Failed to connect', [('FE', server)])
             self.ui.Notify('Failed to connect to %s' % server,
                            prefix='!', color=self.ui.YELLOW)
 
@@ -2687,16 +2493,16 @@ class PageKite(object):
             result = ''.join(urllib.urlopen(updates[update]).readlines())
             self.last_updates.append(update)
             if result.startswith('good') or result.startswith('nochg'):
-              Log([('dyndns', result), ('data', update)])
+              logging.Log([('dyndns', result), ('data', update)])
               self.SetBackendStatus(update.split(':')[0],
                                     sub=BE_STATUS_ERR_DNS)
             else:
-              LogInfo('DynDNS update failed: %s' % result, [('data', update)])
+              logging.LogInfo('DynDNS update failed: %s' % result, [('data', update)])
               self.SetBackendStatus(update.split(':')[0],
                                     add=BE_STATUS_ERR_DNS)
               failures += 1
           except Exception, e:
-            LogInfo('DynDNS update failed: %s' % e, [('data', update)])
+            logging.LogInfo('DynDNS update failed: %s' % e, [('data', update)])
             if DEBUG_IO: traceback.print_exc(file=sys.stderr)
             self.SetBackendStatus(update.split(':')[0],
                                   add=BE_STATUS_ERR_DNS)
@@ -2707,29 +2513,26 @@ class PageKite(object):
     return failures
 
   def LogTo(self, filename, close_all=True, dont_close=[]):
-    global Log
-
     if filename == 'memory':
-      Log = LogToMemory
+      logging.Log = logging.LogToMemory
       filename = self.devnull
 
     elif filename == 'syslog':
-      Log = LogSyslog
+      logging.Log = logging.LogSyslog
       filename = self.devnull
-      syslog.openlog(self.progname, syslog.LOG_PID, syslog.LOG_DAEMON)
+      compat.syslog.openlog(self.progname, syslog.LOG_PID, syslog.LOG_DAEMON)
 
     else:
-      Log = LogToFile
+      logging.Log = logging.LogToFile
 
-    global LogFile
     if filename in ('stdio', 'stdout'):
       try:
-        LogFile = os.fdopen(sys.stdout.fileno(), 'w', 0)
+        logging.LogFile = os.fdopen(sys.stdout.fileno(), 'w', 0)
       except:
-        LogFile = sys.stdout
+        logging.LogFile = sys.stdout
     else:
       try:
-        LogFile = fd = open(filename, "a", 0)
+        logging.LogFile = fd = open(filename, "a", 0)
         os.dup2(fd.fileno(), sys.stdin.fileno())
         os.dup2(fd.fileno(), sys.stdout.fileno())
         if not self.ui.WANTS_STDERR: os.dup2(fd.fileno(), sys.stderr.fileno())
@@ -2762,28 +2565,28 @@ class PageKite(object):
       except KeyboardInterrupt, e:
         raise KeyboardInterrupt()
       except Exception, e:
-        LogError('Error in select: %s (%s/%s)' % (e, isocks, osocks))
+        logging.LogError('Error in select: %s (%s/%s)' % (e, isocks, osocks))
         conns.CleanFds()
         self.last_loop -= 1
 
       now = time.time()
       if not iready and not oready:
         if (isocks or osocks) and (now < self.last_loop + 1):
-          LogError('Spinning, pausing ...')
+          logging.LogError('Spinning, pausing ...')
           time.sleep(0.1)
 
       if oready:
         for socket in oready:
           conn = conns.Connection(socket)
           if conn and not conn.Send([], try_flush=True):
-#           LogDebug("Write error in main loop, closing %s" % conn)
+#           logging.LogDebug("Write error in main loop, closing %s" % conn)
             conns.Remove(conn)
             conn.Cleanup()
 
       if buffered_bytes < 1024 * self.buffer_max:
         throttle = None
       else:
-        LogDebug("FIXME: Nasty pause to let buffers clear!")
+        logging.LogDebug("FIXME: Nasty pause to let buffers clear!")
         time.sleep(0.1)
         throttle = 1024
 
@@ -2791,7 +2594,7 @@ class PageKite(object):
         for socket in iready:
           conn = conns.Connection(socket)
           if conn and not conn.ReadData(maxread=throttle):
-#           LogDebug("Read error in main loop, closing %s" % conn)
+#           logging.LogDebug("Read error in main loop, closing %s" % conn)
             conns.Remove(conn)
             conn.Cleanup()
 
@@ -2810,7 +2613,6 @@ class PageKite(object):
 
   def Start(self, howtoquit='CTRL+C = Quit'):
     conns = self.conns = self.conns or Connections(self)
-    global Log
 
     # If we are going to spam stdout with ugly crap, then there is no point
     # attempting the fancy stuff. This also makes us backwards compatible
@@ -2830,7 +2632,7 @@ class PageKite(object):
                      ('ca_certs', self.ca_certs)]
     for optf in self.rcfiles_loaded:
       config_report.append(('optfile_%s' % optf, 'ok'))
-    Log(config_report)
+    logging.Log(config_report)
 
     if not socks.HAVE_SSL:
       self.ui.Notify('SECURITY WARNING: No SSL support was found, tunnels are insecure!',
@@ -2840,7 +2642,7 @@ class PageKite(object):
 
     # Create global secret
     self.ui.Status('startup', message='Collecting entropy for a secure secret...')
-    LogInfo('Collecting entropy for a secure secret.')
+    logging.LogInfo('Collecting entropy for a secure secret.')
     globalSecret()
     self.ui.Status('startup', message='Starting up...')
 
@@ -2866,7 +2668,7 @@ class PageKite(object):
 
     except Exception, e:
       self.LogTo('stdio')
-      FlushLogMemory()
+      logging.FlushLogMemory()
       if DEBUG_IO: traceback.print_exc(file=sys.stderr)
       raise ConfigError('Configuring listeners: %s ' % e)
 
@@ -2881,7 +2683,7 @@ class PageKite(object):
       self.LogTo('stdio')
 
     # Flush in-memory log, if necessary
-    FlushLogMemory()
+    logging.FlushLogMemory()
 
     # Set up SIGHUP handler.
     if self.logfile or self.reloadfile:
@@ -2890,12 +2692,12 @@ class PageKite(object):
         def reopen(x,y):
           if self.logfile:
             self.LogTo(self.logfile, close_all=False)
-            LogDebug('SIGHUP received, reopening: %s' % self.logfile)
+            logging.LogDebug('SIGHUP received, reopening: %s' % self.logfile)
           if self.reloadfile:
             self.ConfigureFromFile(self.reloadfile)
         signal.signal(signal.SIGHUP, reopen)
       except Exception:
-        LogError('Warning: signal handler unavailable, logrotate will not work.')
+        logging.LogError('Warning: signal handler unavailable, logrotate will not work.')
 
     # Disable compression in OpenSSL
     if socks.HAVE_SSL and not self.enable_sslzlib:
@@ -2918,7 +2720,7 @@ class PageKite(object):
     if self.setgid: os.setgid(self.setgid)
     if self.setuid: os.setuid(self.setuid)
     if self.setuid or self.setgid:
-      Log([('uid', os.getuid()), ('gid', os.getgid())])
+      logging.Log([('uid', os.getuid()), ('gid', os.getgid())])
 
     # Make sure we have what we need
     if self.require_all:
@@ -2929,7 +2731,7 @@ class PageKite(object):
     self.Loop()
 
     self.ui.Status('exiting', message='Stopping...')
-    Log([('stopping', 'pagekite.py')])
+    logging.Log([('stopping', 'pagekite.py')])
     if self.ui_httpd: self.ui_httpd.quit()
     if self.ui_comm: self.ui_comm.quit()
     if self.tunnel_manager: self.tunnel_manager.quit()
@@ -2976,7 +2778,7 @@ def Main(pagekite, configure, uiclass=NullUi,
       if pk.crash_report_url:
         try:
           print 'Submitting crash report to %s' % pk.crash_report_url
-          LogDebug(''.join(urllib.urlopen(pk.crash_report_url,
+          logging.LogDebug(''.join(urllib.urlopen(pk.crash_report_url,
                                           urllib.urlencode({
                                             'platform': sys.platform,
                                             'appver': APPVER,
@@ -2992,7 +2794,7 @@ def Main(pagekite, configure, uiclass=NullUi,
       for fd in sockets: fd.close()
 
       # Exponential fall-back.
-      LogDebug('Restarting in %d seconds...' % (2 ** crashes))
+      logging.LogDebug('Restarting in %d seconds...' % (2 ** crashes))
       time.sleep(2 ** crashes)
       crashes += 1
       if crashes > 9: crashes = 9

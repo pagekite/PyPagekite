@@ -309,6 +309,13 @@ SERVICE_DOMAIN_RE = re.compile('\.(' + '|'.join(SERVICE_DOMAINS) + ')$')
 SERVICE_SUBDOMAIN_RE = re.compile(r'^([A-Za-z0-9_-]+\.)*[A-Za-z0-9_-]+$')
 
 
+class ConfigError(Exception):
+  """This error gets thrown on configuration errors."""
+
+class ConnectError(Exception):
+  """This error gets thrown on connection errors."""
+
+
 ##[ Ugly fugly globals ]#######################################################
 
 # The global Yamon is used for measuring internal state for monitoring
@@ -316,4 +323,6 @@ gYamon = None
 
 # Status of our buffers...
 buffered_bytes = 0
+
+
 

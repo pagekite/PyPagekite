@@ -23,8 +23,12 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 ##############################################################################
 import time
 import sys
-from state import *
+
+import compat, common
 from compat import *
+from common import *
+
+syslog = compat.syslog
 
 LOG = []
 LOG_LINE = 0
@@ -32,7 +36,7 @@ LOG_LENGTH = 300
 LOG_THRESHOLD = 256 * 1024
 
 def LogValues(values, testtime=None):
-  global LOG_LINE, LOG_LAST_TIME
+  global LOG, LOG_LINE, LOG_LAST_TIME
   now = int(testtime or time.time())
   words = [('ts', '%x' % now),
            ('t',  '%s' % datetime.datetime.fromtimestamp(now).isoformat()),
@@ -45,7 +49,9 @@ def LogValues(values, testtime=None):
   wdict = dict(words)
   LOG_LINE += 1
   LOG.append(wdict)
-  while len(LOG) > LOG_LENGTH: LOG.pop(0)
+  while len(LOG) > LOG_LENGTH:
+    LOG.pop(0)
+
   return (words, wdict)
 
 def LogSyslog(values, wdict=None, words=None):
@@ -58,7 +64,6 @@ def LogSyslog(values, wdict=None, words=None):
   else:
     syslog.syslog(syslog.LOG_INFO, '; '.join(['='.join(x) for x in words]))
 
-LogFile = sys.stdout
 def LogToFile(values, wdict=None, words=None):
   if values:
     words, wdict = LogValues(values)
@@ -69,10 +74,9 @@ def LogToMemory(values, wdict=None, words=None):
   if values: LogValues(values)
 
 def FlushLogMemory():
+  global LOG
   for l in LOG:
     Log(None, wdict=l, words=[(w, l[w]) for w in l])
-
-Log = LogToMemory
 
 def LogError(msg, parms=None):
   emsg = [('err', msg)]
@@ -91,3 +95,7 @@ def LogInfo(msg, parms=None):
   emsg = [('info', msg)]
   if parms: emsg.extend(parms)
   Log(emsg)
+
+LogFile = sys.stdout
+Log = LogToMemory
+

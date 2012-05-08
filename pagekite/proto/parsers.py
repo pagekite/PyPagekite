@@ -1,4 +1,6 @@
-from pagekite.logging import *
+from pagekite.compat import *
+from pagekite.common import *
+import pagekite.logging as logging
 
 HTTP_METHODS = ['OPTIONS', 'CONNECT', 'GET', 'HEAD', 'POST', 'PUT', 'TRACE',
                 'PROPFIND', 'PROPPATCH', 'MKCOL', 'DELETE', 'COPY', 'MOVE',
@@ -66,7 +68,7 @@ class MagicLineParser(BaseLineParser):
         break
 
     if not self.parsers:
-      LogDebug('No more parsers!')
+      logging.LogDebug('No more parsers!')
 
     return (len(self.parsers) > 0)
 
@@ -95,7 +97,7 @@ class HttpLineParser(BaseLineParser):
     self.version, self.code, self.message = line.split()
 
     if not self.version.upper() in HTTP_VERSIONS:
-      LogDebug('Invalid version: %s' % self.version)
+      logging.LogDebug('Invalid version: %s' % self.version)
       return False
 
     self.state = self.IN_HEADERS
@@ -105,11 +107,11 @@ class HttpLineParser(BaseLineParser):
     self.method, self.path, self.version = line.split()
 
     if not self.method in HTTP_METHODS:
-      LogDebug('Invalid method: %s' % self.method)
+      logging.LogDebug('Invalid method: %s' % self.method)
       return False
 
     if not self.version.upper() in HTTP_VERSIONS:
-      LogDebug('Invalid version: %s' % self.version)
+      logging.LogDebug('Invalid version: %s' % self.version)
       return False
 
     self.state = self.IN_HEADERS
@@ -149,7 +151,7 @@ class HttpLineParser(BaseLineParser):
         return self.ParseBody(line)
 
     except ValueError, err:
-      LogDebug('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
+      logging.LogDebug('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
 
     self.state = BaseLineParser.PARSE_FAILED
     return False
@@ -231,7 +233,7 @@ class IrcLineParser(BaseLineParser):
         else:
           self.state = BaseLineParser.PARSE_FAILED
       except Exception, err:
-        LogDebug('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
+        logging.LogDebug('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
         self.state = BaseLineParser.PARSE_FAILED
 
     return (self.state != BaseLineParser.PARSE_FAILED)

@@ -39,6 +39,9 @@ from CGIHTTPServer import CGIHTTPRequestHandler
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 import Cookie
 
+from pagekite.common import *
+from pagekite.compat import *
+import pagekite.logging as logging
 import pagekite.pk as pagekite
 import sockschain as socks
 
@@ -201,7 +204,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       SimpleXMLRPCRequestHandler.setup(self)
 
   def log_message(self, format, *args):
-    pagekite.Log([('uireq', format % args)])
+    logging.Log([('uireq', format % args)])
 
   def send_header(self, header, value):
     self.wfile.write('%s: %s\r\n' % (header, value))
@@ -293,9 +296,9 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       return True
 
     except (ValueError, KeyError, AuthError), e:
-      pagekite.LogDebug('HTTP Auth failed: %s' % e)
+      logging.LogDebug('HTTP Auth failed: %s' % e)
     else:
-      pagekite.LogDebug('HTTP Auth failed: Unauthorized')
+      logging.LogDebug('HTTP Auth failed: Unauthorized')
 
     self.sendResponse('<h1>Unauthorized</h1>\n', code=401, msg='Forbidden')
     return False
@@ -351,7 +354,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       return self.handleHttpRequest(scheme, netloc, path, params, query, frag,
                                     qs, None)
     except Exception, e:
-      pagekite.Log([('err', 'GET error at %s: %s' % (path, e))])
+      logging.Log([('err', 'GET error at %s: %s' % (path, e))])
       if pagekite.DEBUG_IO: print '=== ERROR\n%s\n===' % traceback.format_exc()
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
@@ -399,7 +402,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
       self.post_data.seek(0)
     except Exception, e:
-      pagekite.Log([('err', 'POST error at %s: %s' % (path, e))])
+      logging.Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
       self.rfile = self.old_rfile
       self.post_data = None
@@ -410,7 +413,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       return self.handleHttpRequest(scheme, netloc, path, params, query, frag,
                                     qs, posted)
     except Exception, e:
-      pagekite.Log([('err', 'POST error at %s: %s' % (path, e))])
+      logging.Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
     self.rfile = self.old_rfile
@@ -734,7 +737,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                           ])
         return
       else:
-        pagekite.LogDebug("Invalid token, %s != %s" % (token,
+        logging.LogDebug("Invalid token, %s != %s" % (token,
                                                        self.server.secret))
         data.update(self.E404)
 
@@ -805,7 +808,7 @@ class RemoteControlInterface(object):
     # Javascript apps can create these for implementing chat etc.
     self.channels = {'LOG': {'access': self.ACL_READ,
                              'tokens': self.auth_tokens,
-                             'data': pagekite.LOG}}
+                             'data': logging.LOG}}
 
   def _BEGIN(self, request_object):
     self.lock.acquire()
@@ -874,7 +877,7 @@ class RemoteControlInterface(object):
 
     if kite_id in self.pkite.backends:
       del self.pkite.backends[kite_id]
-      pagekite.Log([('reconfigured', '1'), ('removed', kite_id)])
+      logging.Log([('reconfigured', '1'), ('removed', kite_id)])
       self.modified = True
     return self.get_kites(auth_token)
 
