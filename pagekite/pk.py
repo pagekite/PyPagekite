@@ -50,6 +50,10 @@ import Cookie
 
 from state import *
 from compat import *
+from logging import *
+
+
+
 
 
 # Enable system proxies
@@ -304,72 +308,6 @@ def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None,
     return HTTP_Response(code, status,
                          ['<html><body>', message, '</body></html>'],
                          headers=headers)
-
-LOG = []
-LOG_LINE = 0
-LOG_LENGTH = 300
-LOG_THRESHOLD = 256 * 1024
-
-def LogValues(values, testtime=None):
-  global LOG_LINE, LOG_LAST_TIME
-  now = int(testtime or time.time())
-  words = [('ts', '%x' % now),
-           ('t',  '%s' % datetime.datetime.fromtimestamp(now).isoformat()),
-           ('ll', '%x' % LOG_LINE)]
-  words.extend([(kv[0], ('%s' % kv[1]).replace('\t', ' ')
-                                      .replace('\r', ' ')
-                                      .replace('\n', ' ')
-                                      .replace('; ', ', ')
-                                      .strip()) for kv in values])
-  wdict = dict(words)
-  LOG_LINE += 1
-  LOG.append(wdict)
-  while len(LOG) > LOG_LENGTH: LOG.pop(0)
-  return (words, wdict)
-
-def LogSyslog(values, wdict=None, words=None):
-  if values:
-    words, wdict = LogValues(values)
-  if 'err' in wdict:
-    syslog.syslog(syslog.LOG_ERR, '; '.join(['='.join(x) for x in words]))
-  elif 'debug' in wdict:
-    syslog.syslog(syslog.LOG_DEBUG, '; '.join(['='.join(x) for x in words]))
-  else:
-    syslog.syslog(syslog.LOG_INFO, '; '.join(['='.join(x) for x in words]))
-
-LogFile = sys.stdout
-def LogToFile(values, wdict=None, words=None):
-  if values:
-    words, wdict = LogValues(values)
-  LogFile.write('; '.join(['='.join(x) for x in words]))
-  LogFile.write('\n')
-
-def LogToMemory(values, wdict=None, words=None):
-  if values: LogValues(values)
-
-def FlushLogMemory():
-  for l in LOG:
-    Log(None, wdict=l, words=[(w, l[w]) for w in l])
-
-Log = LogToMemory
-
-def LogError(msg, parms=None):
-  emsg = [('err', msg)]
-  if parms: emsg.extend(parms)
-  Log(emsg)
-
-  global gYamon
-  if gYamon: gYamon.vadd('errors', 1, wrap=1000000)
-
-def LogDebug(msg, parms=None):
-  emsg = [('debug', msg)]
-  if parms: emsg.extend(parms)
-  Log(emsg)
-
-def LogInfo(msg, parms=None):
-  emsg = [('info', msg)]
-  if parms: emsg.extend(parms)
-  Log(emsg)
 
 
 # FIXME: This could easily be a pool of threads to let us handle more
