@@ -43,7 +43,7 @@ gtk: pagekite tools dev
 android: pagekite tools
 	@./scripts/breeder.py sockschain $(BREED_PAGEKITE) \
 	             pagekite/__main__.py \
-	             pagekite/__android__.py \
+	             pagekite/android.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
 	@mv pagekite-tmp.py dist/pk-android-`./pagekite-tmp.py --appver`.py
