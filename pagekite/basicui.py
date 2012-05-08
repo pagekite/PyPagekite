@@ -1,6 +1,29 @@
+#!/usr/bin/python
+"""
+This is the "basic" text-mode user interface class.
+"""
+#############################################################################
+LICENSE = """\
+This file is part of pagekite.py.
+Copyright 2010-2012, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the  GNU  Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful,  but  WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more
+details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see: <http://www.gnu.org/licenses/>
+"""
+#############################################################################
 import re, sys, time
-import pagekite
-from pagekite import NullUi
+import pagekite.pk as pk
+
 
 HTML_BR_RE = re.compile(r'<(br|/p|/li|/tr|/h\d)>\s*')
 HTML_LI_RE = re.compile(r'<li>\s*')
@@ -16,7 +39,7 @@ def Q(text):
   return HTML_TAGS_RE.sub('', clean_html(text))
 
 
-class BasicUi(NullUi):
+class BasicUi(pk.NullUi):
   """Stdio based user interface."""
 
   DAEMON_FRIENDLY = False
@@ -174,13 +197,13 @@ class BasicUi(NullUi):
         return back
       elif len(domains) == 1:
         answer = answer.replace(domains[0], '')
-        if answer and pagekite.SERVICE_SUBDOMAIN_RE.match(answer):
+        if answer and pk.SERVICE_SUBDOMAIN_RE.match(answer):
           return answer+domains[0]
       else:
         for domain in domains:
           if answer.endswith(domain):
             answer = answer.replace(domain, '')
-            if answer and pagekite.SERVICE_SUBDOMAIN_RE.match(answer):
+            if answer and pk.SERVICE_SUBDOMAIN_RE.match(answer):
               return answer+domain
       self.wfile.write('    (Please only use characters A-Z, 0-9, - and _.)')
     raise Exception('Too many tries')

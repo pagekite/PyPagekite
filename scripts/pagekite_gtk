@@ -12,9 +12,10 @@ import traceback
 import time
 import webbrowser
 
-import pagekite
-from pagekite import sha1hex, globalSecret, remoteui, httpd
+from pagekite import remoteui, httpd
+from pagekite.pk import sha1hex, globalSecret
 from pagekite.basicui import clean_html
+import pagekite.pk as pagekite
 
 
 SHARE_DIR = "~/PageKite"

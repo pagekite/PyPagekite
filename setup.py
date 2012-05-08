@@ -1,7 +1,7 @@
 #!/usr/bin/python
 from datetime import date
 from setuptools import setup
-from pagekite import APPVER
+from pagekite.state import APPVER
 import os
 
 try:

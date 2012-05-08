@@ -4,6 +4,9 @@ export PYTHONPATH := .
 combined: pagekite tools dev
 	@./scripts/breeder.py sockschain \
 	             pagekite/__init__.py \
+	             pagekite/state.py \
+	             pagekite/compat.py \
+	             pagekite/pk.py \
 	             pagekite/basicui.py \
 	             pagekite/remoteui.py \
 	             pagekite/yamond.py \
@@ -22,6 +25,9 @@ combined: pagekite tools dev
 gtk: pagekite tools dev
 	@./scripts/breeder.py --gtk-images sockschain gui \
 	             pagekite/__init__.py \
+	             pagekite/state.py \
+	             pagekite/compat.py \
+	             pagekite/pk.py \
 	             pagekite/basicui.py \
 	             pagekite/remoteui.py \
 	             pagekite/yamond.py \
@@ -35,6 +41,9 @@ gtk: pagekite tools dev
 android: pagekite tools
 	@./scripts/breeder.py sockschain \
 	             pagekite/__init__.py \
+	             pagekite/state.py \
+	             pagekite/compat.py \
+	             pagekite/pk.py \
 	             pagekite/basicui.py \
 	             pagekite/remoteui.py \
 	             pagekite/yamond.py \

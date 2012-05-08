@@ -1,27 +1,27 @@
 #!/usr/bin/python -u
-#
-# pagekite_logparse.py, Copyright 2010, The Beanstalks Project ehf.
-#                                       http://beanstalks-project.net/
-#
-# Basic tool for processing and parsing the Pagekite logs. This class
-# doesn't actually do anything much, it's meant for subclassing.
-#
-#############################################################################
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as
-# published by the Free Software Foundation, either version 3 of the
-# License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-#############################################################################
-#
+"""
+A basic tool for processing and parsing the Pagekite logs. This class
+doesn't actually do anything much, it's meant for subclassing.
+"""
+##############################################################################
+LICENSE = """\
+This file is part of pagekite.py.
+Copyright 2010-2012, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the  GNU  Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful,  but  WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more
+details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see: <http://www.gnu.org/licenses/>
+"""
+##############################################################################
 import os
 import sys
 import time
