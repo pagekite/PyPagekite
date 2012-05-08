@@ -47,7 +47,7 @@ you can run your own using pagekite.py.
 
 `Pagekite.py` requires Python 2.x, version 2.2 or later.
 
-`Pagekite.py` includes a basic web server for seving static content, but is
+`Pagekite.py` includes a basic web server for serving static content, but is
 more commonly used to expose other HTTP servers running on localhost (such
 as Apache or a Django development server) to the wider Internet.
 
