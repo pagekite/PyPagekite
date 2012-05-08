@@ -36,7 +36,7 @@ from CGIHTTPServer import CGIHTTPRequestHandler
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 import Cookie
 
-import pagekite
+import pagekite.pk as pagekite
 import sockschain as socks
 
 
@@ -704,7 +704,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     console = self.host_config.get('console', False)
 
     if path == self.host_config.get('yamon', False):
-      data['body'] = pagekite.gYamon.render_vars_text()
+      if pagekite.gYamon:
+        data['body'] = pagekite.gYamon.render_vars_text()
+      else:
+        data['body'] = ''
 
     elif console and path.startswith('/_pagekite/logout/'):
       parts = path.split('/')
@@ -783,11 +786,10 @@ class RemoteControlInterface(object):
   ACL_READ = 'r'
   ACL_WRITE = 'w'
 
-  def __init__(self, httpd, pkite, conns, yamon):
+  def __init__(self, httpd, pkite, conns):
     self.httpd = httpd
     self.pkite = pkite
     self.conns = conns
-    self.yamon = yamon
     self.modified = False
 
     self.lock = threading.Lock()
@@ -958,18 +960,16 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
 
     try:
       from pagekite import yamond
-      pagekite.YamonD = yamond.YamonD
+      gYamon = pagekite.gYamon = yamond.YamonD(sspec)
+      gYamon.vset('started', int(time.time()))
+      gYamon.vset('version', pagekite.APPVER)
+      gYamon.vset('httpd_ssl_enabled', self.enable_ssl)
+      gYamon.vset('errors', 0)
+      gYamon.vset("bytes_all", 0)
     except:
       pass
 
-    gYamon = pagekite.gYamon = pagekite.YamonD(sspec)
-    gYamon.vset('started', int(time.time()))
-    gYamon.vset('version', pagekite.APPVER)
-    gYamon.vset('httpd_ssl_enabled', self.enable_ssl)
-    gYamon.vset('errors', 0)
-    gYamon.vset("bytes_all", 0)
-
-    self.RCI = RemoteControlInterface(self, pkite, conns, gYamon)
+    self.RCI = RemoteControlInterface(self, pkite, conns)
     self.register_introspection_functions()
     self.register_instance(self.RCI)
 
