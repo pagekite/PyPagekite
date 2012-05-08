@@ -33,8 +33,8 @@ def Configure(pkobj):
 
 if __name__ == "__main__":
   if sys.stdout.isatty():
-    import pagekite.basicui
-    uiclass = pagekite.basicui.BasicUi
+    import pagekite.ui.basic
+    uiclass = pagekite.ui.basic.BasicUi
   else:
     uiclass = pk.NullUi
 

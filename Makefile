@@ -135,7 +135,7 @@ distclean: clean
 	@rm -rvf dist/*.*
 
 clean:
-	@rm -vf sockschain *.pyc */*.pyc scripts/breeder.py .SELF
+	@rm -vf sockschain *.pyc */*.pyc */*/*.pyc scripts/breeder.py .SELF
 	@rm -vf .appver pagekite-tmp.py MANIFEST setup.cfg pagekite_gtk.py
 	@rm -vrf *.egg-info build/
 	@rm -vf debian/files debian/control debian/copyright debian/changelog

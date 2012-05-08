@@ -1854,8 +1854,8 @@ class PageKite(object):
       elif opt == '--nozchunks': self.disable_zchunks = True
       elif opt == '--nullui': self.ui = NullUi()
       elif opt == '--remoteui':
-        import pagekite.remoteui
-        self.ui = pagekite.remoteui.RemoteUi()
+        import pagekite.ui.remote
+        self.ui = pagekite.ui.remote.RemoteUi()
       elif opt == '--uiport': self.ui_port = int(arg)
       elif opt == '--sslzlib': self.enable_sslzlib = True
       elif opt == '--debugio':
