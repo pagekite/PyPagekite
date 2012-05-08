@@ -260,6 +260,8 @@ SERVICE_PROVIDER = 'PageKite.net'
 SERVICE_DOMAINS = ('pagekite.me', )
 SERVICE_XMLRPC = 'http://pagekite.net/xmlrpc/'
 SERVICE_TOS_URL = 'https://pagekite.net/support/terms/'
+SERVICE_CERTS = ['b5p.us', 'frontends.b5p.us', 'pagekite.net', 'pagekite.me',
+                 'pagekite.com', 'pagekite.org', 'testing.is', '302.is']
 
 OPT_FLAGS = 'o:O:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
@@ -474,7 +476,8 @@ socks.wrapmodule(sys.modules[__name__])
 if socks.HAVE_SSL:
   # Secure connections to pagekite.net in SSL tunnels.
   def_hop = socks.parseproxy('default')
-  https_hop = socks.parseproxy('httpcs:pagekite.net:443')
+  https_hop = socks.parseproxy(('httpcs:%s:443'
+                                ) % ','.join(['pagekite.net']+SERVICE_CERTS))
   for dest in ('pagekite.net', 'up.pagekite.net', 'up.b5p.us'):
     socks.setproxy(dest, *def_hop)
     socks.addproxy(dest, *socks.parseproxy('http:%s:443' % dest))
@@ -3872,7 +3875,7 @@ class PageKite(object):
     def_dyndns    = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
     def_frontends = (1, 'frontends.b5p.us', 443)
     def_ca_certs  = sys.argv[0]
-    def_fe_certs  = ['b5p.us', 'frontends.b5p.us', 'pagekite.net']
+    def_fe_certs  = ['b5p.us'] + SERVICE_CERTS
     def_error_url = 'https://pagekite.net/offline/?'
     if check:
       return (self.dyndns == def_dyndns and
@@ -3889,7 +3892,6 @@ class PageKite(object):
         for cert in def_fe_certs:
           if cert not in self.fe_certname:
             self.fe_certname.append(cert)
-        self.fe_certname.sort()
       return True
 
   def GenerateConfig(self, safe=False):
