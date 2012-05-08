@@ -170,14 +170,14 @@ Front-end Options:
 
 Back-end Options:
 
- --backend=proto:kitename:host:port:secret
+ --service_on=proto:kitename:host:port:secret
                   Configure a back-end service on host:port, using protocol
                  proto and the given kite name as the public domain. As a
                 special case, if host is 'localhost' and the word 'built-in'
               is used as a port number, pagekite.py's HTTP server will be used.
 
- --define_backend=...   Same as --backend, except not enabled by default.
- --delete_backend=...   Delete a given back-end.
+ --service_off=...      Same as --service, except not enabled by default.
+ --service_delete=...   Delete a given service.
  --frontends=N:X:P      Choose N front-ends from X (a DNS domain name), port P.
  --frontend=host:port   Connect to the named front-end server.
  --fe_certname=N        Connect using SSL, accepting valid certs for domain N.
@@ -222,12 +222,12 @@ Examples:
     $ pagekite.py --defaults --httpd=localhost:9999
     $ firefox http://localhost:9999/
 
-    Fly a PageKite on pagekite.net for somedomain.com, and register the
-    new front-ends with the No-IP Dynamic DNS provider.
+    Fly a kite on pagekite.net for somedomain.com, and register the
+    public IP address with the No-IP Dynamic DNS provider.
     $ pagekite.py \\
         --defaults \\
         --dyndns=user:pass@no-ip.com \\
-        --backend=http:kitename.com:localhost:80:mygreatsecret
+        --service_on=http:kitename.com:localhost:80:mygreatsecret
 
 Shortcuts:
 
@@ -278,7 +278,8 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'tls_default=', 'tls_endpoint=',
             'fe_certname=', 'jakenoia', 'ca_certs=',
             'kitename=', 'kitesecret=', 'fingerpath=',
-            'backend=', 'define_backend=', 'be_config=', 'delete_backend',
+            'backend=', 'define_backend=', 'be_config=', 'delete_backend=',
+            'service_on=', 'service_off=', 'service_cfg=', 'service_delete=',
             'frontend=', 'frontends=', 'torify=', 'socksify=', 'proxy=',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes', 'debugio',
@@ -3914,14 +3915,14 @@ class PageKite(object):
     if self.kitename or self.kitesecret or new:
       config.extend([
         '##[ Default kite and account details ]##',
-        p('kitename=%s', self.kitename, 'NAME'),
-        p('kitesecret=%s', self.kitesecret, 'SECRET'),
+        p('kitename   = %s', self.kitename, 'NAME'),
+        p('kitesecret = %s', self.kitesecret, 'SECRET'),
         ''
       ])
 
     if self.SetServiceDefaults(check=True):
       config.extend([
-        '##[ Front-end settings: use service defaults ]##',
+        '##[ Front-end settings: use pagekite.net defaults ]##',
         'defaults',
         ''
       ])
@@ -3934,25 +3935,25 @@ class PageKite(object):
       if not self.servers_auto and not self.servers_manual:
         new = True
         config.extend([
-          '##[ Use this to just use service defaults ]##',
+          '##[ Use this to just use pagekite.net defaults ]##',
           '# defaults',
           ''
         ])
       config.append('##[ Custom front-end and dynamic DNS settings ]##')
       if self.servers_auto:
-        config.append('frontends=%d:%s:%d' % self.servers_auto)
+        config.append('frontends = %d:%s:%d' % self.servers_auto)
       if self.servers_manual:
         for server in sorted(self.servers_manual):
-          config.append('frontend=%s' % server)
+          config.append('frontend = %s' % server)
       if not self.servers_auto and not self.servers_manual:
         new = True
-        config.append('# frontends=N:hostname:port')
-        config.append('# frontend=hostname:port')
+        config.append('# frontends = N:hostname:port')
+        config.append('# frontend = hostname:port')
 
       for server in sorted(self.fe_certname):
-        config.append('fe_certname=%s' % server)
+        config.append('fe_certname = %s' % server)
       if self.ca_certs != self.ca_certs_default:
-        config.append('ca_certs=%s' % self.ca_certs)
+        config.append('ca_certs = %s' % self.ca_certs)
 
       if self.dyndns:
         provider, args = self.dyndns
@@ -3962,34 +3963,34 @@ class PageKite(object):
         if 'prov' not in args:
           args['prov'] = provider
         if args['pass']:
-          config.append('dyndns=%(user)s:%(pass)s@%(prov)s' % args)
+          config.append('dyndns = %(user)s:%(pass)s@%(prov)s' % args)
         elif args['user']:
-          config.append('dyndns=%(user)s@%(prov)s' % args)
+          config.append('dyndns = %(user)s@%(prov)s' % args)
         else:
-          config.append('dyndns=%(prov)s' % args)
+          config.append('dyndns = %(prov)s' % args)
       else:
         new = True
         config.extend([
-          '# dyndns=pagekite.net OR',
-          '# dyndns=user:pass@dyndns.org OR',
-          '# dyndns=user:pass@no-ip.com' ,
+          '# dyndns = pagekite.net OR',
+          '# dyndns = user:pass@dyndns.org OR',
+          '# dyndns = user:pass@no-ip.com' ,
           '#',
-          p('errorurl=%s', self.error_url, 'http://host/page/'),
-          p('fingerpath=%s', self.finger_path, '/~%s/.finger'),
+          p('errorurl  = %s', self.error_url, 'http://host/page/'),
+          p('fingerpath = %s', self.finger_path, '/~%s/.finger'),
           '',
         ])
 
     if self.ui_sspec or self.ui_password or self.ui_pemfile:
       config.extend([
         '##[ Built-in HTTPD settings ]##',
-        p('httpd=%s:%s', self.ui_sspec_cfg, ('host', 'port'))
+        p('httpd = %s:%s', self.ui_sspec_cfg, ('host', 'port'))
       ])
       if self.ui_password: config.append('httppass=%s' % self.ui_password)
       if self.ui_pemfile: config.append('pemfile=%s' % self.pemfile)
       for http_host in sorted(self.ui_paths.keys()):
         for path in sorted(self.ui_paths[http_host].keys()):
           up = self.ui_paths[http_host][path]
-          config.append('webpath=%s:%s:%s:%s' % (http_host, path, up[0], up[1]))
+          config.append('webpath = %s:%s:%s:%s' % (http_host, path, up[0], up[1]))
       config.append('')
 
     config.append('##[ Back-ends and local services ]##')
@@ -3999,33 +4000,38 @@ class PageKite(object):
       proto, domain = bid.split(':')
       if be[BE_BHOST]:
         be_spec = (be[BE_BHOST], be[BE_BPORT])
-        config.append(('%s=%s:%s:%s:%s'
+        be_spec = ((be_spec == self.ui_sspec) and 'localhost:builtin'
+                                               or ('%s:%s' % be_spec))
+        fe_spec = ('%s:%s' % (proto, (domain == self.kitename) and '@kitename'
+                                                               or domain))
+        secret = ((be[BE_SECRET] == self.kitesecret) and '@kitesecret'
+                                                      or be[BE_SECRET])
+        config.append(('%s = %-33s: %-18s: %s'
                        ) % ((be[BE_STATUS] == BE_STATUS_DISABLED
-                             ) and 'define_backend' or 'backend',
-                   proto, ((domain == self.kitename) and '@kitename' or domain),
-         (be_spec == self.ui_sspec) and 'localhost:builtin' or ('%s:%s' % be_spec),
-         (be[BE_SECRET] == self.kitesecret) and '@kitesecret' or be[BE_SECRET]))
+                             ) and 'service_off' or 'service_on ',
+                            fe_spec, be_spec, secret))
         bprinted += 1
     if bprinted == 0:
       config.append('# No back-ends!  How boring!')
+    config.append('')
     for http_host in sorted(self.be_config.keys()):
       for key in sorted(self.be_config[http_host].keys()):
-        config.append('be_config=%s:%s:%s' % (http_host, key,
-                                              self.be_config[http_host][key]))
+        config.append(('service_cfg = %-30s: %-15s: %s'
+                       ) % (http_host, key, self.be_config[http_host][key]))
     config.append('')
 
     if bprinted == 0:
       new = True
       config.extend([
-        '##[ Back-end examples ... ]##',
+        '##[ Back-end service examples ... ]##',
         '#',
-        '# backend=http:YOU.pagekite.me:localhost:80:SECRET',
-        '# backend=ssh:YOU.pagekite.me:localhost:22:SECRET',
-        '# backend=http/8080:YOU.pagekite.me:localhost:8080:SECRET',
-        '# backend=https:YOU.pagekite.me:localhost:443:SECRET',
-        '# backend=websocket:YOU.pagekite.me:localhost:8080:SECRET',
+        '# service_on = http:YOU.pagekite.me:localhost:80:SECRET',
+        '# service_on = ssh:YOU.pagekite.me:localhost:22:SECRET',
+        '# service_on = http/8080:YOU.pagekite.me:localhost:8080:SECRET',
+        '# service_on = https:YOU.pagekite.me:localhost:443:SECRET',
+        '# service_on = websocket:YOU.pagekite.me:localhost:8080:SECRET',
         '#',
-        '# define_backend=http:YOU.pagekite.me:localhost:4545:SECRET',
+        '# service_off = http:YOU.pagekite.me:localhost:4545:SECRET',
         ''
       ])
 
@@ -4036,17 +4042,17 @@ class PageKite(object):
       ])
       comment = ((not self.isfrontend) and '# ' or '')
       config.extend([
-        p('host=%s', self.isfrontend and self.server_host, 'machine.domain.com'),
-        '%sports=%s' % (comment, ','.join(['%s' % x for x in sorted(self.server_ports)] or [])),
-        '%sprotos=%s' % (comment, ','.join(['%s' % x for x in sorted(self.server_protos)] or []))
+        p('host = %s', self.isfrontend and self.server_host, 'machine.domain.com'),
+        '%sports = %s' % (comment, ','.join(['%s' % x for x in sorted(self.server_ports)] or [])),
+        '%sprotos = %s' % (comment, ','.join(['%s' % x for x in sorted(self.server_protos)] or []))
       ])
       for pa in self.server_portalias:
-        config.append('portalias=%s:%s' % (int(pa), int(self.server_portalias[pa])))
+        config.append('portalias = %s:%s' % (int(pa), int(self.server_portalias[pa])))
       config.extend([
-        '%srawports=%s' % (comment or (not self.server_raw_ports) and '# ' or '',
+        '%srawports = %s' % (comment or (not self.server_raw_ports) and '# ' or '',
                            ','.join(['%s' % x for x in sorted(self.server_raw_ports)] or [VIRTUAL_PN])),
-        p('authdomain=%s', self.isfrontend and self.auth_domain, 'foo.com'),
-        p('motd=%s', self.isfrontend and self.motd, '/path/to/motd.txt')
+        p('authdomain = %s', self.isfrontend and self.auth_domain, 'foo.com'),
+        p('motd = %s', self.isfrontend and self.motd, '/path/to/motd.txt')
       ])
       for d in sorted(self.auth_domains.keys()):
         config.append('authdomain=%s:%s' % (d, self.auth_domains[d]))
@@ -4054,26 +4060,26 @@ class PageKite(object):
       for bid in sorted(self.backends.keys()):
         be = self.backends[bid]
         if not be[BE_BHOST]:
-          config.append('domain=%s:%s' % (bid, be[BE_SECRET]))
+          config.append('domain = %s:%s' % (bid, be[BE_SECRET]))
           dprinted += 1
       if not dprinted:
         new = True
         config.extend([
-          '# domain=http:*.pagekite.me:SECRET1',
-          '# domain=http,https,websocket:THEM.pagekite.me:SECRET2',
+          '# domain = http:*.pagekite.me:SECRET1',
+          '# domain = http,https,websocket:THEM.pagekite.me:SECRET2',
           '',
         ])
 
       eprinted = 0
       config.append('##[ Domains we terminate SSL/TLS for natively, with key/cert-files ]##')
       for ep in sorted(self.tls_endpoints.keys()):
-        config.append('tls_endpoint=%s:%s' % (ep, self.tls_endpoints[ep][0]))
+        config.append('tls_endpoint = %s:%s' % (ep, self.tls_endpoints[ep][0]))
         eprinted += 1
       if eprinted == 0:
         new = True
-        config.append('# tls_endpoint=DOMAIN:PEM_FILE')
+        config.append('# tls_endpoint = DOMAIN:PEM_FILE')
       config.extend([
-        p('tls_default=%s', self.tls_default, 'DOMAIN'),
+        p('tls_default = %s', self.tls_default, 'DOMAIN'),
         '',
       ])
 
@@ -4082,13 +4088,13 @@ class PageKite(object):
       '###[ Anything below this line can usually be ignored. ]#########',
       '',
       '##[ Miscellaneous settings ]##',
-      p('logfile=%s', self.logfile, '/path/to/file'),
-      p('buffers=%s', self.buffer_max, DEFAULT_BUFFER_MAX),
+      p('logfile = %s', self.logfile, '/path/to/file'),
+      p('buffers = %s', self.buffer_max, DEFAULT_BUFFER_MAX),
       (self.servers_new_only is True) and 'new' or '# new',
       (self.require_all and 'all' or '# all'),
       (self.no_probes and 'noprobes' or '# noprobes'),
       (self.crash_report_url and '# nocrashreport' or 'nocrashreport'),
-      p('savefile=%s', safe and self.savefile, '/path/to/savefile'),
+      p('savefile = %s', safe and self.savefile, '/path/to/savefile'),
       (self.autosave and 'autosave' or '# autosave'),
       '',
     ])
@@ -4099,13 +4105,13 @@ class PageKite(object):
         (self.daemonize and 'daemonize' or '# daemonize')
       ])
       if self.setuid and self.setgid:
-        config.append('runas=%s:%s' % (self.setuid, self.setgid))
+        config.append('runas = %s:%s' % (self.setuid, self.setgid))
       elif self.setuid:
-        config.append('runas=%s' % self.setuid)
+        config.append('runas = %s' % self.setuid)
       else:
         new = True
-        config.append('# runas=uid:gid')
-      config.append(p('pidfile=%s', self.pidfile, '/path/to/file'))
+        config.append('# runas = uid:gid')
+      config.append(p('pidfile = %s', self.pidfile, '/path/to/file'))
 
     config.extend([
       '',
@@ -4356,7 +4362,7 @@ class PageKite(object):
       if line and not line.startswith('#'):
         if line.startswith('END'): break
         if not line.startswith('-'): line = '--%s' % line
-        args.append(line)
+        args.append(re.sub(':\s*', ':', re.sub('\s*=\s*', '=', line)))
 
     self.rcfile_recursion += 1
     self.Configure(args)
@@ -4678,15 +4684,17 @@ class PageKite(object):
       elif opt == '--kitename': self.kitename = arg
       elif opt == '--kitesecret': self.kitesecret = arg
 
-      elif opt in ('--backend', '--define_backend'):
+      elif opt in ('--service_on', '--service_off',
+                   '--backend', '--define_backend'):
+        disabled = (opt not in ('--backend', '--service_on'))
         bes = self.ArgToBackendSpecs(arg.replace('@kitesecret', self.kitesecret)
                                         .replace('@kitename', self.kitename),
-                                     status=((opt != '--backend')
+                                     status=(disabled
                                              and BE_STATUS_DISABLED
                                              or BE_STATUS_UNKNOWN))
         for bid in bes:
           if bid in self.backends:
-            raise ConfigError("Same backend/domain defined twice: %s" % bid)
+            raise ConfigError("Same service/domain defined twice: %s" % bid)
           if not self.kitename:
             self.kitename = bes[bid][BE_DOMAIN]
             self.kitesecret = bes[bid][BE_SECRET]
@@ -4697,7 +4705,7 @@ class PageKite(object):
         hostc = self.be_config.get(host, {})
         hostc[key] = {'True': True, 'False': False, 'None': None}.get(val, val)
         self.be_config[host] = hostc
-      elif opt == '--delete_backend':
+      elif opt in ('--delete_backend', '--service_delete'):
         bes = self.ArgToBackendSpecs(arg)
         for bid in bes:
           if bid in self.backends:
@@ -4709,7 +4717,7 @@ class PageKite(object):
         for proto in protos.split(','):
           bid = '%s:%s' % (proto, domain)
           if bid in self.backends:
-            raise ConfigError("Same backend/domain defined twice: %s" % bid)
+            raise ConfigError("Same service/domain defined twice: %s" % bid)
           self.backends[bid] = BE_NONE[:]
           self.backends[bid][BE_PROTO] = proto
           self.backends[bid][BE_DOMAIN] = domain
@@ -5058,7 +5066,7 @@ class PageKite(object):
     while 'end' not in state:
       try:
         if 'use_service_question' in state:
-          ch = self.ui.AskYesNo('Use the service?',
+          ch = self.ui.AskYesNo('Use the PageKite.net service?',
                                 pre=['<b>Welcome to PageKite!</b>',
                                      '',
                                      'Please answer a few quick questions to',
