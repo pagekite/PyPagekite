@@ -261,7 +261,7 @@ class Tunnel(ChunkParser):
       try:
         data, parse = self._Connect(server, conns)
       except:
-        traceback.print_exc(file=sys.stderr)
+        logging.LogError('Error in connect: %s' % traceback.format_exc())
         raise
       if data and parse:
 
@@ -388,7 +388,11 @@ class Tunnel(ChunkParser):
 
     # Pass outgoing data through any defined filters
     for f in self.filters:
-      data = f.filter_data_out(self, sid, data)
+      try:
+        data = f.filter_data_out(self, sid, data)
+      except:
+        logging.LogError(('Ignoring error in filter_out %s: %s'
+                          ) % (f, traceback.format_exc()))
 
     sending = ['SID: %s\r\n' % sid]
     if proto: sending.append('Proto: %s\r\n' % proto)
@@ -525,9 +529,13 @@ class Tunnel(ChunkParser):
     else:
       if sid in self.users:
         conn = self.users[sid]
-        # Pass incoming data through a filter, if we have one.
+        # Pass incoming data through filters, if we have any.
         for f in self.filters:
-          data = f.filter_data_in(self, sid, data)
+          try:
+            data = f.filter_data_in(self, sid, data)
+          except:
+            logging.LogError(('Ignoring error in filter_in %s: %s'
+                              ) % (f, traceback.format_exc()))
       else:
         proto = (parse.Header('Proto') or [''])[0].lower()
         port = (parse.Header('Port') or [''])[0].lower()
@@ -558,16 +566,20 @@ class Tunnel(ChunkParser):
                                         sid, HTTP_NoBeConnection(proto) )):
                 return False
           else:
-            # Pass incoming data through a filter, if we have one.
+            # Pass incoming data through filters, if we have any.
             for f in self.filters:
-              f.filter_set_sid(sid, {
-                'proto': proto,
-                'port': port,
-                'host': host,
-                'remote_ip': rIp,
-                'remote_port': rPort
-              })
-              data = f.filter_data_in(self, sid, data)
+              try:
+                f.filter_set_sid(sid, {
+                  'proto': proto,
+                  'port': port,
+                  'host': host,
+                  'remote_ip': rIp,
+                  'remote_port': rPort
+                })
+                data = f.filter_data_in(self, sid, data)
+              except:
+                logging.LogError(('Ignoring error in filter_new/in %s: %s'
+                                  ) % (f, traceback.format_exc()))
 
             conn = UserConn.BackEnd(proto, host, sid, self, port,
                                     remote_ip=rIp, remote_port=rPort, data=data)

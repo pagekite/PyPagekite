@@ -238,7 +238,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'service_on=', 'service_off=', 'service_cfg=', 'service_delete=',
             'frontend=', 'frontends=', 'torify=', 'socksify=', 'proxy=',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
-            'buffers=', 'noprobes', 'debugio', 'watch',
+            'buffers=', 'noprobes', 'debugio', 'watch=',
             # DEPRECATED:
             'webroot=', 'webaccess=', 'webindexes=']
 

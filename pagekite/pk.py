@@ -745,6 +745,7 @@ class PageKite(object):
     self.last_loop = 0
     self.keep_looping = True
     self.main_loop = True
+    self.watch_level = [None]
 
     self.crash_report_url = '%scgi-bin/crashes.pl' % WWWHOME
     self.rcfile_recursion = 0
@@ -1664,6 +1665,8 @@ class PageKite(object):
         self.ui = pagekite.ui.remote.RemoteUi()
       elif opt == '--uiport': self.ui_port = int(arg)
       elif opt == '--sslzlib': self.enable_sslzlib = True
+      elif opt == '--watch':
+        self.watch_level[0] = int(arg)
       elif opt == '--debugio':
         common.DEBUG_IO = True
       elif opt == '--buffers': self.buffer_max = int(arg)
@@ -2436,7 +2439,10 @@ class PageKite(object):
         else:
           self.ui.Status('connect', color=self.ui.YELLOW,
                          message='Connecting to front-end: %s' % server)
-          if Tunnel.BackEnd(server, self.backends, self.require_all, conns):
+          tun = Tunnel.BackEnd(server, self.backends, self.require_all, conns)
+          if tun:
+            if self.watch_level[0] is not None:
+              tun.filters.append(TunnelWatcher(self.watch_level, self.ui))
             logging.Log([('connect', server)])
             connections += 1
           else:

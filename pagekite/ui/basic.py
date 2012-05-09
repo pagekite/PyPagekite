@@ -77,7 +77,8 @@ class BasicUi(NullUi):
         except:
           pass # Fails on Python 2.2
 
-      self.notify_history[message] = now
+      if not now or now > 0:
+        self.notify_history[message] = now
       msg = '\r%s %s%s%s%s%s\n' % ((prefix * 3)[0:3], color, message, self.NORM,
                                    ' ' * (75-len(message)-len(alignright)),
                                    alignright)
