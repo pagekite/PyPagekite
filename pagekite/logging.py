@@ -39,7 +39,7 @@ def LogValues(values, testtime=None):
   global LOG, LOG_LINE, LOG_LAST_TIME
   now = int(testtime or time.time())
   words = [('ts', '%x' % now),
-           ('t',  '%s' % datetime.datetime.fromtimestamp(now).isoformat()),
+           ('t',  '%s' % ts_to_iso(now)),
            ('ll', '%x' % LOG_LINE)]
   words.extend([(kv[0], ('%s' % kv[1]).replace('\t', ' ')
                                       .replace('\r', ' ')
