@@ -81,7 +81,6 @@ Common Options:
  --optfile=X    -o X    Read settings from file X. Default is ~/.pagekite.rc.
  --optdir=X     -O X    Read settings from *.rc in directory X.
  --savefile=X   -S X    Saved settings will be written to file X.
- --reloadfile=X         Re-read settings from X on SIGHUP.
  --autosave             Enable auto-saving.
  --noautosave           Disable auto-saving.
  --save                 Save this configuration.
@@ -220,7 +219,7 @@ SERVICE_CERTS = ['b5p.us', 'frontends.b5p.us', 'pagekite.net', 'pagekite.me',
 OPT_FLAGS = 'o:O:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'nullui', 'remoteui', 'uiport=', 'help', 'settings',
-            'optfile=', 'optdir=', 'savefile=', 'reloadfile=',
+            'optfile=', 'optdir=', 'savefile=',
             'autosave', 'noautosave', 'friendly',
             'signup', 'list', 'add', 'only', 'disable', 'remove', 'save',
             'service_xmlrpc=', 'controlpanel', 'controlpass',

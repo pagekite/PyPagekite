@@ -10,6 +10,7 @@ v0.4.7   ???
    - Renamed --backend/--disable_backend to --service_on/--service_off
    - Allow white-space in the config file and make it more readable
    - Added --watch=<LEVEL> for watching tunneled traffic (back-end only)
+   - Removed the --reloadfile option: buggy and untested and a bad idea
 
 
 v0.4.6   2012.01.15

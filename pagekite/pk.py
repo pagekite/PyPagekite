@@ -752,7 +752,6 @@ class PageKite(object):
     self.rcfiles_loaded = []
     self.savefile = None
     self.autosave = 0
-    self.reloadfile = None
     self.added_kites = False
     self.ui_wfile = sys.stderr
     self.ui_rfile = sys.stdin
@@ -1433,9 +1432,6 @@ class PageKite(object):
         self.ConfigureFromFile(arg)
       elif opt in ('-O', '--optdir'):
         self.ConfigureFromDirectory(arg)
-      elif opt == '--reloadfile':
-        self.ConfigureFromFile(arg)
-        self.reloadfile = arg
       elif opt in ('-S', '--savefile'):
         if self.savefile: raise ConfigError('Multiple save-files!')
         self.savefile = arg
@@ -2691,15 +2687,13 @@ class PageKite(object):
     logging.FlushLogMemory()
 
     # Set up SIGHUP handler.
-    if self.logfile or self.reloadfile:
+    if self.logfile:
       try:
         import signal
         def reopen(x,y):
           if self.logfile:
             self.LogTo(self.logfile, close_all=False)
             logging.LogDebug('SIGHUP received, reopening: %s' % self.logfile)
-          if self.reloadfile:
-            self.ConfigureFromFile(self.reloadfile)
         signal.signal(signal.SIGHUP, reopen)
       except Exception:
         logging.LogError('Warning: signal handler unavailable, logrotate will not work.')
