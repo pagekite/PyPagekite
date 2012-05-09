@@ -52,6 +52,9 @@ android: pagekite tools .header
 	@mv pagekite-tmp.py dist/pk-android-`./pagekite-tmp.py --appver`.py
 	@ls -l dist/pk-android-*.py
 
+doc/pagekite.1: pagekite pagekite/manual.py
+	@./pagekite/manual.py --nopy --man >doc/pagekite.1
+
 dist: combined gtk allrpm android
 
 allrpm: rpm_el4 rpm_el5 rpm_el6-fc13 rpm_fc14-15-16
@@ -74,14 +77,14 @@ rpm_el6-fc13:
 	@./rpm/rpm-setup.sh 0pagekite_el6fc13 /usr/lib/python2.6/site-packages
 	@make .rpm
 
-.rpm:
+.rpm: doc/pagekite.1
 	@python setup.py bdist_rpm --install=rpm/rpm-install.sh \
 	                           --post-install=rpm/rpm-post.sh \
 	                           --pre-uninstall=rpm/rpm-preun.sh \
 	                           --requires=python-SocksipyChain
 
 VERSION=`python setup.py --version`
-.debprep:
+.debprep: doc/pagekite.1
 	@rm -f setup.cfg
 	@sed -e "s/@VERSION@/$(VERSION)/g" \
 		< debian/control.in >debian/control
@@ -137,7 +140,7 @@ distclean: clean
 clean:
 	@rm -vf sockschain *.pyc */*.pyc */*/*.pyc scripts/breeder.py .SELF
 	@rm -vf .appver pagekite-tmp.py MANIFEST setup.cfg pagekite_gtk.py
-	@rm -vrf *.egg-info .header build/
+	@rm -vrf *.egg-info .header doc/pagekite.1 build/
 	@rm -vf debian/files debian/control debian/copyright debian/changelog
 	@rm -vrf debian/pagekite* debian/python* debian/init.d
 
