@@ -1,7 +1,8 @@
 # Makefile for building combined pagekite.py files.
 export PYTHONPATH := .
 
-BREED_PAGEKITE = pagekite/__init__.py \
+BREED_PAGEKITE = --header doc/header.txt \
+                 pagekite/__init__.py \
 	         pagekite/common.py \
 	         pagekite/compat.py \
 	         pagekite/logging.py \
@@ -21,7 +22,7 @@ BREED_PAGEKITE = pagekite/__init__.py \
 
 
 combined: pagekite tools dev
-	@./scripts/breeder.py sockschain $(BREED_PAGEKITE) \
+	@./scripts/breeder.py --compress sockschain $(BREED_PAGEKITE) \
 	             pagekite/__main__.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
