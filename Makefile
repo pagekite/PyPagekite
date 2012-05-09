@@ -5,6 +5,7 @@ BREED_PAGEKITE = pagekite/__init__.py \
 	         pagekite/common.py \
 	         pagekite/compat.py \
 	         pagekite/logging.py \
+	         pagekite/manual.py \
 	         pagekite/proto/__init__.py \
 	         pagekite/proto/proto.py \
 	         pagekite/proto/parsers.py \

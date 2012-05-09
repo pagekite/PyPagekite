@@ -751,7 +751,6 @@ class PageKite(object):
     self.rcfile_recursion = 0
     self.rcfiles_loaded = []
     self.savefile = None
-    self.autosave = 0
     self.added_kites = False
     self.ui_wfile = sys.stderr
     self.ui_rfile = sys.stdin
@@ -1024,7 +1023,6 @@ class PageKite(object):
       (self.no_probes and 'noprobes' or '# noprobes'),
       (self.crash_report_url and '# nocrashreport' or 'nocrashreport'),
       p('savefile = %s', safe and self.savefile, '/path/to/savefile'),
-      (self.autosave and 'autosave' or '# autosave'),
       '',
     ])
 
@@ -1131,7 +1129,8 @@ class PageKite(object):
     self.keep_looping = False
     self.conns = self.ui_httpd = self.ui_comm = self.tunnel_manager = None
     if help or longhelp:
-      print longhelp and DOC or MINIDOC
+      import manual
+      print longhelp and manual.DOC or manual.MINIDOC
       print '***'
     else:
       self.ui.Status('exiting', message=(message or 'Good-bye!'))
@@ -1304,7 +1303,8 @@ class PageKite(object):
         self.ConfigureFromFile(os.path.join(dirname, fn))
 
   def HelpAndExit(self, longhelp=False):
-    print longhelp and DOC or MINIDOC
+    import manual
+    print longhelp and manual.DOC or manual.MINIDOC
     sys.exit(0)
 
   def ArgToBackendSpecs(self, arg, status=BE_STATUS_UNKNOWN, secret=None):
@@ -1435,10 +1435,6 @@ class PageKite(object):
       elif opt in ('-S', '--savefile'):
         if self.savefile: raise ConfigError('Multiple save-files!')
         self.savefile = arg
-      elif opt == '--autosave':
-        self.autosave = True
-      elif opt == '--noautosave':
-        self.autosave = False
       elif opt == '--save':
         self.save = True
       elif opt == '--only':
@@ -1673,8 +1669,13 @@ class PageKite(object):
         if not 'localhost' in args: args.append('localhost')
       elif opt == '--defaults': self.SetServiceDefaults()
       elif opt in ('--clean', '--nopyopenssl', '--nossl', '--settings',
-                   '--webaccess', '--webindexes',
-                   '--webroot', '--signup', '--friendly'): pass
+                   '--signup', '--friendly'):
+        # These are handled outside the main loop, we just ignore them.
+        pass
+      elif opt in ('--webroot', '--webaccess', '--webindexes',
+                   '--noautosave', '--autosave', '--reloadfile'):
+        # FIXME: These are deprecated, we should probably warn the user.
+        pass
       elif opt == '--help':
         self.HelpAndExit(longhelp=True)
 
@@ -2826,7 +2827,7 @@ def Configure(pk):
   pk.CheckConfig()
 
   if pk.added_kites:
-    if (pk.autosave or pk.save or
+    if (pk.save or
         pk.ui.AskYesNo('Save settings to %s?' % pk.rcfile,
                        default=(len(pk.backends.keys()) > 0))):
       pk.SaveUserConfig()
