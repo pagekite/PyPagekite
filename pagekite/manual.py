@@ -25,8 +25,8 @@ MAN_DESCRIPTION = ("""\
     address and is often subject to adverse network conditions, including
     aggressive firewalls and multiple layers of NAT.
 
-    This program implements both the local "back-end" of the protocol and
-    the remote "front-end" reverse-proxy relay server.  For convenience,
+    This program implements both ends of the tunnel: the local "back-end"
+    and the remote "front-end" reverse-proxy relay.  For convenience,
     <b>pagekite.py</b> also includes a basic HTTP server for quickly exposing
     files and directories to the World Wide Web for casual sharing and
     collaboration.
@@ -36,52 +36,71 @@ MAN_EXAMPLES = ("""\
     $ pagekite.py NAME.pagekite.me
 
     To expose specific folders, files or use alternate local ports:
-    $ pagekite.py +indexes /a/path/ NAME.pagekite.me  # built-in HTTPD
-    $ pagekite.py *.html            NAME.pagekite.me  # built-in HTTPD
-    $ pagekite.py 3000              NAME.pagekite.me  # http://localhost:3000/
+    $ pagekite.py /a/path/ NAME.pagekite.me +indexes  # built-in HTTPD
+    $ pagekite.py *.html   NAME.pagekite.me           # built-in HTTPD
+    $ pagekite.py 3000     NAME.pagekite.me           # HTTPD on 3000
 
     To expose multiple local servers (SSH and HTTP):
     $ pagekite.py ssh://NAME.pagekite.me AND 3000 NAME.pagekite.me</pre>
 """)
-MAN_SHORTCUTS = ("""\
+MAN_KITES = ("""\
+    The most comman usage of <b>pagekite.py</b> is as a back-end, where it
+    is used to expose local services to the outside world.
 
-    FIXME FIXME FIXME
+    Examples of services are: a local HTTP server, a local SSH server,
+    a folder or a file.
 
-    A shortcut is simply the name of a kite following a list of zero or
-    more 'things' to expose using that name.  Pagekite knows how to expose
-    either servers running on localhost ports or directories and files
-    using the built-in HTTP server.  If no list of things to expose is
-    provided, the defaults for that kite are read from the configuration
-    file or http://localhost:80/ used as a last-resort default.
+    As illustrated above, one simply tells the program which local services
+    to expose to the world and which names to use.  If a kite name is
+    requested which does not already exist in the configuration file and
+    program is run interactively, the user will be prompted and given the
+    option of signing up and/or creating a new kite using the <b>pagekite.net</b>
+    service.
 
-    If a kite name is requested which does not already exist in the
-    configuration file and program is run interactively, the user
-    will be prompted and given the option of signing up and/or creating a
-    new kite using the PageKite.net service.
-
-    Multiple short-cuts can be specified on a single command-line,
+    Multiple services and kites can be specified on a single command-line,
     separated by the word 'AND' (note capital letters are required).
     This may cause problems if you have many files and folders by that
     name, but that should be relatively rare. :-)
 
-    The options --list, --add, --disable and --remove can be combined with
-    shortcuts to manipulate the kites in you configuration file.
+    The options <b>--list</b>, <b>--add</b>, <b>--disable</b> and \
+<b>--remove</b> can be used to
+    manipulate the kites in your configuration, if you prefer not to edit
+    the file by hand.
 """)
 MAN_FLAGS = ("""\
+    Flags are used to tune the behavior of a particular kite, for example
+    by enabling access controls or specific features of the built-in HTTP
+    server.
+""")
+MAN_FLAGS_COMMON = ("""\
+    +ip</b>/<a>1.2.3.4     __Enable connections only from this IP address.
+    +ip</b>/<a>1.2.3       __Enable connections only from this /24 netblock.
+""")
+MAN_FLAGS_HTTP = ("""\
+    +password</b>/<a>name</b>=<a>pass
+            Require a username and password (HTTP Basic Authentication)
 
-    FIXME FIXME FIXME
+    +rewritehost   __Rewrite the incoming Host: header
+""")
+MAN_FLAGS_BUILTIN = ("""\
+    +indexes       __Enable directory indexes.
+    +indexes</b>=<a>all   __Enable directory indexes including hidden (dot-) files.
+    +hide          __Obfuscate URLs of shared files.
 
+    +cgi</b>=<a>list
+            A list of extensions, for which files should be treated as
+            CGI scripts (example: <tt>+cgi=cgi,pl,sh</tt>).
 """)
 MAN_OPTIONS = ("""\
-    All pagekite.py options can be specified on the command line or
-    in a configuration file (see below).
+    The full power of <b>pagekite.py</b> lies in the numerous options which
+    can be specified on the command line or in a configuration file (see below).
 
     Note that many options, especially the service and domain definitions,
     are additive and if given multiple options the program will attempt to
     obey them all.  Options are processed in order and if they are not
     additive then the last option will override all preceding ones.
 
-    Although pagekite.py accepts a great many options, most of the
+    Although <b>pagekite.py</b> accepts a great many options, most of the
     time the program defaults will Just Work.
 """)
 MAN_OPT_COMMON = ("""\
@@ -100,32 +119,39 @@ MAN_OPT_BACKEND = ("""\
 
     --local</b>=<a>ports   __Configure for local serving only (no remote front-end).
 
-    --proxy</b>=<a>type</a>:<a>server</a>:<a>port
-    --socksify</b>=<a>server</a>:<a>port
-    --torify</b>=<a>server</a>:<a>port
+    --proxy</b>=<a>type</a>:<a>server</a>:<a>port<a>,\
+ <b>--socksify</b>=<a>server</a>:<a>port,\
+ <b>--torify</b>=<a>server</a>:<a>port
             Connect to the front-ends using a chain of proxies, a single SOCKS
             proxy or the Tor anonymity network.  The type can be any of
             'ssl', 'http' or 'socks5'.
 
     --service_on</b>=<a>proto</a>:<a>kitename</a>:<a>host</a>:<a>port</a>:<a>secret
             Explicit configuration for a service kite.  Generally kites are
-            created on the command-line using the service short-hand described
-            above, but this syntax is used in the configuration file.
+            created on the command-line using the service short-hand
+            described above, but this syntax is used in the config file.
 
     --service_off</b>=<a>proto</a>:<a>kitename</a>:<a>host</a>:<a>port</a>:<a>secret
             Same as --service, except disabled by default.
+
+    --service_cfg</b>=<a>...</a>, <b>--webpath</b>=<a>...
+            These options are used in the configuration file to store service
+            and flag settings (see above). These are both likely to change in
+            the near future, so please just pretend you didn't notice them.
+
+    --frontend</b>=<a>host</a>:<a>port
+            Connect to the named front-end server. If this option is repeated,
+            multiple connections will be made.
 
     --frontends</b>=<a>num</a>:<a>dns-name</a>:<a>port
             Choose <a>num</a> front-ends from the A records of a DNS domain
             name, using the given port number. Default behavior is to probe
             all addresses and use the fastest one.
 
-    --frontend</b>=<a>host</a>:<a>port
-            Connect to the named front-end server.  If this option is repeated,
-            multiple connections will be made.
-
     --fe_certname</b>=<a>domain
-            Connect using SSL, accepting valid certs for this domain.
+            Connect using SSL, accepting valid certs for this domain. If
+            this option is repeated, any of the named certificates will be
+            accepted, but the first will be preferred.
 
     --ca_certs</b>=<a>/path/to/file
             Path to your trusted root SSL certificates file.
@@ -148,8 +174,8 @@ MAN_OPT_FRONTEND = ("""\
             domain, using the given secret.  A * may be used as a wildcard for
             subdomains or protocols.
 
-    --authdomain</b>=<a>auth-domain
-    --authdomain</b>=<a>target-domain</a>:<a>auth-domain
+    --authdomain</b>=<a>auth-domain,\
+ <b>--authdomain</b>=<a>target-domain</a>:<a>auth-domain
             Use <i>auth-domain</a> as a remote authentication server for the
             DNS-based authetication protocol.  If no <i>target-domain</i>
             is given, use this as the default authentication method.
@@ -162,6 +188,7 @@ MAN_OPT_FRONTEND = ("""\
     --ports</b>=<a>list    __Listen on a comma-separated list of ports.
     --portalias</b>=<a>A:B __Report port A as port B to backends.
     --protos</b>=<a>list   __Accept the listed protocols for tunneling.
+
     --rawports</b>=<a>list
             Listen for raw connections these ports. The string '%s'
             allows arbitrary ports in HTTP CONNECT.
@@ -204,15 +231,15 @@ MAN_OPT_SYSTEM = ("""\
     --errorurl</b>=<a>U   __URL to redirect to when back-ends are not found.
 """)
 MAN_CONFIG_FILES = ("""\
-    The pagekite.py configuration file lives in different places,
+    The <b>pagekite.py</b> configuration file lives in different places,
     depending on your operating system and how you are using it.
 
-    If you are using pagekite.py as a command-line utility, it will
+    If you are using the program as a command-line utility, it will
     load its configuration from a file in your home directory.  The file is
     named <tt>.pagekite.rc</tt> on Unix systems (including Mac OS X), or
     <tt>pagekite.cfg</tt> on Windows.
 
-    If you are using pagekite.py as a system-daemon which starts up
+    If you are using <b>pagekite.py</b> as a system-daemon which starts up
     when your computer boots, it is generally configured to load settings
     from <tt>/etc/pagekite.d/*.rc</tt> (in lexicographical order).
 
@@ -252,9 +279,12 @@ MANUAL = (
   ('SH', 'Name', MAN_NAME),
   ('SH', 'Synopsis', MAN_SYNOPSIS),
   ('SH', 'Description', MAN_DESCRIPTION),
-  ('SH', 'Examples', MAN_EXAMPLES),
-  ('SH', 'Services and kites', MAN_SHORTCUTS),
+  ('SH', 'Basic examples', MAN_EXAMPLES),
+  ('SH', 'Services and kites', MAN_KITES),
   ('SH', 'Flags', MAN_FLAGS),
+  ('SS', 'Common flags', MAN_FLAGS_COMMON),
+  ('SS', 'HTTP protocol flags', MAN_FLAGS_HTTP),
+  ('SS', 'Built-in HTTPD flags', MAN_FLAGS_BUILTIN),
   ('SH', 'Options', MAN_OPTIONS),
   ('SS', 'Common options', MAN_OPT_COMMON),
   ('SS', 'Back-end options', MAN_OPT_BACKEND),
@@ -266,6 +296,11 @@ MANUAL = (
   ('SH', 'Copyright and license', MAN_LICENSE),
 )
 
+def clean_text(text):
+  return re.sub('</?(tt|i)>', '`',
+                re.sub('</?(a|b|pre)>', '', text.replace(' __', '   ')))
+
+
 MINIDOC = ("""\
 >>> Welcome to pagekite.py v%s!
 
@@ -276,17 +311,14 @@ MINIDOC = ("""\
 
     If you request a kite which does not exist in your configuration file,
     the program will offer to help you sign up with https://pagekite.net/
-    and create it. Pick a name, any name!\
-""") % (APPVER, MAN_EXAMPLES)
-
+    and create it.  Pick a name, any name!\
+""") % (APPVER, clean_text(MAN_EXAMPLES))
 
 def DOC():
   doc = ''
   for h, section, text in MANUAL:
-    doc += '%s\n\n%s\n' % (h == 'SH' and section.upper() or section,
-                           re.sub('</?(tt|i)>', '`',
-                                  re.sub('</?(a|b|pre)>', '',
-                                         text.replace(' __', '   '))))
+    doc += '%s\n\n%s\n' % (h == 'SH' and section.upper() or '  '+section,
+                           clean_text(text))
   return doc
 
 def MAN(pname=None):
@@ -301,6 +333,7 @@ def MAN(pname=None):
             ) % (h, h == 'SH' and section.upper() or section,
                  re.sub('\n +', '\n', '\n'+text.strip())
                    .replace('\n--', '\n.TP\n\\fB--')
+                   .replace('\n+', '\n.TP\n\\fB+')
                    .replace(' __', '\\fR\n')
                    .replace('-', '\\-')
                    .replace('<pre>', '\n.nf\n').replace('</pre>', '\n.fi\n')
