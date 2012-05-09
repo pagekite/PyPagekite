@@ -1,8 +1,7 @@
 # Makefile for building combined pagekite.py files.
 export PYTHONPATH := .
 
-BREED_PAGEKITE = --header doc/header.txt \
-                 pagekite/__init__.py \
+BREED_PAGEKITE = pagekite/__init__.py \
 	         pagekite/common.py \
 	         pagekite/compat.py \
 	         pagekite/logging.py \
@@ -22,7 +21,8 @@ BREED_PAGEKITE = --header doc/header.txt \
 
 
 combined: pagekite tools dev
-	@./scripts/breeder.py --compress sockschain $(BREED_PAGEKITE) \
+	@./scripts/breeder.py --compress --header doc/header.txt \
+	             sockschain $(BREED_PAGEKITE) \
 	             pagekite/__main__.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
@@ -34,7 +34,8 @@ combined: pagekite tools dev
 	@ls -l dist/pagekite-*.py
 
 gtk: pagekite tools dev
-	@./scripts/breeder.py --gtk-images sockschain $(BREED_PAGEKITE) gui \
+	@./scripts/breeder.py --gtk-images --compress --header doc/header.txt \
+	             sockschain $(BREED_PAGEKITE) gui \
 	             pagekite_gtk.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
@@ -42,8 +43,8 @@ gtk: pagekite tools dev
 	@ls -l dist/pagekite-*.py
 
 android: pagekite tools
-	@./scripts/breeder.py sockschain $(BREED_PAGEKITE) \
-	             pagekite/__main__.py \
+	@./scripts/breeder.py --compress --header doc/header.txt \
+	             sockschain $(BREED_PAGEKITE) \
 	             pagekite/android.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
