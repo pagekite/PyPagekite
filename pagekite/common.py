@@ -56,14 +56,14 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'tls_default=', 'tls_endpoint=',
             'fe_certname=', 'jakenoia', 'ca_certs=',
             'kitename=', 'kitesecret=', 'fingerpath=',
-            'backend=', 'define_backend=', 'be_config=', 'delete_backend=',
-            'service_on=', 'service_off=', 'service_cfg=', 'service_delete=',
+            'backend=', 'define_backend=', 'be_config=',
+            'service_on=', 'service_off=', 'service_cfg='
             'frontend=', 'frontends=', 'torify=', 'socksify=', 'proxy=',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes', 'debugio', 'watch=',
             # DEPRECATED:
             'reloadfile=', 'autosave', 'noautosave', 'webroot=',
-            'webaccess=', 'webindexes=']
+            'webaccess=', 'webindexes=', 'delete_backend=',]
 
 DEBUG_IO = False
 DEFAULT_CHARSET = 'utf-8'

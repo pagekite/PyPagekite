@@ -1130,7 +1130,7 @@ class PageKite(object):
     self.conns = self.ui_httpd = self.ui_comm = self.tunnel_manager = None
     if help or longhelp:
       import manual
-      print longhelp and manual.DOC or manual.MINIDOC
+      print longhelp and manual.DOC() or manual.MINIDOC
       print '***'
     else:
       self.ui.Status('exiting', message=(message or 'Good-bye!'))
@@ -1304,7 +1304,7 @@ class PageKite(object):
 
   def HelpAndExit(self, longhelp=False):
     import manual
-    print longhelp and manual.DOC or manual.MINIDOC
+    print longhelp and manual.DOC() or manual.MINIDOC
     sys.exit(0)
 
   def ArgToBackendSpecs(self, arg, status=BE_STATUS_UNKNOWN, secret=None):
@@ -1627,11 +1627,6 @@ class PageKite(object):
         hostc = self.be_config.get(host, {})
         hostc[key] = {'True': True, 'False': False, 'None': None}.get(val, val)
         self.be_config[host] = hostc
-      elif opt in ('--delete_backend', '--service_delete'):
-        bes = self.ArgToBackendSpecs(arg)
-        for bid in bes:
-          if bid in self.backends:
-            del self.backends[bid]
 
       elif opt == '--domain':
         protos, domain, secret = arg.split(':')
@@ -1673,7 +1668,8 @@ class PageKite(object):
         # These are handled outside the main loop, we just ignore them.
         pass
       elif opt in ('--webroot', '--webaccess', '--webindexes',
-                   '--noautosave', '--autosave', '--reloadfile'):
+                   '--noautosave', '--autosave', '--reloadfile',
+                   '--delete_backend'):
         # FIXME: These are deprecated, we should probably warn the user.
         pass
       elif opt == '--help':
