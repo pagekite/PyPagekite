@@ -217,10 +217,6 @@ MAN_OPT_SYSTEM = ("""\
             Dump the current settings to STDOUT, formatted as a configuration
             file would be.
 
-    --httpd</b>=<a>X</a>:<a>P    __Enable the HTTP user interface on hostname X, port P.
-    --pemfile</b>=<a>X    __Use X as a PEM key for the HTTPS UI.
-    --httppass</b>=<a>X   __Require password X to access the UI.
-
     --nozchunks    __Disable zlib tunnel compression.
     --sslzlib      __Enable zlib compression in OpenSSL.
     --buffers</b>=<a>N    __Buffer at most N kB of data before blocking.
@@ -229,6 +225,12 @@ MAN_OPT_SYSTEM = ("""\
     --runas</b>=<a>U</a>:<a>G    __Set UID:GID after opening our listening sockets.
     --pidfile</b>=<a>P    __Write PID to the named file.
     --errorurl</b>=<a>U   __URL to redirect to when back-ends are not found.
+
+    --httpd</b>=<a>X</a>:<a>P</a>,\
+ <b>--httppass</b>=<a>X,\
+ <b>--pemfile</b>=<a>X
+            Configure the built-in HTTP daemon.  These options are likely to
+            change in the near future, please pretend you didn't see them.
 """)
 MAN_CONFIG_FILES = ("""\
     The <b>pagekite.py</b> configuration file lives in different places,
