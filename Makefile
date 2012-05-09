@@ -20,8 +20,8 @@ BREED_PAGEKITE = pagekite/__init__.py \
 	         pagekite/pk.py \
 
 
-combined: pagekite tools dev
-	@./scripts/breeder.py --compress --header doc/header.txt \
+combined: pagekite tools dev .header
+	@./scripts/breeder.py --compress --header .header \
 	             sockschain $(BREED_PAGEKITE) \
 	             pagekite/__main__.py \
 	             >pagekite-tmp.py
@@ -33,8 +33,8 @@ combined: pagekite tools dev
 	@mv pagekite-tmp.py dist/pagekite-`python setup.py --version`.py
 	@ls -l dist/pagekite-*.py
 
-gtk: pagekite tools dev
-	@./scripts/breeder.py --gtk-images --compress --header doc/header.txt \
+gtk: pagekite tools dev .header
+	@./scripts/breeder.py --gtk-images --compress --header .header \
 	             sockschain $(BREED_PAGEKITE) gui \
 	             pagekite_gtk.py \
 	             >pagekite-tmp.py
@@ -42,8 +42,8 @@ gtk: pagekite tools dev
 	@mv pagekite-tmp.py dist/pagekite-gtk-`python setup.py --version`.py
 	@ls -l dist/pagekite-*.py
 
-android: pagekite tools
-	@./scripts/breeder.py --compress --header doc/header.txt \
+android: pagekite tools .header
+	@./scripts/breeder.py --compress --header .header \
 	             sockschain $(BREED_PAGEKITE) \
 	             pagekite/android.py \
 	             >pagekite-tmp.py
@@ -79,7 +79,6 @@ rpm_el6-fc13:
 	                           --pre-uninstall=rpm/rpm-preun.sh \
 	                           --requires=python-SocksipyChain
 
-
 VERSION=`python setup.py --version`
 .debprep:
 	@rm -f setup.cfg
@@ -103,6 +102,10 @@ VERSION=`python setup.py --version`
 	@debuild -i -us -uc -b
 	@mv ../pagekite_*.deb dist/
 	@rm ../pagekite-$(VERSION)*
+
+.header: pagekite doc/header.txt
+	@sed -e "s/@VERSION@/$(VERSION)/g" \
+		< doc/header.txt >.header
 
 test: dev
 	@./scripts/blackbox-test.sh ./pk
@@ -133,7 +136,7 @@ distclean: clean
 clean:
 	@rm -vf sockschain *.pyc */*.pyc */*/*.pyc scripts/breeder.py .SELF
 	@rm -vf .appver pagekite-tmp.py MANIFEST setup.cfg pagekite_gtk.py
-	@rm -vrf *.egg-info build/
+	@rm -vrf *.egg-info .header build/
 	@rm -vf debian/files debian/control debian/copyright debian/changelog
 	@rm -vrf debian/pagekite* debian/python* debian/init.d
 
