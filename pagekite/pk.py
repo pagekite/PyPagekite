@@ -54,6 +54,33 @@ import compat
 import logging
 
 
+OPT_FLAGS = 'o:O:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
+OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
+            'nullui', 'remoteui', 'uiport=', 'help', 'settings',
+            'optfile=', 'optdir=', 'savefile=',
+            'friendly',
+            'signup', 'list', 'add', 'only', 'disable', 'remove', 'save',
+            'service_xmlrpc=', 'controlpanel', 'controlpass',
+            'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webpath=',
+            'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
+            'isfrontend', 'noisfrontend', 'settings',
+            'defaults', 'local=', 'domain=',
+            'authdomain=', 'motd=', 'register=', 'host=',
+            'noupgradeinfo', 'upgradeinfo=',
+            'ports=', 'protos=', 'portalias=', 'rawports=',
+            'tls_default=', 'tls_endpoint=',
+            'fe_certname=', 'jakenoia', 'ca_certs=',
+            'kitename=', 'kitesecret=', 'fingerpath=',
+            'backend=', 'define_backend=', 'be_config=',
+            'service_on=', 'service_off=', 'service_cfg=',
+            'frontend=', 'frontends=', 'torify=', 'socksify=', 'proxy=',
+            'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
+            'buffers=', 'noprobes', 'debugio', 'watch=',
+            # DEPRECATED:
+            'reloadfile=', 'autosave', 'noautosave', 'webroot=',
+            'webaccess=', 'webindexes=', 'delete_backend=']
+
+
 # Enable system proxies
 # This will all fail if we don't have PySocksipyChain available.
 # FIXME: Move this code somewhere else?

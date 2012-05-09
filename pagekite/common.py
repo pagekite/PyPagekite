@@ -39,32 +39,6 @@ SERVICE_TOS_URL = 'https://pagekite.net/support/terms/'
 SERVICE_CERTS = ['b5p.us', 'frontends.b5p.us', 'pagekite.net', 'pagekite.me',
                  'pagekite.com', 'pagekite.org', 'testing.is', '302.is']
 
-OPT_FLAGS = 'o:O:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
-OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
-            'nullui', 'remoteui', 'uiport=', 'help', 'settings',
-            'optfile=', 'optdir=', 'savefile=',
-            'friendly',
-            'signup', 'list', 'add', 'only', 'disable', 'remove', 'save',
-            'service_xmlrpc=', 'controlpanel', 'controlpass',
-            'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webpath=',
-            'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
-            'isfrontend', 'noisfrontend', 'settings',
-            'defaults', 'local=', 'domain=',
-            'authdomain=', 'motd=', 'register=', 'host=',
-            'noupgradeinfo', 'upgradeinfo=',
-            'ports=', 'protos=', 'portalias=', 'rawports=',
-            'tls_default=', 'tls_endpoint=',
-            'fe_certname=', 'jakenoia', 'ca_certs=',
-            'kitename=', 'kitesecret=', 'fingerpath=',
-            'backend=', 'define_backend=', 'be_config=',
-            'service_on=', 'service_off=', 'service_cfg='
-            'frontend=', 'frontends=', 'torify=', 'socksify=', 'proxy=',
-            'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
-            'buffers=', 'noprobes', 'debugio', 'watch=',
-            # DEPRECATED:
-            'reloadfile=', 'autosave', 'noautosave', 'webroot=',
-            'webaccess=', 'webindexes=', 'delete_backend=',]
-
 DEBUG_IO = False
 DEFAULT_CHARSET = 'utf-8'
 DEFAULT_BUFFER_MAX = 1024
