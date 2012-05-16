@@ -105,8 +105,8 @@ MAN_OPTIONS = ("""\
 """)
 MAN_OPT_COMMON = ("""\
     --clean         __Skip loading the default configuration file.
-    --signup        __Interactively sign up for PageKite.net service.
-    --defaults      __Set defaults for use with PageKite.net service.
+    --signup        __Interactively sign up for pagekite.net service.
+    --defaults      __Set defaults for use with pagekite.net service.
     --nocrashreport __Don't send anonymous crash reports to pagekite.net.
 """)
 MAN_OPT_BACKEND = ("""\
@@ -115,9 +115,9 @@ MAN_OPT_BACKEND = ("""\
     --remove        __Remove the following kites, save config.
     --disable       __Disable the following kites, save config.
     --only          __Disable all but the following kites, save config.
-    --watch</b>=<a>N       __Display proxied data (higher N = more verbosity).
 
     --local</b>=<a>ports   __Configure for local serving only (no remote front-end).
+    --watch</b>=<a>N       __Display proxied data (higher N = more verbosity).
 
     --proxy</b>=<a>type</a>:<a>server</a>:<a>port<a>,\
  <b>--socksify</b>=<a>server</a>:<a>port,\
