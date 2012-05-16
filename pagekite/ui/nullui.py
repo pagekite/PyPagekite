@@ -150,9 +150,12 @@ class NullUi(object):
       self.Notify(' - Raw ports: %s' % ' '.join(server_info[obj.S_RAW_PORTS]),
                   color=self.GREY)
 
-  def NotifyQuota(self, quota):
+  def NotifyQuota(self, quota, q_days, q_conns):
     qMB = 1024
-    self.Notify('You have %.2f MB of quota left.' % (quota / qMB),
+    msg = 'Quota: You have %.2f MB' % (float(quota) / qMB)
+    if q_days is not None: msg += ', %d days' % q_days
+    if q_conns is not None: msg += ' and %d connections' % q_conns
+    self.Notify(msg + ' left.',
                 prefix=(int(quota) < qMB) and '!' or ' ',
                 color=self.MAGENTA)
 

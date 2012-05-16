@@ -180,6 +180,8 @@ class AuthThread(threading.Thread):
         self.qc.release()
 
         quotas = []
+        q_conns = []
+        q_days = []
         results = []
         log_info = []
         session = '%x:%s:' % (now, globalSecret())
@@ -201,9 +203,9 @@ class AuthThread(threading.Thread):
           else:
             # This is a bit lame, but we only check the token if the quota
             # for this connection has never been verified.
-            (quota, reason) = self.conns.config.GetDomainQuota(proto,
-                                                    domain, srand, token, sign,
-                                               check_token=(conn.quota is None))
+            (quota, days, conns, reason
+             ) = self.conns.config.GetDomainQuota(proto, domain, srand, token,
+                                         sign, check_token=(conn.quota is None))
             if not quota:
               if not reason: reason = 'quota'
               results.append(('%s-Invalid' % prefix, what))
@@ -220,6 +222,8 @@ class AuthThread(threading.Thread):
             else:
               results.append(('%s-OK' % prefix, what))
               quotas.append(quota)
+              if conns: q_conns.append(conns)
+              if days: q_days.append(days)
               if (proto.startswith('http') and
                   self.conns.config.GetTlsEndpointCtx(domain)):
                 results.append(('%s-SSL-OK' % prefix, what))
@@ -233,6 +237,14 @@ class AuthThread(threading.Thread):
           results.append(('%s-Upgrade' % prefix, ';'.join(upgrade)))
 
         if quotas:
+          min_qconns = min(q_conns or [0])
+          if q_conns and min_qconns:
+            results.append(('%s-QConns' % prefix, min_qconns))
+
+          min_qdays = min(q_days or [0])
+          if q_days and min_qdays:
+            results.append(('%s-QDays' % prefix, min_qdays))
+
           nz_quotas = [q for q in quotas if q and q > 0]
           if nz_quotas:
             quota = min(nz_quotas)
@@ -1219,11 +1231,13 @@ class PageKite(object):
     (hn, al, ips) = socket.gethostbyname_ex(lookup)
     if logging.DEBUG_IO: print 'hn=%s\nal=%s\nips=%s\n' % (hn, al, ips)
 
-    # Extract auth error hints from domain name, if we got a CNAME reply.
+    # Extract auth error and extended quota info from CNAME replies
     if al:
-      error = hn.split('.')[0]
+      error, hg, hd, hc, junk = hn.split('.', 4)
+      q_days = int(hd, 16)
+      q_conns = int(hc, 16)
     else:
-      error = None
+      error = q_days = q_conns = None
 
     # If not an authentication error, quota should be encoded as an IP.
     ip = ips[0]
@@ -1233,13 +1247,13 @@ class PageKite(object):
         error = 'unauthorized'
     else:
       o = [int(x) for x in ip.split('.')]
-      return ((((o[0]*256 + o[1])*256 + o[2])*256 + o[3]), None)
+      return ((((o[0]*256 + o[1])*256 + o[2])*256 + o[3]), q_days, q_conns, None)
 
     # Errors on real errors are final.
-    if not ip.endswith(AUTH_ERR_USER_UNKNOWN): return (None, error)
+    if not ip.endswith(AUTH_ERR_USER_UNKNOWN): return (None, q_days, q_conns, error)
 
     # User unknown, fall through to local test.
-    return (-1, error)
+    return (-1, q_days, q_conns, error)
 
   def GetDomainQuota(self, protoport, domain, srand, token, sign,
                      recurse=True, check_token=True):
@@ -1255,17 +1269,17 @@ class PageKite(object):
         if porti in self.server_aliasport: porti = self.server_aliasport[porti]
         if porti not in port_list and VIRTUAL_PN not in port_list:
           logging.LogInfo('Unsupported port request: %s (%s:%s)' % (porti, protoport, domain))
-          return (None, 'port')
+          return (None, None, None, 'port')
 
       except ValueError:
         logging.LogError('Invalid port request: %s:%s' % (protoport, domain))
-        return (None, 'port')
+        return (None, None, None, 'port')
     else:
       proto, port = protoport, None
 
     if proto not in self.server_protos:
       logging.LogInfo('Invalid proto request: %s:%s' % (protoport, domain))
-      return (None, 'proto')
+      return (None, None, None, 'proto')
 
     data = '%s:%s:%s' % (protoport, domain, srand)
     auth_error_type = None
@@ -1279,10 +1293,10 @@ class PageKite(object):
 
       if secret:
         if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
-          return (-1, None)
+          return (-1, None, None, None)
         elif not self.auth_domain:
           logging.LogError('Invalid signature for: %s (%s)' % (domain, protoport))
-          return (None, auth_error_type or 'signature')
+          return (None, None, None, auth_error_type or 'signature')
 
       if self.auth_domain:
         adom = self.auth_domain
@@ -1292,16 +1306,16 @@ class PageKite(object):
         try:
           lookup = '.'.join([srand, token, sign, protoport,
                              domain.replace('*', '_any_'), adom])
-          (rv, auth_error_type) = self.LookupDomainQuota(lookup)
+          (rv, qd, qc, auth_error_type) = self.LookupDomainQuota(lookup)
           if rv is None or rv >= 0:
-            return (rv, auth_error_type)
+            return (rv, qd, qc, auth_error_type)
         except Exception, e:
           # Lookup failed, fail open.
           logging.LogError('Quota lookup failed: %s' % e)
-          return (-2, None)
+          return (-2, None, None, None)
 
     logging.LogInfo('No authentication found for: %s (%s)' % (domain, protoport))
-    return (None, auth_error_type or 'unauthorized')
+    return (None, None, None, auth_error_type or 'unauthorized')
 
   def ConfigureFromFile(self, filename=None, data=None):
     if not filename: filename = self.rcfile

@@ -72,6 +72,8 @@ class Selectable(object):
 
     # Quota-related stuff
     self.quota = None
+    self.q_conns = None
+    self.q_days = None
 
     # Read-related variables
     self.maxread = maxread

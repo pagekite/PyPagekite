@@ -109,7 +109,8 @@ class Tunnel(ChunkParser):
     self.last_activity = time.time()
     self.CountAs('backends_live')
     self.SetConn(conn)
-    conns.auth.check(requests[:], conn, lambda r, l: self.AuthCallback(conn, r, l))
+    conns.auth.check(requests[:], conn,
+                     lambda r, l: self.AuthCallback(conn, r, l))
 
     return self
 
@@ -302,9 +303,20 @@ class Tunnel(ChunkParser):
               conns.config.ui.NotifyMOTD(sname, args['motd'][0])
 
           for quota in parse.Header('X-PageKite-Quota'):
-            self.quota = [int(quota), None, None]
+            self.quota = [float(quota), None, None]
             self.Log([('FE', sname), ('quota', quota)])
-            conns.config.ui.NotifyQuota(float(quota))
+
+          for quota in parse.Header('X-PageKite-QConns'):
+            self.q_conns = float(quota)
+            self.Log([('FE', sname), ('q_conns', quota)])
+
+          for quota in parse.Header('X-PageKite-QDays'):
+            self.q_days = float(quota)
+            self.Log([('FE', sname), ('q_days', quota)])
+
+          if self.quota:
+            conns.config.ui.NotifyQuota(self.quota[0],
+                                        self.q_days, self.q_conns)
 
           invalid_reasons = {}
           for request in parse.Header('X-PageKite-Invalid-Why'):
@@ -452,8 +464,13 @@ class Tunnel(ChunkParser):
     return self.SendChunked('NOOP: 1\r\n\r\n!', compress=False)
 
   def SendQuota(self):
-    return self.SendChunked('NOOP: 1\r\nQuota: %s\r\n\r\n!' % self.quota[0],
-                            compress=False)
+    if self.q_days is not None:
+      return self.SendChunked(('NOOP: 1\r\nQuota: %s\r\nQDays: %s\r\nQConns: %s\r\n\r\n!'
+                               ) % (self.quota[0], self.q_days, self.q_conns),
+                              compress=False)
+    else:
+      return self.SendChunked('NOOP: 1\r\nQuota: %s\r\n\r\n!' % self.quota[0],
+                              compress=False)
 
   def SendThrottle(self, sid, write_speed):
     return self.SendChunked('NOOP: 1\r\nSID: %s\r\nSPD: %d\r\n\r\n!' % (
@@ -500,14 +517,20 @@ class Tunnel(ChunkParser):
       return False
 
     try:
+      new_quota = 0
+      if parse.Header('QDays'):
+        self.q_days = new_quota = int(parse.Header('QDays'))
+      if parse.Header('QConns'):
+        self.q_conns = new_quota = int(parse.Header('QConns'))
       if parse.Header('Quota'):
+        new_quota = 1
         if self.quota:
           self.quota[0] = int(parse.Header('Quota')[0])
         else:
           self.quota = [int(parse.Header('Quota')[0]), None, None]
-        self.conns.config.ui.Notify(('You have %.2f MB of quota left.'
-                                     ) % (float(self.quota[0]) / 1024),
-                                    color=self.conns.config.ui.MAGENTA)
+      if new_quota:
+        self.conns.config.ui.NotifyQuota(self.quota[0],
+                                         self.q_days, self.q_conns)
       if parse.Header('PING'): return self.SendPong()
       if parse.Header('ZRST') and not self.ResetZChunks(): return False
       if parse.Header('SPD') and not self.Throttle(parse): return False
