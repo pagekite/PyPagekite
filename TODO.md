@@ -3,14 +3,22 @@
 ## Known bugs ##
 
    * XML-RPC CNAME creation fail
-   * SSL verification fail
    * Signup message weirdness
    * Poor handling of reconfiguration
 
+   * WONTFIX: SSL verification fail - unfixable with pyOpenSSL :-(
+
+
+## Code cleanup ##
+
+   * Files are still too big, github chokes
+   * Function naming is inconsistent
+   * Need docstrings all over pagekite source
+   * Unneeded ( ) in a few places
+   * Bad form: if this: thenfoo
+
 
 ## General ##
-
-   * 0.4.7/launch: COMPLETE DOCUMENTATION. Bugfixes.
 
    * 0.5.x: Add UI to report available upgrades at the back-end.
    * 0.5.x: Windows: Auto upgrades?
@@ -33,14 +41,6 @@
    * 0.6: Package lapcat
    * 0.6: Create Mac OS X GUI and package: Talk to Sveinbjörn?
 
-
-## Code cleanup ##
-
-   * Files are still too big, github chokes
-   * Function naming is inconsistent
-   * Need docstrings all over pagekite source
-   * Unneeded ( ) in a few places
-   * Bad form: if this: thenfoo
 
 ### Optimization ###
 
