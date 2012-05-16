@@ -202,7 +202,7 @@ class Tunnel(ChunkParser):
         return None
       data += buf
       self.read_bytes += len(buf)
-    if DEBUG_IO: print '<== IN (headers)\n%s\n===' % data
+    if logging.DEBUG_IO: print '<== IN (headers)\n%s\n===' % data
     return data
 
   def _Connect(self, server, conns, tokens=None):
@@ -212,7 +212,7 @@ class Tunnel(ChunkParser):
     if len(sspec) < 2: sspec = (sspec[0], 443)
 
     # Use chained SocksiPy to secure our communication.
-    socks.DEBUG = (DEBUG_IO or socks.DEBUG) and logging.LogDebug
+    socks.DEBUG = (logging.DEBUG_IO or socks.DEBUG) and logging.LogDebug
     sock = socks.socksocket()
     if socks.HAVE_SSL:
       chain = ['default']
@@ -872,7 +872,7 @@ class UserConn(Selectable):
               fail = False
 
         if fail:
-          if DEBUG_IO: print '=== REQUEST\n%s\n===' % data
+          if logging.DEBUG_IO: print '=== REQUEST\n%s\n===' % data
           self.ui.Notify(('%s - %s://%s:%s (USER ACCESS DENIED)'
                           ) % (remote_ip or 'unknown', proto, host, on_port),
                          prefix='!', color=self.ui.YELLOW)

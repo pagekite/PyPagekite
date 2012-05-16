@@ -176,7 +176,7 @@ class AuthThread(threading.Thread):
       now = int(time.time())
       if self.jobs:
         (requests, conn, callback) = self.jobs.pop(0)
-        if DEBUG_IO: print '=== AUTH REQUESTS\n%s\n===' % requests
+        if logging.DEBUG_IO: print '=== AUTH REQUESTS\n%s\n===' % requests
         self.qc.release()
 
         quotas = []
@@ -245,7 +245,7 @@ class AuthThread(threading.Thread):
             else:
               conn.quota[2] = time.time()
 
-        if DEBUG_IO: print '=== AUTH RESULTS\n%s\n===' % results
+        if logging.DEBUG_IO: print '=== AUTH RESULTS\n%s\n===' % results
         callback(results, log_info)
         self.qc.acquire()
       else:
@@ -599,7 +599,7 @@ class TunnelManager(threading.Thread):
         self._run()
       except Exception, e:
         logging.LogError('TunnelManager died: %s' % e)
-        if DEBUG_IO: traceback.print_exc(file=sys.stderr)
+        if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
         time.sleep(5)
     logging.LogDebug('TunnelManager: done')
 
@@ -1162,7 +1162,7 @@ class PageKite(object):
     else:
       self.ui.Status('exiting', message=(message or 'Good-bye!'))
     if message: print 'Error: %s' % message
-    if DEBUG_IO: traceback.print_exc(file=sys.stderr)
+    if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
     if not noexit:
       self.main_loop = False
       sys.exit(1)
@@ -1215,9 +1215,9 @@ class PageKite(object):
 
   def LookupDomainQuota(self, lookup):
     if not lookup.endswith('.'): lookup += '.'
-    if DEBUG_IO: print '=== AUTH LOOKUP\n%s\n===' % lookup
+    if logging.DEBUG_IO: print '=== AUTH LOOKUP\n%s\n===' % lookup
     (hn, al, ips) = socket.gethostbyname_ex(lookup)
-    if DEBUG_IO: print 'hn=%s\nal=%s\nips=%s\n' % (hn, al, ips)
+    if logging.DEBUG_IO: print 'hn=%s\nal=%s\nips=%s\n' % (hn, al, ips)
 
     # Extract auth error hints from domain name, if we got a CNAME reply.
     if al:
@@ -1682,7 +1682,7 @@ class PageKite(object):
       elif opt == '--watch':
         self.watch_level[0] = int(arg)
       elif opt == '--debugio':
-        common.DEBUG_IO = True
+        logging.DEBUG_IO = True
       elif opt == '--buffers': self.buffer_max = int(arg)
       elif opt == '--nocrashreport': self.crash_report_url = None
       elif opt == '--noloop': self.main_loop = False
@@ -1715,7 +1715,7 @@ class PageKite(object):
         self.HelpAndExit()
 
     # Make sure these are configured before we try and do XML-RPC stuff.
-    socks.DEBUG = (DEBUG_IO or socks.DEBUG) and logging.LogDebug
+    socks.DEBUG = (logging.DEBUG_IO or socks.DEBUG) and logging.LogDebug
     if self.ca_certs: socks.setdefaultcertfile(self.ca_certs)
 
     # Handle the user-friendly argument stuff and simple registration.
@@ -2528,7 +2528,7 @@ class PageKite(object):
               failures += 1
           except Exception, e:
             logging.LogInfo('DynDNS update failed: %s' % e, [('data', update)])
-            if DEBUG_IO: traceback.print_exc(file=sys.stderr)
+            if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
             self.SetBackendStatus(update.split(':')[0],
                                   add=BE_STATUS_ERR_DNS)
             failures += 1
@@ -2694,7 +2694,7 @@ class PageKite(object):
     except Exception, e:
       self.LogTo('stdio')
       logging.FlushLogMemory()
-      if DEBUG_IO: traceback.print_exc(file=sys.stderr)
+      if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
       raise ConfigError('Configuring listeners: %s ' % e)
 
     # Configure logging

@@ -30,6 +30,8 @@ from common import *
 
 syslog = compat.syslog
 
+DEBUG_IO = False
+
 LOG = []
 LOG_LINE = 0
 LOG_LENGTH = 300

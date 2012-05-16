@@ -223,12 +223,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def sendChunk(self, chunk):
     if self.chunked:
-      if DEBUG_IO: print '<== SENDING CHUNK ===\n%s\n' % chunk
+      if logging.DEBUG_IO: print '<== SENDING CHUNK ===\n%s\n' % chunk
       self.wfile.write('%x\r\n' % len(chunk))
       self.wfile.write(chunk)
       self.wfile.write('\r\n')
     else:
-      if DEBUG_IO: print '<== SENDING ===\n%s\n' % chunk
+      if logging.DEBUG_IO: print '<== SENDING ===\n%s\n' % chunk
       self.wfile.write(chunk)
 
   def sendEof(self):
@@ -354,7 +354,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                                     qs, None)
     except Exception, e:
       logging.Log([('err', 'GET error at %s: %s' % (path, e))])
-      if DEBUG_IO: print '=== ERROR\n%s\n===' % traceback.format_exc()
+      if logging.DEBUG_IO: print '=== ERROR\n%s\n===' % traceback.format_exc()
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
   def do_HEAD(self):

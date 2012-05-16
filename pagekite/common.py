@@ -39,7 +39,6 @@ SERVICE_TOS_URL = 'https://pagekite.net/support/terms/'
 SERVICE_CERTS = ['b5p.us', 'frontends.b5p.us', 'pagekite.net', 'pagekite.me',
                  'pagekite.com', 'pagekite.org', 'testing.is', '302.is']
 
-DEBUG_IO = False
 DEFAULT_CHARSET = 'utf-8'
 DEFAULT_BUFFER_MAX = 1024
 
