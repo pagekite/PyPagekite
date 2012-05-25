@@ -1623,8 +1623,7 @@ class PageKite(object):
 
           # This increases the odds of unrelated requests getting lumped
           # together in the tunnel, which makes traffic analysis harder.
-          global SEND_ALWAYS_BUFFERS
-          SEND_ALWAYS_BUFFERS = True
+          compat.SEND_ALWAYS_BUFFERS = True
 
       elif opt == '--ca_certs': self.ca_certs = arg
       elif opt == '--jakenoia': self.fe_anon_tls_wrap = True
@@ -2587,13 +2586,11 @@ class PageKite(object):
     if os.fork() != 0: os._exit(0)
 
   def SelectLoop(self):
-    global buffered_bytes
-
     conns = self.conns
     self.last_loop = time.time()
 
-    iready, oready, eready = None, None, None
     while self.keep_looping:
+      iready, oready, eready = None, None, None
       isocks, osocks = conns.Readable(), conns.Blocked()
       try:
         if isocks or osocks:
@@ -2603,7 +2600,7 @@ class PageKite(object):
           time.sleep(0.5)
       except KeyboardInterrupt, e:
         raise KeyboardInterrupt()
-      except Exception, e:
+      except:
         logging.LogError('Error in select: %s (%s/%s)' % (e, isocks, osocks))
         conns.CleanFds()
         self.last_loop -= 1
@@ -2615,14 +2612,15 @@ class PageKite(object):
           time.sleep(0.1)
 
       if oready:
-        for socket in oready:
-          conn = conns.Connection(socket)
+        if logging.DEBUG_IO:
+          print '\n=== Ready for Write: %s' % [o.fileno() for o in oready]
+        for osock in oready:
+          conn = conns.Connection(osock)
           if conn and not conn.Send([], try_flush=True):
-#           logging.LogDebug("Write error in main loop, closing %s" % conn)
             conns.Remove(conn)
             conn.Cleanup()
 
-      if buffered_bytes < 1024 * self.buffer_max:
+      if common.buffered_bytes < 1024 * self.buffer_max:
         throttle = None
       else:
         logging.LogDebug("FIXME: Nasty pause to let buffers clear!")
@@ -2630,10 +2628,11 @@ class PageKite(object):
         throttle = 1024
 
       if iready:
-        for socket in iready:
-          conn = conns.Connection(socket)
+        if logging.DEBUG_IO:
+          print '\n=== Ready for Read: %s' % [i.fileno() for i in iready]
+        for isock in iready:
+          conn = conns.Connection(isock)
           if conn and not conn.ReadData(maxread=throttle):
-#           logging.LogDebug("Read error in main loop, closing %s" % conn)
             conns.Remove(conn)
             conn.Cleanup()
 

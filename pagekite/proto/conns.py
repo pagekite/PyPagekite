@@ -167,7 +167,7 @@ class Tunnel(ChunkParser):
       output.append('%s: %s\r\n' % r)
 
     output.append(HTTP_StartBody())
-    if not self.Send(output, try_flush=True):
+    if not self.Send(output, try_flush=True, activity=False):
       conn.LogDebug('No tunnels configured, closing connection (send failed).')
       self.Cleanup()
       return None
@@ -203,7 +203,8 @@ class Tunnel(ChunkParser):
         return None
       data += buf
       self.read_bytes += len(buf)
-    if logging.DEBUG_IO: print '<== IN (headers)\n%s\n===' % data
+    if logging.DEBUG_IO:
+      print '<== IN (headers) =[%s]==(\n%s)==' % (self, data)
     return data
 
   def _Connect(self, server, conns, tokens=None):
@@ -237,7 +238,8 @@ class Tunnel(ChunkParser):
                                          conns.config.backends,
                                        tokens,
                                      nozchunks=conns.config.disable_zchunks,
-                                    replace=replace_sessionid), try_flush=True)
+                                    replace=replace_sessionid),
+                      activity=False, try_flush=True)
         or not self.Flush(wait=True)):
       return None, None
 
@@ -425,7 +427,8 @@ class Tunnel(ChunkParser):
   def SendStreamEof(self, sid, write_eof=False, read_eof=False):
     return self.SendChunked('SID: %s\r\nEOF: 1%s%s\r\n\r\nBye!' % (sid,
                             (write_eof or not read_eof) and 'W' or '',
-                            (read_eof or not write_eof) and 'R' or ''))
+                            (read_eof or not write_eof) and 'R' or ''),
+                            compress=False)
 
   def EofStream(self, sid, eof_type='WR'):
     if sid in self.users and self.users[sid] is not None:
@@ -576,17 +579,17 @@ class Tunnel(ChunkParser):
             if self.conns.config.no_probes:
               logging.LogDebug('Responding to probe for %s: rejected' % host)
               if not self.SendChunked('SID: %s\r\n\r\n%s' % (
-                                        sid, HTTP_NoFeConnection(proto) )):
+                                      sid, HTTP_NoFeConnection(proto) )):
                 return False
             elif self.Probe(host):
               logging.LogDebug('Responding to probe for %s: good' % host)
               if not self.SendChunked('SID: %s\r\n\r\n%s' % (
-                                        sid, HTTP_GoodBeConnection(proto) )):
+                                      sid, HTTP_GoodBeConnection(proto) )):
                 return False
             else:
               logging.LogDebug('Responding to probe for %s: back-end down' % host)
               if not self.SendChunked('SID: %s\r\n\r\n%s' % (
-                                        sid, HTTP_NoBeConnection(proto) )):
+                                      sid, HTTP_NoBeConnection(proto) )):
                 return False
           else:
             # Pass incoming data through filters, if we have any.
@@ -609,12 +612,12 @@ class Tunnel(ChunkParser):
             if proto in ('http', 'http2', 'http3', 'websocket'):
               if conn is None:
                 if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
-                                          HTTP_Unavailable('be', proto, host,
+                                        HTTP_Unavailable('be', proto, host,
                                        frame_url=self.conns.config.error_url))):
                   return False
               elif not conn:
                 if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
-                                          HTTP_Unavailable('be', proto, host,
+                                        HTTP_Unavailable('be', proto, host,
                                        frame_url=self.conns.config.error_url,
                                       code=401))):
                   return False

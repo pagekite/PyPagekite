@@ -28,6 +28,8 @@ import zlib
 from pagekite.compat import *
 from pagekite.common import *
 import pagekite.logging as logging
+import pagekite.compat as compat
+import pagekite.common as common
 
 
 def obfuIp(ip):
@@ -44,7 +46,7 @@ class Selectable(object):
                      errno.EDEADLK, errno.EWOULDBLOCK, errno.ENOBUFS,
                      errno.EALREADY)
 
-  def __init__(self, fd=None, address=None, on_port=None, maxread=16000,
+  def __init__(self, fd=None, address=None, on_port=None, maxread=16*1024,
                      ui=None, tracked=True, bind=None, backlog=100):
     self.fd = None
 
@@ -243,8 +245,7 @@ class Selectable(object):
       self.Log([('eof', '1')])
 
   def Cleanup(self, close=True):
-    global buffered_bytes
-    buffered_bytes -= len(self.write_blocked)
+    common.buffered_bytes -= len(self.write_blocked)
     self.write_blocked = self.peeked = self.zw = ''
 
     if not self.dead:
@@ -330,6 +331,8 @@ class Selectable(object):
     self.last_activity = time.time()
     if data is None or data == '':
       self.read_eof = True
+      if logging.DEBUG_IO:
+        print '<== IN =[%s]==(EOF)==' % self
       return self.ProcessData('')
     else:
       if not self.peeking:
@@ -358,9 +361,9 @@ class Selectable(object):
     buffered_bytes -= len(self.write_blocked)
 
     # If we're already blocked, just buffer unless explicitly asked to flush.
-    if (not try_flush) and (len(self.write_blocked) > 0 or SEND_ALWAYS_BUFFERS):
+    if (not try_flush) and (len(self.write_blocked) > 0 or compat.SEND_ALWAYS_BUFFERS):
       self.write_blocked += ''.join(data)
-      buffered_bytes += len(self.write_blocked)
+      common.buffered_bytes += len(self.write_blocked)
       return True
 
     self.write_speed = int((self.wrote_bytes + self.all_out) / (0.1 + time.time() - self.created))
@@ -371,7 +374,8 @@ class Selectable(object):
     if sending:
       try:
         sent_bytes = self.fd.send(sending[:(self.write_retry or SEND_MAX_BYTES)])
-        if logging.DEBUG_IO: print '==> OUT\n%s\n===' % sending[:sent_bytes]
+        if logging.DEBUG_IO:
+          print '==> OUT =[%s]==(\n%s)==' % (self, sending[:min(160, sent_bytes)])
         self.wrote_bytes += sent_bytes
         self.write_retry = None
       except IOError, err:
@@ -395,8 +399,9 @@ class Selectable(object):
         self.ProcessEofWrite()
         return False
 
+    if activity: self.last_activity = time.time()
     self.write_blocked = sending[sent_bytes:]
-    buffered_bytes += len(self.write_blocked)
+    common.buffered_bytes += len(self.write_blocked)
     if self.wrote_bytes >= logging.LOG_THRESHOLD: self.LogTraffic()
 
     if self.write_eof and not self.write_blocked: self.ProcessEofWrite()
@@ -418,16 +423,19 @@ class Selectable(object):
         if zhistory:
           zhistory[0] = len(sdata)
           zhistory[1] = len(zdata)
-        return self.Send(['%xZ%x%s\r\n%s' % (len(sdata), len(zdata), rst, zdata)])
+        return self.Send(['%xZ%x%s\r\n%s' % (len(sdata), len(zdata), rst, zdata)],
+                         activity=False)
       except zlib.error:
         logging.LogError('Error compressing, resetting ZChunks.')
         self.ResetZChunks()
 
-    return self.Send(['%x%s\r\n%s' % (len(sdata), rst, sdata)])
+    return self.Send(['%x%s\r\n%s' % (len(sdata), rst, sdata)],
+                     activity=False)
 
   def Flush(self, loops=50, wait=False):
     while loops != 0 and len(self.write_blocked) > 0 and self.Send([],
-                                                                try_flush=True):
+                                                                try_flush=True,
+                                                                activity=False):
       if wait and len(self.write_blocked) > 0:
         time.sleep(0.1)
       logging.LogDebug('Flushing...')
