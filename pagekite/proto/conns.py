@@ -1380,8 +1380,10 @@ class Listener(Selectable):
         return True
       else:
         self.LogInfo('Listener::ReadData: error: %s (errno=%s)' % (msg, errno))
+        raise
 
     except Exception, e:
       logging.LogDebug('Listener::ReadData: %s' % e)
+      raise
 
     return False
