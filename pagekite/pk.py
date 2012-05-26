@@ -331,6 +331,7 @@ class Connections(object):
     now = time.time()
     return [s.fd for s in self.conns if (s.fd
                                          and (not s.read_eof)
+                                         and (s.acked_kb_delta < 64)  # FIXME
                                          and (s.throttle_until <= now))]
 
   def Blocked(self):

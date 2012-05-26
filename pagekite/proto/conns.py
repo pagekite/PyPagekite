@@ -475,9 +475,13 @@ class Tunnel(ChunkParser):
       return self.SendChunked('NOOP: 1\r\nQuota: %s\r\n\r\n!' % self.quota[0],
                               compress=False)
 
-  def SendThrottle(self, sid, write_speed):
-    return self.SendChunked('NOOP: 1\r\nSID: %s\r\nSPD: %d\r\n\r\n!' % (
-                              sid, write_speed), compress=False)
+  def SendProgress(self, sid, conn, throttle=False):
+    # FIXME: Optimize this away unless meaningful progress has been made?
+    msg = ('NOOP: 1\r\n'
+           'SID: %s\r\n'
+           'SKB: %d\r\n') % (sid, (conn.all_out + conn.wrote_bytes)/1024)
+    throttle = throttle and ('SPD: %d\r\n' % conn.write_speed) or ''
+    return self.SendChunked('%s%s\r\n!' % (msg, throttle), compress=False)
 
   def ProcessCorruptChunk(self, data):
     self.ResetRemoteZChunks()
@@ -492,13 +496,20 @@ class Tunnel(ChunkParser):
         if self.conns.config.Ping(bhost, int(bport)) > 2: return False
     return True
 
-  def Throttle(self, parse):
+  def AutoThrottle(self, max_speed=None, remote=False, delay=0.2):
+    # Never throttle tunnels.
+    return True
+
+  def ProgressTo(self, parse):
     try:
       sid = int(parse.Header('SID')[0])
-      bps = int(parse.Header('SPD')[0])
-      if sid in self.users: self.users[sid].Throttle(bps, remote=True)
+      bps = int((parse.Header('SPD') or [-1])[0])
+      skb = int((parse.Header('SKB') or [-1])[0])
+      if sid in self.users:
+        self.users[sid].RecordProgress(skb, bps)
     except:
-      logging.LogError('Tunnel::ProcessChunk: Invalid throttle request!')
+      logging.LogError(('Tunnel::ProgressTo: That made no sense! %s'
+                        ) % traceback.format_exc())
     return True
 
   # If a tunnel goes down, we just go down hard and kill all our connections.
@@ -536,7 +547,8 @@ class Tunnel(ChunkParser):
                                          self.q_days, self.q_conns)
       if parse.Header('PING'): return self.SendPong()
       if parse.Header('ZRST') and not self.ResetZChunks(): return False
-      if parse.Header('SPD') and not self.Throttle(parse): return False
+      if parse.Header('SPD') or parse.Header('SKB'):
+        if not self.ProgressTo(parse): return False
       if parse.Header('NOOP'): return True
     except Exception, e:
       logging.LogError('Tunnel::ProcessChunk: Corrupt chunk: %s' % e)
@@ -679,9 +691,8 @@ class Tunnel(ChunkParser):
           # FIXME
           pass
 
-        if len(conn.write_blocked) > 2*max(conn.write_speed, 50000):
-          if conn.created < time.time()-3:
-            if not self.SendThrottle(sid, conn.write_speed): return False
+        if len(conn.write_blocked) > 0 and conn.created < time.time()-3:
+          return self.SendProgress(sid, conn, throttle=True)
 
     return True
 
@@ -990,6 +1001,8 @@ class UserConn(Selectable):
     rv = Selectable.Send(self, data, try_flush=try_flush)
     if self.write_eof and not self.write_blocked:
       self.Shutdown(socket.SHUT_WR)
+    elif try_flush or not self.write_blocked:
+      self.tunnel.SendProgress(self.sid, self)
     return rv
 
   def ProcessData(self, data):
@@ -1003,7 +1016,9 @@ class UserConn(Selectable):
 
     # Back off if tunnel is stuffed.
     if self.tunnel and len(self.tunnel.write_blocked) > 1024000:
-      self.Throttle(delay=(len(self.tunnel.write_blocked)-204800)/max(50000, self.tunnel.write_speed))
+      # FIXME: think about this...
+      self.Throttle(delay=(len(self.tunnel.write_blocked)-204800)/max(50000,
+                    self.tunnel.write_speed))
 
     if self.read_eof: return self.ProcessEofRead()
     return True

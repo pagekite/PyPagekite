@@ -91,8 +91,11 @@ class Selectable(object):
     self.write_eof = False
     self.write_retry = None
 
-    # Throttle reads and writes
-    self.throttle_until = 0
+    # Flow control v1
+    self.throttle_until = (time.time() - 1)
+    self.max_read_speed = 64*1024
+    # Flow control v2
+    self.acked_kb_delta = 0
 
     # Compression stuff
     self.zw = None
@@ -301,15 +304,32 @@ class Selectable(object):
     if self.read_eof:
       return False
 
+    now = time.time()
+    maxread = maxread or self.maxread
+    flooded = self.Flooded()
+    if flooded > self.max_read_speed and not self.acked_kb_delta:
+      # FIXME: This is v1 flow control, kill it when 0.4.7 is "everywhere"
+      last = self.throttle_until
+      # Disable local throttling for really slow connections; remote
+      # throttles (trigged by blocked sockets) still work.
+      if self.max_read_speed > 1024:
+        self.AutoThrottle()
+        maxread = 1024
+      if now > last and self.all_in > 2*self.max_read_speed:
+        self.max_read_speed *= 1.25
+        self.max_read_speed += maxread
+
     try:
-      maxread = maxread or self.maxread
       if self.peeking:
         data = self.fd.recv(maxread, socket.MSG_PEEK)
         self.peeked = len(data)
-        if logging.DEBUG_IO: print '<== IN (peeked)\n%s\n===' % data
+        if logging.DEBUG_IO:
+          print '<== PEEK =[%s]==(\n%s)==' % (self, data[:160])
       else:
         data = self.fd.recv(maxread)
-        if logging.DEBUG_IO: print '<== IN\n%s\n===' % data
+        if logging.DEBUG_IO:
+          print ('<== IN =[%s @ %dbps]==(\n%s)=='
+                 ) % (self, self.max_read_speed, data[:160])
     except (SSL.WantReadError, SSL.WantWriteError), err:
       return True
     except IOError, err:
@@ -328,7 +348,7 @@ class Selectable(object):
         self.LogInfo('Error reading socket: %s (errno=%s)' % (msg, errno))
         return False
 
-    self.last_activity = time.time()
+    self.last_activity = now
     if data is None or data == '':
       self.read_eof = True
       if logging.DEBUG_IO:
@@ -337,36 +357,56 @@ class Selectable(object):
     else:
       if not self.peeking:
         self.read_bytes += len(data)
+        self.acked_kb_delta += (len(data)/1024)
         if self.read_bytes > logging.LOG_THRESHOLD: self.LogTraffic()
       return self.ProcessData(data)
 
+  def Flooded(self):
+    flooded = self.read_bytes + self.all_in
+    flooded -= self.max_read_speed * 0.95 * (time.time() - self.created)
+    return flooded
+
+  def RecordProgress(self, skb, bps):
+    if skb >= 0:
+      all_read = (self.all_in + self.read_bytes) / 1024
+      self.acked_kb_delta = max(1, all_read - skb)
+      self.LogDebug('Delta is: %d' % self.acked_kb_delta)
+    elif bps >= 0:
+      self.Throttle(max_speed=bps, remote=True)
+
   def Throttle(self, max_speed=None, remote=False, delay=0.2):
     if max_speed:
-      self.throttle_until = time.time()
-      flooded = self.read_bytes + self.all_in
-      flooded -= max_speed * (time.time() - self.created)
-      delay = min(15, max(0.2, flooded/max_speed))
-      if flooded < 0: delay = 15
-    else:
-      if self.throttle_until < time.time(): self.throttle_until = time.time()
-      flooded = '?'
+      self.max_read_speed = max_speed
 
-    self.throttle_until += delay
-    self.LogInfo('Throttled until %x (flooded=%s, bps=%s, remote=%s)' % (
-                    int(self.throttle_until), flooded, max_speed, remote))
+    flooded = max(-1, self.Flooded())
+    if self.max_read_speed:
+      delay = min(10, max(0.1, flooded/self.max_read_speed))
+      if flooded < 0: delay = 0
+
+    if delay:
+      ot = self.throttle_until
+      self.throttle_until = time.time() + delay
+      if ((self.throttle_until - ot) > 30 or
+          (int(ot) != int(self.throttle_until) and delay > 8)):
+        self.LogInfo('Throttled %.1fs until %x (flood=%d, bps=%s, %s)' % (
+                     delay, self.throttle_until, flooded,
+                     self.max_read_speed, remote and 'remote' or 'local'))
+
     return True
 
-  def Send(self, data, try_flush=False):
-    global buffered_bytes
-    buffered_bytes -= len(self.write_blocked)
+  def AutoThrottle(self, max_speed=None, remote=False, delay=0.2):
+    return self.Throttle(max_speed, remote, delay)
+
+  def Send(self, data, try_flush=False, activity=True):
+    common.buffered_bytes -= len(self.write_blocked)
+    self.write_speed = int((self.wrote_bytes + self.all_out)
+                           / max(1, (time.time() - self.created)))
 
     # If we're already blocked, just buffer unless explicitly asked to flush.
     if (not try_flush) and (len(self.write_blocked) > 0 or compat.SEND_ALWAYS_BUFFERS):
       self.write_blocked += ''.join(data)
       common.buffered_bytes += len(self.write_blocked)
       return True
-
-    self.write_speed = int((self.wrote_bytes + self.all_out) / (0.1 + time.time() - self.created))
 
     sending = self.write_blocked+(''.join(data))
     self.write_blocked = ''
