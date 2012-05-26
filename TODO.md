@@ -5,6 +5,7 @@
    * XML-RPC CNAME creation fail
    * Signup message weirdness
    * Poor handling of reconfiguration
+   * Poor handling of FD exhaustion
 
    * WONTFIX: SSL verification fail - unfixable with pyOpenSSL :-(
 
@@ -53,5 +54,27 @@
    * Make tunnel creation more stubborn, try multiple ports, etc.
    * Add XMPP and incoming SMTP support
    * Replace/augment current tunnel auth with SSL certificates
+
+
+### Dynamic DNS ###
+
+Dynamic DNS updates are the only SPoF left in the PageKite.net service,
+should fix by:
+
+   * Modify pagekite.py to update multiple (all) update servers
+
+
+### Lame-duck ###
+
+Lame-duck mode is when a front-end knows it can no longer handle traffic
+but still has established user connections.  The goal is to shut down as
+quickly as possible, without dropping (too much) traffic.
+
+   * Trigger on: normal shutdown, out of FDs, OOM, uncaught exceptions
+   * Add signaling to tunnels to warn that FE is lame.
+   * Shut down all listening sockets and daemonize so new FE can start up
+   * Implement protocol for sending entire live tunnel to new FE process?
+   * Give existing conns 60 seconds to finish?
+   * Add "lame" recognition in back-end (also "rejected")
 
 
