@@ -754,6 +754,11 @@ class UserConn(Selectable):
                      escape_html('%s' % (self.tunnel or '')),
                      Selectable.__html__(self))
 
+  def IsReadable(self, now):
+    if self.tunnel and self.tunnel.IsBlocked():
+      return False
+    return Selectable.IsReadable(self, now)
+
   def CloseTunnel(self, tunnel_closed=False):
     tunnel = self.tunnel
     self.tunnel = None

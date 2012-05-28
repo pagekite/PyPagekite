@@ -93,7 +93,7 @@ class Selectable(object):
 
     # Flow control v1
     self.throttle_until = (time.time() - 1)
-    self.max_read_speed = 64*1024
+    self.max_read_speed = 96*1024
     # Flow control v2
     self.acked_kb_delta = 0
 
@@ -357,7 +357,8 @@ class Selectable(object):
     else:
       if not self.peeking:
         self.read_bytes += len(data)
-        self.acked_kb_delta += (len(data)/1024)
+        if self.acked_kb_delta:
+          self.acked_kb_delta += (len(data)/1024)
         if self.read_bytes > logging.LOG_THRESHOLD: self.LogTraffic()
       return self.ProcessData(data)
 
@@ -369,8 +370,9 @@ class Selectable(object):
   def RecordProgress(self, skb, bps):
     if skb >= 0:
       all_read = (self.all_in + self.read_bytes) / 1024
-      self.acked_kb_delta = max(1, all_read - skb)
-      self.LogDebug('Delta is: %d' % self.acked_kb_delta)
+      if self.acked_kb_delta:
+        self.acked_kb_delta = max(1, all_read - skb)
+        self.LogDebug('Delta is: %d' % self.acked_kb_delta)
     elif bps >= 0:
       self.Throttle(max_speed=bps, remote=True)
 
