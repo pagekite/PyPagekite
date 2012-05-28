@@ -326,31 +326,17 @@ class Connections(object):
       # Let's not asplode if another thread races us for this.
       pass
 
-  def IsReadable(self, s, now):
-    # FIXME: This should be an attribute of the Selectable
-    return (s.fd and (not s.read_eof)
-                 and (s.acked_kb_delta < 64)  # FIXME
-                 and (s.throttle_until <= now))
-
-  def IsBlocked(self, s):
-    # FIXME: This should be an attribute of the Selectable
-    return (s.fd and (len(s.write_blocked) > 0))
-
-  def IsDead(self, s):
-    # FIXME: This should be an attribute of the Selectable
-    return (s.read_eof and s.write_eof and not s.write_blocked)
-
   def Readable(self):
     # FIXME: This is O(n)
     now = time.time()
-    return [s.fd for s in self.conns if self.IsReadable(s, now)]
+    return [s.fd for s in self.conns if s.IsReadable(now)]
 
   def Blocked(self):
     # FIXME: This is O(n)
-    return [s.fd for s in self.conns if self.IsBlocked(s)]
+    return [s.fd for s in self.conns if s.IsBlocked()]
 
   def DeadConns(self):
-    return [s for s in self.conns if self.IsDead(s)]
+    return [s for s in self.conns if s.IsDead()]
 
   def CleanFds(self):
     evil = []
@@ -2639,8 +2625,8 @@ class PageKite(object):
       else:
         # Windoes does not seem to like empty selects, so we do this instead.
         time.sleep(waittime/2)
-    except KeyboardInterrupt, e:
-      raise KeyboardInterrupt()
+    except KeyboardInterrupt:
+      raise
     except:
       logging.LogError('Error in select: %s (%s/%s)' % (e, isocks, osocks))
       self.conns.CleanFds()
@@ -2657,27 +2643,31 @@ class PageKite(object):
   def Epoll(self, epoll, waittime):
     fdc = {}
     now = time.time()
-    for c in self.conns.conns:
-      try:
-        if self.conns.IsDead(c):
-          epoll.unregister(c.fd)
-        else:
-          fdc[c.fd.fileno()] = c.fd
-          mask = 0
-          if self.conns.IsBlocked(c):       mask |= select.EPOLLOUT
-          if self.conns.IsReadable(c, now): mask |= select.EPOLLIN
-          if mask:
-            try:
-              epoll.modify(c.fd, mask)
-            except IOError:
-              epoll.register(c.fd, mask)
-          else:
+    try:
+      for c in self.conns.conns:
+        try:
+          if c.IsDead():
             epoll.unregister(c.fd)
-      except IOError:
-        if logging.DEBUG_IO:
-          print '*** EPoll: %s' % traceback.format_exc()
+          else:
+            fdc[c.fd.fileno()] = c.fd
+            mask = 0
+            if c.IsBlocked():     mask |= select.EPOLLOUT
+            if c.IsReadable(now): mask |= select.EPOLLIN
+            if mask:
+              try:
+                epoll.modify(c.fd, mask)
+              except IOError:
+                epoll.register(c.fd, mask)
+            else:
+              epoll.unregister(c.fd)
+        except IOError:
+          if logging.DEBUG_IO:
+            print '*** EPoll: %s' % traceback.format_exc()
 
-    evs = epoll.poll(waittime)
+      evs = epoll.poll(waittime)
+    except KeyboardInterrupt:
+      epoll.close()
+      raise
 
     rmask = select.EPOLLIN | select.EPOLLHUP
     iready = [fdc.get(e[0]) for e in evs if e[1] & rmask]
@@ -2694,14 +2684,11 @@ class PageKite(object):
     try:
       epoll = select.epoll()
       mypoll = self.Epoll
-      if logging.DEBUG_IO:
-        print '\n=== Loop (epoll) ==='
     except:
       epoll = None
       mypoll = self.Select
-      if logging.DEBUG_IO:
-        print '\n=== Loop (select) ==='
 
+    logging.LogDebug('Entering main %s loop' % (epoll and 'epoll' or 'select'))
     self.last_loop = time.time()
     while self.keep_looping:
       iready, oready, eready = mypoll(epoll, 1.1)
@@ -2722,6 +2709,9 @@ class PageKite(object):
 
       self.ProcessDead(epoll)
       self.last_loop = now
+
+    if epoll:
+      epoll.close()
 
   def Start(self, howtoquit='CTRL+C = Quit'):
     conns = self.conns = self.conns or Connections(self)

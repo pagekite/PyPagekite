@@ -484,6 +484,17 @@ class Selectable(object):
     if self.write_blocked: return False
     return True
 
+  def IsReadable(s, now):
+    return (s.fd and (not s.read_eof)
+                 and (s.acked_kb_delta < 64)  # FIXME
+                 and (s.throttle_until <= now))
+
+  def IsBlocked(s):
+    return (s.fd and (len(s.write_blocked) > 0))
+
+  def IsDead(s):
+    return (s.read_eof and s.write_eof and not s.write_blocked)
+
 
 class LineParser(Selectable):
   """A Selectable which parses the input as lines of text."""
