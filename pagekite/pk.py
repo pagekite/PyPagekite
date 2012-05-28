@@ -326,20 +326,31 @@ class Connections(object):
       # Let's not asplode if another thread races us for this.
       pass
 
+  def IsReadable(self, s, now):
+    # FIXME: This should be an attribute of the Selectable
+    return (s.fd and (not s.read_eof)
+                 and (s.acked_kb_delta < 64)  # FIXME
+                 and (s.throttle_until <= now))
+
+  def IsBlocked(self, s):
+    # FIXME: This should be an attribute of the Selectable
+    return (s.fd and (len(s.write_blocked) > 0))
+
+  def IsDead(self, s):
+    # FIXME: This should be an attribute of the Selectable
+    return (s.read_eof and s.write_eof and not s.write_blocked)
+
   def Readable(self):
     # FIXME: This is O(n)
     now = time.time()
-    return [s.fd for s in self.conns if (s.fd
-                                         and (not s.read_eof)
-                                         and (s.acked_kb_delta < 64)  # FIXME
-                                         and (s.throttle_until <= now))]
+    return [s.fd for s in self.conns if self.IsReadable(s, now)]
 
   def Blocked(self):
     # FIXME: This is O(n)
-    return [s.fd for s in self.conns if s.fd and len(s.write_blocked) > 0]
+    return [s.fd for s in self.conns if self.IsBlocked(s)]
 
   def DeadConns(self):
-    return [s for s in self.conns if s.read_eof and s.write_eof and not s.write_blocked]
+    return [s for s in self.conns if self.IsDead(s)]
 
   def CleanFds(self):
     evil = []
@@ -2586,40 +2597,118 @@ class PageKite(object):
     os.setsid()
     if os.fork() != 0: os._exit(0)
 
-  def SelectLoop(self):
-    conns = self.conns
-    self.last_loop = time.time()
+  def ProcessWritable(self, oready):
+    if logging.DEBUG_IO:
+      print '\n=== Ready for Write: %s' % [o and o.fileno() or ''
+                                           for o in oready]
+    for osock in oready:
+      if osock:
+        conn = self.conns.Connection(osock)
+        if conn and not conn.Send([], try_flush=True):
+          self.conns.Remove(conn)
+          conn.Cleanup()
 
-    while self.keep_looping:
-      iready, oready, eready = None, None, None
-      isocks, osocks = conns.Readable(), conns.Blocked()
+  def ProcessReadable(self, iready, throttle):
+    if logging.DEBUG_IO:
+      print '\n=== Ready for Read: %s' % [i and i.fileno() or ''
+                                          for i in iready]
+    for isock in iready:
+      if isock:
+        conn = self.conns.Connection(isock)
+        if conn and not conn.ReadData(maxread=throttle):
+          self.conns.Remove(conn)
+          conn.Cleanup()
+
+  def ProcessDead(self, epoll=None):
+    for conn in self.conns.DeadConns():
+      if epoll and conn.fd:
+        try:
+          epoll.unregister(conn.fd)
+        except IOError:
+          logging.LogError(('Failed: epoll.unregister(%s): %s'
+                            ) % (conn.fd, traceback.format_exc()))
+      self.conns.Remove(conn)
+      conn.Cleanup()
+
+  def Select(self, epoll, waittime):
+    iready = oready = eready = None
+    isocks, osocks = self.conns.Readable(), self.conns.Blocked()
+    try:
+      if isocks or osocks:
+        iready, oready, eready = select.select(isocks, osocks, [], waittime)
+      else:
+        # Windoes does not seem to like empty selects, so we do this instead.
+        time.sleep(waittime/2)
+    except KeyboardInterrupt, e:
+      raise KeyboardInterrupt()
+    except:
+      logging.LogError('Error in select: %s (%s/%s)' % (e, isocks, osocks))
+      self.conns.CleanFds()
+      self.last_loop -= 1
+
+    now = time.time()
+    if not iready and not oready:
+      if (isocks or osocks) and (now < self.last_loop + 1):
+        logging.LogError('Spinning, pausing ...')
+        time.sleep(0.1)
+
+    return iready, oready, eready
+
+  def Epoll(self, epoll, waittime):
+    fdc = {}
+    now = time.time()
+    for c in self.conns.conns:
       try:
-        if isocks or osocks:
-          iready, oready, eready = select.select(isocks, osocks, [], 1.1)
+        if self.conns.IsDead(c):
+          epoll.unregister(c.fd)
         else:
-          # Windoes does not seem to like empty selects, so we do this instead.
-          time.sleep(0.5)
-      except KeyboardInterrupt, e:
-        raise KeyboardInterrupt()
-      except:
-        logging.LogError('Error in select: %s (%s/%s)' % (e, isocks, osocks))
-        conns.CleanFds()
-        self.last_loop -= 1
+          fdc[c.fd.fileno()] = c.fd
+          mask = 0
+          if self.conns.IsBlocked(c):       mask |= select.EPOLLOUT
+          if self.conns.IsReadable(c, now): mask |= select.EPOLLIN
+          if mask:
+            try:
+              epoll.modify(c.fd, mask)
+            except IOError:
+              epoll.register(c.fd, mask)
+          else:
+            epoll.unregister(c.fd)
+      except IOError:
+        if logging.DEBUG_IO:
+          print '*** EPoll: %s' % traceback.format_exc()
 
+    evs = epoll.poll(waittime)
+
+    rmask = select.EPOLLIN | select.EPOLLHUP
+    iready = [fdc.get(e[0]) for e in evs if e[1] & rmask]
+    oready = [fdc.get(e[0]) for e in evs if e[1] & select.EPOLLOUT]
+
+    return iready, oready, []
+
+  def Loop(self):
+    self.conns.start()
+    if self.ui_httpd: self.ui_httpd.start()
+    if self.tunnel_manager: self.tunnel_manager.start()
+    if self.ui_comm: self.ui_comm.start()
+
+    try:
+      epoll = select.epoll()
+      mypoll = self.Epoll
+      if logging.DEBUG_IO:
+        print '\n=== Loop (epoll) ==='
+    except:
+      epoll = None
+      mypoll = self.Select
+      if logging.DEBUG_IO:
+        print '\n=== Loop (select) ==='
+
+    self.last_loop = time.time()
+    while self.keep_looping:
+      iready, oready, eready = mypoll(epoll, 1.1)
       now = time.time()
-      if not iready and not oready:
-        if (isocks or osocks) and (now < self.last_loop + 1):
-          logging.LogError('Spinning, pausing ...')
-          time.sleep(0.1)
 
       if oready:
-        if logging.DEBUG_IO:
-          print '\n=== Ready for Write: %s' % [o.fileno() for o in oready]
-        for osock in oready:
-          conn = conns.Connection(osock)
-          if conn and not conn.Send([], try_flush=True):
-            conns.Remove(conn)
-            conn.Cleanup()
+        self.ProcessWritable(oready)
 
       if common.buffered_bytes < 1024 * self.buffer_max:
         throttle = None
@@ -2629,26 +2718,10 @@ class PageKite(object):
         throttle = 1024
 
       if iready:
-        if logging.DEBUG_IO:
-          print '\n=== Ready for Read: %s' % [i.fileno() for i in iready]
-        for isock in iready:
-          conn = conns.Connection(isock)
-          if conn and not conn.ReadData(maxread=throttle):
-            conns.Remove(conn)
-            conn.Cleanup()
+        self.ProcessReadable(iready, throttle)
 
-      for conn in conns.DeadConns():
-        conns.Remove(conn)
-        conn.Cleanup()
-
+      self.ProcessDead(epoll)
       self.last_loop = now
-
-  def Loop(self):
-    self.conns.start()
-    if self.ui_httpd: self.ui_httpd.start()
-    if self.tunnel_manager: self.tunnel_manager.start()
-    if self.ui_comm: self.ui_comm.start()
-    self.SelectLoop()
 
   def Start(self, howtoquit='CTRL+C = Quit'):
     conns = self.conns = self.conns or Connections(self)

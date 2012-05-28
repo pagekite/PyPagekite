@@ -3,6 +3,7 @@ Version history - highlights
 
 v0.4.7   ???
 ------
+   - Prefer and use epoll() if it is available.
    - Added better probe diagnostics, using json returns and CORS headers.
    - Correctly handle and report the new pagekite.net quota dimensions.
    - Corrected error messages when using an invalid shared secret.
