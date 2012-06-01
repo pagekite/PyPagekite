@@ -23,7 +23,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 ##############################################################################
 
 PROTOVER = '0.8'
-APPVER = '0.4.6b+github'
+APPVER = '0.4.6c+github'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -33,7 +33,7 @@ MAGIC_PATH = '%sv%s' % (MAGIC_PREFIX, PROTOVER)
 MAGIC_PATHS = (MAGIC_PATH, '/Beanstalk~Magic~Beans/0.2')
 
 SERVICE_PROVIDER = 'PageKite.net'
-SERVICE_DOMAINS = ('pagekite.me', )
+SERVICE_DOMAINS = ('pagekite.me', '302.is', 'testing.is', 'kazz.am')
 SERVICE_XMLRPC = 'http://pagekite.net/xmlrpc/'
 SERVICE_TOS_URL = 'https://pagekite.net/support/terms/'
 SERVICE_CERTS = ['b5p.us', 'frontends.b5p.us', 'pagekite.net', 'pagekite.me',
