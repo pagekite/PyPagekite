@@ -85,8 +85,8 @@ def LogError(msg, parms=None):
   if parms: emsg.extend(parms)
   Log(emsg)
 
-  global gYamon
-  if gYamon: gYamon.vadd('errors', 1, wrap=1000000)
+  if common.gYamon:
+    common.gYamon.vadd('errors', 1, wrap=1000000)
 
 def LogDebug(msg, parms=None):
   emsg = [('debug', msg)]

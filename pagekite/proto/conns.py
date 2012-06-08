@@ -29,6 +29,7 @@ import sys
 
 from pagekite.compat import *
 from pagekite.common import *
+import pagekite.common as common
 import pagekite.logging as logging
 
 from selectables import *
@@ -80,8 +81,8 @@ class Tunnel(ChunkParser):
         # Track which versions we see in the wild.
         version = 'old'
         for v in conn.parser.Header(prefix+'-Version'): version = v
-        global gYamon
-        if gYamon: gYamon.vadd('version-%s' % version, 1, wrap=10000000)
+        if common.gYamon:
+          common.gYamon.vadd('version-%s' % version, 1, wrap=10000000)
 
         for replace in conn.parser.Header(prefix+'-Replace'):
           if replace in self.conns.conns_by_id:

@@ -121,21 +121,21 @@ class Selectable(object):
     if SELECTABLES is not None:
       SELECTABLES.append(self)
 
-    global gYamon
     self.countas = 'selectables_live'
-    if gYamon: gYamon.vadd(self.countas, 1)
-    if gYamon: gYamon.vadd('selectables', 1)
+    if common.gYamon:
+      common.gYamon.vadd(self.countas, 1)
+      common.gYamon.vadd('selectables', 1)
 
   def CountAs(self, what):
-    global gYamon
-    if gYamon: gYamon.vadd(self.countas, -1)
+    if common.gYamon:
+      common.gYamon.vadd(self.countas, -1)
+      common.gYamon.vadd(what, 1)
     self.countas = what
-    if gYamon: gYamon.vadd(self.countas, 1)
 
   def __del__(self):
-    global gYamon
-    if gYamon: gYamon.vadd(self.countas, -1)
-    if gYamon: gYamon.vadd('selectables', -1)
+    if common.gYamon:
+      common.gYamon.vadd(self.countas, -1)
+      common.gYamon.vadd('selectables', -1)
 
   def __str__(self):
     return '%s: %s' % (self.log_id, self.__class__)
@@ -228,8 +228,8 @@ class Selectable(object):
 
       if self.ui: self.ui.Status('traffic')
 
-      global gYamon
-      if gYamon: gYamon.vadd("bytes_all", self.wrote_bytes
+      if common.gYamon:
+        common.gYamon.vadd("bytes_all", self.wrote_bytes
                                         + self.read_bytes, wrap=1000000000)
 
       if final:
