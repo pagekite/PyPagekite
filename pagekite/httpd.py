@@ -41,6 +41,7 @@ import Cookie
 
 from pagekite.common import *
 from pagekite.compat import *
+import pagekite.common as common
 import pagekite.logging as logging
 import sockschain as socks
 
@@ -709,8 +710,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     console = self.host_config.get('console', False)
 
     if path == self.host_config.get('yamon', False):
-      if gYamon:
-        data['body'] = gYamon.render_vars_text()
+      if common.gYamon:
+        data['body'] = common.gYamon.render_vars_text()
       else:
         data['body'] = ''
 
