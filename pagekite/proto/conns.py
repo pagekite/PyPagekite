@@ -1266,6 +1266,15 @@ class UnknownConn(MagicProtocolParser):
 
     return False
 
+  def ProcessFlashPolicyRequest(self, data):
+    # FIXME: Should this be configurable?
+    logging.LogDebug('Sending friendly response to Flash Policy Request')
+    self.Send("""\
+<cross-domain-policy>
+     <allow-access-from domain="*" to-ports="*" />
+</cross-domain-policy>""", try_flush=True)
+    return False
+
   def ProcessRaw(self, data, domain):
     if UserConn.FrontEnd(self, self.address,
                          'raw', domain, self.on_port,

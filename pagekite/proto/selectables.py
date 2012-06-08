@@ -535,6 +535,7 @@ class LineParser(Selectable):
 
 TLS_CLIENTHELLO = '%c' % 026
 SSL_CLIENTHELLO = '\x80'
+FLASH_POLICY_REQ = '<policy-file-request/>'
 
 # FIXME: XMPP support
 class MagicProtocolParser(LineParser):
@@ -587,7 +588,10 @@ class MagicProtocolParser(LineParser):
       self.might_be_tls = False
       if not data.startswith(TLS_CLIENTHELLO) and not data.startswith(SSL_CLIENTHELLO):
         self.EatPeeked()
-        return LineParser.ProcessData(self, data)
+        if data.startswith(FLASH_POLICY_REQ):
+          return self.ProcessFlashPolicyRequest(data)
+        else:
+          return LineParser.ProcessData(self, data)
       self.is_tls = True
 
     if self.is_tls:
@@ -636,12 +640,16 @@ class MagicProtocolParser(LineParser):
         sni.extend(self.GetSniNames(self.GetClientHelloExtensions(msg)))
     return sni
 
+  def ProcessFlashPolicyRequest(self, data):
+    self.LogError('MagicProtocolParser::ProcessFlashPolicyRequest: Should be overridden!')
+    return False
+
   def ProcessTls(self, data, domain=None):
-    self.LogError('TlsOrLineParser::ProcessTls: Should be overridden!')
+    self.LogError('MagicProtocolParser::ProcessTls: Should be overridden!')
     return False
 
   def ProcessRaw(self, data, domain):
-    self.LogError('TlsOrLineParser::ProcessRaw: Should be overridden!')
+    self.LogError('MagicProtocolParser::ProcessRaw: Should be overridden!')
     return False
 
 
