@@ -128,7 +128,8 @@ class Tunnel(ChunkParser):
 
   def QuotaCallback(self, conns, results, log_info):
     # Report new values to the back-end...
-    if self.quota and (self.quota[0] >= 0): self.SendQuota()
+    if self.quota and (self.quota[0] >= 0):
+      self.SendQuota()
 
     for r in results:
       if r[0] in ('X-PageKite-OK', 'X-PageKite-Duplicate'):
@@ -141,8 +142,8 @@ class Tunnel(ChunkParser):
     return None
 
   def AuthCallback(self, conn, results, log_info):
-
-    if log_info: logging.Log(log_info)
+    if log_info:
+      logging.Log(log_info)
 
     output = [HTTP_ResponseHeader(200, 'OK'),
               HTTP_Header('Transfer-Encoding', 'chunked'),
@@ -494,7 +495,8 @@ class Tunnel(ChunkParser):
       if be[BE_DOMAIN] == host:
         bhost, bport = (be[BE_BHOST], be[BE_BPORT])
         # FIXME: Should vary probe by backend type
-        if self.conns.config.Ping(bhost, int(bport)) > 2: return False
+        if self.conns.config.Ping(bhost, int(bport)) > 2:
+          return False
     return True
 
   def AutoThrottle(self, max_speed=None, remote=False, delay=0.2):
@@ -522,45 +524,82 @@ class Tunnel(ChunkParser):
   def ProcessEofWrite(self):
     return self.ProcessEofRead()
 
+  def ProcessChunkQuotaInfo(self, parse):
+    new_quota = 0
+    if parse.Header('QDays'):
+      self.q_days = new_quota = int(parse.Header('QDays'))
+    if parse.Header('QConns'):
+      self.q_conns = new_quota = int(parse.Header('QConns'))
+    if parse.Header('Quota'):
+      new_quota = 1
+      if self.quota:
+        self.quota[0] = int(parse.Header('Quota')[0])
+      else:
+        self.quota = [int(parse.Header('Quota')[0]), None, None]
+    if new_quota:
+      self.conns.config.ui.NotifyQuota(self.quota[0],
+                                       self.q_days, self.q_conns)
+
+  def ProcessChunkDirectives(self, parse):
+    if parse.Header('PING'):
+      return self.SendPong()
+    if parse.Header('ZRST') and not self.ResetZChunks():
+      return False
+    if parse.Header('SPD') or parse.Header('SKB'):
+      if not self.ProgressTo(parse):
+        return False
+    if parse.Header('NOOP'):
+      return True
+
+    return None
+
+  def FilterData(self, data, sid=None, info=None):
+    """Pass incoming data through filters, if we have any."""
+    for f in self.filters:
+      try:
+        if sid and info:
+          f.filter_set_sid(sid, info)
+        data = f.filter_data_in(self, sid, data)
+      except:
+        logging.LogError(('Ignoring error in filter_in %s: %s'
+                          ) % (f, traceback.format_exc()))
+    return data
+
+  def GetChunkDestination(self, parse):
+    return ((parse.Header('Proto') or [''])[0].lower(),
+            (parse.Header('Port')  or [''])[0].lower(),
+            (parse.Header('Host')  or [''])[0].lower(),
+            (parse.Header('RIP')   or [''])[0].lower(),
+            (parse.Header('RPort') or [''])[0].lower(),
+            (parse.Header('RTLS')  or [''])[0].lower())
+
+  def ReplyToProbe(self, proto, sid, host):
+    if self.conns.config.no_probes:
+      what, reply = 'rejected', HTTP_NoFeConnection(proto)
+    elif self.Probe(host):
+      what, reply = 'good', HTTP_GoodBeConnection(proto)
+    else:
+      what, reply = 'back-end down', HTTP_NoBeConnection(proto)
+    logging.LogDebug('Responding to probe for %s: %s' % (host, what))
+    return self.SendChunked('SID: %s\r\n\r\n%s' % (sid, reply))
+
   def ProcessChunk(self, data):
     try:
       headers, data = data.split('\r\n\r\n', 1)
       parse = HttpLineParser(lines=headers.splitlines(),
                              state=HttpLineParser.IN_HEADERS)
-    except ValueError:
-      logging.LogError('Tunnel::ProcessChunk: Corrupt packet!')
-      return False
 
-    try:
-      new_quota = 0
-      if parse.Header('QDays'):
-        self.q_days = new_quota = int(parse.Header('QDays'))
-      if parse.Header('QConns'):
-        self.q_conns = new_quota = int(parse.Header('QConns'))
-      if parse.Header('Quota'):
-        new_quota = 1
-        if self.quota:
-          self.quota[0] = int(parse.Header('Quota')[0])
-        else:
-          self.quota = [int(parse.Header('Quota')[0]), None, None]
-      if new_quota:
-        self.conns.config.ui.NotifyQuota(self.quota[0],
-                                         self.q_days, self.q_conns)
-      if parse.Header('PING'): return self.SendPong()
-      if parse.Header('ZRST') and not self.ResetZChunks(): return False
-      if parse.Header('SPD') or parse.Header('SKB'):
-        if not self.ProgressTo(parse): return False
-      if parse.Header('NOOP'): return True
-    except Exception, e:
-      logging.LogError('Tunnel::ProcessChunk: Corrupt chunk: %s' % e)
-      return False
+      self.ProcessChunkQuotaInfo(parse)
+      rv = self.ProcessChunkDirectives(parse)
+      if rv is not None:
+        return rv
 
-    proto = conn = sid = None
-    try:
+      proto = conn = None
       sid = int(parse.Header('SID')[0])
       eof = parse.Header('EOF')
-    except IndexError:
-      logging.LogError('Tunnel::ProcessChunk: Corrupt packet!')
+    except:
+      logging.LogError(('Tunnel::ProcessChunk: Corrupt chunk: %s'
+                        ) % (traceback.format_exc(), ))
       return False
 
     if eof:
@@ -568,111 +607,77 @@ class Tunnel(ChunkParser):
     else:
       if sid in self.users:
         conn = self.users[sid]
-        # Pass incoming data through filters, if we have any.
-        for f in self.filters:
-          try:
-            data = f.filter_data_in(self, sid, data)
-          except:
-            logging.LogError(('Ignoring error in filter_in %s: %s'
-                              ) % (f, traceback.format_exc()))
+        if self.filters:
+          data = self.FilterData(data)
       else:
-        proto = (parse.Header('Proto') or [''])[0].lower()
-        port = (parse.Header('Port') or [''])[0].lower()
-        host = (parse.Header('Host') or [''])[0].lower()
-        rIp = (parse.Header('RIP') or [''])[0].lower()
-        rPort = (parse.Header('RPort') or [''])[0].lower()
-        rTLS = (parse.Header('RTLS') or [''])[0].lower()
+        proto, port, host, rIp, rPort, rTLS = self.GetChunkDestination(parse)
         if proto and host:
-# FIXME:
-#         if proto == 'https':
-#           if host in self.conns.config.tls_endpoints:
-#             print 'Should unwrap SSL from %s' % host
-
           if proto.startswith('probe'):
-            if self.conns.config.no_probes:
-              logging.LogDebug('Responding to probe for %s: rejected' % host)
-              if not self.SendChunked('SID: %s\r\n\r\n%s' % (
-                                      sid, HTTP_NoFeConnection(proto) )):
-                return False
-            elif self.Probe(host):
-              logging.LogDebug('Responding to probe for %s: good' % host)
-              if not self.SendChunked('SID: %s\r\n\r\n%s' % (
-                                      sid, HTTP_GoodBeConnection(proto) )):
-                return False
-            else:
-              logging.LogDebug('Responding to probe for %s: back-end down' % host)
-              if not self.SendChunked('SID: %s\r\n\r\n%s' % (
-                                      sid, HTTP_NoBeConnection(proto) )):
-                return False
-          else:
-            # Pass incoming data through filters, if we have any.
-            for f in self.filters:
-              try:
-                f.filter_set_sid(sid, {
-                  'proto': proto,
-                  'port': port,
-                  'host': host,
-                  'remote_ip': rIp,
-                  'remote_port': rPort
-                })
-                data = f.filter_data_in(self, sid, data)
-              except:
-                logging.LogError(('Ignoring error in filter_new/in %s: %s'
-                                  ) % (f, traceback.format_exc()))
+            return self.ReplyToProbe(proto, sid, host)
 
-            conn = UserConn.BackEnd(proto, host, sid, self, port,
-                                    remote_ip=rIp, remote_port=rPort, data=data)
-            if proto in ('http', 'http2', 'http3', 'websocket'):
-              if conn is None:
-                if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
-                                        HTTP_Unavailable('be', proto, host,
-                                       frame_url=self.conns.config.error_url))):
-                  return False
-              elif not conn:
-                if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
-                                        HTTP_Unavailable('be', proto, host,
-                                       frame_url=self.conns.config.error_url,
-                                      code=401))):
-                  return False
-              elif rIp:
-                add_headers = ('\nX-Forwarded-For: %s\r\n'
-                               'X-PageKite-Port: %s\r\n'
-                               'X-PageKite-Proto: %s\r\n'
-                               ) % (rIp, port,
-                                    # FIXME: Checking for port == 443 is wrong!
-                                    ((rTLS or (int(port) == 443)) and 'https'
-                                                                   or 'http'))
-                rewritehost = conn.config.get('rewritehost', False)
-                if rewritehost:
-                  if rewritehost is True:
-                    rewritehost = conn.backend[BE_BHOST]
-                  for hdr in ('host', 'connection', 'keep-alive'):
-                    data = re.sub(r'(?mi)^'+hdr, 'X-Old-'+hdr, data)
-                  add_headers += ('Connection: close\r\n'
-                                  'Host: %s\r\n') % rewritehost
-                req, rest = re.sub(r'(?mi)^x-forwarded-for',
-                                   'X-Old-Forwarded-For', data).split('\n', 1)
-                data = ''.join([req, add_headers, rest])
-
-            elif proto == 'httpfinger':
-              # Rewrite a finger request to HTTP.
-              try:
-                firstline, rest = data.split('\n', 1)
-                if conn.config.get('rewritehost', False):
+          if self.filters:
+            data = self.FilterData(data, sid, {
+              'proto': proto,
+              'port': port,
+              'host': host,
+              'remote_ip': rIp,
+              'remote_port': rPort
+            })
+          conn = UserConn.BackEnd(proto, host, sid, self, port,
+                                  remote_ip=rIp, remote_port=rPort, data=data)
+          if proto in ('http', 'http2', 'http3', 'websocket'):
+            if conn is None:
+              if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
+                                      HTTP_Unavailable('be', proto, host,
+                                        frame_url=self.conns.config.error_url
+                                      ))):
+                return False
+            elif not conn:
+              if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
+                                      HTTP_Unavailable('be', proto, host,
+                                        frame_url=self.conns.config.error_url,
+                                        code=401
+                                      ))):
+                return False
+            elif rIp:
+              add_headers = ('\nX-Forwarded-For: %s\r\n'
+                             'X-PageKite-Port: %s\r\n'
+                             'X-PageKite-Proto: %s\r\n'
+                             ) % (rIp, port,
+                                  # FIXME: Checking for port == 443 is wrong!
+                                  ((rTLS or (int(port) == 443)) and 'https'
+                                                                 or 'http'))
+              rewritehost = conn.config.get('rewritehost', False)
+              if rewritehost:
+                if rewritehost is True:
                   rewritehost = conn.backend[BE_BHOST]
-                else:
-                  rewritehost = host
-                if '%s' in self.conns.config.finger_path:
-                  args =  (firstline.strip(), rIp, rewritehost, rest)
-                else:
-                  args =  (rIp, rewritehost, rest)
-                data = ('GET '+self.conns.config.finger_path+' HTTP/1.1\r\n'
-                        'X-Forwarded-For: %s\r\n'
-                        'Connection: close\r\n'
-                        'Host: %s\r\n\r\n%s') % args
-              except Exception, e:
-                self.LogError('Error formatting HTTP-Finger: %s' % e)
-                conn = None
+                for hdr in ('host', 'connection', 'keep-alive'):
+                  data = re.sub(r'(?mi)^'+hdr, 'X-Old-'+hdr, data)
+                add_headers += ('Connection: close\r\n'
+                                'Host: %s\r\n') % rewritehost
+              req, rest = re.sub(r'(?mi)^x-forwarded-for',
+                                 'X-Old-Forwarded-For', data).split('\n', 1)
+              data = ''.join([req, add_headers, rest])
+
+          elif proto == 'httpfinger':
+            # Rewrite a finger request to HTTP.
+            try:
+              firstline, rest = data.split('\n', 1)
+              if conn.config.get('rewritehost', False):
+                rewritehost = conn.backend[BE_BHOST]
+              else:
+                rewritehost = host
+              if '%s' in self.conns.config.finger_path:
+                args =  (firstline.strip(), rIp, rewritehost, rest)
+              else:
+                args =  (rIp, rewritehost, rest)
+              data = ('GET '+self.conns.config.finger_path+' HTTP/1.1\r\n'
+                      'X-Forwarded-For: %s\r\n'
+                      'Connection: close\r\n'
+                      'Host: %s\r\n\r\n%s') % args
+            except Exception, e:
+              self.LogError('Error formatting HTTP-Finger: %s' % e)
+              conn = None
 
           if conn:
             self.users[sid] = conn
@@ -686,10 +691,11 @@ class Tunnel(ChunkParser):
 
       if not conn:
         self.CloseStream(sid)
-        if not self.SendStreamEof(sid): return False
+        if not self.SendStreamEof(sid):
+          return False
       else:
         if not conn.Send(data, try_flush=True):
-          # FIXME
+          # FIXME: wtf?
           pass
 
         if len(conn.write_blocked) > 0 and conn.created < time.time()-3:
@@ -852,15 +858,25 @@ class UserConn(Selectable):
     # be registered using the http2/3/4 protocols.
     backend = None
 
-    if proto == 'http': protos = [proto, 'http2', 'http3']
-    elif proto.startswith('probe'): protos = ['http', 'http2', 'http3']
-    elif proto == 'websocket': protos = [proto, 'http', 'http2', 'http3']
-    else: protos = [proto]
+    if proto == 'http':
+      protos = [proto, 'http2', 'http3']
+    elif proto.startswith('probe'):
+      protos = ['http', 'http2', 'http3']
+    elif proto == 'websocket':
+      protos = [proto, 'http', 'http2', 'http3']
+    else:
+      protos = [proto]
 
     for p in protos:
-      if not backend: backend, be = self.conns.config.GetBackendServer('%s-%s' % (p, on_port), host)
-      if not backend: backend, be = self.conns.config.GetBackendServer(p, host)
-      if not backend: backend, be = self.conns.config.GetBackendServer(p, CATCHALL_HN)
+      if not backend:
+        p_p = '%s-%s' % (p, on_port)
+        backend, be = self.conns.config.GetBackendServer(p_p, host)
+      if not backend:
+        backend, be = self.conns.config.GetBackendServer(p, host)
+      if not backend:
+        backend, be = self.conns.config.GetBackendServer(p, CATCHALL_HN)
+      if backend:
+        break
 
     logInfo = [
       ('on_port', on_port),
@@ -868,7 +884,8 @@ class UserConn(Selectable):
       ('domain', host),
       ('is', 'BE')
     ]
-    if remote_ip: logInfo.append(('remote_ip', remote_ip))
+    if remote_ip:
+      logInfo.append(('remote_ip', remote_ip))
 
     # Strip off useless IPv6 prefix, if this is an IPv4 address.
     if remote_ip.startswith('::ffff:') and ':' not in remote_ip[7:]:
