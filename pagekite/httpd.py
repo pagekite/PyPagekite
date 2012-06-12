@@ -353,6 +353,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     try:
       return self.handleHttpRequest(scheme, netloc, path, params, query, frag,
                                     qs, None)
+    except socket.error:
+      pass
     except Exception, e:
       logging.Log([('err', 'GET error at %s: %s' % (path, e))])
       if logging.DEBUG_IO: print '=== ERROR\n%s\n===' % traceback.format_exc()
@@ -401,6 +403,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         return RCI._END(SimpleXMLRPCRequestHandler.do_POST(RCI._BEGIN(self)))
 
       self.post_data.seek(0)
+    except socket.error:
+      pass
     except Exception, e:
       logging.Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
@@ -412,6 +416,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     try:
       return self.handleHttpRequest(scheme, netloc, path, params, query, frag,
                                     qs, posted)
+    except socket.error:
+      pass
     except Exception, e:
       logging.Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
@@ -978,5 +984,11 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     self.RCI = RemoteControlInterface(self, pkite, conns)
     self.register_introspection_functions()
     self.register_instance(self.RCI)
+
+  def finish_request(self, request, client_address):
+    try:
+      SimpleXMLRPCServer.finish_request(self, request, client_address)
+    except socket.error:
+      pass
 
 
