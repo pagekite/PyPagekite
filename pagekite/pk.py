@@ -323,7 +323,7 @@ class Connections(object):
     for s in self.conns:
       try:
         i, o, e = select.select([s.fd], [s.fd], [s.fd], 0)
-      except Exception:
+      except:
         evil.append(s)
     for s in evil:
       logging.LogDebug('Removing broken Selectable: %s' % s)

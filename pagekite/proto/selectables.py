@@ -22,6 +22,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
 import errno
+import struct
 import time
 import zlib
 
@@ -144,7 +145,7 @@ class Selectable(object):
     try:
       peer = self.fd.getpeername()
       sock = self.fd.getsockname()
-    except Exception:
+    except:
       peer = ('x.x.x.x', 'x')
       sock = ('x.x.x.x', 'x')
 
@@ -188,7 +189,7 @@ class Selectable(object):
       self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPIDLE, 60)
       self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPCNT, 10)
       self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPINTVL, 1)
-    except Exception:
+    except:
       pass
 
   def SetConn(self, conn):
@@ -582,11 +583,13 @@ class MagicProtocolParser(LineParser):
     return False
 
   def ProcessData(self, data):
-    if data.startswith(MAGIC_PREFIX): return self.ProcessMagic(data)
+    if data.startswith(MAGIC_PREFIX):
+      return self.ProcessMagic(data)
 
     if self.might_be_tls:
       self.might_be_tls = False
-      if not data.startswith(TLS_CLIENTHELLO) and not data.startswith(SSL_CLIENTHELLO):
+      if not (data.startswith(TLS_CLIENTHELLO) or
+              data.startswith(SSL_CLIENTHELLO)):
         self.EatPeeked()
         if data.startswith(FLASH_POLICY_REQ):
           return self.ProcessFlashPolicyRequest(data)

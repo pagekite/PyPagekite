@@ -230,7 +230,7 @@ class Tunnel(ChunkParser):
 
     try:
       self.fd.settimeout(20.0) # Missing in Python 2.2
-    except Exception:
+    except:
       self.fd.setblocking(1)
 
     self.fd.connect((sspec[0], int(sspec[1])))
@@ -375,7 +375,7 @@ class Tunnel(ChunkParser):
         self.rtt = (time.time() - begin)
 
 
-    except socket.error, e:
+    except socket.error:
       self.Cleanup()
       return None
 
@@ -1239,9 +1239,11 @@ class UnknownConn(MagicProtocolParser):
           domains = [self.conns.LastIpDomain(self.address[0]) or self.conns.config.tls_default]
           logging.LogDebug('No SNI - trying: %s' % domains[0])
           if not domains[0]: domains = None
-      except Exception:
+      except:
         # Probably insufficient data, just return True and assume we'll have
         # better luck on the next round.
+        if logging.DEBUG_IO:
+          logging.LogError('Error in ProcessTls: %s' % traceback.format_exc())
         return True
 
     if domains and domains[0] is not None:
