@@ -733,7 +733,7 @@ class LoopbackTunnel(Tunnel):
 
   Loop = staticmethod(_Loop)
 
-  def Send(self, data):
+  def Send(self, data, activity=True):
     return self.other_end.ProcessData(''.join(data))
 
 
@@ -1003,8 +1003,8 @@ class UserConn(Selectable):
 
     return self.ProcessEof()
 
-  def Send(self, data, try_flush=False):
-    rv = Selectable.Send(self, data, try_flush=try_flush)
+  def Send(self, data, try_flush=False, activity=True):
+    rv = Selectable.Send(self, data, try_flush=try_flush, activity=activity)
     if self.write_eof and not self.write_blocked:
       self.Shutdown(socket.SHUT_WR)
     elif try_flush or not self.write_blocked:

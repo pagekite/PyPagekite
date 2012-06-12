@@ -101,26 +101,6 @@ else:
   pass
 
 
-class MockPageKiteXmlRpc:
-  def __init__(self, config):
-    self.config = config
-
-  def getSharedSecret(self, email, p):
-    for be in self.config.backends.values():
-      if be[BE_SECRET]: return be[BE_SECRET]
-
-  def getAvailableDomains(self, a, b):
-    return ['.%s' % x for x in SERVICE_DOMAINS]
-
-  def signUp(self, a, b):
-    return {
-      'secret': self.getSharedSecret(a, b)
-    }
-
-  def addCnameKite(self, a, s, k): return {}
-  def addKite(self, a, s, k): return {}
-
-
 ##[ PageKite.py code starts here! ]############################################
 
 from proto.proto import *
@@ -1938,10 +1918,7 @@ class PageKite(object):
 
   def GetServiceXmlRpc(self):
     service = self.service_xmlrpc
-    if service == 'mock':
-      return MockPageKiteXmlRpc(self)
-    else:
-      return xmlrpclib.ServerProxy(self.service_xmlrpc, None, None, False)
+    return xmlrpclib.ServerProxy(self.service_xmlrpc, None, None, False)
 
   def _KiteInfo(self, kitename):
     is_service_domain = kitename and SERVICE_DOMAIN_RE.search(kitename)
