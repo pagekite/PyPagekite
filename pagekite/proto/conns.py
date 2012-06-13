@@ -553,7 +553,7 @@ class Tunnel(ChunkParser):
 
     return None
 
-  def FilterData(self, data, sid=None, info=None):
+  def FilterData(self, data, sid, info=None):
     """Pass incoming data through filters, if we have any."""
     for f in self.filters:
       try:
@@ -583,18 +583,99 @@ class Tunnel(ChunkParser):
     logging.LogDebug('Responding to probe for %s: %s' % (host, what))
     return self.SendChunked('SID: %s\r\n\r\n%s' % (sid, reply))
 
+  def ConnectBE(self, sid, proto, port, host, rIp, rPort, rTLS, data):
+    if self.filters:
+      data = self.FilterData(data, sid, info={
+        'proto': proto,
+        'port': port,
+        'host': host,
+        'remote_ip': rIp,
+        'remote_port': rPort
+      })
+
+    conn = UserConn.BackEnd(proto, host, sid, self, port,
+                            remote_ip=rIp, remote_port=rPort, data=data)
+
+    if proto in ('http', 'http2', 'http3', 'websocket'):
+      if not conn:
+        # conn is None means we have no back-end.
+        # conn is False means authentication is required.
+        code = (conn is None) and 503 or 401
+        if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
+                                HTTP_Unavailable('be', proto, host,
+                                  frame_url=self.conns.config.error_url,
+                                  code=code
+                                ))):
+          return False, False
+
+      elif rIp:
+        # FIXME: Checking for port == 443 is wrong!
+        rTLS = rTLS or (int(port) == 443)
+        add_headers = ('\nX-Forwarded-For: %s\r\n'
+                       'X-PageKite-Port: %s\r\n'
+                       'X-PageKite-Proto: %s\r\n'
+                       ) % (rIp, port, (rTLS and 'https' or 'http'))
+        rewritehost = conn.config.get('rewritehost', False)
+        if rewritehost:
+          if rewritehost is True:
+            rewritehost = conn.backend[BE_BHOST]
+          for hdr in ('host', 'connection', 'keep-alive'):
+            data = re.sub(r'(?mi)^'+hdr, 'X-Old-'+hdr, data)
+          add_headers += ('Connection: close\r\n'
+                          'Host: %s\r\n') % rewritehost
+        req, rest = re.sub(r'(?mi)^x-forwarded-for',
+                           'X-Old-Forwarded-For', data).split('\n', 1)
+        data = ''.join([req, add_headers, rest])
+
+    elif proto == 'httpfinger':
+      # Rewrite a finger request to HTTP.
+      try:
+        firstline, rest = data.split('\n', 1)
+        if conn.config.get('rewritehost', False):
+          rewritehost = conn.backend[BE_BHOST]
+        else:
+          rewritehost = host
+        if '%s' in self.conns.config.finger_path:
+          args =  (firstline.strip(), rIp, rewritehost, rest)
+        else:
+          args =  (rIp, rewritehost, rest)
+        data = ('GET '+self.conns.config.finger_path+' HTTP/1.1\r\n'
+                'X-Forwarded-For: %s\r\n'
+                'Connection: close\r\n'
+                'Host: %s\r\n\r\n%s') % args
+      except Exception, e:
+        self.LogError('Error formatting HTTP-Finger: %s' % e)
+        conn = None
+
+    if conn:
+      self.users[sid] = conn
+
+      if proto == 'httpfinger':
+        conn.fd.setblocking(1)
+        conn.Send(data, try_flush=True) or conn.Flush(wait=True)
+        self._RecvHttpHeaders(fd=conn.fd)
+        conn.fd.setblocking(0)
+        data = ''
+
+    return conn, data
+
   def ProcessChunk(self, data):
+    # First, we process the chunk headers.
     try:
       headers, data = data.split('\r\n\r\n', 1)
       parse = HttpLineParser(lines=headers.splitlines(),
                              state=HttpLineParser.IN_HEADERS)
 
+      # Update quota information if necessary
       self.ProcessChunkQuotaInfo(parse)
+
+      # FIXME: Look for responses to requests for new tunnels
+
+      # Process PING/NOOP/etc: may result in a short-circuit.
       rv = self.ProcessChunkDirectives(parse)
       if rv is not None:
         return rv
 
-      proto = conn = None
       sid = int(parse.Header('SID')[0])
       eof = parse.Header('EOF')
     except:
@@ -602,104 +683,48 @@ class Tunnel(ChunkParser):
                         ) % (traceback.format_exc(), ))
       return False
 
+    # EOF stream?
     if eof:
       self.EofStream(sid, eof[0])
+      return True
+
+    # Headers done, not EOF: let's get the other end of this connection.
+    if sid in self.users:
+      # Either from pre-existing connections...
+      conn = self.users[sid]
+      if self.filters:
+        data = self.FilterData(data, sid)
     else:
-      if sid in self.users:
-        conn = self.users[sid]
-        if self.filters:
-          data = self.FilterData(data)
-      else:
-        proto, port, host, rIp, rPort, rTLS = self.GetChunkDestination(parse)
-        if proto and host:
-          if proto.startswith('probe'):
-            return self.ReplyToProbe(proto, sid, host)
+      # ... or we connect to a back-end.
+      proto, port, host, rIp, rPort, rTLS = self.GetChunkDestination(parse)
+      if proto and host:
 
-          if self.filters:
-            data = self.FilterData(data, sid, {
-              'proto': proto,
-              'port': port,
-              'host': host,
-              'remote_ip': rIp,
-              'remote_port': rPort
-            })
-          conn = UserConn.BackEnd(proto, host, sid, self, port,
-                                  remote_ip=rIp, remote_port=rPort, data=data)
-          if proto in ('http', 'http2', 'http3', 'websocket'):
-            if conn is None:
-              if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
-                                      HTTP_Unavailable('be', proto, host,
-                                        frame_url=self.conns.config.error_url
-                                      ))):
-                return False
-            elif not conn:
-              if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
-                                      HTTP_Unavailable('be', proto, host,
-                                        frame_url=self.conns.config.error_url,
-                                        code=401
-                                      ))):
-                return False
-            elif rIp:
-              add_headers = ('\nX-Forwarded-For: %s\r\n'
-                             'X-PageKite-Port: %s\r\n'
-                             'X-PageKite-Proto: %s\r\n'
-                             ) % (rIp, port,
-                                  # FIXME: Checking for port == 443 is wrong!
-                                  ((rTLS or (int(port) == 443)) and 'https'
-                                                                 or 'http'))
-              rewritehost = conn.config.get('rewritehost', False)
-              if rewritehost:
-                if rewritehost is True:
-                  rewritehost = conn.backend[BE_BHOST]
-                for hdr in ('host', 'connection', 'keep-alive'):
-                  data = re.sub(r'(?mi)^'+hdr, 'X-Old-'+hdr, data)
-                add_headers += ('Connection: close\r\n'
-                                'Host: %s\r\n') % rewritehost
-              req, rest = re.sub(r'(?mi)^x-forwarded-for',
-                                 'X-Old-Forwarded-For', data).split('\n', 1)
-              data = ''.join([req, add_headers, rest])
+        # Probe requests are handled differently (short circuit)
+        if proto.startswith('probe'):
+          return self.ReplyToProbe(proto, sid, host)
 
-          elif proto == 'httpfinger':
-            # Rewrite a finger request to HTTP.
-            try:
-              firstline, rest = data.split('\n', 1)
-              if conn.config.get('rewritehost', False):
-                rewritehost = conn.backend[BE_BHOST]
-              else:
-                rewritehost = host
-              if '%s' in self.conns.config.finger_path:
-                args =  (firstline.strip(), rIp, rewritehost, rest)
-              else:
-                args =  (rIp, rewritehost, rest)
-              data = ('GET '+self.conns.config.finger_path+' HTTP/1.1\r\n'
-                      'X-Forwarded-For: %s\r\n'
-                      'Connection: close\r\n'
-                      'Host: %s\r\n\r\n%s') % args
-            except Exception, e:
-              self.LogError('Error formatting HTTP-Finger: %s' % e)
-              conn = None
-
-          if conn:
-            self.users[sid] = conn
-
-            if proto == 'httpfinger':
-              conn.fd.setblocking(1)
-              conn.Send(data, try_flush=True) or conn.Flush(wait=True)
-              self._RecvHttpHeaders(fd=conn.fd)
-              conn.fd.setblocking(0)
-              data = ''
-
-      if not conn:
-        self.CloseStream(sid)
-        if not self.SendStreamEof(sid):
+        conn, data = self.ConnectBE(sid, proto, port, host,
+                                         rIp, rPort, rTLS, data)
+        if conn is False:
           return False
       else:
-        if not conn.Send(data, try_flush=True):
-          # FIXME: wtf?
-          pass
+        conn = None
 
-        if len(conn.write_blocked) > 0 and conn.created < time.time()-3:
-          return self.SendProgress(sid, conn, throttle=True)
+    # Send the data or shut down.
+    if conn:
+      if data and not conn.Send(data, try_flush=True):
+        # If that failed something is wrong, but we'll let the outer
+        # select/epoll loop catch and handle it.
+        pass
+
+      if len(conn.write_blocked) > 0 and conn.created < time.time()-3:
+        return self.SendProgress(sid, conn, throttle=True)
+
+    else:
+      # No connection?  Close this stream.
+      self.CloseStream(sid)
+      if not self.SendStreamEof(sid):
+        return False
 
     return True
 

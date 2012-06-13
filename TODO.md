@@ -6,6 +6,7 @@
    * Signup message weirdness
    * Poor handling of reconfiguration
    * Poor handling of FD exhaustion
+   * Kite creation can be confusing if a name is already taken.
 
    * WONTFIX: SSL verification fail - unfixable with pyOpenSSL :-(
 
@@ -54,6 +55,21 @@
    * Make tunnel creation more stubborn, try multiple ports, etc.
    * Add XMPP and incoming SMTP support
    * Replace/augment current tunnel auth with SSL certificates
+
+
+### Better kite registration ###
+
+   1. Quota calculations should be done on a kite-by-kite basis:
+      - kites out of quota get disabled
+      - tunnels only die if they have *no* live/challenged kites left
+
+   3. Stop requiring the reconnect after a challenge, just establish
+      a tunnel with zero kites?
+
+   2. Registration
+      - recognize the challenge/response headers within chunk headers,
+        so kite can be set up using NOOP chunks.
+      - add a back-end initiated "remove this kite" message
 
 
 ### Dynamic DNS ###
