@@ -1,6 +1,6 @@
 # pagekite.py #
 
-PageKite implements a tunneled reverse proxy which makes it easy make a
+PageKite implements a tunneled reverse proxy which makes it easy to make a
 service (such as an HTTP or HTTPS server) on localhost visible to the wider
 Internet.  It also supports other protocols (including SSH), by behaving
 as a specialized HTTP proxy.
@@ -211,7 +211,7 @@ their own PageKite front-end relay servers.
 In all examples below, the long-form `--argument=foo` syntax is used, for
 precision and for compatibility with the PageKite configuration file.
 
-Note that in releas 0.4.7, the `--backend` argument was renamed to
+Note that in release 0.4.7, the `--backend` argument was renamed to
 `--service_on`.  This document uses the new name, although the old one is
 still recognized by the program and will be for the forseeable future.
 
