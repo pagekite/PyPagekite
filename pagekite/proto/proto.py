@@ -94,16 +94,8 @@ def checkSignature(sign='', secret='', payload=''):
     valid = signToken(token=sign, secret=secret, payload=payload)
     return sign == valid
 
-
-def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
-                         tls=False, testtoken=None, replace=None):
-  req = ['CONNECT PageKite:1 HTTP/1.0\r\n',
-         'X-PageKite-Version: %s\r\n' % APPVER]
-
-  if not nozchunks: req.append('X-PageKite-Features: ZChunks\r\n')
-  if replace: req.append('X-PageKite-Replace: %s\r\n' % replace)
-  if tls: req.append('X-PageKite-Features: TLS\r\n')
-
+def PageKiteRequestHeaders(server, backends, tokens=None, testtoken=None):
+  req = []
   tokens = tokens or {}
   for d in backends.keys():
     if (backends[d][BE_BHOST] and
@@ -126,7 +118,22 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
                        token=testtoken)
 
       req.append('X-PageKite: %s:%s\r\n' % (data, sign))
+  return req
 
+def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
+                         tls=False, testtoken=None, replace=None):
+  req = ['CONNECT PageKite:1 HTTP/1.0\r\n',
+         'X-PageKite-Version: %s\r\n' % APPVER]
+
+  if not nozchunks:
+    req.append('X-PageKite-Features: ZChunks\r\n')
+  if replace:
+    req.append('X-PageKite-Replace: %s\r\n' % replace)
+  if tls:
+    req.append('X-PageKite-Features: TLS\r\n')
+
+  req.extend(PageKiteRequestHeaders(server, backends,
+                                    tokens=tokens, testtoken=testtoken))
   req.append('\r\n')
   return ''.join(req)
 

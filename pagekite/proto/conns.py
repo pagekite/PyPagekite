@@ -44,6 +44,7 @@ class Tunnel(ChunkParser):
   S_PORTS = 1
   S_RAW_PORTS = 2
   S_PROTOS = 3
+  S_ADD_KITES = 4
 
   def __init__(self, conns):
     ChunkParser.__init__(self, ui=conns.config.ui)
@@ -53,13 +54,12 @@ class Tunnel(ChunkParser):
     # read here.
     self.maxread *= 2
 
-    self.server_info = ['x.x.x.x:x', [], [], []]
+    self.server_info = ['x.x.x.x:x', [], [], [], False]
     self.conns = conns
     self.users = {}
     self.remote_ssl = {}
     self.zhistory = {}
     self.backends = {}
-    self.rtt = 100000
     self.last_ping = 0
     self.using_tls = False
     self.filters = []
@@ -68,15 +68,25 @@ class Tunnel(ChunkParser):
     return ('<b>Server name</b>: %s<br>'
             '%s') % (self.server_info[self.S_NAME], ChunkParser.__html__(self))
 
+  def GetKiteRequests(self, parse):
+    requests = []
+    for prefix in ('X-Beanstalk', 'X-PageKite'):
+      for bs in parse.Header(prefix):
+        # X-PageKite: proto:my.domain.com:token:signature
+        proto, domain, srand, token, sign = bs.split(':')
+        requests.append((proto.lower(), domain.lower(),
+                         srand, token, sign, prefix))
+    return requests
+
   def _FrontEnd(conn, body, conns):
     """This is what the front-end does when a back-end requests a new tunnel."""
     self = Tunnel(conns)
-    requests = []
     try:
       for prefix in ('X-Beanstalk', 'X-PageKite'):
         for feature in conn.parser.Header(prefix+'-Features'):
           if not conns.config.disable_zchunks:
-            if feature == 'ZChunks': self.EnableZChunks(level=1)
+            if feature == 'ZChunks':
+              self.EnableZChunks(level=1)
 
         # Track which versions we see in the wild.
         version = 'old'
@@ -91,11 +101,7 @@ class Tunnel(ChunkParser):
             self.conns.Remove(repl)
             repl.Cleanup()
 
-        for bs in conn.parser.Header(prefix):
-          # X-Beanstalk: proto:my.domain.com:token:signature
-          proto, domain, srand, token, sign = bs.split(':')
-          requests.append((proto.lower(), domain.lower(), srand, token, sign,
-                           prefix))
+      requests = self.GetKiteRequests(conn.parser)
 
     except Exception, err:
       self.LogError('Discarding connection: %s' % err)
@@ -110,9 +116,9 @@ class Tunnel(ChunkParser):
     self.last_activity = time.time()
     self.CountAs('backends_live')
     self.SetConn(conn)
-    conns.auth.check(requests[:], conn,
-                     lambda r, l: self.AuthCallback(conn, r, l))
-
+    if requests:
+      conns.auth.check(requests[:], conn,
+                       lambda r, l: self.AuthCallback(conn, r, l))
     return self
 
   def RecheckQuota(self, conns, when=None):
@@ -126,11 +132,53 @@ class Tunnel(ChunkParser):
       conns.auth.check([self.quota[1]], self,
                        lambda r, l: self.QuotaCallback(conns, r, l))
 
+  def ProcessAuthResults(self, results, duplicates_ok=False, add_tunnels=True):
+    ok = []
+    bad = []
+
+    ok_results = ['X-PageKite-OK']
+    bad_results = ['X-PageKite-Invalid']
+    if duplicates_ok is True:
+      ok_results.extend(['X-PageKite-Duplicate'])
+    elif duplicates_ok is False:
+      bad_results.extend(['X-PageKite-Duplicate'])
+
+    for r in results:
+      if r[0] in ok_results:
+        ok.append(r[1])
+      elif r[0] in bad_results:
+        bad.append(r[1])
+      elif r[0] == 'X-PageKite-SessionID':
+        self.alt_id = r[1]
+
+    if bad:
+      for backend in bad:
+        if backend in self.backends:
+          del self.backends[backend]
+      proto, domain, srand = backend.split(':')
+      self.Log([('BE', 'Dead'), ('proto', proto), ('domain', domain)])
+      self.conns.CloseTunnel(proto, domain, self)
+
+    if add_tunnels:
+      for backend in ok:
+        if backend not in self.backends:
+          self.backends[backend] = 1
+        proto, domain, srand = backend.split(':')
+        self.Log([('BE', 'Live'), ('proto', proto), ('domain', domain)])
+        self.conns.Tunnel(proto, domain, self)
+      if not ok:
+        #conn.LogDebug('No tunnels configured, closing connection.')
+        #return None
+        self.LogDebug('No tunnels configured, idling...')
+
+    return True
+
   def QuotaCallback(self, conns, results, log_info):
     # Report new values to the back-end...
     if self.quota and (self.quota[0] >= 0):
       self.SendQuota()
 
+    self.ProcessAuthResults(results, duplicates_ok=True, add_tunnels=False)
     for r in results:
       if r[0] in ('X-PageKite-OK', 'X-PageKite-Duplicate'):
         return self
@@ -147,6 +195,7 @@ class Tunnel(ChunkParser):
 
     output = [HTTP_ResponseHeader(200, 'OK'),
               HTTP_Header('Transfer-Encoding', 'chunked'),
+              HTTP_Header('X-PageKite-Features', 'AddKites'),
               HTTP_Header('X-PageKite-Protos', ', '.join(['%s' % p
                             for p in self.conns.config.server_protos])),
               HTTP_Header('X-PageKite-Ports', ', '.join(
@@ -162,10 +211,7 @@ class Tunnel(ChunkParser):
                     ', '.join(['%s' % p for p
                                in self.conns.config.server_raw_ports])))
 
-    ok = {}
     for r in results:
-      if r[0] in ('X-PageKite-OK', 'X-Beanstalk-OK'): ok[r[1]] = 1
-      if r[0] == 'X-PageKite-SessionID': self.alt_id = r[1]
       output.append('%s: %s\r\n' % r)
 
     output.append(HTTP_StartBody())
@@ -174,21 +220,27 @@ class Tunnel(ChunkParser):
       self.Cleanup()
       return None
 
-    self.backends = ok.keys()
-    if self.backends:
-      for backend in self.backends:
-        proto, domain, srand = backend.split(':')
-        self.Log([('BE', 'Live'), ('proto', proto), ('domain', domain)])
-        self.conns.Tunnel(proto, domain, self)
-      if conn.quota:
-        self.quota = conn.quota
-        self.Log([('BE', 'Live'), ('quota', self.quota[0])])
+    if conn.quota and conn.quota[0]:
+      self.quota = conn.quota
+      self.Log([('BE-Quota', self.quota[0])])
+
+    if self.ProcessAuthResults(results):
       self.conns.Add(self, alt_id=self.alt_id)
       return self
     else:
-      conn.LogDebug('No tunnels configured, closing connection.')
       self.Cleanup()
       return None
+
+  def ChunkAuthCallback(self, results, log_info):
+    if log_info:
+      logging.Log(log_info)
+
+    if self.ProcessAuthResults(results):
+      output = ['NOOP: 1\r\n']
+      for r in results:
+        output.append('%s: %s\r\n' % r)
+      output.append('\r\n!')
+      self.SendChunked(''.join(output), compress=False)
 
   def _RecvHttpHeaders(self, fd=None):
     data = ''
@@ -210,10 +262,12 @@ class Tunnel(ChunkParser):
     return data
 
   def _Connect(self, server, conns, tokens=None):
-    if self.fd: self.fd.close()
+    if self.fd:
+      self.fd.close()
 
     sspec = server.split(':')
-    if len(sspec) < 2: sspec = (sspec[0], 443)
+    if len(sspec) < 2:
+      sspec = (sspec[0], 443)
 
     # Use chained SocksiPy to secure our communication.
     socks.DEBUG = (logging.DEBUG_IO or socks.DEBUG) and logging.LogDebug
@@ -246,13 +300,116 @@ class Tunnel(ChunkParser):
       return None, None
 
     data = self._RecvHttpHeaders()
-    if not data: return None, None
+    if not data:
+      return None, None
 
     self.fd.setblocking(0)
     parse = HttpLineParser(lines=data.splitlines(),
                            state=HttpLineParser.IN_RESPONSE)
 
     return data, parse
+
+  def CheckForTokens(self, parse):
+    tcount = 0
+    tokens = {}
+    for request in parse.Header('X-PageKite-SignThis'):
+      proto, domain, srand, token = request.split(':')
+      tokens['%s:%s' % (proto, domain)] = token
+      tcount += 1
+    return tcount, tokens
+
+  def ParsePageKiteCapabilities(self, parse):
+    for portlist in parse.Header('X-PageKite-Ports'):
+      self.server_info[self.S_PORTS].extend(portlist.split(', '))
+    for portlist in parse.Header('X-PageKite-Raw-Ports'):
+      self.server_info[self.S_RAW_PORTS].extend(portlist.split(', '))
+    for protolist in parse.Header('X-PageKite-Protos'):
+      self.server_info[self.S_PROTOS].extend(protolist.split(', '))
+    if not self.conns.config.disable_zchunks:
+      for feature in parse.Header('X-PageKite-Features'):
+        if feature == 'ZChunks':
+          self.EnableZChunks(level=9)
+        if feature == 'AddKites':
+          self.server_info[self.S_ADD_KITES] = True
+
+  def HandlePageKiteResponse(self, parse):
+    config = self.conns.config
+    have_kites = 0
+
+    sname = self.server_info[self.S_NAME]
+    config.ui.NotifyServer(self, self.server_info)
+
+    for misc in parse.Header('X-PageKite-Misc'):
+      args = parse_qs(misc)
+      logdata = [('FE', sname)]
+      for arg in args:
+        logdata.append((arg, args[arg][0]))
+      logging.Log(logdata)
+      if 'motd' in args and args['motd'][0]:
+        config.ui.NotifyMOTD(sname, args['motd'][0])
+
+    # FIXME: Really, we should keep track of quota dimensions for
+    #        each kite.  At the moment that isn't even reported...
+    for quota in parse.Header('X-PageKite-Quota'):
+      self.quota = [float(quota), None, None]
+      self.Log([('FE', sname), ('quota', quota)])
+
+    for quota in parse.Header('X-PageKite-QConns'):
+      self.q_conns = float(quota)
+      self.Log([('FE', sname), ('q_conns', quota)])
+
+    for quota in parse.Header('X-PageKite-QDays'):
+      self.q_days = float(quota)
+      self.Log([('FE', sname), ('q_days', quota)])
+
+    if self.quota and self.quota[0] is not None:
+      config.ui.NotifyQuota(self.quota[0], self.q_days, self.q_conns)
+
+    invalid_reasons = {}
+    for request in parse.Header('X-PageKite-Invalid-Why'):
+      # This is future-compatible, in that we can add more fields later.
+      details = request.split(';')
+      invalid_reasons[details[0]] = details[1]
+
+    for request in parse.Header('X-PageKite-Invalid'):
+      proto, domain, srand = request.split(':')
+      reason = invalid_reasons.get(request, 'unknown')
+      self.Log([('FE', sname),
+                ('err', 'Rejected'),
+                ('proto', proto),
+                ('reason', reason),
+                ('domain', domain)])
+      config.ui.NotifyKiteRejected(proto, domain, reason, crit=True)
+      config.SetBackendStatus(domain, proto, add=BE_STATUS_ERR_TUNNEL)
+
+    for request in parse.Header('X-PageKite-Duplicate'):
+      proto, domain, srand = request.split(':')
+      self.Log([('FE', self.server_info[self.S_NAME]),
+                ('err', 'Duplicate'),
+                ('proto', proto),
+                ('domain', domain)])
+      config.ui.NotifyKiteRejected(proto, domain, 'duplicate')
+      config.SetBackendStatus(domain, proto, add=BE_STATUS_ERR_TUNNEL)
+
+    ssl_available = {}
+    for request in parse.Header('X-PageKite-SSL-OK'):
+      ssl_available[request] = True
+
+    for request in parse.Header('X-PageKite-OK'):
+      have_kites += 1
+      proto, domain, srand = request.split(':')
+      self.conns.Tunnel(proto, domain, self)
+      status = BE_STATUS_OK
+      if request in ssl_available:
+        status |= BE_STATUS_REMOTE_SSL
+        self.remote_ssl[(proto, domain)] = True
+      self.Log([('FE', sname),
+                ('proto', proto),
+                ('domain', domain),
+                ('ssl', (request in ssl_available))])
+      config.SetBackendStatus(domain, proto, add=status)
+
+    return have_kites
 
   def _BackEnd(server, backends, require_all, conns):
     """This is the back-end end of a tunnel."""
@@ -262,119 +419,34 @@ class Tunnel(ChunkParser):
     self.server_info[self.S_NAME] = server
     abort = True
     try:
-      begin = time.time()
       try:
         data, parse = self._Connect(server, conns)
       except:
         logging.LogError('Error in connect: %s' % traceback.format_exc())
         raise
-      if data and parse:
 
+      if data and parse:
         # Collect info about front-end capabilities, for interactive config
-        for portlist in parse.Header('X-PageKite-Ports'):
-          self.server_info[self.S_PORTS].extend(portlist.split(', '))
-        for portlist in parse.Header('X-PageKite-Raw-Ports'):
-          self.server_info[self.S_RAW_PORTS].extend(portlist.split(', '))
-        for protolist in parse.Header('X-PageKite-Protos'):
-          self.server_info[self.S_PROTOS].extend(protolist.split(', '))
+        self.ParsePageKiteCapabilities(parse)
 
         for sessionid in parse.Header('X-PageKite-SessionID'):
           self.alt_id = sessionid
           conns.config.servers_sessionids[server] = sessionid
 
-        tryagain = False
-        tokens = {}
-        for request in parse.Header('X-PageKite-SignThis'):
-          proto, domain, srand, token = request.split(':')
-          tokens['%s:%s' % (proto, domain)] = token
-          tryagain = True
-
+        tryagain, tokens = self.CheckForTokens(parse)
         if tryagain:
-          begin = time.time()
-          data, parse = self._Connect(server, conns, tokens)
+          if self.server_info[self.S_ADD_KITES]:
+            request = PageKiteRequestHeaders(server, conns.config.backends,
+                                             tokens)
+            abort = not self.SendChunked(('NOOP: 1\r\n%s\r\n\r\n!'
+                                          ) % ''.join(request),
+                                         compress=False)
+            data = parse = None
+          else:
+            data, parse = self._Connect(server, conns, tokens)
 
         if data and parse:
-          sname = self.server_info[self.S_NAME]
-          conns.config.ui.NotifyServer(self, self.server_info)
-
-          for misc in parse.Header('X-PageKite-Misc'):
-            args = parse_qs(misc)
-            logdata = [('FE', sname)]
-            for arg in args:
-              logdata.append((arg, args[arg][0]))
-            logging.Log(logdata)
-            if 'motd' in args and args['motd'][0]:
-              conns.config.ui.NotifyMOTD(sname, args['motd'][0])
-
-          for quota in parse.Header('X-PageKite-Quota'):
-            self.quota = [float(quota), None, None]
-            self.Log([('FE', sname), ('quota', quota)])
-
-          for quota in parse.Header('X-PageKite-QConns'):
-            self.q_conns = float(quota)
-            self.Log([('FE', sname), ('q_conns', quota)])
-
-          for quota in parse.Header('X-PageKite-QDays'):
-            self.q_days = float(quota)
-            self.Log([('FE', sname), ('q_days', quota)])
-
-          if self.quota:
-            conns.config.ui.NotifyQuota(self.quota[0],
-                                        self.q_days, self.q_conns)
-
-          invalid_reasons = {}
-          for request in parse.Header('X-PageKite-Invalid-Why'):
-            # This is future-compatible, in that we can add more fields later.
-            details = request.split(';')
-            invalid_reasons[details[0]] = details[1]
-
-          for request in parse.Header('X-PageKite-Invalid'):
-            proto, domain, srand = request.split(':')
-            reason = invalid_reasons.get(request, 'unknown')
-            self.Log([('FE', sname),
-                      ('err', 'Rejected'),
-                      ('proto', proto),
-                      ('reason', reason),
-                      ('domain', domain)])
-            conns.config.ui.NotifyKiteRejected(proto, domain, reason, crit=True)
-            conns.config.SetBackendStatus(domain, proto,
-                                          add=BE_STATUS_ERR_TUNNEL)
-
-          for request in parse.Header('X-PageKite-Duplicate'):
-            abort = True
-            proto, domain, srand = request.split(':')
-            self.Log([('FE', self.server_info[self.S_NAME]),
-                      ('err', 'Duplicate'),
-                      ('proto', proto),
-                      ('domain', domain)])
-            conns.config.ui.NotifyKiteRejected(proto, domain, 'duplicate')
-            conns.config.SetBackendStatus(domain, proto,
-                                          add=BE_STATUS_ERR_TUNNEL)
-
-          if not conns.config.disable_zchunks:
-            for feature in parse.Header('X-PageKite-Features'):
-              if feature == 'ZChunks': self.EnableZChunks(level=9)
-
-          ssl_available = {}
-          for request in parse.Header('X-PageKite-SSL-OK'):
-            ssl_available[request] = True
-
-          for request in parse.Header('X-PageKite-OK'):
-            abort = False
-            proto, domain, srand = request.split(':')
-            conns.Tunnel(proto, domain, self)
-            status = BE_STATUS_OK
-            if request in ssl_available:
-              status |= BE_STATUS_REMOTE_SSL
-              self.remote_ssl[(proto, domain)] = True
-            self.Log([('FE', sname),
-                      ('proto', proto),
-                      ('domain', domain),
-                      ('ssl', (request in ssl_available))])
-            conns.config.SetBackendStatus(domain, proto, add=status)
-
-        self.rtt = (time.time() - begin)
-
+          abort = (self.HandlePageKiteResponse(parse) < 1)
 
     except socket.error:
       self.Cleanup()
@@ -385,7 +457,8 @@ class Tunnel(ChunkParser):
       self.Cleanup()
       return None
 
-    if abort: return None
+    if abort:
+      return None
 
     conns.Add(self)
     self.CountAs('frontends_live')
@@ -659,6 +732,17 @@ class Tunnel(ChunkParser):
 
     return conn, data
 
+  def ProcessKiteUpdates(self, parse):
+    # Look for requests for new tunnels
+    if self.conns.config.isfrontend:
+      requests = self.GetKiteRequests(parse)
+      if requests:
+        self.conns.auth.check(requests[:], self,
+                              lambda r, l: self.ChunkAuthCallback(r, l))
+
+    # Look for responses to requests for new tunnels
+    self.HandlePageKiteResponse(parse)
+
   def ProcessChunk(self, data):
     # First, we process the chunk headers.
     try:
@@ -666,10 +750,9 @@ class Tunnel(ChunkParser):
       parse = HttpLineParser(lines=headers.splitlines(),
                              state=HttpLineParser.IN_HEADERS)
 
-      # Update quota information if necessary
+      # Update quota and kite information if necessary
       self.ProcessChunkQuotaInfo(parse)
-
-      # FIXME: Look for responses to requests for new tunnels
+      self.ProcessKiteUpdates(parse)
 
       # Process PING/NOOP/etc: may result in a short-circuit.
       rv = self.ProcessChunkDirectives(parse)

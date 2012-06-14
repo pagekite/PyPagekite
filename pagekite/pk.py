@@ -344,6 +344,14 @@ class Connections(object):
           servers[server] = 1
     return servers.keys()
 
+  def CloseTunnel(self, proto, domain, conn):
+    tid = '%s:%s' % (proto, domain)
+    if tid in self.tunnels:
+      if conn in self.tunnels[tid]:
+        self.tunnels[tid].remove(conn)
+      if not self.tunnels[tid]:
+        del self.tunnels[tid]
+
   def Tunnel(self, proto, domain, conn=None):
     tid = '%s:%s' % (proto, domain)
     if conn is not None:
