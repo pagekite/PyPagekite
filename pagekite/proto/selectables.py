@@ -407,11 +407,11 @@ class Selectable(object):
 
     # If we're already blocked, just buffer unless explicitly asked to flush.
     if (not try_flush) and (len(self.write_blocked) > 0 or compat.SEND_ALWAYS_BUFFERS):
-      self.write_blocked += ''.join(data)
+      self.write_blocked += str(''.join(data))
       common.buffered_bytes += len(self.write_blocked)
       return True
 
-    sending = self.write_blocked+(''.join(data))
+    sending = ''.join([self.write_blocked, str(''.join(data))])
     self.write_blocked = ''
     sent_bytes = 0
     if sending:
