@@ -15,6 +15,7 @@ v0.4.7   ???
    - Deprecated: --reloadfile, --delete_backend
    - Refactored and rewrote built-in manual and man page
    - Added support for Flash socket-policy responses (open policy).
+   - Support kites over IPv6.
 
 
 v0.4.6   2012.01.15

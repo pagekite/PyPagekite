@@ -265,7 +265,7 @@ class Tunnel(ChunkParser):
     if self.fd:
       self.fd.close()
 
-    sspec = server.split(':')
+    sspec = server.rsplit(':', 1)
     if len(sspec) < 2:
       sspec = (sspec[0], 443)
 
@@ -275,10 +275,10 @@ class Tunnel(ChunkParser):
     if socks.HAVE_SSL:
       chain = ['default']
       if self.conns.config.fe_anon_tls_wrap:
-        chain.append('ssl-anon:%s:%s' % (sspec[0], sspec[1]))
+        chain.append('ssl-anon!%s!%s' % (sspec[0], sspec[1]))
       if self.conns.config.fe_certname:
-        chain.append('http:%s:%s' % (sspec[0], sspec[1]))
-        chain.append('ssl:%s:443' % ','.join(self.conns.config.fe_certname))
+        chain.append('http!%s!%s' % (sspec[0], sspec[1]))
+        chain.append('ssl!%s!443' % ','.join(self.conns.config.fe_certname))
       for hop in chain:
         sock.addproxy(*socks.parseproxy(hop))
     self.SetFD(sock)

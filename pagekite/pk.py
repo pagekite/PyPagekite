@@ -90,11 +90,11 @@ socks.wrapmodule(sys.modules[__name__])
 if socks.HAVE_SSL:
   # Secure connections to pagekite.net in SSL tunnels.
   def_hop = socks.parseproxy('default')
-  https_hop = socks.parseproxy(('httpcs:%s:443'
+  https_hop = socks.parseproxy(('httpcs!%s!443'
                                 ) % ','.join(['pagekite.net']+SERVICE_CERTS))
   for dest in ('pagekite.net', 'up.pagekite.net', 'up.b5p.us'):
     socks.setproxy(dest, *def_hop)
-    socks.addproxy(dest, *socks.parseproxy('http:%s:443' % dest))
+    socks.addproxy(dest, *socks.parseproxy('http!%s!443' % dest))
     socks.addproxy(dest, *https_hop)
 else:
   # FIXME: Should scream and shout about lack of security.
@@ -2360,11 +2360,15 @@ class PageKite(object):
     logging.LogDebug('Pinged %s:%s: %f' % (host, port, elapsed))
     return elapsed
 
-  def GetHostIpAddr(self, host):
-    return socket.gethostbyname(host)
-
-  def GetHostDetails(self, host):
-    return socket.gethostbyname_ex(host)
+  def GetHostIpAddrs(self, host):
+    rv = []
+    try:
+      info = socket.getaddrinfo(host, 0, socket.AF_UNSPEC, socket.SOCK_STREAM)
+      rv = [i[4][0] for i in info]
+    except AttributeError:
+      rv = socket.gethostbyname_ex(host)[2]
+    print 'GetHostIpAddrs(%s): %s' % (host, rv)
+    return rv
 
   def GetActiveBackends(self):
     active = []
@@ -2393,12 +2397,12 @@ class PageKite(object):
     for server in self.servers_manual:
       (host, port) = server.split(':')
       try:
-        ipaddr = self.GetHostIpAddr(host)
+        ipaddr = self.GetHostIpAddrs(host)[0]
         server = '%s:%s' % (ipaddr, port)
         if server not in self.servers:
           self.servers.append(server)
           self.servers_preferred.append(ipaddr)
-      except Exception, e:
+      except:
         logging.LogDebug('DNS lookup failed for %s' % host)
 
     # Lookup and choose from the auto-list (and our old domain).
@@ -2410,8 +2414,7 @@ class PageKite(object):
         for bid in self.GetActiveBackends():
           (proto, bdom) = bid.split(':')
           try:
-            (hn, al, ips) = self.GetHostDetails(bdom)
-            for ip in ips:
+            for ip in self.GetHostIpAddrs(bdom):
               if not ip.startswith('127.'):
                 server = '%s:%s' % (ip, port)
                 if server not in self.servers: self.servers.append(server)
@@ -2419,7 +2422,7 @@ class PageKite(object):
             logging.LogDebug('DNS lookup failed for %s' % bdom)
 
       try:
-        (hn, al, ips) = socket.gethostbyname_ex(domain)
+        ips = self.GetHostIpAddrs(domain)
         times = [self.Ping(ip, port) for ip in ips]
       except Exception, e:
         logging.LogDebug('Unreachable: %s, %s' % (domain, e))
@@ -2454,7 +2457,7 @@ class PageKite(object):
           LoopbackTunnel.Loop(conns, self.backends)
         else:
           self.ui.Status('connect', color=self.ui.YELLOW,
-                         message='Connecting to front-end: %s' % server)
+                         message='Front-end connect: %s' % server)
           tun = Tunnel.BackEnd(server, self.backends, self.require_all, conns)
           if tun:
             if self.watch_level[0] is not None:
@@ -2477,7 +2480,7 @@ class PageKite(object):
           ips = []
           bips = []
           for tunnel in conns.tunnels[bid]:
-            ip = tunnel.server_info[tunnel.S_NAME].split(':')[0]
+            ip = tunnel.server_info[tunnel.S_NAME].rsplit(':', 1)[0]
             if not ip == LOOPBACK_HN:
               if not self.servers_preferred or ip in self.servers_preferred:
                 ips.append(ip)
