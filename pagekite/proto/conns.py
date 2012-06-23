@@ -750,13 +750,13 @@ class Tunnel(ChunkParser):
       parse = HttpLineParser(lines=headers.splitlines(),
                              state=HttpLineParser.IN_HEADERS)
 
-      # Update quota and kite information if necessary
-      self.ProcessChunkQuotaInfo(parse)
-      self.ProcessKiteUpdates(parse)
-
       # Process PING/NOOP/etc: may result in a short-circuit.
       rv = self.ProcessChunkDirectives(parse)
       if rv is not None:
+        # Update quota and kite information if necessary: this data is
+        # always sent along with a NOOP, so checking for it here is safe.
+        self.ProcessChunkQuotaInfo(parse)
+        self.ProcessKiteUpdates(parse)
         return rv
 
       sid = int(parse.Header('SID')[0])
