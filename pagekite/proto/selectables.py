@@ -442,12 +442,17 @@ class Selectable(object):
         self.ProcessEofWrite()
         return False
 
-    if activity: self.last_activity = time.time()
+    if activity:
+      self.last_activity = time.time()
+
     self.write_blocked = sending[sent_bytes:]
     common.buffered_bytes += len(self.write_blocked)
-    if self.wrote_bytes >= logging.LOG_THRESHOLD: self.LogTraffic()
 
-    if self.write_eof and not self.write_blocked: self.ProcessEofWrite()
+    if self.wrote_bytes >= logging.LOG_THRESHOLD:
+      self.LogTraffic()
+
+    if self.write_eof and not self.write_blocked:
+      self.ProcessEofWrite()
     return True
 
   def SendChunked(self, data, compress=True, zhistory=None):

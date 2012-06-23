@@ -1334,6 +1334,11 @@ class PageKite(object):
     print longhelp and manual.DOC() or manual.MINIDOC
     sys.exit(0)
 
+  def AddNewKite(self, kitespec, status=BE_STATUS_UNKNOWN, secret=None):
+    specs = self.ArgToBackendSpecs(kitespec, status, secret)
+    self.backends.update(specs)
+    # FIXME: Tunnels need to be updated!
+
   def ArgToBackendSpecs(self, arg, status=BE_STATUS_UNKNOWN, secret=None):
     protos, fe_domain, be_host, be_port = '', '', '', ''
 
