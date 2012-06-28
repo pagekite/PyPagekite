@@ -123,6 +123,7 @@ def PageKiteRequestHeaders(server, backends, tokens=None, testtoken=None):
 def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
                          tls=False, testtoken=None, replace=None):
   req = ['CONNECT PageKite:1 HTTP/1.0\r\n',
+         'X-PageKite-Features: AddKites\r\n',
          'X-PageKite-Version: %s\r\n' % APPVER]
 
   if not nozchunks:

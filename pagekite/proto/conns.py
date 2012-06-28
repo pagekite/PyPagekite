@@ -87,6 +87,8 @@ class Tunnel(ChunkParser):
           if not conns.config.disable_zchunks:
             if feature == 'ZChunks':
               self.EnableZChunks(level=1)
+            elif feature == 'AddKites':
+              self.server_info[self.S_ADD_KITES] = True
 
         # Track which versions we see in the wild.
         version = 'old'
@@ -167,9 +169,11 @@ class Tunnel(ChunkParser):
         self.Log([('BE', 'Live'), ('proto', proto), ('domain', domain)])
         self.conns.Tunnel(proto, domain, self)
       if not ok:
-        #conn.LogDebug('No tunnels configured, closing connection.')
-        #return None
-        self.LogDebug('No tunnels configured, idling...')
+        if self.server_info[self.S_ADD_KITES]:
+          conn.LogDebug('No tunnels configured, idling...')
+        else:
+          conn.LogDebug('No tunnels configured, closing connection.')
+          return None
 
     return True
 
