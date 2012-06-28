@@ -1,4 +1,5 @@
 #!/usr/bin/python
+import time
 from datetime import date
 from setuptools import setup
 from pagekite.common import APPVER
@@ -12,8 +13,7 @@ except:
 
 setup(
     name="pagekite",
-    version=APPVER.replace('github',
-                           'dev'+date.today().isoformat().replace('-', '')),
+    version=APPVER.replace('github', 'dev%d' % time.time()),
     license="AGPLv3+",
     author="Bjarni R. Einarsson",
     author_email="bre@pagekite.net",
