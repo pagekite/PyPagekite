@@ -105,7 +105,7 @@ VERSION=`python setup.py --version`
 		../pagekite-$(VERSION)_$(VERSION).orig.tar.gz
 	@debuild -i -us -uc -b
 	@mv ../pagekite_*.deb dist/
-	@rm ../pagekite-$(VERSION)*
+	@rm ../pagekite-*.orig.tar.gz
 
 .header: pagekite doc/header.txt
 	@sed -e "s/@VERSION@/$(VERSION)/g" \
