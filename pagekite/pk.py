@@ -2658,6 +2658,8 @@ class PageKite(object):
             print '*** EPoll: %s' % traceback.format_exc()
 
       evs = epoll.poll(waittime)
+    except IOError:
+      evs = []
     except KeyboardInterrupt:
       epoll.close()
       raise
