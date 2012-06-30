@@ -52,7 +52,7 @@ more commonly used to expose other HTTP servers running on localhost (such
 as Apache or a Django development server) to the wider Internet.
 
 In order for pagekite.py to terminate SSL connections or encrypt the built
-in HTTPserver, you will need openssl and either python 2.6+ or the pyOpenSSL
+in HTTP server, you will need openssl and either python 2.6+ or the pyOpenSSL
 module. These are not required if you just want to route HTTPS requests.
 
 You can download pagekite.py from <http://pagekite.net/downloads/>.
@@ -145,6 +145,12 @@ file, by using commands like the following:
 
 You can also use `--add` to update the configuration of a particular service,
 for example to add a `+indexes` flag or access controls.
+
+**Hint:** Another useful flag in this context, is `--nullui`.  Making that the
+first argument will suppress  he normal interactive user interface and simply
+assumes the answer to all questions is "yes".  If you already have valid service
+in your configuration file, this can be combined with `--add` to configure new
+kites automatically from within a script or other program.
 
 [ [up](#toc) ]
 
