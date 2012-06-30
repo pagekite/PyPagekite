@@ -547,7 +547,7 @@ information about which domains you are hosting through DNS side channels.
 
 
 <a                                                              name=ipr></a>
-### 2.8. Raw backends (HTTP CONNECT) ###
+### 2.8. Raw services (HTTP CONNECT) ###
 
 Pagekite.py version 0.3.7 added the "raw" protocol, which allows you to
 bind a back-end to a raw port.  This may be useful for all sorts of things,
