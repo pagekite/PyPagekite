@@ -21,7 +21,7 @@ BREED_PAGEKITE = pagekite/__init__.py \
 	         pagekite/pk.py \
 
 
-combined: pagekite tools dev .header
+combined: pagekite tools doc/MANPAGE.md dev .header
 	@./scripts/breeder.py --compress --header .header \
 	             sockschain $(BREED_PAGEKITE) \
 	             pagekite/__main__.py \
@@ -51,6 +51,9 @@ android: pagekite tools .header
 	@chmod +x pagekite-tmp.py
 	@mv pagekite-tmp.py dist/pk-android-`./pagekite-tmp.py --appver`.py
 	@ls -l dist/pk-android-*.py
+
+doc/MANPAGE.md: pagekite pagekite/manual.py
+	@./pagekite/manual.py --nopy --markdown >doc/MANPAGE.md
 
 doc/pagekite.1: pagekite pagekite/manual.py
 	@./pagekite/manual.py --nopy --man >doc/pagekite.1
