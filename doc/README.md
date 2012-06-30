@@ -147,8 +147,8 @@ You can also use `--add` to update the configuration of a particular service,
 for example to add a `+indexes` flag or access controls.
 
 **Hint:** Another useful flag in this context, is `--nullui`.  Making that the
-first argument will suppress  he normal interactive user interface and simply
-assumes the answer to all questions is "yes".  If you already have valid service
+first argument will suppress the normal interactive user interface and simply
+assume the answer to all questions is "yes".  If you already have valid service
 in your configuration file, this can be combined with `--add` to configure new
 kites automatically from within a script or other program.
 
