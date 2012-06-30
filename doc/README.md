@@ -28,7 +28,7 @@ you can run your own using pagekite.py.
       5.  [Coexisting front-ends and other HTTP servers    ](#co)
       6.  [Configuring DNS                                 ](#dns)
       7.  [Connecting over Socks or Tor                    ](#tor)
-      8.  [Raw backends (HTTP CONNECT)                     ](#ipr)
+      8.  [Raw services (HTTP CONNECT)                     ](#ipr)
       9.  [SSL/TLS back-ends, endpoints and SNI            ](#tls)
       10. [Unix/Linux systems integration                  ](#unx)
       11. [Saving your configuration                       ](#cfg)
@@ -232,7 +232,7 @@ Replace YOURNAME with your PageKite domain name (for example
 *something.pagekite.me*) and SECRET with the shared secret displayed on
 your account page.
 
-You can add multiple backend specifications, one for each name and protocol
+You can add multiple service specifications, one for each name and protocol
 you wish to expose.  Here is an example running two websites, one of which
 is available using three protocols: HTTP, HTTPS and WebSocket.
 
@@ -242,8 +242,8 @@ is available using three protocols: HTTP, HTTPS and WebSocket.
       --service_on=https:YOURNAME:localhost:443:SECRET \
       --service_on=http:OTHERNAME:localhost:8080:SECRET
 
-Alternately, if you want to run different HTTP back-ends on different ports
-for the same domain name, you can include port numbers in your backend specs:
+Alternately, if you want to expose different HTTP services on different ports
+for the same domain name, you can include port numbers in your service specs:
 
     backend$ pagekite.py \
       --defaults \
@@ -383,11 +383,11 @@ way to get the two to coexist:
 
    1. Move your old web-server to another port (such as 8080)
    2. Configure pagekite.py [as a front-end](#fe) on port 80
-   3. Add `--backend` specifications for your old web-server.
+   3. Add `--service_on` specifications for your old web-server.
 
 As of 0.3.14, you can make pagekite.py use a local back-end as a catch-all
 for any unrecongized domains, by using the special hostname "unknown" in
-the `--backend` line (remember to specify a protocol).
+the `--service_on` line (remember to specify a protocol).
 
 For example:
 
