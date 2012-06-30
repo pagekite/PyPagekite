@@ -73,21 +73,21 @@ MAN_FLAGS = ("""\
     server.
 """)
 MAN_FLAGS_COMMON = ("""\
-    +ip</b>/<a>1.2.3.4     __Enable connections only from this IP address.
-    +ip</b>/<a>1.2.3       __Enable connections only from this /24 netblock.
+    +ip</b>/<a>1.2.3.4</a>     __Enable connections only from this IP address.
+    +ip</b>/<a>1.2.3</a>       __Enable connections only from this /24 netblock.
 """)
 MAN_FLAGS_HTTP = ("""\
-    +password</b>/<a>name</b>=<a>pass
+    +password</b>/<a>name</a>=<a>pass</a>
             Require a username and password (HTTP Basic Authentication)
 
-    +rewritehost   __Rewrite the incoming Host: header
+    +rewritehost</b>   __Rewrite the incoming Host: header
 """)
 MAN_FLAGS_BUILTIN = ("""\
     +indexes       __Enable directory indexes.
-    +indexes</b>=<a>all   __Enable directory indexes including hidden (dot-) files.
+    +indexes</b>=<a>all</a>   __Enable directory indexes including hidden (dot-) files.
     +hide          __Obfuscate URLs of shared files.
 
-    +cgi</b>=<a>list
+    +cgi</b>=<a>list</a>
             A list of extensions, for which files should be treated as
             CGI scripts (example: <tt>+cgi=cgi,pl,sh</tt>).
 """)
@@ -116,119 +116,119 @@ MAN_OPT_BACKEND = ("""\
     --disable       __Disable the following kites, save config.
     --only          __Disable all but the following kites, save config.
 
-    --local</b>=<a>ports   __Configure for local serving only (no remote front-end).
-    --watch</b>=<a>N       __Display proxied data (higher N = more verbosity).
+    --local</b>=<a>ports</a>   __Configure for local serving only (no remote front-end).
+    --watch</b>=<a>N</a>       __Display proxied data (higher N = more verbosity).
 
-    --proxy</b>=<a>type</a>:<a>server</a>:<a>port<a>,\
- <b>--socksify</b>=<a>server</a>:<a>port,\
- <b>--torify</b>=<a>server</a>:<a>port
+    --proxy</b>=<a>type</a>:<a>server</a>:<a>port</a>,\
+ <b>--socksify</b>=<a>server</a>:<a>port</a>,\
+ <b>--torify</b>=<a>server</a>:<a>port</a> __
             Connect to the front-ends using a chain of proxies, a single SOCKS
             proxy or the Tor anonymity network.  The type can be any of
             'ssl', 'http' or 'socks5'.
 
-    --service_on</b>=<a>proto</a>:<a>kitename</a>:<a>host</a>:<a>port</a>:<a>secret
+    --service_on</b>=<a>proto</a>:<a>kitename</a>:<a>host</a>:<a>port</a>:<a>secret</a> __
             Explicit configuration for a service kite.  Generally kites are
             created on the command-line using the service short-hand
             described above, but this syntax is used in the config file.
 
-    --service_off</b>=<a>proto</a>:<a>kitename</a>:<a>host</a>:<a>port</a>:<a>secret
+    --service_off</b>=<a>proto</a>:<a>kitename</a>:<a>host</a>:<a>port</a>:<a>secret</a> __
             Same as --service, except disabled by default.
 
-    --service_cfg</b>=<a>...</a>, <b>--webpath</b>=<a>...
+    --service_cfg</b>=<a>...</a>, <b>--webpath</b>=<a>...</a> __
             These options are used in the configuration file to store service
             and flag settings (see above). These are both likely to change in
             the near future, so please just pretend you didn't notice them.
 
-    --frontend</b>=<a>host</a>:<a>port
+    --frontend</b>=<a>host</a>:<a>port</a> __
             Connect to the named front-end server. If this option is repeated,
             multiple connections will be made.
 
-    --frontends</b>=<a>num</a>:<a>dns-name</a>:<a>port
+    --frontends</b>=<a>num</a>:<a>dns-name</a>:<a>port</a> __
             Choose <a>num</a> front-ends from the A records of a DNS domain
             name, using the given port number. Default behavior is to probe
             all addresses and use the fastest one.
 
-    --fe_certname</b>=<a>domain
+    --fe_certname</b>=<a>domain</a> __
             Connect using SSL, accepting valid certs for this domain. If
             this option is repeated, any of the named certificates will be
             accepted, but the first will be preferred.
 
-    --ca_certs</b>=<a>/path/to/file
+    --ca_certs</b>=<a>/path/to/file</a> __
             Path to your trusted root SSL certificates file.
 
-    --dyndns</b>=<a>X
+    --dyndns</b>=<a>X</a> __
             Register changes with DynDNS provider X.  X can either be simply
             the name of one of the 'built-in' providers, or a URL format
             string for ad-hoc updating.
 
     --all           __Terminate early if any tunnels fail to register.
     --new           __Don't attempt to connect to any kites' old front-ends.
-    --fingerpath</b>=<a>P  __Path recipe for the httpfinger back-end proxy.
+    --fingerpath</b>=<a>P</a>  __Path recipe for the httpfinger back-end proxy.
     --noprobes      __Reject all probes for service state.
 """)
 MAN_OPT_FRONTEND = ("""\
     --isfrontend    __Enable front-end operation.
 
-    --domain</b>=<a>proto,proto2,pN</a>:<a>domain</a>:<a>secret
+    --domain</b>=<a>proto,proto2,pN</a>:<a>domain</a>:<a>secret</a> __
             Accept tunneling requests for the named protocols and specified
             domain, using the given secret.  A * may be used as a wildcard for
             subdomains or protocols.
 
-    --authdomain</b>=<a>auth-domain,\
- <b>--authdomain</b>=<a>target-domain</a>:<a>auth-domain
-            Use <i>auth-domain</a> as a remote authentication server for the
+    --authdomain</b>=<a>auth-domain</a>,\
+ <b>--authdomain</b>=<a>target-domain</a>:<a>auth-domain</a> __
+            Use <a>auth-domain</a> as a remote authentication server for the
             DNS-based authetication protocol.  If no <i>target-domain</i>
             is given, use this as the default authentication method.
 
-    --motd</b>=<a>/path/to/motd
+    --motd</b>=<a>/path/to/motd</a> __
             Send the contents of this file to new back-ends as a
             "message of the day".
 
-    --host</b>=<a>hostname __Listen on the given hostname only.
-    --ports</b>=<a>list    __Listen on a comma-separated list of ports.
-    --portalias</b>=<a>A:B __Report port A as port B to backends.
-    --protos</b>=<a>list   __Accept the listed protocols for tunneling.
+    --host</b>=<a>hostname</a> __Listen on the given hostname only.
+    --ports</b>=<a>list</a>    __Listen on a comma-separated list of ports.
+    --portalias</b>=<a>A:B</a> __Report port A as port B to backends.
+    --protos</b>=<a>list</a>   __Accept the listed protocols for tunneling.
 
-    --rawports</b>=<a>list
+    --rawports</b>=<a>list</a> __
             Listen for raw connections these ports. The string '%s'
             allows arbitrary ports in HTTP CONNECT.
 
-    --tls_default</b>=<a>name
+    --tls_default</b>=<a>name</a> __
             Default name to use for SSL, if SNI (Server Name Indication)
             is missing from incoming HTTPS connections.
 
-    --tls_endpoint</b>=<a>name</a>:<a>/path/to/file
+    --tls_endpoint</b>=<a>name</a>:<a>/path/to/file</a> __
             Terminate SSL/TLS for a name using key/cert from a file.
 """)
 MAN_OPT_SYSTEM = ("""\
-    --optfile</b>=<a>/path/to/file
+    --optfile</b>=<a>/path/to/file</a> __
             Read settings from file X. Default is <tt>~/.pagekite.rc</tt>.
 
-    --optdir</b>=<a>/path/to/directory
+    --optdir</b>=<a>/path/to/directory</a> __
             Read settings from <tt>/path/to/directory/*.rc</tt>, in
             lexicographical order.
 
-    --savefile</b>=<a>/path/to/file
+    --savefile</b>=<a>/path/to/file</a> __
             Saved settings will be written to this file.
 
     --save          __Save the current configuration to the savefile.
 
-    --settings
+    --settings</b> __
             Dump the current settings to STDOUT, formatted as a configuration
             file would be.
 
     --nozchunks    __Disable zlib tunnel compression.
     --sslzlib      __Enable zlib compression in OpenSSL.
-    --buffers</b>=<a>N    __Buffer at most N kB of data before blocking.
-    --logfile</b>=<a>F    __Log to file F.
+    --buffers</b>=<a>N</a>    __Buffer at most N kB of data before blocking.
+    --logfile</b>=<a>F</a>    __Log to file F.
     --daemonize    __Run as a daemon.
-    --runas</b>=<a>U</a>:<a>G    __Set UID:GID after opening our listening sockets.
-    --pidfile</b>=<a>P    __Write PID to the named file.
-    --errorurl</b>=<a>U   __URL to redirect to when back-ends are not found.
+    --runas</b>=<a>U</a>:<a>G</a>    __Set UID:GID after opening our listening sockets.
+    --pidfile</b>=<a>P</a>    __Write PID to the named file.
+    --errorurl</b>=<a>U</a>   __URL to redirect to when back-ends are not found.
 
     --httpd</b>=<a>X</a>:<a>P</a>,\
- <b>--httppass</b>=<a>X,\
- <b>--pemfile</b>=<a>X
+ <b>--httppass</b>=<a>X</a>,\
+ <b>--pemfile</b>=<a>X</a> __
             Configure the built-in HTTP daemon.  These options are likely to
             change in the near future, please pretend you didn't see them.
 """)
@@ -342,9 +342,33 @@ def MAN(pname=None):
                    .replace('<b>', '\\fB').replace('</b>', '\\fR')
                    .replace('<a>', '\\fI').replace('</a>', '\\fR')
                    .replace('<i>', '\\fI').replace('</i>', '\\fR')
-                   .replace('<tt>', '\\fI').replace('</tt>', '\\fR'))
-  if pname: man = man.replace('pagekite.py', pname)
+                   .replace('<tt>', '\\fI').replace('</tt>', '\\fR')
+                   .replace('\\fR\\fR\n', '\\fR'))
+  if pname:
+    man = man.replace('pagekite.py', pname)
   return man
+
+def MARKDOWN(pname=None):
+  mkd = ''
+  for h, section, text in MANUAL:
+     if h == 'SH':
+       h = '##'
+     else:
+       h = '###'
+     mkd += ('%s %s %s\n%s\n\n'
+            ) % (h, section, h,
+                 re.sub('(</[aib]>|`)</b>', '\\1',
+                  re.sub(' +<br />([A-Z0-9])', '</b>  \n     \\1',
+                   re.sub('\n        ', '\n     ',
+                    re.sub('\n    ', '\n', '\n'+text.strip()))
+                     .replace(' __', ' <br />')
+                     .replace('\n--', '\n   * <b>--')
+                     .replace('\n+', '\n   * <b>+')
+                     .replace('<a>', '`').replace('</a>', '`')
+                     .replace('<tt>', '`').replace('</tt>', '`'))))
+  if pname:
+    mkd = mkd.replace('pagekite.py', pname)
+  return mkd
 
 if __name__ == '__main__':
   import sys
@@ -355,6 +379,8 @@ if __name__ == '__main__':
 
   if '--man' in sys.argv:
     print MAN(pname)
+  elif '--markdown' in sys.argv:
+    print MARKDOWN(pname)
   elif '--minidoc' in sys.argv:
     print MINIDOC
   else:
