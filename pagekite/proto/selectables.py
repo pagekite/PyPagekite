@@ -23,6 +23,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 ##############################################################################
 import errno
 import struct
+import threading
 import time
 import zlib
 
@@ -99,6 +100,7 @@ class Selectable(object):
     self.acked_kb_delta = 0
 
     # Compression stuff
+    self.lock = threading.Lock()
     self.zw = None
     self.zlevel = 1
     self.zreset = False
@@ -463,22 +465,25 @@ class Selectable(object):
 
     # Stop compressing streams that just get bigger.
     if zhistory and (zhistory[0] < zhistory[1]): compress = False
+    try:
+      self.lock.acquire()
+      sdata = ''.join(data)
+      if self.zw and compress:
+        try:
+          zdata = self.zw.compress(sdata) + self.zw.flush(zlib.Z_SYNC_FLUSH)
+          if zhistory:
+            zhistory[0] = len(sdata)
+            zhistory[1] = len(zdata)
+          return self.Send(['%xZ%x%s\r\n%s' % (len(sdata), len(zdata), rst, zdata)],
+                           activity=False)
+        except zlib.error:
+          logging.LogError('Error compressing, resetting ZChunks.')
+          self.ResetZChunks()
 
-    sdata = ''.join(data)
-    if self.zw and compress:
-      try:
-        zdata = self.zw.compress(sdata) + self.zw.flush(zlib.Z_SYNC_FLUSH)
-        if zhistory:
-          zhistory[0] = len(sdata)
-          zhistory[1] = len(zdata)
-        return self.Send(['%xZ%x%s\r\n%s' % (len(sdata), len(zdata), rst, zdata)],
-                         activity=False)
-      except zlib.error:
-        logging.LogError('Error compressing, resetting ZChunks.')
-        self.ResetZChunks()
-
-    return self.Send(['%x%s\r\n%s' % (len(sdata), rst, sdata)],
-                     activity=False)
+      return self.Send(['%x%s\r\n%s' % (len(sdata), rst, sdata)],
+                       activity=False)
+    finally:
+      self.lock.release()
 
   def Flush(self, loops=50, wait=False):
     while loops != 0 and len(self.write_blocked) > 0 and self.Send([],

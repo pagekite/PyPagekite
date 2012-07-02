@@ -561,6 +561,8 @@ class TunnelManager(threading.Thread):
 
   def PingTunnels(self, now):
     dead = {}
+    # FIXME: Allow mobile devices to request less frequent pings to extend
+    #        battery life.  Look for "Mobile" feature.
     for tid in self.conns.tunnels:
       for tunnel in self.conns.tunnels[tid]:
         grace = max(40, len(tunnel.write_blocked)/(tunnel.write_speed or 0.001))
