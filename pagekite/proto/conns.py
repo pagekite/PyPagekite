@@ -845,10 +845,13 @@ class LoopbackTunnel(Tunnel):
     if other and other.other_end: other.Cleanup()
 
   def Linkup(self, other):
+    """Links two LoopbackTunnels together."""
     self.other_end = other
     other.other_end = self
+    return other
 
   def _Loop(conns, backends):
+    """Creates a loop, returning the back-end tunnel object."""
     return LoopbackTunnel(conns, 'FE', backends
                           ).Linkup(LoopbackTunnel(conns, 'BE', backends))
 

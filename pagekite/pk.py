@@ -2470,7 +2470,8 @@ class PageKite(object):
     for server in self.servers:
       if server not in live_servers:
         if server == LOOPBACK_FE:
-          LoopbackTunnel.Loop(conns, self.backends)
+          loop = LoopbackTunnel.Loop(conns, self.backends)
+          loop.filters.append(HttpHeaderFilter())
         else:
           self.ui.Status('connect', color=self.ui.YELLOW,
                          message='Front-end connect: %s' % server)
