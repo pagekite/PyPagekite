@@ -80,12 +80,16 @@ class TunnelWatcher(TunnelFilter):
       if output.count('\\') > 0.15*len(output):
         if level > 2:
           output = [['', '']]
+          count = 0
           for d in data:
-            output[-1][0] += '%2.2x ' % ord(d)
-            output[-1][1] += '%c' % ((ord(d) > 32 and ord(d) < 128) and d or '.')
-            if len(output[-1][0]) > 56:
+            output[-1][0] += '%2.2x' % ord(d)
+            output[-1][1] += '%c' % ((ord(d) > 31 and ord(d) < 127) and d or '.')
+            count += 1
+            if (count % 4) == 0:
+              output[-1][0] += ' '
+            if (count % 24) == 0:
               output.append(['', ''])
-          return ['%-57s %s' % (l[0], l[1]) for l in output]
+          return ['%-54s%s' % (l[0], l[1]) for l in output]
         else:
           return ['<< Binary bytes: %d >>' % len(data)]
       else:
