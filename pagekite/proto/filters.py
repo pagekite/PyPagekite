@@ -139,6 +139,7 @@ class HttpHeaderFilter(TunnelFilter):
           clean_headers.append(r'(?mi)^(Host:)')
 
         if http_hdr.group(1).upper() in ('POST', 'PUT'):
+          # FIXME: This is a bit ugly
           add_headers.append('Connection: close')
           clean_headers.append(r'(?mi)^(Connection|Keep-Alive):')
           info['rawheaders'] = True
