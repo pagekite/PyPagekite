@@ -46,6 +46,7 @@ class Tunnel(ChunkParser):
   S_RAW_PORTS = 2
   S_PROTOS = 3
   S_ADD_KITES = 4
+  S_IS_MOBILE = 5
 
   def __init__(self, conns):
     ChunkParser.__init__(self, ui=conns.config.ui)
@@ -55,7 +56,7 @@ class Tunnel(ChunkParser):
     # read here.
     self.maxread *= 2
 
-    self.server_info = ['x.x.x.x:x', [], [], [], False]
+    self.server_info = ['x.x.x.x:x', [], [], [], False, False]
     self.conns = conns
     self.users = {}
     self.remote_ssl = {}
@@ -90,6 +91,8 @@ class Tunnel(ChunkParser):
               self.EnableZChunks(level=1)
             elif feature == 'AddKites':
               self.server_info[self.S_ADD_KITES] = True
+            elif feature == 'Mobile':
+              self.server_info[self.S_IS_MOBILE] = True
 
         # Track which versions we see in the wild.
         version = 'old'
@@ -334,8 +337,10 @@ class Tunnel(ChunkParser):
       for feature in parse.Header('X-PageKite-Features'):
         if feature == 'ZChunks':
           self.EnableZChunks(level=9)
-        if feature == 'AddKites':
+        elif feature == 'AddKites':
           self.server_info[self.S_ADD_KITES] = True
+        elif feature == 'Mobile':
+          self.server_info[self.S_IS_MOBILE] = True
 
   def HandlePageKiteResponse(self, parse):
     config = self.conns.config
