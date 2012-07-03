@@ -1337,9 +1337,18 @@ class PageKite(object):
     sys.exit(0)
 
   def AddNewKite(self, kitespec, status=BE_STATUS_UNKNOWN, secret=None):
-    specs = self.ArgToBackendSpecs(kitespec, status, secret)
-    self.backends.update(specs)
-    # FIXME: Tunnels need to be updated!
+    new_specs = self.ArgToBackendSpecs(kitespec, status, secret)
+    self.backends.update(new_specs)
+    req = {}
+    for server in self.conns.TunnelServers():
+      req[server] = '\r\n'.join(PageKiteRequestHeaders(server, new_specs, {}))
+    for tid, tunnels in self.conns.tunnels.iteritems():
+      for tunnel in tunnels:
+        server_name = tunnel.server_info[tunnel.S_NAME]
+        if server_name in req:
+          tunnel.SendChunked('NOOP: 1\r\n%s\r\n\r\n!' % req[server_name],
+                             compress=False)
+          del req[server_name]
 
   def ArgToBackendSpecs(self, arg, status=BE_STATUS_UNKNOWN, secret=None):
     protos, fe_domain, be_host, be_port = '', '', '', ''
@@ -2539,7 +2548,9 @@ class PageKite(object):
             self.SetBackendStatus(update.split(':')[0],
                                   add=BE_STATUS_ERR_DNS)
             failures += 1
-      if not self.last_updates:
+      if self.last_updates:
+        self.last_updates.extend(last_updates)
+      else:
         self.last_updates = last_updates
 
     return failures

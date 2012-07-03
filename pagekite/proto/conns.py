@@ -740,6 +740,14 @@ class Tunnel(ChunkParser):
                               lambda r, l: self.ChunkAuthCallback(r, l))
 
     # Look for responses to requests for new tunnels
+    tryagain, tokens = self.CheckForTokens(parse)
+    if tryagain:
+      server = self.server_info[self.S_NAME]
+      backends = { }
+      for bid in tokens:
+        backends[bid] = self.conns.config.backends[bid]
+      request = '\r\n'.join(PageKiteRequestHeaders(server, backends, tokens))
+      self.SendChunked('NOOP: 1\r\n%s\r\n\r\n!' % request, compress=False)
     self.HandlePageKiteResponse(parse)
 
   def ProcessChunk(self, data):
