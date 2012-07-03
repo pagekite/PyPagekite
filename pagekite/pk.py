@@ -2467,6 +2467,7 @@ class PageKite(object):
                          message='Front-end connect: %s' % server)
           tun = Tunnel.BackEnd(server, self.backends, self.require_all, conns)
           if tun:
+            tun.filters.append(HttpHeaderFilter())
             if self.watch_level[0] is not None:
               tun.filters.append(TunnelWatcher(self.watch_level, self.ui))
             logging.Log([('connect', server)])

@@ -80,7 +80,11 @@ server.
      Require a username and password (HTTP Basic Authentication)
 
    * <b>+rewritehost</b>  
-     Rewrite the incoming Host: header
+     Rewrite the incoming Host: header.
+   * <b>+rewritehost</b>=`N`  
+     Replace Host: header value with N.
+   * <b>+rawheaders</b>  
+     Do not rewrite (or add) any HTTP headers at all.
 
 ### Built-in HTTPD flags ###
 
@@ -131,6 +135,9 @@ time the program defaults will Just Work.
      Disable the following kites, save config.
    * <b>--only</b>  
      Disable all but the following kites, save config.
+
+   * <b>--nullui</b>  
+     Silent UI for scripting. Assumes Yes on all questions.
 
    * <b>--local</b>=`ports`  
      Configure for local serving only (no remote front-end).

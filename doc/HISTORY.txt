@@ -13,9 +13,11 @@ v0.4.7   ???
    - Allow white-space in the config file and make it more readable
    - Added: --watch=<LEVEL> for watching tunneled traffic (back-end only)
    - Deprecated: --reloadfile, --delete_backend
-   - Refactored and rewrote built-in manual and man page
-   - Added support for Flash socket-policy responses (open policy).
+   - Refactored and rewrote built-in manual and man page.
+   - Added support for Flash socket-policy responses (open policy)
    - Support kites over IPv6.
+   - Improved HTTP header filtering, now always inserts X-Forwarded-For,
+     added X-Forwarded-Proto and +rawheaders flag for disabling.
 
 
 v0.4.6   2012.01.15

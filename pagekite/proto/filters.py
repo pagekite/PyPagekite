@@ -22,6 +22,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+import re
 import time
 from pagekite.compat import *
 
@@ -42,7 +43,9 @@ class TunnelFilter:
 
   def filter_set_sid(self, sid, info):
     now = time.time()
-    self.sid[sid] = info
+    if sid not in self.sid:
+      self.sid[sid] = {}
+    self.sid[sid].update(info)
     self.sid[sid]['_ts'] = now
     self.clean_idle_sids(now=now)
 
@@ -87,4 +90,44 @@ class TunnelWatcher(TunnelFilter):
       for line in self.format_data(data):
         self.ui.Notify(line, prefix=' =>', now=-1, color=self.ui.BLUE)
     return TunnelFilter.filter_data_out(self, tunnel, sid, data)
+
+
+class HttpHeaderFilter(TunnelFilter):
+  """Filter that adds X-Forwarded-For and X-Forwarded-Proto to requests."""
+
+  HTTP_HEADER = re.compile('(?ism)^(([A-Z]+) ([^\n]+) HTTP/\d+\.\d+\s*)$')
+
+  def filter_data_in(self, tunnel, sid, data):
+    info = self.sid.get(sid)
+    if (info and
+        info.get('proto') in ('http', 'http2', 'http3', 'websocket') and
+        not info.get('rawheaders', False)):
+
+      http_hdr = self.HTTP_HEADER.search(data)
+      if http_hdr:
+        clean_headers = [
+          r'(?mi)^(X-(PageKite|Forwarded)-(For|Proto|Port):)'
+        ]
+        add_headers = [
+          'X-Forwarded-For: %s' % info.get('remote_ip', 'unknown'),
+          'X-Forwarded-Proto: %s' % (info.get('using_tls') and 'https' or 'http'),
+          'X-PageKite-Port: %s' % info.get('port', 0)
+        ]
+
+        if info.get('rewritehost', False):
+          add_headers.append('Host: %s' % info.get('rewritehost'))
+          clean_headers.append(r'(?mi)^(Host:)')
+
+        if http_hdr.group(1).upper() in ('POST', 'PUT'):
+          add_headers.append('Connection: close')
+          clean_headers.append(r'(?mi)^(Connection|Keep-Alive):')
+          info['rawheaders'] = True
+
+        for hdr_re in clean_headers:
+          data = re.sub(hdr_re, 'X-Old-\\1', data)
+        data = re.sub(self.HTTP_HEADER,
+                      '\\1\n%s\r' % '\r\n'.join(add_headers),
+                      data)
+
+    return TunnelFilter.filter_data_in(self, tunnel, sid, data)
 

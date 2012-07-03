@@ -80,12 +80,14 @@ MAN_FLAGS_HTTP = ("""\
     +password</b>/<a>name</a>=<a>pass</a>
             Require a username and password (HTTP Basic Authentication)
 
-    +rewritehost</b>   __Rewrite the incoming Host: header
+    +rewritehost</b>    __Rewrite the incoming Host: header.
+    +rewritehost</b>=<a>N</a>  __Replace Host: header value with N.
+    +rawheaders</b>     __Do not rewrite (or add) any HTTP headers at all.
 """)
 MAN_FLAGS_BUILTIN = ("""\
-    +indexes       __Enable directory indexes.
-    +indexes</b>=<a>all</a>   __Enable directory indexes including hidden (dot-) files.
-    +hide          __Obfuscate URLs of shared files.
+    +indexes        __Enable directory indexes.
+    +indexes</b>=<a>all</a>    __Enable directory indexes including hidden (dot-) files.
+    +hide           __Obfuscate URLs of shared files.
 
     +cgi</b>=<a>list</a>
             A list of extensions, for which files should be treated as
@@ -115,6 +117,8 @@ MAN_OPT_BACKEND = ("""\
     --remove        __Remove the following kites, save config.
     --disable       __Disable the following kites, save config.
     --only          __Disable all but the following kites, save config.
+
+    --nullui        __Silent UI for scripting. Assumes Yes on all questions.
 
     --local</b>=<a>ports</a>   __Configure for local serving only (no remote front-end).
     --watch</b>=<a>N</a>       __Display proxied data (higher N = more verbosity).

@@ -631,13 +631,14 @@ class Tunnel(ChunkParser):
 
     return None
 
-  def FilterData(self, data, sid, info=None):
+  def FilterIncoming(self, sid, data=None, info=None):
     """Pass incoming data through filters, if we have any."""
     for f in self.filters:
       try:
         if sid and info:
           f.filter_set_sid(sid, info)
-        data = f.filter_data_in(self, sid, data)
+        if data is not None:
+          data = f.filter_data_in(self, sid, data)
       except:
         logging.LogError(('Ignoring error in filter_in %s: %s'
                           ) % (f, traceback.format_exc()))
@@ -662,17 +663,29 @@ class Tunnel(ChunkParser):
     return self.SendChunked('SID: %s\r\n\r\n%s' % (sid, reply))
 
   def ConnectBE(self, sid, proto, port, host, rIp, rPort, rTLS, data):
+    conn = UserConn.BackEnd(proto, host, sid, self, port,
+                            remote_ip=rIp, remote_port=rPort, data=data)
+
     if self.filters:
-      data = self.FilterData(data, sid, info={
+      if conn:
+        rewritehost = conn.config.get('rewritehost')
+        if rewritehost is True:
+          rewritehost = conn.backend[BE_BHOST]
+      else:
+        rewritehost = False
+
+      data = self.FilterIncoming(sid, data,  info={
         'proto': proto,
         'port': port,
         'host': host,
         'remote_ip': rIp,
-        'remote_port': rPort
+        'remote_port': rPort,
+        'using_tls': rTLS,
+        'be_host': conn and conn.backend[BE_BHOST],
+        'be_port': conn and conn.backend[BE_BPORT],
+        'rawheaders': conn and conn.config.get('rawheaders', False),
+        'rewritehost': rewritehost
       })
-
-    conn = UserConn.BackEnd(proto, host, sid, self, port,
-                            remote_ip=rIp, remote_port=rPort, data=data)
 
     if proto in ('http', 'http2', 'http3', 'websocket'):
       if not conn:
@@ -686,26 +699,7 @@ class Tunnel(ChunkParser):
                                 ))):
           return False, False
 
-      elif rIp:
-        # FIXME: Checking for port == 443 is wrong!
-        rTLS = rTLS or (int(port) == 443)
-        add_headers = ('\nX-Forwarded-For: %s\r\n'
-                       'X-PageKite-Port: %s\r\n'
-                       'X-PageKite-Proto: %s\r\n'
-                       ) % (rIp, port, (rTLS and 'https' or 'http'))
-        rewritehost = conn.config.get('rewritehost', False)
-        if rewritehost:
-          if rewritehost is True:
-            rewritehost = conn.backend[BE_BHOST]
-          for hdr in ('host', 'connection', 'keep-alive'):
-            data = re.sub(r'(?mi)^'+hdr, 'X-Old-'+hdr, data)
-          add_headers += ('Connection: close\r\n'
-                          'Host: %s\r\n') % rewritehost
-        req, rest = re.sub(r'(?mi)^x-forwarded-for',
-                           'X-Old-Forwarded-For', data).split('\n', 1)
-        data = ''.join([req, add_headers, rest])
-
-    elif proto == 'httpfinger':
+    elif conn and proto == 'httpfinger':
       # Rewrite a finger request to HTTP.
       try:
         firstline, rest = data.split('\n', 1)
@@ -781,7 +775,7 @@ class Tunnel(ChunkParser):
       # Either from pre-existing connections...
       conn = self.users[sid]
       if self.filters:
-        data = self.FilterData(data, sid)
+        data = self.FilterIncoming(sid, data)
     else:
       # ... or we connect to a back-end.
       proto, port, host, rIp, rPort, rTLS = self.GetChunkDestination(parse)
