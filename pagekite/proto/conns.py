@@ -157,12 +157,18 @@ class Tunnel(ChunkParser):
       elif r[0] == 'X-PageKite-SessionID':
         self.alt_id = r[1]
 
+    log_info = [('proto', proto), ('domain', domain)]
+    if self.server_info[self.S_IS_MOBILE]:
+      log_info.append(('mobile', 'True'))
+    if self.server_info[self.S_ADD_KITES]:
+      log_info.append(('add_kites', 'True'))
+
     if bad:
       for backend in bad:
         if backend in self.backends:
           del self.backends[backend]
       proto, domain, srand = backend.split(':')
-      self.Log([('BE', 'Dead'), ('proto', proto), ('domain', domain)])
+      self.Log([('BE', 'Dead')] + log_info)
       self.conns.CloseTunnel(proto, domain, self)
 
     if add_tunnels:
@@ -170,7 +176,7 @@ class Tunnel(ChunkParser):
         if backend not in self.backends:
           self.backends[backend] = 1
         proto, domain, srand = backend.split(':')
-        self.Log([('BE', 'Live'), ('proto', proto), ('domain', domain)])
+        self.Log([('BE', 'Live')] + log_info)
         self.conns.Tunnel(proto, domain, self)
       if not ok:
         if self.server_info[self.S_ADD_KITES]:
