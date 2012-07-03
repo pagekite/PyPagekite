@@ -66,10 +66,30 @@ class TunnelWatcher(TunnelFilter):
     self.watch_level = watch_level
     self.ui = ui
 
-  def format_data(self, data):
-    return [x.encode('string_escape') for x
-            in re.sub('([^\r\n\x20-\x7e]{3,}..|[^\r\n\x20-\x7e]{2,}.)+',
-                      ' .. ', data).splitlines(True)]
+  def format_data(self, data, level):
+    if '\r\n\r\n' in data:
+      head, tail = data.split('\r\n\r\n', 1)
+      output = self.format_data(head, level)
+      output[-1] += '\\r\\n'
+      output.append('\\r\\n')
+      if tail:
+        output.extend(self.format_data(tail, level))
+      return output
+    else:
+      output = data.encode('string_escape').replace('\\n', '\\n\n')
+      if output.count('\\') > 0.15*len(output):
+        if level > 2:
+          output = [['', '']]
+          for d in data:
+            output[-1][0] += '%2.2x ' % ord(d)
+            output[-1][1] += '%c' % ((ord(d) > 32 and ord(d) < 128) and d or '.')
+            if len(output[-1][0]) > 56:
+              output.append(['', ''])
+          return ['%-57s %s' % (l[0], l[1]) for l in output]
+        else:
+          return ['<< Binary bytes: %d >>' % len(data)]
+      else:
+        return output.strip().splitlines()
 
   def now(self):
     return ts_to_iso(int(10*time.time())/10.0
@@ -79,7 +99,7 @@ class TunnelWatcher(TunnelFilter):
     if data and self.watch_level[0] > 0:
       self.ui.Notify('===[ INCOMING @ %s ]===' % self.now(),
                      color=self.ui.WHITE, prefix=' __')
-      for line in self.format_data(data):
+      for line in self.format_data(data, self.watch_level[0]):
         self.ui.Notify(line, prefix=' <=', now=-1, color=self.ui.GREEN)
     return TunnelFilter.filter_data_in(self, tunnel, sid, data)
 
@@ -87,7 +107,7 @@ class TunnelWatcher(TunnelFilter):
     if data and self.watch_level[0] > 1:
       self.ui.Notify('===[ OUTGOING @ %s ]===' % self.now(),
                      color=self.ui.WHITE, prefix=' __')
-      for line in self.format_data(data):
+      for line in self.format_data(data, self.watch_level[0]):
         self.ui.Notify(line, prefix=' =>', now=-1, color=self.ui.BLUE)
     return TunnelFilter.filter_data_out(self, tunnel, sid, data)
 
