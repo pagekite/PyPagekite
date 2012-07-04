@@ -188,9 +188,10 @@ class Tunnel(ChunkParser):
     return True
 
   def QuotaCallback(self, conns, results, log_info):
-    # Report new values to the back-end...
+    # Report new values to the back-end... unless they are mobile.
     if self.quota and (self.quota[0] >= 0):
-      self.SendQuota()
+      if not self.server_info[self.S_IS_MOBILE]:
+        self.SendQuota()
 
     self.ProcessAuthResults(results, duplicates_ok=True, add_tunnels=False)
     for r in results:
@@ -555,7 +556,11 @@ class Tunnel(ChunkParser):
     return self.SendChunked('NOOP: 1\r\nPING: 1\r\n\r\n!', compress=False)
 
   def SendPong(self):
-    return self.SendChunked('NOOP: 1\r\n\r\n!', compress=False)
+    if self.quota:
+      # May as well send something useful!
+      return self.SendQuota()
+    else:
+      return self.SendChunked('NOOP: 1\r\n\r\n!', compress=False)
 
   def SendQuota(self):
     if self.q_days is not None:
