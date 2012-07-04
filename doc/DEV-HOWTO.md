@@ -2,14 +2,14 @@
 
 ### Getting started ###
 
-   $ git clone https://github.com/pagekite/PyPagekite.git
-   $ git clone https://github.com/pagekite/PyBreeder.git
-   $ git clone https://github.com/pagekite/PySocksipyChain.git
+    $ git clone https://github.com/pagekite/PyPagekite.git
+    $ git clone https://github.com/pagekite/PyBreeder.git
+    $ git clone https://github.com/pagekite/PySocksipyChain.git
 
-   $ cd PyPagekite
-   $ $(make dev)    # sets up the environment
-   $ ./pk           # run the local code
-   $ make           # run tests, build distributable "binary"
+    $ cd PyPagekite
+    $ $(make dev)    # sets up the environment
+    $ ./pk           # run the local code
+    $ make           # run tests, build distributable "binary"
 
 ### Exploring the code ###
 
