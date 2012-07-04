@@ -234,11 +234,13 @@ class BasicUi(NullUi):
   def Tell(self, lines, error=False, back=None):
     if self.in_wizard:
       self.wizard_tell = lines
+      self.Welcome()
+      self.wizard_tell = lines
     else:
       self.Welcome()
       for line in lines: self.wfile.write('    %s\n' % line)
       if error: self.wfile.write('\n')
-      return True
+    return True
 
   def Working(self, message):
     self.Tell([message])

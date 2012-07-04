@@ -34,8 +34,9 @@ MAGIC_PATHS = (MAGIC_PATH, '/Beanstalk~Magic~Beans/0.2')
 
 SERVICE_PROVIDER = 'PageKite.net'
 SERVICE_DOMAINS = ('pagekite.me', '302.is', 'testing.is', 'kazz.am')
+SERVICE_DOMAINS_SIGNUP = ('pagekite.me',)
 SERVICE_XMLRPC = 'http://pagekite.net/xmlrpc/'
-SERVICE_TOS_URL = 'https://pagekite.net/support/terms/'
+SERVICE_TOS_URL = 'https://pagekite.net/humans.txt'
 SERVICE_CERTS = ['b5p.us', 'frontends.b5p.us', 'pagekite.net', 'pagekite.me',
                  'pagekite.com', 'pagekite.org', 'testing.is', '302.is']
 

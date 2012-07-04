@@ -2142,9 +2142,9 @@ class PageKite(object):
               'service_ask_kitename' in state):
           try:
             self.ui.Working('Fetching list of available domains')
-            domains = service.getAvailableDomains(None, None)
+            domains = service.getAvailableDomains('', '')
           except:
-            domains = ['.%s' % x for x in SERVICE_DOMAINS]
+            domains = ['.%s' % x for x in SERVICE_DOMAINS_SIGNUP]
 
           ch = self.ui.AskKiteName(domains, 'Name this kite:',
                                  pre=['Your kite name becomes the public name',
