@@ -85,11 +85,11 @@ class TunnelWatcher(TunnelFilter):
             output[-1][0] += '%2.2x' % ord(d)
             output[-1][1] += '%c' % ((ord(d) > 31 and ord(d) < 127) and d or '.')
             count += 1
-            if (count % 4) == 0:
+            if (count % 2) == 0:
               output[-1][0] += ' '
-            if (count % 24) == 0:
+            if (count % 20) == 0:
               output.append(['', ''])
-          return ['%-54s%s' % (l[0], l[1]) for l in output]
+          return ['%-50s %s' % (l[0], l[1]) for l in output]
         else:
           return ['<< Binary bytes: %d >>' % len(data)]
       else:
