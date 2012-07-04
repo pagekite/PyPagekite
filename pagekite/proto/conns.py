@@ -556,8 +556,9 @@ class Tunnel(ChunkParser):
     return self.SendChunked('NOOP: 1\r\nPING: 1\r\n\r\n!', compress=False)
 
   def SendPong(self):
-    if self.quota and self.quota[0] is not None:
-      # May as well send something useful!
+    if (self.conns.config.isfrontend and
+        self.quota and (self.quota[0] >= 0)):
+      # May as well make ourselves useful!
       return self.SendQuota()
     else:
       return self.SendChunked('NOOP: 1\r\n\r\n!', compress=False)
