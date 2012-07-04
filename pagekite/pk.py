@@ -641,7 +641,8 @@ class TunnelManager(threading.Thread):
         if be[BE_PROTO] in ('http', 'http2', 'http3') and tunnels:
           has_ssl = True
           for t in tunnels:
-            if (protoport, domain) not in t.remote_ssl: has_ssl = False
+            if (protoport, domain) not in t.remote_ssl:
+              has_ssl = False
         else:
           has_ssl = False
 
@@ -1169,14 +1170,15 @@ class PageKite(object):
       sys.exit(1)
 
   def GetTlsEndpointCtx(self, domain):
-    if domain in self.tls_endpoints: return self.tls_endpoints[domain][1]
+    if domain in self.tls_endpoints:
+      return self.tls_endpoints[domain][1]
     parts = domain.split('.')
     # Check for wildcards ...
-    while len(parts) > 2:
+    if len(parts) > 2:
       parts[0] = '*'
       domain = '.'.join(parts)
-      if domain in self.tls_endpoints: return self.tls_endpoints[domain][1]
-      parts.pop(0)
+      if domain in self.tls_endpoints:
+        return self.tls_endpoints[domain][1]
     return None
 
   def SetBackendStatus(self, domain, proto='', add=None, sub=None):

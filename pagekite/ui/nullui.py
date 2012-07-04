@@ -171,6 +171,8 @@ class NullUi(object):
     domain, port, proto = be[BE_DOMAIN], be[BE_PORT], be[BE_PROTO]
     prox = (proto == 'raw') and ' (HTTP proxied)' or ''
     if proto == 'raw' and port in ('22', 22): proto = 'ssh'
+    if has_ssl and proto == 'http':
+      proto = 'https'
     url = '%s://%s%s' % (proto, domain, port and (':%s' % port) or '')
 
     if be[BE_STATUS] == BE_STATUS_UNKNOWN: return
