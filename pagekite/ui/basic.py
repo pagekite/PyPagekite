@@ -26,6 +26,7 @@ import sys
 import time
 
 from nullui import NullUi
+from pagekite.common import *
 
 
 HTML_BR_RE = re.compile(r'<(br|/p|/li|/tr|/h\d)>\s*')
@@ -201,13 +202,13 @@ class BasicUi(NullUi):
         return back
       elif len(domains) == 1:
         answer = answer.replace(domains[0], '')
-        if answer and pk.SERVICE_SUBDOMAIN_RE.match(answer):
+        if answer and SERVICE_SUBDOMAIN_RE.match(answer):
           return answer+domains[0]
       else:
         for domain in domains:
           if answer.endswith(domain):
             answer = answer.replace(domain, '')
-            if answer and pk.SERVICE_SUBDOMAIN_RE.match(answer):
+            if answer and SERVICE_SUBDOMAIN_RE.match(answer):
               return answer+domain
       self.wfile.write('    (Please only use characters A-Z, 0-9, - and _.)')
     raise Exception('Too many tries')
@@ -234,8 +235,6 @@ class BasicUi(NullUi):
   def Tell(self, lines, error=False, back=None):
     if self.in_wizard:
       self.wizard_tell = lines
-      self.Welcome()
-      self.wizard_tell = lines
     else:
       self.Welcome()
       for line in lines: self.wfile.write('    %s\n' % line)
@@ -243,4 +242,11 @@ class BasicUi(NullUi):
     return True
 
   def Working(self, message):
-    self.Tell([message])
+    if self.in_wizard:
+      pending_messages = self.wizard_tell or []
+      self.wizard_tell = pending_messages + [message+' ...']
+      self.Welcome()
+      self.wizard_tell = pending_messages + [message+' ... done.']
+    else:
+      self.Tell([message])
+    return True

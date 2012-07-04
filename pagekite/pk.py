@@ -2225,16 +2225,14 @@ class PageKite(object):
             error = '%s' % (sys.exc_info(), )
 
           if error == 'pleaselogin':
-            #self.ui.ExplainError(error,
-            #                     '%s log-in required.' % self.service_provider,
-            #                     subject=register)
+            self.ui.ExplainError(error, 'Signup failed!', subject=email)
             Goto('service_login_email', back_skips_current=True)
           elif error == 'email':
             self.ui.ExplainError(error, 'Signup failed!', subject=register)
             Goto('service_login_email', back_skips_current=True)
           elif error in ('domain', 'domaintaken', 'subdomain'):
-            register, kitename = None, None
             self.ui.ExplainError(error, 'Invalid domain!', subject=register)
+            register, kitename = None, None
             Goto('service_signup_kitename', back_skips_current=True)
           elif error == 'network':
             self.ui.ExplainError(error, 'Network error!', subject=self.service_provider)
@@ -2384,7 +2382,6 @@ class PageKite(object):
       rv = [i[4][0] for i in info]
     except AttributeError:
       rv = socket.gethostbyname_ex(host)[2]
-    print 'GetHostIpAddrs(%s): %s' % (host, rv)
     return rv
 
   def GetActiveBackends(self):
@@ -2919,7 +2916,8 @@ def Configure(pk):
     sys.exit(0)
 
   if '--clean' not in sys.argv and '--help' not in sys.argv:
-    if os.path.exists(pk.rcfile): pk.ConfigureFromFile()
+    if os.path.exists(pk.rcfile):
+      pk.ConfigureFromFile()
 
   pk.Configure(sys.argv[1:])
 
@@ -2933,7 +2931,8 @@ def Configure(pk):
                                        'darwin', 'darwin1', 'darwin2')))
     if '--signup' in sys.argv or friendly_mode:
       pk.RegisterNewKite(autoconfigure=True, first=True)
-    if friendly_mode: pk.save = True
+    if friendly_mode:
+      pk.save = True
 
   pk.CheckConfig()
 

@@ -30,7 +30,8 @@ if __name__ == "__main__":
     import pagekite.ui.basic
     uiclass = pagekite.ui.basic.BasicUi
   else:
-    uiclass = pk.NullUi
+    import pagekite.ui.nullui
+    uiclass = pagekite.ui.nullui.NullUi
 
   pk.Main(pk.PageKite, pk.Configure,
           uiclass=uiclass,
