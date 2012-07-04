@@ -609,11 +609,11 @@ class TunnelManager(threading.Thread):
     while self.keep_running:
 
       # Reconnect if necessary, randomized exponential fallback.
-      problem = False
-      if self.pkite.CreateTunnels(self.conns) > 0:
+      problem, connecting = self.pkite.CreateTunnels(self.conns)
+      if problem:
         self.check_interval += int(1+random.random()*self.check_interval)
-        if self.check_interval > 300: self.check_interval = 300
-        problem = True
+        if self.check_interval > 300:
+          self.check_interval = 300
         time.sleep(1)
       else:
         self.check_interval = 5
@@ -672,7 +672,7 @@ class TunnelManager(threading.Thread):
         elif tunnel_total == 0:
           self.pkite.ui.Status('down', color=self.pkite.ui.GREY,
                        message='No kites ready to fly.  Boring...')
-        else:
+        elif connecting == 0:
           self.pkite.ui.Status('down', color=self.pkite.ui.RED,
                        message='Not connected to any front-ends, will retry...')
       elif tunnel_count < tunnel_total:
@@ -2554,7 +2554,7 @@ class PageKite(object):
       else:
         self.last_updates = last_updates
 
-    return failures
+    return failures, connections
 
   def LogTo(self, filename, close_all=True, dont_close=[]):
     if filename == 'memory':
