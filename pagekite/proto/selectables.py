@@ -186,11 +186,13 @@ class Selectable(object):
     self.fd = fd
     self.fd.setblocking(0)
     try:
-      if six: self.fd.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
-      self.fd.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-      self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPIDLE, 60)
-      self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPCNT, 10)
-      self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPINTVL, 1)
+      if six:
+        self.fd.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+      # This hurts mobile devices, let's try living without it
+      #self.fd.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+      #self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPIDLE, 60)
+      #self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPCNT, 10)
+      #self.fd.setsockopt(socket.SOL_TCP, socket.TCP_KEEPINTVL, 1)
     except:
       pass
 
