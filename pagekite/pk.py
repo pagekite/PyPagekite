@@ -2604,12 +2604,12 @@ class PageKite(object):
 
   def ProcessReadable(self, iready, throttle):
     if logging.DEBUG_IO:
-      print '\n=== Ready for Read: %s' % [i and i.fileno() or ''
+      print '\n=== Ready for Read: %s' % [i and i.fileno() or None
                                           for i in iready]
     for isock in iready:
-      if isock:
+      if isock is not None:
         conn = self.conns.Connection(isock)
-        if conn and not conn.ReadData(maxread=throttle):
+        if conn and not (conn.fd and conn.ReadData(maxread=throttle)):
           self.conns.Remove(conn)
           conn.Cleanup()
 
@@ -2661,16 +2661,19 @@ class PageKite(object):
             mask = 0
             if c.IsBlocked():     mask |= select.EPOLLOUT
             if c.IsReadable(now): mask |= select.EPOLLIN
-            if mask:
-              try:
-                epoll.modify(c.fd, mask)
-              except IOError:
-                epoll.register(c.fd, mask)
-            else:
-              epoll.unregister(c.fd)
+            try:
+              if mask:
+                try:
+                  epoll.modify(c.fd, mask)
+                except IOError:
+                  epoll.register(c.fd, mask)
+              else:
+                epoll.unregister(c.fd)
+            except (IOError, TypeError):
+              logging.LogError('Epoll mod/reg/del: %s(%s), mask=0x%x'
+                               '' % (c, c.fd, mask))
         except IOError:
-          if logging.DEBUG_IO:
-            print '*** EPoll: %s' % traceback.format_exc()
+          logging.LogError('Epoll: %s' % traceback.format_exc())
 
       evs = epoll.poll(waittime)
     except IOError:
