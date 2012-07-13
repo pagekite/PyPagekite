@@ -2664,20 +2664,19 @@ class PageKite(object):
             mask = 0
             if c.IsBlocked():     mask |= select.EPOLLOUT
             if c.IsReadable(now): mask |= select.EPOLLIN
-            try:
-              if mask:
+            if mask:
+              try:
                 try:
                   epoll.modify(c.fd, mask)
                 except IOError:
                   epoll.register(c.fd, mask)
-              else:
-                epoll.unregister(c.fd)
-            except (IOError, TypeError):
-              evs.append((c.fd, select.EPOLLHUP))
-              logging.LogError('Epoll mod/reg/del: %s(%s), mask=0x%x'
-                               '' % (c, c.fd, mask))
+              except (IOError, TypeError):
+                evs.append((c.fd, select.EPOLLHUP))
+                logging.LogError('Epoll mod/reg: %s(%s), mask=0x%x'
+                                 '' % (c, c.fd, mask))
+            else:
+              epoll.unregister(c.fd)
         except IOError:
-          evs.append((c.fd, select.EPOLLHUP))
           logging.LogError('Epoll: %s' % traceback.format_exc())
 
       evs.extend(epoll.poll(waittime))
