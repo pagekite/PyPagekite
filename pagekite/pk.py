@@ -452,7 +452,8 @@ class UiCommunicator(threading.Thread):
 
       if self.config:
         line = self.config.ui.rfile.readline().strip()
-        if line: self.Parse(line)
+        if line:
+          self.Parse(line)
 
     logging.LogDebug('UiCommunicator: done')
 
@@ -517,7 +518,7 @@ class UiCommunicator(threading.Thread):
       self.config.keep_looping = False
       self.config.main_loop = False
     except:
-      logging.LogDebug('UiComm: %s' % (sys.exc_info(), ))
+      logging.LogDebug('UiComm: failed %s' % (sys.exc_info(), ))
       self.config.ui.Tell(['Oops!', '', 'Failed to %s, details:' % command,
                            '', '%s' % (sys.exc_info(), )], error=True)
 
@@ -1146,6 +1147,7 @@ class PageKite(object):
         self.ui.Spacer()
       logging.Log([('saved', 'Settings saved to: %s' % self.savefile)])
     except Exception, e:
+      if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
       self.ui.Tell(['Could not save to %s: %s' % (self.savefile, e)],
                    error=True)
       self.ui.Spacer()
@@ -2858,8 +2860,8 @@ class PageKite(object):
 def Main(pagekite, configure, uiclass=NullUi,
                               progname=None, appver=APPVER,
                               http_handler=None, http_server=None):
+  logging.ResetLog()
   crashes = 1
-
   ui = uiclass()
 
   while True:

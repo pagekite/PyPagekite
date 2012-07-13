@@ -120,7 +120,7 @@ class NullUi(object):
       logging.LogError(' '.join(lines))
       raise ConfigError(' '.join(lines))
     else:
-      logging.Log(['message', ' '.join(lines)])
+      logging.Log([('message', ' '.join(lines))])
       return True
 
   def Notify(self, message, prefix=' ',

@@ -26,6 +26,7 @@ import time
 
 from pagekite.compat import *
 from pagekite.common import *
+from pagekite.proto.conns import Tunnel
 
 from nullui import NullUi
 
@@ -53,9 +54,9 @@ class RemoteUi(NullUi):
     self.wfile.write('end_be_list\n')
 
   def NotifyBE(self, bid, be, has_ssl, dpaths, is_builtin=False, now=None):
-    domain = be[pagekite.BE_DOMAIN]
-    port = be[pagekite.BE_PORT]
-    proto = be[pagekite.BE_PROTO]
+    domain = be[BE_DOMAIN]
+    port = be[BE_PORT]
+    proto = be[BE_PROTO]
     prox = (proto == 'raw') and ' (HTTP proxied)' or ''
     if proto == 'raw' and port in ('22', 22): proto = 'ssh'
     url = '%s://%s%s' % (proto, domain, port and (':%s' % port) or '')
@@ -63,8 +64,8 @@ class RemoteUi(NullUi):
     message = (' be_status:'
                ' status=%x; bid=%s; domain=%s; port=%s; proto=%s;'
                ' bhost=%s; bport=%s%s%s'
-               '\n') % (be[pagekite.BE_STATUS], bid, domain, port, proto,
-                        be[pagekite.BE_BHOST], be[pagekite.BE_BPORT],
+               '\n') % (be[BE_STATUS], bid, domain, port, proto,
+                        be[BE_BHOST], be[BE_BPORT],
                         has_ssl and '; ssl=1' or '',
                         is_builtin and '; builtin=1' or '')
     self.wfile.write(message)
@@ -198,9 +199,9 @@ class RemoteUi(NullUi):
         self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       count = 0
       if self.server_info:
-        protos = self.server_info[pagekite.Tunnel.S_PROTOS]
-        ports = self.server_info[pagekite.Tunnel.S_PORTS]
-        rawports = self.server_info[pagekite.Tunnel.S_RAW_PORTS]
+        protos = self.server_info[Tunnel.S_PROTOS]
+        ports = self.server_info[Tunnel.S_PORTS]
+        rawports = self.server_info[Tunnel.S_RAW_PORTS]
       self.wfile.write(' kitename: %s\n' % kitename)
       self.wfile.write(' protos: %s\n' % ', '.join(protos))
       self.wfile.write(' ports: %s\n' % ', '.join(ports))

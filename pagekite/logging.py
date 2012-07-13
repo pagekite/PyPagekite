@@ -98,6 +98,10 @@ def LogInfo(msg, parms=None):
   if parms: emsg.extend(parms)
   Log(emsg)
 
-LogFile = sys.stdout
-Log = LogToMemory
+def ResetLog():
+  global LogFile, Log
+  LogFile = sys.stdout
+  Log = LogToMemory
+
+ResetLog()
 
