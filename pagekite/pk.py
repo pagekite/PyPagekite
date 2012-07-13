@@ -2677,7 +2677,8 @@ class PageKite(object):
             else:
               epoll.unregister(c.fd)
         except IOError:
-          logging.LogError('Epoll: %s' % traceback.format_exc())
+          # Failing to unregister is FINE, we don't complain about that.
+          pass
 
       evs.extend(epoll.poll(waittime))
     except IOError:
