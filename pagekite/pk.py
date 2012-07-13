@@ -2653,6 +2653,7 @@ class PageKite(object):
   def Epoll(self, epoll, waittime):
     fdc = {}
     now = time.time()
+    evs = []
     try:
       for c in self.conns.conns:
         try:
@@ -2672,14 +2673,16 @@ class PageKite(object):
               else:
                 epoll.unregister(c.fd)
             except (IOError, TypeError):
+              evs.append((c.fd, select.EPOLLHUP))
               logging.LogError('Epoll mod/reg/del: %s(%s), mask=0x%x'
                                '' % (c, c.fd, mask))
         except IOError:
+          evs.append((c.fd, select.EPOLLHUP))
           logging.LogError('Epoll: %s' % traceback.format_exc())
 
-      evs = epoll.poll(waittime)
+      evs.extend(epoll.poll(waittime))
     except IOError:
-      evs = []
+      pass
     except KeyboardInterrupt:
       epoll.close()
       raise
