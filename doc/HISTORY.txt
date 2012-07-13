@@ -1,7 +1,7 @@
 Version history - highlights
 ============================
 
-v0.4.7   ???
+v0.5.0   2012.07.13
 ------
    - Prefer and use epoll() if it is available.
    - Added better probe diagnostics, using json returns and CORS headers.
