@@ -1537,7 +1537,6 @@ class Listener(Selectable):
                      connclass=UnknownConn, quiet=False):
     Selectable.__init__(self, bind=(host, port), backlog=backlog)
     self.Log([('listen', '%s:%s' % (host, port))])
-    self.CountAs('listeners_live')
     if not quiet:
       conns.config.ui.Notify(' - Listening on %s:%s' % (host or '*', port))
 
@@ -1546,6 +1545,7 @@ class Listener(Selectable):
     self.last_activity = self.created + 1
     self.conns = conns
     self.conns.Add(self)
+    self.CountAs('listeners_live')
 
   def __str__(self):
     return '%s port=%s' % (Selectable.__str__(self), self.port)
