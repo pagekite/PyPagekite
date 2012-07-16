@@ -171,6 +171,10 @@ time the program defaults will Just Work.
      name, using the given port number. Default behavior is to probe
      all addresses and use the fastest one.
 
+   * <b>--nofrontend</b>=`ip`:`port` <br />
+     Never connect to the named front-end server. This can be used to
+     exclude some front-ends from auto-configuration.
+
    * <b>--fe_certname</b>=`domain` <br />
      Connect using SSL, accepting valid certs for this domain. If
      this option is repeated, any of the named certificates will be
