@@ -142,6 +142,7 @@ class YamonD(threading.Thread):
       l.extend(list[:offset])
       data.append('%s: %s\n' % (lname, ' '.join(['%s' % x for x in l])))
 
+    data.sort()
     return ''.join(data)
 
   def quit(self):
