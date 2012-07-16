@@ -2722,7 +2722,7 @@ class PageKite(object):
       mypoll = self.Select
 
     logging.LogDebug('Entering main %s loop' % (epoll and 'epoll' or 'select'))
-    self.last_loop = time.time()
+    self.last_barf = self.last_loop = time.time()
     while self.keep_looping:
       iready, oready, eready = mypoll(epoll, 1.1)
       now = time.time()
@@ -2742,6 +2742,10 @@ class PageKite(object):
 
       self.ProcessDead(epoll)
       self.last_loop = now
+
+      if logging.DEBUG_IO and now - self.last_barf > 15:
+        logging.LogDebug('Selectable map: %s' % SELECTABLES)
+        self.last_barf = now
 
     if epoll:
       epoll.close()
@@ -2804,7 +2808,8 @@ class PageKite(object):
     except Exception, e:
       self.LogTo('stdio')
       logging.FlushLogMemory()
-      if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
+      if logging.DEBUG_IO:
+        traceback.print_exc(file=sys.stderr)
       raise ConfigError('Configuring listeners: %s ' % e)
 
     # Configure logging
