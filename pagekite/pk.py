@@ -291,7 +291,7 @@ class Connections(object):
       if ip in self.ip_tracker[tick]: domain = self.ip_tracker[tick][ip][1]
     return domain
 
-  def Remove(self, conn):
+  def Remove(self, conn, retry=True):
     try:
       if conn.alt_id and conn.alt_id in self.conns_by_id:
         del self.conns_by_id[conn.alt_id]
@@ -305,7 +305,10 @@ class Connections(object):
           if not self.tunnels[tid]: del self.tunnels[tid]
     except ValueError:
       # Let's not asplode if another thread races us for this.
-      pass
+      logging.LogError('Failed to remove %s: %s'
+                       '' % (conn, traceback.format_exc()))
+      if retry:
+        return self.Remove(conn, retry=False)
 
   def Readable(self):
     # FIXME: This is O(n)
