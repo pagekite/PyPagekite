@@ -129,7 +129,7 @@ class Selectable(object):
     self.logged = []
     self.alt_id = None
     self.countas = 'selectables_live'
-    self.sid = getSelectableId(self.countas)
+    self.sid = self.gsid = getSelectableId(self.countas)
 
     if address:
       addr = address or ('x.x.x.x', 'x')
@@ -142,20 +142,19 @@ class Selectable(object):
       common.gYamon.vadd('selectables', 1)
 
   def CountAs(self, what):
-    global SELECTABLES
-    SELECTABLES[self.sid] = what
     if common.gYamon:
       common.gYamon.vadd(self.countas, -1)
       common.gYamon.vadd(what, 1)
-    self.countas = what
+    global SELECTABLES
+    SELECTABLES[self.gsid] = self.countas = what
 
   def __del__(self):
-    global SELECTABLES
-    if self.sid in SELECTABLES:
-      del SELECTABLES[self.sid]
     if common.gYamon:
       common.gYamon.vadd(self.countas, -1)
       common.gYamon.vadd('selectables', -1)
+    global SELECTABLES
+    if self.gsid in SELECTABLES:
+      del SELECTABLES[self.gsid]
 
   def __str__(self):
     return '%s: %s' % (self.log_id, self.__class__)
