@@ -50,7 +50,7 @@ def getSelectableId(what):
     while SELECTABLE_ID in SELECTABLES:
       SELECTABLE_ID += 1
       SELECTABLE_ID %= 0x10000
-      if SELECTABLE_ID & 0x01000:
+      if (SELECTABLE_ID % 0x01000) == 0:
         logging.LogDebug('Selectable map: %s' % (SELECTABLES, ))
       count += 1
       if count > 0x10001:
