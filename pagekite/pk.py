@@ -73,7 +73,8 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'kitename=', 'kitesecret=', 'fingerpath=',
             'backend=', 'define_backend=', 'be_config=',
             'service_on=', 'service_off=', 'service_cfg=',
-            'frontend=', 'frontends=', 'torify=', 'socksify=', 'proxy=',
+            'frontend=', 'nofrontend=', 'frontends=',
+            'torify=', 'socksify=', 'proxy=',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes', 'debugio', 'watch=',
             # DEPRECATED:
@@ -760,6 +761,7 @@ class PageKite(object):
     self.no_probes = False
     self.servers = []
     self.servers_manual = []
+    self.servers_never = []
     self.servers_auto = None
     self.servers_new_only = False
     self.servers_no_ping = False
@@ -822,6 +824,7 @@ class PageKite(object):
     self.isfrontend = True
     self.servers_auto = None
     self.servers_manual = []
+    self.servers_never = []
     self.server_ports = ports
     self.backends = self.ArgToBackendSpecs('http:localhost:localhost:builtin:-')
 
@@ -883,10 +886,12 @@ class PageKite(object):
         'defaults',
         ''
       ])
-      if self.servers_manual:
+      if self.servers_manual or self.servers_never:
         config.append('##[ Manual front-ends ]##')
         for server in sorted(self.servers_manual):
           config.append('frontend=%s' % server)
+        for server in sorted(self.servers_never):
+          config.append('nofrontend=%s' % server)
         config.append('')
     else:
       if not self.servers_auto and not self.servers_manual:
@@ -902,10 +907,14 @@ class PageKite(object):
       if self.servers_manual:
         for server in sorted(self.servers_manual):
           config.append('frontend = %s' % server)
+      if self.servers_never:
+        for server in sorted(self.servers_never):
+          config.append('nofrontend = %s' % server)
       if not self.servers_auto and not self.servers_manual:
         new = True
         config.append('# frontends = N:hostname:port')
         config.append('# frontend = hostname:port')
+        config.append('# nofrontend = hostname:port  # never connect')
 
       for server in sorted(self.fe_certname):
         config.append('fe_certname = %s' % server)
@@ -1643,6 +1652,7 @@ class PageKite(object):
           self.fe_certname.sort()
       elif opt == '--service_xmlrpc': self.service_xmlrpc = arg
       elif opt == '--frontend': self.servers_manual.append(arg)
+      elif opt == '--nofrontend': self.servers_never.append(arg)
       elif opt == '--frontends':
         count, domain, port = arg.split(':')
         self.servers_auto = (int(count), domain, int(port))
@@ -2356,7 +2366,8 @@ class PageKite(object):
       self.FallDown('No tunnel for %s' % missing, help=False)
 
   def Ping(self, host, port):
-    if self.servers_no_ping: return 0
+    if self.servers_no_ping:
+      return 0
 
     start = time.time()
     try:
@@ -2417,7 +2428,7 @@ class PageKite(object):
       try:
         ipaddr = self.GetHostIpAddrs(host)[0]
         server = '%s:%s' % (ipaddr, port)
-        if server not in self.servers:
+        if (server not in self.servers) and (server not in self.servers_never):
           self.servers.append(server)
           self.servers_preferred.append(ipaddr)
       except:
@@ -2435,13 +2446,16 @@ class PageKite(object):
             for ip in self.GetHostIpAddrs(bdom):
               if not ip.startswith('127.'):
                 server = '%s:%s' % (ip, port)
-                if server not in self.servers: self.servers.append(server)
+                if ((server not in self.servers) and
+                    (server not in self.servers_never)):
+                  self.servers.append(server)
           except Exception, e:
             logging.LogDebug('DNS lookup failed for %s' % bdom)
 
       try:
         ips = self.GetHostIpAddrs(domain)
-        times = [self.Ping(ip, port) for ip in ips]
+        times = [self.Ping(ip, port) for ip in ips
+                 if '%s:%s' % (ip, port) not in self.servers_never]
       except Exception, e:
         logging.LogDebug('Unreachable: %s, %s' % (domain, e))
         ips = times = []
@@ -2450,7 +2464,8 @@ class PageKite(object):
         count -= 1
         mIdx = times.index(min(times))
         server = '%s:%s' % (ips[mIdx], port)
-        if server not in self.servers:
+        if ((server not in self.servers) and
+            (server not in self.servers_never)):
           self.servers.append(server)
         if ips[mIdx] not in self.servers_preferred:
           self.servers_preferred.append(ips[mIdx])

@@ -152,6 +152,10 @@ MAN_OPT_BACKEND = ("""\
             name, using the given port number. Default behavior is to probe
             all addresses and use the fastest one.
 
+    --nofrontend</b>=<a>ip</a>:<a>port</a> __
+            Never connect to the named front-end server. This can be used to
+            exclude some front-ends from auto-configuration.
+
     --fe_certname</b>=<a>domain</a> __
             Connect using SSL, accepting valid certs for this domain. If
             this option is repeated, any of the named certificates will be
