@@ -38,8 +38,28 @@ def obfuIp(ip):
   quads = ('%s' % ip).replace(':', '.').split('.')
   return '~%s' % '.'.join([q for q in quads[-2:]])
 
-selectable_id = 0
-SELECTABLES = None
+
+SELECTABLE_LOCK = threading.Lock()
+SELECTABLE_ID = 0
+SELECTABLES = {}
+def getSelectableId(what):
+  global SELECTABLES, SELECTABLE_ID, SELECTABLE_LOCK
+  try:
+    SELECTABLE_LOCK.acquire()
+    count = 0
+    while SELECTABLE_ID in SELECTABLES:
+      SELECTABLE_ID += 1
+      SELECTABLE_ID %= 0x10000
+      if SELECTABLE_ID & 0x01000:
+        logging.LogDebug('Selectable map: %s' % (SELECTABLES, ))
+      count += 1
+      if count > 0x10001:
+        raise ValueError('Too many conns!')
+    SELECTABLES[SELECTABLE_ID] = what
+    return SELECTABLE_ID
+  finally:
+    SELECTABLE_LOCK.release()
+
 
 class Selectable(object):
   """A wrapper around a socket, for use with select."""
@@ -107,11 +127,9 @@ class Selectable(object):
 
     # logging.Logging
     self.logged = []
-    global selectable_id
-    selectable_id += 1
-    selectable_id %= 0x10000
-    self.sid = selectable_id
     self.alt_id = None
+    self.countas = 'selectables_live'
+    self.sid = getSelectableId(self.countas)
 
     if address:
       addr = address or ('x.x.x.x', 'x')
@@ -119,23 +137,22 @@ class Selectable(object):
     else:
       self.log_id = 's%x' % self.sid
 
-    # Introspection
-    global SELECTABLES
-    if SELECTABLES is not None:
-      SELECTABLES.append(self)
-
-    self.countas = 'selectables_live'
     if common.gYamon:
       common.gYamon.vadd(self.countas, 1)
       common.gYamon.vadd('selectables', 1)
 
   def CountAs(self, what):
+    global SELECTABLES
+    SELECTABLES[self.sid] = what
     if common.gYamon:
       common.gYamon.vadd(self.countas, -1)
       common.gYamon.vadd(what, 1)
     self.countas = what
 
   def __del__(self):
+    global SELECTABLES
+    if self.sid in SELECTABLES:
+      del SELECTABLES[self.sid]
     if common.gYamon:
       common.gYamon.vadd(self.countas, -1)
       common.gYamon.vadd('selectables', -1)

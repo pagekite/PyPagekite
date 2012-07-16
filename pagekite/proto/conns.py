@@ -842,6 +842,8 @@ class LoopbackTunnel(Tunnel):
   def __init__(self, conns, which, backends):
     Tunnel.__init__(self, conns)
 
+    if self.fd:
+      self.fd = None
     self.backends = backends
     self.require_all = True
     self.server_info[self.S_NAME] = LOOPBACK[which]
