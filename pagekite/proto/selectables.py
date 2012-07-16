@@ -50,7 +50,7 @@ def getSelectableId(what):
     while SELECTABLE_ID in SELECTABLES:
       SELECTABLE_ID += 1
       SELECTABLE_ID %= 0x10000
-      if (SELECTABLE_ID % 0x01000) == 0:
+      if (SELECTABLE_ID % 0x00800) == 0:
         logging.LogDebug('Selectable map: %s' % (SELECTABLES, ))
       count += 1
       if count > 0x10001:
@@ -145,8 +145,9 @@ class Selectable(object):
     if common.gYamon:
       common.gYamon.vadd(self.countas, -1)
       common.gYamon.vadd(what, 1)
+    self.countas = what
     global SELECTABLES
-    SELECTABLES[self.gsid] = self.countas = what
+    SELECTABLES[self.gsid] = '%s %s' % (what, self)
 
   def __del__(self):
     if common.gYamon:

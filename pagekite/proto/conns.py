@@ -96,7 +96,8 @@ class Tunnel(ChunkParser):
 
         # Track which versions we see in the wild.
         version = 'old'
-        for v in conn.parser.Header(prefix+'-Version'): version = v
+        for v in conn.parser.Header(prefix+'-Version'):
+          version = v
         if common.gYamon:
           common.gYamon.vadd('version-%s' % version, 1, wrap=10000000)
 
@@ -848,6 +849,7 @@ class LoopbackTunnel(Tunnel):
     self.require_all = True
     self.server_info[self.S_NAME] = LOOPBACK[which]
     self.other_end = None
+    self.CountAs('loopback%ss_live' % which)
     if which == 'FE':
       for d in backends.keys():
         if backends[d][BE_BHOST]:
@@ -1535,6 +1537,7 @@ class Listener(Selectable):
                      connclass=UnknownConn, quiet=False):
     Selectable.__init__(self, bind=(host, port), backlog=backlog)
     self.Log([('listen', '%s:%s' % (host, port))])
+    self.CountAs('listeners_live')
     if not quiet:
       conns.config.ui.Notify(' - Listening on %s:%s' % (host or '*', port))
 
