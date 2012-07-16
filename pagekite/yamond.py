@@ -91,6 +91,7 @@ class YamonD(threading.Thread):
                server=YamonHttpServer,
                handler=YamonRequestHandler):
     threading.Thread.__init__(self)
+    self.lock = threading.Lock()
     self.server = server
     self.handler = handler
     self.sspec = sspec
@@ -100,36 +101,73 @@ class YamonD(threading.Thread):
     self.lists = {}
 
   def vmax(self, var, value):
-    if value > self.values[var]: self.values[var] = value
+    try:
+      self.lock.acquire()
+      if value > self.values[var]:
+        self.values[var] = value
+    finally:
+      self.lock.release()
 
   def vscale(self, var, ratio, add=0):
-    if var not in self.values: self.values[var] = 0
-    self.values[var] *= ratio
-    self.values[var] += add
+    try:
+      self.lock.acquire()
+      if var not in self.values:
+        self.values[var] = 0
+      self.values[var] *= ratio
+      self.values[var] += add
+    finally:
+      self.lock.release()
 
   def vset(self, var, value):
-    self.values[var] = value
+    try:
+      self.lock.acquire()
+      self.values[var] = value
+    finally:
+      self.lock.release()
 
   def vadd(self, var, value, wrap=None):
-    if var not in self.values: self.values[var] = 0
-    self.values[var] += value
-    if wrap is not None and self.values[var] >= wrap:
-      self.values[var] -= wrap
+    try:
+      self.lock.acquire()
+      if var not in self.values:
+        self.values[var] = 0
+      self.values[var] += value
+      if wrap is not None and self.values[var] >= wrap:
+        self.values[var] -= wrap
+    finally:
+      self.lock.release()
 
   def vmin(self, var, value):
-    if value < self.values[var]: self.values[var] = value
+    try:
+      self.lock.acquire()
+      if value < self.values[var]:
+        self.values[var] = value
+    finally:
+      self.lock.release()
 
   def vdel(self, var):
-    if var in self.values: del self.values[var]
+    try:
+      self.lock.acquire()
+      if var in self.values:
+        del self.values[var]
+    finally:
+      self.lock.release()
 
   def lcreate(self, listn, elems):
-    self.lists[listn] = [elems, 0, ['' for x in xrange(0, elems)]]
+    try:
+      self.lock.acquire()
+      self.lists[listn] = [elems, 0, ['' for x in xrange(0, elems)]]
+    finally:
+      self.lock.release()
 
   def ladd(self, listn, value):
-    list = self.lists[listn]
-    list[2][list[1]] = value
-    list[1] += 1
-    list[1] %= list[0]
+    try:
+      self.lock.acquire()
+      lst = self.lists[listn]
+      lst[2][lst[1]] = value
+      lst[1] += 1
+      lst[1] %= lst[0]
+    finally:
+      self.lock.release()
 
   def render_vars_text(self):
     data = []
