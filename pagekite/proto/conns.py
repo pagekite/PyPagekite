@@ -613,9 +613,10 @@ class Tunnel(ChunkParser):
 
   # If a tunnel goes down, we just go down hard and kill all our connections.
   def ProcessEofRead(self):
-    if self.conns: self.conns.Remove(self)
+    if self.conns:
+      self.conns.Remove(self)
     self.Cleanup()
-    return True
+    return False
 
   def ProcessEofWrite(self):
     return self.ProcessEofRead()
@@ -1135,11 +1136,12 @@ class UserConn(Selectable):
       pass
 
   def ProcessTunnelEof(self, read_eof=False, write_eof=False):
+    rv = True
     if read_eof and not self.write_eof:
-      self.ProcessEofWrite(tell_tunnel=False)
+      rv = self.ProcessEofWrite(tell_tunnel=False) and rv
     if write_eof and not self.read_eof:
-      self.ProcessEofRead(tell_tunnel=False)
-    return True
+      rv = self.ProcessEofRead(tell_tunnel=False) and rv
+    return rv
 
   def ProcessEofRead(self, tell_tunnel=True):
     self.read_eof = True
@@ -1182,7 +1184,8 @@ class UserConn(Selectable):
       self.Throttle(delay=(len(self.tunnel.write_blocked)-204800)/max(50000,
                     self.tunnel.write_speed))
 
-    if self.read_eof: return self.ProcessEofRead()
+    if self.read_eof:
+      return self.ProcessEofRead()
     return True
 
 
