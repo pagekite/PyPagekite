@@ -105,8 +105,7 @@ class Tunnel(ChunkParser):
           if replace in self.conns.conns_by_id:
             repl = self.conns.conns_by_id[replace]
             self.LogInfo('Disconnecting old tunnel: %s' % repl)
-            self.conns.Remove(repl)
-            repl.Cleanup()
+            repl.Die(discard_buffer=True)
 
       requests = self.GetKiteRequests(conn.parser)
 
@@ -201,9 +200,8 @@ class Tunnel(ChunkParser):
 
     self.Log(log_info)
     self.LogInfo('Ran out of quota or account deleted, closing tunnel.')
-    conns.Remove(self)
-    self.Cleanup()
-    return None
+    self.Die()
+    return self
 
   def AuthCallback(self, conn, results, log_info):
     if log_info:
@@ -233,8 +231,8 @@ class Tunnel(ChunkParser):
     output.append(HTTP_StartBody())
     if not self.Send(output, activity=False, just_buffer=True):
       conn.LogDebug('No tunnels configured, closing connection (send failed).')
-      self.Cleanup()
-      return None
+      self.Die(discard_buffer=True)
+      return self
 
     if conn.quota and conn.quota[0]:
       self.quota = conn.quota
@@ -242,10 +240,10 @@ class Tunnel(ChunkParser):
 
     if self.ProcessAuthResults(results):
       self.conns.Add(self, alt_id=self.alt_id)
-      return self
     else:
-      self.Cleanup()
-      return None
+      self.Die()
+
+    return self
 
   def ChunkAuthCallback(self, results, log_info):
     if log_info:
@@ -617,9 +615,7 @@ class Tunnel(ChunkParser):
 
   # If a tunnel goes down, we just go down hard and kill all our connections.
   def ProcessEofRead(self):
-    if self.conns:
-      self.conns.Remove(self)
-    self.Cleanup()
+    self.Die()
     return False
 
   def ProcessEofWrite(self):
@@ -1218,7 +1214,8 @@ class UnknownConn(MagicProtocolParser):
     self.said_hello = False
 
   def Cleanup(self, close=True):
-    if self.conns: self.conns.Remove(self)
+    if self.conns:
+      self.conns.Remove(self)
     MagicProtocolParser.Cleanup(self, close=close)
     self.conns = self.parser = None
 

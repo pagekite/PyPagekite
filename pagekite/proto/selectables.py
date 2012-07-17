@@ -421,7 +421,7 @@ class Selectable(object):
   def AutoThrottle(self, max_speed=None, remote=False, delay=0.2):
     return self.Throttle(max_speed, remote, delay)
 
-  def Send(self, data, try_flush=False, activity=True, just_buffer=False):
+  def Send(self, data, try_flush=False, activity=False, just_buffer=False):
     common.buffered_bytes -= len(self.write_blocked)
     self.write_speed = int((self.wrote_bytes + self.all_out)
                            / max(1, (time.time() - self.created)))
@@ -528,6 +528,12 @@ class Selectable(object):
 
   def IsDead(s):
     return (s.read_eof and s.write_eof and not s.write_blocked)
+
+  def Die(s, discard_buffer=False):
+    if discard_buffer:
+      s.write_blocked = ''
+    s.read_eof = s.write_eof = True
+    return True
 
 
 class LineParser(Selectable):
