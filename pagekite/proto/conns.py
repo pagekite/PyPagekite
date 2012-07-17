@@ -231,7 +231,7 @@ class Tunnel(ChunkParser):
       output.append('%s: %s\r\n' % r)
 
     output.append(HTTP_StartBody())
-    if not self.Send(output, try_flush=True, activity=False):
+    if not self.Send(output, activity=False, just_buffer=True):
       conn.LogDebug('No tunnels configured, closing connection (send failed).')
       self.Cleanup()
       return None
@@ -256,7 +256,7 @@ class Tunnel(ChunkParser):
       for r in results:
         output.append('%s: %s\r\n' % r)
       output.append('\r\n!')
-      self.SendChunked(''.join(output), compress=False)
+      self.SendChunked(''.join(output), compress=False, just_buffer=True)
 
   def _RecvHttpHeaders(self, fd=None):
     data = ''
@@ -568,10 +568,10 @@ class Tunnel(ChunkParser):
     if self.q_days is not None:
       return self.SendChunked(('NOOP: 1\r\nQuota: %s\r\nQDays: %s\r\nQConns: %s\r\n\r\n!'
                                ) % (self.quota[0], self.q_days, self.q_conns),
-                              compress=False)
+                              compress=False, just_buffer=True)
     else:
       return self.SendChunked('NOOP: 1\r\nQuota: %s\r\n\r\n!' % self.quota[0],
-                              compress=False)
+                              compress=False, just_buffer=True)
 
   def SendProgress(self, sid, conn, throttle=False):
     # FIXME: Optimize this away unless meaningful progress has been made?

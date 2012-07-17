@@ -421,13 +421,15 @@ class Selectable(object):
   def AutoThrottle(self, max_speed=None, remote=False, delay=0.2):
     return self.Throttle(max_speed, remote, delay)
 
-  def Send(self, data, try_flush=False, activity=True):
+  def Send(self, data, try_flush=False, activity=True, just_buffer=False):
     common.buffered_bytes -= len(self.write_blocked)
     self.write_speed = int((self.wrote_bytes + self.all_out)
                            / max(1, (time.time() - self.created)))
 
     # If we're already blocked, just buffer unless explicitly asked to flush.
-    if (not try_flush) and (len(self.write_blocked) > 0 or compat.SEND_ALWAYS_BUFFERS):
+    if ((just_buffer) or
+        ((not try_flush) and
+         (len(self.write_blocked) > 0 or compat.SEND_ALWAYS_BUFFERS))):
       self.write_blocked += str(''.join(data))
       common.buffered_bytes += len(self.write_blocked)
       return True
@@ -476,7 +478,7 @@ class Selectable(object):
       self.ProcessEofWrite()
     return True
 
-  def SendChunked(self, data, compress=True, zhistory=None):
+  def SendChunked(self, data, compress=True, zhistory=None, just_buffer=False):
     rst = ''
     if self.zreset:
       self.zreset = False
@@ -494,13 +496,13 @@ class Selectable(object):
             zhistory[0] = len(sdata)
             zhistory[1] = len(zdata)
           return self.Send(['%xZ%x%s\r\n%s' % (len(sdata), len(zdata), rst, zdata)],
-                           activity=False)
+                           activity=False, just_buffer=just_buffer)
         except zlib.error:
           logging.LogError('Error compressing, resetting ZChunks.')
           self.ResetZChunks()
 
       return self.Send(['%x%s\r\n%s' % (len(sdata), rst, sdata)],
-                       activity=False)
+                       activity=False, just_buffer=just_buffer)
     finally:
       self.lock.release()
 
