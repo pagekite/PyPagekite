@@ -33,6 +33,7 @@ from pagekite.common import *
 import pagekite.common as common
 import pagekite.logging as logging
 
+from filters import HttpSecurityFilter
 from selectables import *
 from parsers import *
 from proto import *
@@ -693,7 +694,7 @@ class Tunnel(ChunkParser):
       else:
         rewritehost = False
 
-      data = self.FilterIncoming(sid, data,  info={
+      data = self.FilterIncoming(sid, data, info={
         'proto': proto,
         'port': port,
         'host': host,
@@ -702,11 +703,15 @@ class Tunnel(ChunkParser):
         'using_tls': rTLS,
         'be_host': conn and conn.backend[BE_BHOST],
         'be_port': conn and conn.backend[BE_BPORT],
+        'insecure': conn and conn.config.get('insecure', False),
         'rawheaders': conn and conn.config.get('rawheaders', False),
         'rewritehost': rewritehost
       })
 
     if proto in ('http', 'http2', 'http3', 'websocket'):
+      if conn and data.startswith(HttpSecurityFilter.REJECT):
+        # Pretend we need authentication for dangerous URLs
+        conn, data = False, ''
       if not conn:
         # conn is None means we have no back-end.
         # conn is False means authentication is required.
@@ -717,6 +722,8 @@ class Tunnel(ChunkParser):
                                   code=code
                                 ))):
           return False, False
+        else:
+          conn = None
 
     elif conn and proto == 'httpfinger':
       # Rewrite a finger request to HTTP.
@@ -736,6 +743,7 @@ class Tunnel(ChunkParser):
                 'Host: %s\r\n\r\n%s') % args
       except Exception, e:
         self.LogError('Error formatting HTTP-Finger: %s' % e)
+        conn.Die()
         conn = None
 
     if conn:

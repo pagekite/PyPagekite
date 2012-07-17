@@ -156,3 +156,35 @@ class HttpHeaderFilter(TunnelFilter):
 
     return TunnelFilter.filter_data_in(self, tunnel, sid, data)
 
+
+class HttpSecurityFilter(TunnelFilter):
+  """Filter that blocks known-to-be-dangerous requests."""
+
+  HTTP_DANGER = re.compile('(?ism)^(([A-Z]+) '
+                           '(/+(?:xampp|security|adm)'
+                           '|[^\n]*(?:/wp-admin/|/system32/'
+                                    '|/(?:php)?my(?:sql)?(?:adm|manager)'
+                                    '|/(?:setup|install|admin).php)'
+                           ')[^\n]*'
+                           ' HTTP/\d+\.\d+\s*)$')
+  REJECT = 'PAGEKITE_REJECT_'
+
+  def __init__(self, ui):
+    TunnelFilter.__init__(self)
+    self.ui = ui
+
+  def filter_data_in(self, tunnel, sid, data):
+    info = self.sid.get(sid)
+    if (info and
+        info.get('proto') in ('http', 'http2', 'http3', 'websocket') and
+        not info.get('insecure', False)):
+
+      danger = self.HTTP_DANGER.search(data)
+      if danger:
+        data = self.REJECT+data
+        self.ui.Notify('BLOCKED: %s %s' % (danger.group(2), danger.group(3)),
+                       color=self.ui.RED, prefix='***')
+        self.ui.Notify('NOTE: Use the +insecure flag to disable basic URL '
+                       'security checks.')
+
+    return TunnelFilter.filter_data_in(self, tunnel, sid, data)

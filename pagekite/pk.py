@@ -2491,12 +2491,14 @@ class PageKite(object):
         if server == LOOPBACK_FE:
           loop = LoopbackTunnel.Loop(conns, self.backends)
           loop.filters.append(HttpHeaderFilter())
+          loop.filters.append(HttpSecurityFilter(self.ui))
         else:
           self.ui.Status('connect', color=self.ui.YELLOW,
                          message='Front-end connect: %s' % server)
           tun = Tunnel.BackEnd(server, self.backends, self.require_all, conns)
           if tun:
             tun.filters.append(HttpHeaderFilter())
+            tun.filters.append(HttpSecurityFilter(self.ui))
             if self.watch_level[0] is not None:
               tun.filters.append(TunnelWatcher(self.watch_level, self.ui))
             logging.Log([('connect', server)])

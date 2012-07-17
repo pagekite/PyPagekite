@@ -83,6 +83,7 @@ MAN_FLAGS_HTTP = ("""\
     +rewritehost</b>    __Rewrite the incoming Host: header.
     +rewritehost</b>=<a>N</a>  __Replace Host: header value with N.
     +rawheaders</b>     __Do not rewrite (or add) any HTTP headers at all.
+    +insecure</b>       __Allow access to phpMyAdmin, /admin, etc.
 """)
 MAN_FLAGS_BUILTIN = ("""\
     +indexes        __Enable directory indexes.

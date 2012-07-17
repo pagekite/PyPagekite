@@ -10,8 +10,8 @@ BREED_PAGEKITE = pagekite/__init__.py \
 	         pagekite/proto/proto.py \
 	         pagekite/proto/parsers.py \
 	         pagekite/proto/selectables.py \
-	         pagekite/proto/conns.py \
 	         pagekite/proto/filters.py \
+	         pagekite/proto/conns.py \
 	         pagekite/ui/__init__.py \
 	         pagekite/ui/nullui.py \
 	         pagekite/ui/basic.py \
