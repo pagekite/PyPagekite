@@ -880,7 +880,7 @@ class LoopbackTunnel(Tunnel):
 
   Loop = staticmethod(_Loop)
 
-  def Send(self, data, activity=True):
+  def Send(self, data, try_flush=False, activity=False, just_buffer=False):
     return self.other_end.ProcessData(''.join(data))
 
 
