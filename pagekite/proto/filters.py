@@ -161,11 +161,11 @@ class HttpSecurityFilter(TunnelFilter):
   """Filter that blocks known-to-be-dangerous requests."""
 
   HTTP_DANGER = re.compile('(?ism)^(([A-Z]+) '
-                           '(/+(?:xampp|security|adm)'
+                           '((?:/+(?:xampp|security|adm)'
                            '|[^\n]*(?:/wp-admin/|/system32/'
                                     '|/(?:php)?my(?:sql)?(?:adm|manager)'
                                     '|/(?:setup|install|admin).php)'
-                           ')[^\n]*'
+                           ')[^\n]*)'
                            ' HTTP/\d+\.\d+\s*)$')
   REJECT = 'PAGEKITE_REJECT_'
 
