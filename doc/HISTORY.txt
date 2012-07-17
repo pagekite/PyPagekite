@@ -18,6 +18,7 @@ v0.5.0   2012.07.13
    - Support kites over IPv6.
    - Improved HTTP header filtering, now always inserts X-Forwarded-For,
      added X-Forwarded-Proto and +rawheaders flag for disabling.
+   - Added URL security filter and +insecure to disable it.
 
 
 v0.4.6   2012.01.15
