@@ -2456,9 +2456,9 @@ class PageKite(object):
             logging.LogDebug('DNS lookup failed for %s' % bdom)
 
       try:
-        ips = self.GetHostIpAddrs(domain)
-        times = [self.Ping(ip, port) for ip in ips
-                 if '%s:%s' % (ip, port) not in self.servers_never]
+        ips = [ip for ip in self.GetHostIpAddrs(domain)
+               if ('%s:%s' % (ip, port)) not in self.servers_never]
+        times = [self.Ping(ip, port) for ip in ips]
       except Exception, e:
         logging.LogDebug('Unreachable: %s, %s' % (domain, e))
         ips = times = []
@@ -2467,8 +2467,7 @@ class PageKite(object):
         count -= 1
         mIdx = times.index(min(times))
         server = '%s:%s' % (ips[mIdx], port)
-        if ((server not in self.servers) and
-            (server not in self.servers_never)):
+        if server not in self.servers:
           self.servers.append(server)
         if ips[mIdx] not in self.servers_preferred:
           self.servers_preferred.append(ips[mIdx])
@@ -2982,5 +2981,3 @@ def Configure(pk):
       pk.kite_add or pk.kite_remove or pk.kite_only or pk.kite_disable):
     pk.ListKites()
     sys.exit(0)
-
-
