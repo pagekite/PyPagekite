@@ -458,7 +458,7 @@ class Tunnel(ChunkParser):
                                              tokens)
             abort = not self.SendChunked(('NOOP: 1\r\n%s\r\n\r\n!'
                                           ) % ''.join(request),
-                                         compress=False)
+                                         compress=False, just_buffer=True)
             data = parse = None
           else:
             data, parse = self._Connect(server, conns, tokens)
@@ -521,7 +521,7 @@ class Tunnel(ChunkParser):
     return self.SendChunked('SID: %s\r\nEOF: 1%s%s\r\n\r\nBye!' % (sid,
                             (write_eof or not read_eof) and 'W' or '',
                             (read_eof or not write_eof) and 'R' or ''),
-                            compress=False)
+                            compress=False, just_buffer=True)
 
   def EofStream(self, sid, eof_type='WR'):
     if sid in self.users and self.users[sid] is not None:
@@ -549,12 +549,14 @@ class Tunnel(ChunkParser):
     self.users = self.zhistory = self.backends = {}
 
   def ResetRemoteZChunks(self):
-    return self.SendChunked('NOOP: 1\r\nZRST: 1\r\n\r\n!', compress=False)
+    return self.SendChunked('NOOP: 1\r\nZRST: 1\r\n\r\n!',
+                            compress=False, just_buffer=True)
 
   def SendPing(self):
     self.last_ping = int(time.time())
     self.LogDebug("Ping", [('host', self.server_info[self.S_NAME])])
-    return self.SendChunked('NOOP: 1\r\nPING: 1\r\n\r\n!', compress=False)
+    return self.SendChunked('NOOP: 1\r\nPING: 1\r\n\r\n!',
+                            compress=False, just_buffer=True)
 
   def SendPong(self):
     if (self.conns.config.isfrontend and
@@ -562,7 +564,8 @@ class Tunnel(ChunkParser):
       # May as well make ourselves useful!
       return self.SendQuota()
     else:
-      return self.SendChunked('NOOP: 1\r\n\r\n!', compress=False)
+      return self.SendChunked('NOOP: 1\r\n\r\n!',
+                              compress=False, just_buffer=True)
 
   def SendQuota(self):
     if self.q_days is not None:
@@ -579,7 +582,8 @@ class Tunnel(ChunkParser):
            'SID: %s\r\n'
            'SKB: %d\r\n') % (sid, (conn.all_out + conn.wrote_bytes)/1024)
     throttle = throttle and ('SPD: %d\r\n' % conn.write_speed) or ''
-    return self.SendChunked('%s%s\r\n!' % (msg, throttle), compress=False)
+    return self.SendChunked('%s%s\r\n!' % (msg, throttle),
+                            compress=False, just_buffer=True)
 
   def ProcessCorruptChunk(self, data):
     self.ResetRemoteZChunks()
@@ -766,7 +770,8 @@ class Tunnel(ChunkParser):
       for bid in tokens:
         backends[bid] = self.conns.config.backends[bid]
       request = '\r\n'.join(PageKiteRequestHeaders(server, backends, tokens))
-      self.SendChunked('NOOP: 1\r\n%s\r\n\r\n!' % request, compress=False)
+      self.SendChunked('NOOP: 1\r\n%s\r\n\r\n!' % request,
+                       compress=False, just_buffer=True)
     self.HandlePageKiteResponse(parse)
 
   def ProcessChunk(self, data):
