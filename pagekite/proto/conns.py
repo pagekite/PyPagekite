@@ -184,7 +184,7 @@ class Tunnel(ChunkParser):
           self.LogDebug('No tunnels configured, idling...')
         else:
           self.LogDebug('No tunnels configured, closing connection.')
-          return None
+          self.write_eof = self.read_eof = True
 
     return True
 
