@@ -71,7 +71,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'tls_default=', 'tls_endpoint=',
             'fe_certname=', 'jakenoia', 'ca_certs=',
             'kitename=', 'kitesecret=', 'fingerpath=',
-            'backend=', 'define_backend=', 'be_config=',
+            'backend=', 'define_backend=', 'be_config=', 'insecure',
             'service_on=', 'service_off=', 'service_cfg=',
             'frontend=', 'nofrontend=', 'frontends=',
             'torify=', 'socksify=', 'proxy=',
@@ -749,6 +749,7 @@ class PageKite(object):
     self.ui_pemfile = None
     self.ui_magic_file = '.pagekite.magic'
     self.ui_paths = {}
+    self.insecure = False
     self.be_config = {}
     self.disable_zchunks = False
     self.enable_sslzlib = False
@@ -1004,6 +1005,12 @@ class PageKite(object):
         '# service_off = http:YOU.pagekite.me:localhost:4545:SECRET',
         ''
       ])
+
+    config.extend([
+      '##[ Allow risky known-to-be-risky incoming HTTP requests? ]##',
+      (self.insecure) and 'insecure' or '# insecure',
+      ''
+    ])
 
     if self.isfrontend or new:
       config.extend([
@@ -1701,6 +1708,7 @@ class PageKite(object):
           self.backends[bid][BE_SECRET] = secret
           self.backends[bid][BE_STATUS] = BE_STATUS_UNKNOWN
 
+      elif opt == '--insecure': self.insecure = True
       elif opt == '--noprobes': self.no_probes = True
       elif opt == '--nofrontend': self.isfrontend = False
       elif opt == '--nodaemonize': self.daemonize = False
@@ -2491,14 +2499,16 @@ class PageKite(object):
         if server == LOOPBACK_FE:
           loop = LoopbackTunnel.Loop(conns, self.backends)
           loop.filters.append(HttpHeaderFilter())
-          loop.filters.append(HttpSecurityFilter(self.ui))
+          if not self.insecure:
+            loop.filters.append(HttpSecurityFilter(self.ui))
         else:
           self.ui.Status('connect', color=self.ui.YELLOW,
                          message='Front-end connect: %s' % server)
           tun = Tunnel.BackEnd(server, self.backends, self.require_all, conns)
           if tun:
             tun.filters.append(HttpHeaderFilter())
-            tun.filters.append(HttpSecurityFilter(self.ui))
+            if not self.insecure:
+              tun.filters.append(HttpSecurityFilter(self.ui))
             if self.watch_level[0] is not None:
               tun.filters.append(TunnelWatcher(self.watch_level, self.ui))
             logging.Log([('connect', server)])
