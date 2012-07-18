@@ -269,14 +269,16 @@ class Connections(object):
   def Add(self, conn, alt_id=None):
     self.idle.append(conn)
     self.conns.append(conn)
-    if alt_id: self.conns_by_id[alt_id] = conn
+    if alt_id:
+      self.conns_by_id[alt_id] = conn
 
   def TrackIP(self, ip, domain):
     tick = '%d' % (time.time()/12)
     if tick not in self.ip_tracker:
       deadline = int(tick)-10
       for ot in self.ip_tracker.keys():
-        if int(ot) < deadline: del self.ip_tracker[ot]
+        if int(ot) < deadline:
+          del self.ip_tracker[ot]
       self.ip_tracker[tick] = {}
 
     if ip not in self.ip_tracker[tick]:
@@ -288,7 +290,8 @@ class Connections(object):
   def LastIpDomain(self, ip):
     domain = None
     for tick in sorted(self.ip_tracker.keys()):
-      if ip in self.ip_tracker[tick]: domain = self.ip_tracker[tick][ip][1]
+      if ip in self.ip_tracker[tick]:
+        domain = self.ip_tracker[tick][ip][1]
     return domain
 
   def Remove(self, conn, retry=True):
@@ -302,7 +305,8 @@ class Connections(object):
       for tid in self.tunnels.keys():
         if conn in self.tunnels[tid]:
           self.tunnels[tid].remove(conn)
-          if not self.tunnels[tid]: del self.tunnels[tid]
+          if not self.tunnels[tid]:
+            del self.tunnels[tid]
     except ValueError:
       # Let's not asplode if another thread races us for this.
       logging.LogError('Failed to remove %s: %s'
@@ -2722,21 +2726,25 @@ class PageKite(object):
 
     return iready, oready, []
 
-  def Loop(self):
-    self.conns.start()
-    if self.ui_httpd: self.ui_httpd.start()
-    if self.tunnel_manager: self.tunnel_manager.start()
-    if self.ui_comm: self.ui_comm.start()
-
+  def CreatePollObject(self):
     try:
       epoll = select.epoll()
       mypoll = self.Epoll
     except:
       epoll = None
       mypoll = self.Select
+    return epoll, mypoll
+
+  def Loop(self):
+    self.conns.start()
+    if self.ui_httpd: self.ui_httpd.start()
+    if self.tunnel_manager: self.tunnel_manager.start()
+    if self.ui_comm: self.ui_comm.start()
+
+    epoll, mypoll = self.CreatePollObject()
+    self.last_barf = self.last_loop = time.time()
 
     logging.LogDebug('Entering main %s loop' % (epoll and 'epoll' or 'select'))
-    self.last_barf = self.last_loop = time.time()
     while self.keep_looping:
       iready, oready, eready = mypoll(epoll, 1.1)
       now = time.time()
@@ -2757,9 +2765,13 @@ class PageKite(object):
       self.ProcessDead(epoll)
       self.last_loop = now
 
-      if logging.DEBUG_IO and now - self.last_barf > 15:
-        logging.LogDebug('Selectable map: %s' % SELECTABLES)
+      if now - self.last_barf > 60:
         self.last_barf = now
+        if epoll:
+          epoll.close()
+        epoll, mypoll = self.CreatePollObject()
+        if logging.DEBUG_IO:
+          logging.LogDebug('Selectable map: %s' % SELECTABLES)
 
     if epoll:
       epoll.close()
