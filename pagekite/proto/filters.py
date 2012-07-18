@@ -168,15 +168,22 @@ class HttpSecurityFilter(HttpHeaderFilter):
 
   DISABLE = 'trusted'
   HTTP_DANGER = re.compile('(?ism)^(([A-Z]+) '
+                           # xampp config, anything starting with /adm*
                            '((?:/+(?:xampp|security|adm)'
-                           '|[^\n]*(?:/wp-admin/|/system32/'
-                                    '|/(?:php)?my(?:sql)?(?:adm|manager)'
-                                    '|/(?:setup|install|admin).php)'
+                           '|[^\n]*/'
+                             # WordPress admin pages
+                             '(?:wp-admin/(?!admin-ajax|css/)|wp-config\.php'
+                             # Hackzor tricks
+                             '|system32/|\.\.|\.ht(?:access|pass)'
+                             # phpMyAdmin and similar tools
+                             '|(?:php|sql)?my(?:sql)?(?:adm|manager)'
+                             # Setup pages for common PHP tools
+                             '|(?:adm[^\n]*|install[^\n]*|setup)\.php)'
                            ')[^\n]*)'
                            ' HTTP/\d+\.\d+\s*)$')
   REJECT = 'PAGEKITE_REJECT_'
 
-  def filter_header_data_in(self, tunnel, sid, data):
+  def filter_header_data_in(self, http_hdr, data, info):
     danger = self.HTTP_DANGER.search(data)
     if danger:
       self.ui.Notify('BLOCKED: %s %s' % (danger.group(2), danger.group(3)),
