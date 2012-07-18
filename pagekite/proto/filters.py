@@ -167,7 +167,7 @@ class HttpSecurityFilter(HttpHeaderFilter):
   """Filter that blocks known-to-be-dangerous requests."""
 
   DISABLE = 'trusted'
-  HTTP_DANGER = re.compile('(?ism)^(([A-Z]+) '
+  HTTP_DANGER = re.compile('(?ism)^((get|post|put|delete) '
                            # xampp config, anything starting with /adm*
                            '((?:/+(?:xampp|security|adm)'
                            '|[^\n]*/'
