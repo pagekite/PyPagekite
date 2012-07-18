@@ -703,7 +703,8 @@ class Tunnel(ChunkParser):
         'using_tls': rTLS,
         'be_host': conn and conn.backend[BE_BHOST],
         'be_port': conn and conn.backend[BE_BPORT],
-        'insecure': conn and conn.config.get('insecure', False),
+        'trusted': conn and (conn.security or
+                             conn.config.get('insecure', False)),
         'rawheaders': conn and conn.config.get('rawheaders', False),
         'rewritehost': rewritehost
       })
@@ -901,6 +902,7 @@ class UserConn(Selectable):
     self.conns = None
     self.backend = BE_NONE[:]
     self.config = {}
+    self.security = None
     # UserConn objects are considered active immediately
     self.last_activity = time.time()
 
@@ -1060,6 +1062,8 @@ class UserConn(Selectable):
                          prefix='!', color=self.ui.YELLOW)
           logInfo.append(('forbidden-ip', '%s' % remote_ip))
           backend = None
+        else:
+          self.security = 'ip'
 
       # Access control interception: check for HTTP Basic authentication.
       user_keys = [k for k in host_config if k.startswith('password/')]
@@ -1088,6 +1092,8 @@ class UserConn(Selectable):
           logInfo.append(('forbidden-user', '%s' % user))
           backend = None
           failure = ''
+        else:
+          self.security = 'password'
 
     if not backend:
       logInfo.append(('err', 'No back-end'))

@@ -85,6 +85,8 @@ server.
      Replace Host: header value with N.
    * <b>+rawheaders</b>  
      Do not rewrite (or add) any HTTP headers at all.
+   * <b>+insecure</b>  
+     Allow access to phpMyAdmin, /admin, etc.
 
 ### Built-in HTTPD flags ###
 

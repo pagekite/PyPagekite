@@ -166,7 +166,7 @@ class HttpHeaderFilter(TunnelFilter):
 class HttpSecurityFilter(HttpHeaderFilter):
   """Filter that blocks known-to-be-dangerous requests."""
 
-  DISABLE = 'insecure'
+  DISABLE = 'trusted'
   HTTP_DANGER = re.compile('(?ism)^(([A-Z]+) '
                            '((?:/+(?:xampp|security|adm)'
                            '|[^\n]*(?:/wp-admin/|/system32/'
