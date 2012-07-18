@@ -2498,7 +2498,7 @@ class PageKite(object):
       if server not in live_servers:
         if server == LOOPBACK_FE:
           loop = LoopbackTunnel.Loop(conns, self.backends)
-          loop.filters.append(HttpHeaderFilter())
+          loop.filters.append(HttpHeaderFilter(self.ui))
           if not self.insecure:
             loop.filters.append(HttpSecurityFilter(self.ui))
         else:
@@ -2506,11 +2506,11 @@ class PageKite(object):
                          message='Front-end connect: %s' % server)
           tun = Tunnel.BackEnd(server, self.backends, self.require_all, conns)
           if tun:
-            tun.filters.append(HttpHeaderFilter())
+            tun.filters.append(HttpHeaderFilter(self.ui))
             if not self.insecure:
               tun.filters.append(HttpSecurityFilter(self.ui))
             if self.watch_level[0] is not None:
-              tun.filters.append(TunnelWatcher(self.watch_level, self.ui))
+              tun.filters.append(TunnelWatcher(self.ui, self.watch_level))
             logging.Log([('connect', server)])
             connections += 1
           else:

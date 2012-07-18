@@ -32,8 +32,9 @@ class TunnelFilter:
 
   IDLE_TIMEOUT = 1800
 
-  def __init__(self):
+  def __init__(self, ui):
     self.sid = {}
+    self.ui = ui
 
   def clean_idle_sids(self, now=None):
     now = now or time.time()
@@ -61,10 +62,9 @@ class TunnelFilter:
 class TunnelWatcher(TunnelFilter):
   """Base class for watchers/filters for data going in/out of Tunnels."""
 
-  def __init__(self, watch_level, ui):
-    TunnelFilter.__init__(self)
+  def __init__(self, ui, watch_level=0):
+    TunnelFilter.__init__(self, ui)
     self.watch_level = watch_level
-    self.ui = ui
 
   def format_data(self, data, level):
     if '\r\n\r\n' in data:
@@ -120,46 +120,53 @@ class HttpHeaderFilter(TunnelFilter):
   """Filter that adds X-Forwarded-For and X-Forwarded-Proto to requests."""
 
   HTTP_HEADER = re.compile('(?ism)^(([A-Z]+) ([^\n]+) HTTP/\d+\.\d+\s*)$')
+  DISABLE = 'rawheaders'
 
   def filter_data_in(self, tunnel, sid, data):
     info = self.sid.get(sid)
     if (info and
         info.get('proto') in ('http', 'http2', 'http3', 'websocket') and
-        not info.get('rawheaders', False)):
+        not info.get(self.DISABLE, False)):
 
+      # FIXME: Check content-length and skip bodies entirely
       http_hdr = self.HTTP_HEADER.search(data)
       if http_hdr:
-        clean_headers = [
-          r'(?mi)^(X-(PageKite|Forwarded)-(For|Proto|Port):)'
-        ]
-        add_headers = [
-          'X-Forwarded-For: %s' % info.get('remote_ip', 'unknown'),
-          'X-Forwarded-Proto: %s' % (info.get('using_tls') and 'https' or 'http'),
-          'X-PageKite-Port: %s' % info.get('port', 0)
-        ]
-
-        if info.get('rewritehost', False):
-          add_headers.append('Host: %s' % info.get('rewritehost'))
-          clean_headers.append(r'(?mi)^(Host:)')
-
-        if http_hdr.group(1).upper() in ('POST', 'PUT'):
-          # FIXME: This is a bit ugly
-          add_headers.append('Connection: close')
-          clean_headers.append(r'(?mi)^(Connection|Keep-Alive):')
-          info['rawheaders'] = True
-
-        for hdr_re in clean_headers:
-          data = re.sub(hdr_re, 'X-Old-\\1', data)
-        data = re.sub(self.HTTP_HEADER,
-                      '\\1\n%s\r' % '\r\n'.join(add_headers),
-                      data)
+        data = self.filter_header_data_in(http_hdr, data, info)
 
     return TunnelFilter.filter_data_in(self, tunnel, sid, data)
 
+  def filter_header_data_in(self, http_hdr, data, info):
+    clean_headers = [
+      r'(?mi)^(X-(PageKite|Forwarded)-(For|Proto|Port):)'
+    ]
+    add_headers = [
+      'X-Forwarded-For: %s' % info.get('remote_ip', 'unknown'),
+      'X-Forwarded-Proto: %s' % (info.get('using_tls') and 'https' or 'http'),
+      'X-PageKite-Port: %s' % info.get('port', 0)
+    ]
 
-class HttpSecurityFilter(TunnelFilter):
+    if info.get('rewritehost', False):
+      add_headers.append('Host: %s' % info.get('rewritehost'))
+      clean_headers.append(r'(?mi)^(Host:)')
+
+    if http_hdr.group(1).upper() in ('POST', 'PUT'):
+      # FIXME: This is a bit ugly
+      add_headers.append('Connection: close')
+      clean_headers.append(r'(?mi)^(Connection|Keep-Alive):')
+      info['rawheaders'] = True
+
+    for hdr_re in clean_headers:
+      data = re.sub(hdr_re, 'X-Old-\\1', data)
+
+    return re.sub(self.HTTP_HEADER,
+                  '\\1\n%s\r' % '\r\n'.join(add_headers),
+                  data)
+
+
+class HttpSecurityFilter(HttpHeaderFilter):
   """Filter that blocks known-to-be-dangerous requests."""
 
+  DISABLE = 'insecure'
   HTTP_DANGER = re.compile('(?ism)^(([A-Z]+) '
                            '((?:/+(?:xampp|security|adm)'
                            '|[^\n]*(?:/wp-admin/|/system32/'
@@ -169,22 +176,13 @@ class HttpSecurityFilter(TunnelFilter):
                            ' HTTP/\d+\.\d+\s*)$')
   REJECT = 'PAGEKITE_REJECT_'
 
-  def __init__(self, ui):
-    TunnelFilter.__init__(self)
-    self.ui = ui
-
-  def filter_data_in(self, tunnel, sid, data):
-    info = self.sid.get(sid)
-    if (info and
-        info.get('proto') in ('http', 'http2', 'http3', 'websocket') and
-        not info.get('insecure', False)):
-
-      danger = self.HTTP_DANGER.search(data)
-      if danger:
-        data = self.REJECT+data
-        self.ui.Notify('BLOCKED: %s %s' % (danger.group(2), danger.group(3)),
-                       color=self.ui.RED, prefix='***')
-        self.ui.Notify('NOTE: Use the +insecure flag to disable basic URL '
-                       'security checks.')
-
-    return TunnelFilter.filter_data_in(self, tunnel, sid, data)
+  def filter_header_data_in(self, tunnel, sid, data):
+    danger = self.HTTP_DANGER.search(data)
+    if danger:
+      self.ui.Notify('BLOCKED: %s %s' % (danger.group(2), danger.group(3)),
+                     color=self.ui.RED, prefix='***')
+      self.ui.Notify('See https://pagekite.net/support/security/ for more'
+                     ' details.')
+      return self.REJECT+data
+    else:
+      return data
