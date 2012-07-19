@@ -307,7 +307,7 @@ class Connections(object):
           self.tunnels[tid].remove(conn)
           if not self.tunnels[tid]:
             del self.tunnels[tid]
-    except ValueError:
+    except (ValueError, KeyError):
       # Let's not asplode if another thread races us for this.
       logging.LogError('Failed to remove %s: %s'
                        '' % (conn, traceback.format_exc()))
