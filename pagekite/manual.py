@@ -83,7 +83,7 @@ MAN_FLAGS_HTTP = ("""\
     +rewritehost</b>    __Rewrite the incoming Host: header.
     +rewritehost</b>=<a>N</a>  __Replace Host: header value with N.
     +rawheaders</b>     __Do not rewrite (or add) any HTTP headers at all.
-    +insecure</b>       __Allow access to phpMyAdmin, /admin, etc.
+    +insecure</b>       __Allow access to phpMyAdmin, /admin, etc. (per kite).
 """)
 MAN_FLAGS_BUILTIN = ("""\
     +indexes        __Enable directory indexes.
@@ -118,6 +118,8 @@ MAN_OPT_BACKEND = ("""\
     --remove        __Remove the following kites, save config.
     --disable       __Disable the following kites, save config.
     --only          __Disable all but the following kites, save config.
+
+    --insecure      __Allow access to phpMyAdmin, /admin, etc. (global).
 
     --nullui        __Silent UI for scripting. Assumes Yes on all questions.
 

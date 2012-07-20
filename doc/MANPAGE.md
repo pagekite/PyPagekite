@@ -86,7 +86,7 @@ server.
    * <b>+rawheaders</b>  
      Do not rewrite (or add) any HTTP headers at all.
    * <b>+insecure</b>  
-     Allow access to phpMyAdmin, /admin, etc.
+     Allow access to phpMyAdmin, /admin, etc. (per kite).
 
 ### Built-in HTTPD flags ###
 
@@ -137,6 +137,9 @@ time the program defaults will Just Work.
      Disable the following kites, save config.
    * <b>--only</b>  
      Disable all but the following kites, save config.
+
+   * <b>--insecure</b>  
+     Allow access to phpMyAdmin, /admin, etc. (global).
 
    * <b>--nullui</b>  
      Silent UI for scripting. Assumes Yes on all questions.
