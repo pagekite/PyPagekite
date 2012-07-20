@@ -280,7 +280,7 @@ class Tunnel(ChunkParser):
     if self.fd:
       self.fd.close()
 
-    sspec = server.rsplit(':', 1)
+    sspec = rsplit(':', server)
     if len(sspec) < 2:
       sspec = (sspec[0], 443)
 
@@ -439,7 +439,7 @@ class Tunnel(ChunkParser):
       try:
         data, parse = self._Connect(server, conns)
       except:
-        logging.LogError('Error in connect: %s' % traceback.format_exc())
+        logging.LogError('Error in connect: %s' % format_exc())
         raise
 
       if data and parse:
@@ -498,7 +498,7 @@ class Tunnel(ChunkParser):
         data = f.filter_data_out(self, sid, data)
       except:
         logging.LogError(('Ignoring error in filter_out %s: %s'
-                          ) % (f, traceback.format_exc()))
+                          ) % (f, format_exc()))
 
     sending = ['SID: %s\r\n' % sid]
     if proto: sending.append('Proto: %s\r\n' % proto)
@@ -611,7 +611,7 @@ class Tunnel(ChunkParser):
         self.users[sid].RecordProgress(skb, bps)
     except:
       logging.LogError(('Tunnel::ProgressTo: That made no sense! %s'
-                        ) % traceback.format_exc())
+                        ) % format_exc())
     return True
 
   # If a tunnel goes down, we just go down hard and kill all our connections.
@@ -661,7 +661,7 @@ class Tunnel(ChunkParser):
           data = f.filter_data_in(self, sid, data)
       except:
         logging.LogError(('Ignoring error in filter_in %s: %s'
-                          ) % (f, traceback.format_exc()))
+                          ) % (f, format_exc()))
     return data
 
   def GetChunkDestination(self, parse):
@@ -798,7 +798,7 @@ class Tunnel(ChunkParser):
       eof = parse.Header('EOF')
     except:
       logging.LogError(('Tunnel::ProcessChunk: Corrupt chunk: %s'
-                        ) % (traceback.format_exc(), ))
+                        ) % format_exc())
       return False
 
     # EOF stream?
@@ -1430,7 +1430,7 @@ class UnknownConn(MagicProtocolParser):
         # Probably insufficient data, just return True and assume we'll have
         # better luck on the next round.
         if logging.DEBUG_IO:
-          logging.LogError('Error in ProcessTls: %s' % traceback.format_exc())
+          logging.LogError('Error in ProcessTls: %s' % format_exc())
         return True
 
     if domains and domains[0] is not None:

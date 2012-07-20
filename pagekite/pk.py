@@ -309,8 +309,7 @@ class Connections(object):
             del self.tunnels[tid]
     except (ValueError, KeyError):
       # Let's not asplode if another thread races us for this.
-      logging.LogError('Failed to remove %s: %s'
-                       '' % (conn, traceback.format_exc()))
+      logging.LogError('Failed to remove %s: %s' % (conn, format_exc()))
       if retry:
         return self.Remove(conn, retry=False)
 
@@ -2533,7 +2532,7 @@ class PageKite(object):
           ips = []
           bips = []
           for tunnel in conns.tunnels[bid]:
-            ip = tunnel.server_info[tunnel.S_NAME].rsplit(':', 1)[0]
+            ip = rsplit(':', tunnel.server_info[tunnel.S_NAME])[0]
             if not ip == LOOPBACK_HN:
               if not self.servers_preferred or ip in self.servers_preferred:
                 ips.append(ip)
@@ -2655,7 +2654,7 @@ class PageKite(object):
           epoll.unregister(conn.fd)
         except IOError:
           logging.LogError(('Failed: epoll.unregister(%s): %s'
-                            ) % (conn.fd, traceback.format_exc()))
+                            ) % (conn.fd, format_exc()))
       self.conns.Remove(conn)
       conn.Cleanup()
 
@@ -2946,7 +2945,7 @@ def Main(pagekite, configure, uiclass=NullUi,
                                           urllib.urlencode({
                                             'platform': sys.platform,
                                             'appver': APPVER,
-                                            'crash': traceback.format_exc()
+                                            'crash': format_exc()
                                           })).readlines()))
         except Exception, e:
           print 'FAILED: %s' % e

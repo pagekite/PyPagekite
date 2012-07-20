@@ -357,7 +357,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       pass
     except Exception, e:
       logging.Log([('err', 'GET error at %s: %s' % (path, e))])
-      if logging.DEBUG_IO: print '=== ERROR\n%s\n===' % traceback.format_exc()
+      if logging.DEBUG_IO: print '=== ERROR\n%s\n===' % format_exc()
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
   def do_HEAD(self):

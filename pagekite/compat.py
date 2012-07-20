@@ -79,6 +79,24 @@ except ImportError:
   def sha1hex(data):
     return sha.new(data).hexdigest().lower()
 
+try:
+  from traceback import format_exc
+except ImportError:
+  import traceback
+  import StringIO
+  def format_exc():
+    sio = StringIO.StringIO()
+    traceback.print_exc(file=sio)
+    return sio.getvalue()
+
+# Old Pythons lack rsplit
+def rsplit(ch, data):
+  parts = data.split(ch)
+  if (len(parts) > 2):
+    tail = parts.pop(-1)
+    return (ch.join(parts), tail)
+  else:
+    return parts
 
 # SSL/TLS strategy: prefer pyOpenSSL, as it comes with built-in Context
 # objects. If that fails, look for Python 2.6+ native ssl support and
