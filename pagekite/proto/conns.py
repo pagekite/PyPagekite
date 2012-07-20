@@ -520,7 +520,7 @@ class Tunnel(ChunkParser):
     return self.SendChunked('SID: %s\r\nEOF: 1%s%s\r\n\r\nBye!' % (sid,
                             (write_eof or not read_eof) and 'W' or '',
                             (read_eof or not write_eof) and 'R' or ''),
-                            compress=False, just_buffer=True)
+                            compress=False)
 
   def EofStream(self, sid, eof_type='WR'):
     if sid in self.users and self.users[sid] is not None:
@@ -721,7 +721,7 @@ class Tunnel(ChunkParser):
                                 HTTP_Unavailable('be', proto, host,
                                   frame_url=self.conns.config.error_url,
                                   code=code
-                                ))):
+                                )), just_buffer=True):
           return False, False
         else:
           conn = None
@@ -749,7 +749,6 @@ class Tunnel(ChunkParser):
 
     if conn:
       self.users[sid] = conn
-
       if proto == 'httpfinger':
         conn.fd.setblocking(1)
         conn.Send(data, try_flush=True) or conn.Flush(wait=True)
@@ -842,8 +841,7 @@ class Tunnel(ChunkParser):
     else:
       # No connection?  Close this stream.
       self.CloseStream(sid)
-      if not self.SendStreamEof(sid):
-        return False
+      return self.SendStreamEof(sid) and self.Flush()
 
     return True
 
@@ -856,6 +854,7 @@ class LoopbackTunnel(Tunnel):
 
     if self.fd:
       self.fd = None
+    self.lock = None
     self.backends = backends
     self.require_all = True
     self.server_info[self.S_NAME] = LOOPBACK[which]
@@ -889,8 +888,20 @@ class LoopbackTunnel(Tunnel):
 
   Loop = staticmethod(_Loop)
 
-  def Send(self, data, try_flush=False, activity=False, just_buffer=False):
-    return self.other_end.ProcessData(''.join(data))
+  # FIXME: This is a zero-length tunnel, but the code relies in some places
+  #        on the tunnel having a length.  We really need a pipe here, or
+  # things will go horribly wrong now and then.  Perhaps we can hack this
+  # by separating Write and Flush and looping back only on Flush.
+
+  def Send(self, data, try_flush=False, activity=False, just_buffer=True):
+    if self.write_blocked:
+      data = [self.write_blocked] + data
+      self.write_blocked = ''
+    if try_flush:
+      return self.other_end.ProcessData(''.join(data))
+    else:
+      self.write_blocked = ''.join(data)
+      return True
 
 
 class UserConn(Selectable):
@@ -1085,7 +1096,8 @@ class UserConn(Selectable):
               fail = False
 
         if fail:
-          if logging.DEBUG_IO: print '=== REQUEST\n%s\n===' % data
+          if logging.DEBUG_IO:
+            print '=== REQUEST\n%s\n===' % data
           self.ui.Notify(('%s - %s://%s:%s (USER ACCESS DENIED)'
                           ) % (remote_ip or 'unknown', proto, host, on_port),
                          prefix='!', color=self.ui.YELLOW)
@@ -1486,7 +1498,6 @@ class UiConn(LineParser):
                             length=1000)
     logging.LogDebug('Expecting: %s' % self.expect)
     self.Send('PageKite? %s\r\n' % self.challenge)
-
 
   def readline(self):
     self.qc.acquire()

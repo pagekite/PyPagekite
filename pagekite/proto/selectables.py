@@ -318,6 +318,8 @@ class Selectable(object):
                        eat_bytes, self.peeked, msg, errno))
         time.sleep(0.1)
 
+    if logging.DEBUG_IO:
+      print '===[ ATE %d PEEKED BYTES ]===\n' % eat_bytes
     self.peeked -= eat_bytes
     self.peeking = keep_peeking
     return
@@ -487,7 +489,8 @@ class Selectable(object):
     # Stop compressing streams that just get bigger.
     if zhistory and (zhistory[0] < zhistory[1]): compress = False
     try:
-      self.lock.acquire()
+      if self.lock:
+        self.lock.acquire()
       sdata = ''.join(data)
       if self.zw and compress:
         try:
@@ -496,15 +499,18 @@ class Selectable(object):
             zhistory[0] = len(sdata)
             zhistory[1] = len(zdata)
           return self.Send(['%xZ%x%s\r\n%s' % (len(sdata), len(zdata), rst, zdata)],
-                           activity=False, just_buffer=just_buffer)
+                           activity=False,
+                           try_flush=(not just_buffer), just_buffer=just_buffer)
         except zlib.error:
           logging.LogError('Error compressing, resetting ZChunks.')
           self.ResetZChunks()
 
       return self.Send(['%x%s\r\n%s' % (len(sdata), rst, sdata)],
-                       activity=False, just_buffer=just_buffer)
+                       activity=False,
+                       try_flush=(not just_buffer), just_buffer=just_buffer)
     finally:
-      self.lock.release()
+      if self.lock:
+        self.lock.release()
 
   def Flush(self, loops=50, wait=False):
     while loops != 0 and len(self.write_blocked) > 0 and self.Send([],
