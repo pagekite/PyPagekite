@@ -712,11 +712,12 @@ class Tunnel(ChunkParser):
     if proto in ('http', 'http2', 'http3', 'websocket'):
       if conn and data.startswith(HttpSecurityFilter.REJECT):
         # Pretend we need authentication for dangerous URLs
-        conn, data = False, ''
+        conn, data, code = False, '', 500
+      else:
+        code = (conn is None) and 503 or 401
       if not conn:
         # conn is None means we have no back-end.
         # conn is False means authentication is required.
-        code = (conn is None) and 503 or 401
         if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
                                 HTTP_Unavailable('be', proto, host,
                                   frame_url=self.conns.config.error_url,
