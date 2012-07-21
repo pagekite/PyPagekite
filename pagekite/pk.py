@@ -2654,7 +2654,7 @@ class PageKite(object):
       if epoll and conn.fd:
         try:
           epoll.unregister(conn.fd)
-        except IOError:
+        except (IOError, TypeError):
           pass
       conn.Cleanup()
       self.conns.Remove(conn)
