@@ -51,13 +51,14 @@ class Tunnel(ChunkParser):
 
   def __init__(self, conns):
     ChunkParser.__init__(self, ui=conns.config.ui)
-
+    self.server_info = ['x.x.x.x:x', [], [], [], False, False]
+    self.Init(conns)
     # We want to be sure to read the entire chunk at once, including
     # headers to save cycles, so we double the size we're willing to
     # read here.
     self.maxread *= 2
 
-    self.server_info = ['x.x.x.x:x', [], [], [], False, False]
+  def Init(self, conns):
     self.conns = conns
     self.users = {}
     self.remote_ssl = {}
@@ -66,6 +67,13 @@ class Tunnel(ChunkParser):
     self.last_ping = 0
     self.using_tls = False
     self.filters = []
+
+  def Cleanup(self, close=True):
+    if self.users:
+      for sid in self.users.keys():
+        self.CloseStream(sid)
+    ChunkParser.Cleanup(self, close=close)
+    self.Init(None)
 
   def __html__(self):
     return ('<b>Server name</b>: %s<br>'
@@ -156,7 +164,7 @@ class Tunnel(ChunkParser):
       elif r[0] in bad_results:
         bad.append(r[1])
       elif r[0] == 'X-PageKite-SessionID':
-        self.alt_id = r[1]
+        self.conns.SetAltId(self, r[1])
 
     logi = []
     if self.server_info[self.S_IS_MOBILE]:
@@ -240,7 +248,7 @@ class Tunnel(ChunkParser):
       self.Log([('BE-Quota', self.quota[0])])
 
     if self.ProcessAuthResults(results):
-      self.conns.Add(self, alt_id=self.alt_id)
+      self.conns.Add(self)
     else:
       self.Die()
 
@@ -447,7 +455,7 @@ class Tunnel(ChunkParser):
         self.ParsePageKiteCapabilities(parse)
 
         for sessionid in parse.Header('X-PageKite-SessionID'):
-          self.alt_id = sessionid
+          self.conns.SetAltId(self, sessionid)
           conns.config.servers_sessionids[server] = sessionid
 
         tryagain, tokens = self.CheckForTokens(parse)
@@ -539,13 +547,6 @@ class Tunnel(ChunkParser):
 
     if sid in self.zhistory:
       del self.zhistory[sid]
-
-  def Cleanup(self, close=True):
-    if self.users:
-      for sid in self.users.keys(): self.CloseStream(sid)
-    ChunkParser.Cleanup(self, close=close)
-    self.conns = None
-    self.users = self.zhistory = self.backends = {}
 
   def ResetRemoteZChunks(self):
     return self.SendChunked('NOOP: 1\r\nZRST: 1\r\n\r\n!',
@@ -712,6 +713,7 @@ class Tunnel(ChunkParser):
     if proto in ('http', 'http2', 'http3', 'websocket'):
       if conn and data.startswith(HttpSecurityFilter.REJECT):
         # Pretend we need authentication for dangerous URLs
+        conn.Die()
         conn, data, code = False, '', 500
       else:
         code = (conn is None) and 503 or 401
@@ -874,7 +876,8 @@ class LoopbackTunnel(Tunnel):
     Tunnel.Cleanup(self, close=close)
     other = self.other_end
     self.other_end = None
-    if other and other.other_end: other.Cleanup()
+    if other and other.other_end:
+      other.Cleanup(close=close)
 
   def Linkup(self, other):
     """Links two LoopbackTunnels together."""
@@ -910,13 +913,22 @@ class UserConn(Selectable):
 
   def __init__(self, address, ui=None):
     Selectable.__init__(self, address=address, ui=ui)
+    self.Reset()
+    # UserConn objects are considered active immediately
+    self.last_activity = time.time()
+
+  def Reset(self):
     self.tunnel = None
     self.conns = None
     self.backend = BE_NONE[:]
     self.config = {}
     self.security = None
-    # UserConn objects are considered active immediately
-    self.last_activity = time.time()
+
+  def Cleanup(self, close=True):
+    if close:
+      self.CloseTunnel()
+    Selectable.Cleanup(self, close=close)
+    self.Reset()
 
   def __html__(self):
     return ('<b>Tunnel</b>: <a href="/conn/%s">%s</a><br>'
@@ -937,14 +949,6 @@ class UserConn(Selectable):
         tunnel.SendStreamEof(self.sid, write_eof=True, read_eof=True)
       tunnel.CloseStream(self.sid, stream_closed=True)
     self.ProcessTunnelEof(read_eof=True, write_eof=True)
-
-  def Cleanup(self, close=True):
-    if close:
-      self.CloseTunnel()
-    Selectable.Cleanup(self, close=close)
-    if self.conns:
-      self.conns.Remove(self)
-      self.backend = self.config = self.conns = None
 
   def _FrontEnd(conn, address, proto, host, on_port, body, conns):
     # This is when an external user connects to a server and requests a
@@ -1241,8 +1245,6 @@ class UnknownConn(MagicProtocolParser):
     self.said_hello = False
 
   def Cleanup(self, close=True):
-    if self.conns:
-      self.conns.Remove(self)
     MagicProtocolParser.Cleanup(self, close=close)
     self.conns = self.parser = None
 

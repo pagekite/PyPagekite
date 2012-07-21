@@ -125,7 +125,7 @@ class Selectable(object):
     self.zlevel = 1
     self.zreset = False
 
-    # logging.Logging
+    # Logging
     self.logged = []
     self.alt_id = None
     self.countas = 'selectables_live'
@@ -148,6 +148,20 @@ class Selectable(object):
     self.countas = what
     global SELECTABLES
     SELECTABLES[self.gsid] = '%s %s' % (what, self)
+
+  def Cleanup(self, close=True):
+    self.peeked = self.zw = ''
+    self.Die(discard_buffer=True)
+    if close:
+      if self.fd:
+        self.fd.close()
+    self.fd = None
+
+    if not self.dead:
+      self.dead = True
+      self.CountAs('selectables_dead')
+      if close:
+        self.LogTraffic(final=True)
 
   def __del__(self):
     if common.gYamon:
@@ -268,20 +282,6 @@ class Selectable(object):
       self.wrote_bytes = self.read_bytes = 0
     elif final:
       self.Log([('eof', '1')])
-
-  def Cleanup(self, close=True):
-    common.buffered_bytes -= len(self.write_blocked)
-    self.write_blocked = self.peeked = self.zw = ''
-
-    if not self.dead:
-      self.dead = True
-      self.CountAs('selectables_dead')
-
-    if close:
-      if self.fd:
-        self.fd.close()
-      self.LogTraffic(final=True)
-    self.fd = None
 
   def SayHello(self):
     pass
@@ -535,10 +535,11 @@ class Selectable(object):
   def IsDead(s):
     return (s.read_eof and s.write_eof and not s.write_blocked)
 
-  def Die(s, discard_buffer=False):
+  def Die(self, discard_buffer=False):
     if discard_buffer:
-      s.write_blocked = ''
-    s.read_eof = s.write_eof = True
+      common.buffered_bytes -= len(self.write_blocked)
+      self.write_blocked = ''
+    self.read_eof = self.write_eof = True
     return True
 
 

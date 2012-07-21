@@ -155,7 +155,10 @@ class AuthThread(threading.Thread):
     self.qc.acquire()
     while self.keep_running:
       now = int(time.time())
-      if self.jobs:
+      if not self.jobs:
+        (requests, conn, callback) = None, None, None
+        self.qc.wait()
+      else:
         (requests, conn, callback) = self.jobs.pop(0)
         if logging.DEBUG_IO: print '=== AUTH REQUESTS\n%s\n===' % requests
         self.qc.release()
@@ -241,8 +244,6 @@ class AuthThread(threading.Thread):
         if logging.DEBUG_IO: print '=== AUTH RESULTS\n%s\n===' % results
         callback(results, log_info)
         self.qc.acquire()
-      else:
-        self.qc.wait()
 
     self.buffering = 0
     self.qc.release()
@@ -266,11 +267,16 @@ class Connections(object):
     self.auth = auth_thread or AuthThread(self)
     self.auth.start()
 
-  def Add(self, conn, alt_id=None):
+  def Add(self, conn):
     self.idle.append(conn)
     self.conns.append(conn)
-    if alt_id:
-      self.conns_by_id[alt_id] = conn
+
+  def SetAltId(self, conn, new_id):
+    if conn.alt_id and conn.alt_id in self.conns_by_id:
+      del self.conns_by_id[conn.alt_id]
+    if new_id:
+      self.conns_by_id[new_id] = conn
+    conn.alt_id = new_id
 
   def TrackIP(self, ip, domain):
     tick = '%d' % (time.time()/12)
@@ -302,10 +308,10 @@ class Connections(object):
         self.conns.remove(conn)
       if conn in self.idle:
         self.idle.remove(conn)
-      for tid in self.tunnels.keys():
-        if conn in self.tunnels[tid]:
-          self.tunnels[tid].remove(conn)
-          if not self.tunnels[tid]:
+      for tid, tunnels in self.tunnels.items():
+        if conn in tunnels:
+          tunnels.remove(conn)
+          if not tunnels:
             del self.tunnels[tid]
     except (ValueError, KeyError):
       # Let's not asplode if another thread races us for this.
@@ -334,6 +340,7 @@ class Connections(object):
         evil.append(s)
     for s in evil:
       logging.LogDebug('Removing broken Selectable: %s' % s)
+      s.Cleanup()
       self.Remove(s)
 
   def Connection(self, fd):
@@ -555,8 +562,7 @@ class TunnelManager(threading.Thread):
         active.append(conn)
       elif conn.created < now - 10:
         logging.LogDebug('Removing idle connection: %s' % conn)
-        self.conns.Remove(conn)
-        conn.Cleanup()
+        conn.Die(discard_buffer=True)
       elif conn.created < now - 1:
         conn.SayHello()
     for conn in active:
@@ -584,8 +590,7 @@ class TunnelManager(threading.Thread):
 
     for tunnel in dead.values():
       logging.Log([('dead', tunnel.server_info[tunnel.S_NAME])])
-      self.conns.Remove(tunnel)
-      tunnel.Cleanup()
+      tunnel.Die(discard_buffer=True)
 
   def CloseTunnels(self):
     close = []
@@ -594,8 +599,7 @@ class TunnelManager(threading.Thread):
         close.append(tunnel)
     for tunnel in close:
       logging.Log([('closing', tunnel.server_info[tunnel.S_NAME])])
-      self.conns.Remove(tunnel)
-      tunnel.Cleanup()
+      tunnel.Die(discard_buffer=True)
 
   def quit(self):
     self.keep_running = False
@@ -2633,8 +2637,7 @@ class PageKite(object):
       if osock:
         conn = self.conns.Connection(osock)
         if conn and not conn.Send([], try_flush=True):
-          self.conns.Remove(conn)
-          conn.Cleanup()
+          conn.Die(discard_buffer=True)
 
   def ProcessReadable(self, iready, throttle):
     if logging.DEBUG_IO:
@@ -2644,8 +2647,7 @@ class PageKite(object):
       if isock is not None:
         conn = self.conns.Connection(isock)
         if conn and not (conn.fd and conn.ReadData(maxread=throttle)):
-          self.conns.Remove(conn)
-          conn.Cleanup()
+          conn.Die(discard_buffer=True)
 
   def ProcessDead(self, epoll=None):
     for conn in self.conns.DeadConns():
@@ -2653,10 +2655,9 @@ class PageKite(object):
         try:
           epoll.unregister(conn.fd)
         except IOError:
-          logging.LogError(('Failed: epoll.unregister(%s): %s'
-                            ) % (conn.fd, format_exc()))
-      self.conns.Remove(conn)
+          pass
       conn.Cleanup()
+      self.conns.Remove(conn)
 
   def Select(self, epoll, waittime):
     iready = oready = eready = None
@@ -2764,7 +2765,7 @@ class PageKite(object):
       self.ProcessDead(epoll)
       self.last_loop = now
 
-      if now - self.last_barf > 60:
+      if now - self.last_barf > 600:
         self.last_barf = now
         if epoll:
           epoll.close()
@@ -2900,7 +2901,8 @@ class PageKite(object):
     if self.tunnel_manager: self.tunnel_manager.quit()
     if self.conns:
       if self.conns.auth: self.conns.auth.quit()
-      for conn in self.conns.conns: conn.Cleanup()
+      for conn in self.conns.conns:
+        conn.Cleanup()
 
 
 ##[ Main ]#####################################################################
