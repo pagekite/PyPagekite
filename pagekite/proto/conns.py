@@ -862,7 +862,8 @@ class LoopbackTunnel(Tunnel):
     self.require_all = True
     self.server_info[self.S_NAME] = LOOPBACK[which]
     self.other_end = None
-    self.CountAs('loopback%ss_live' % which)
+    self.which = which
+    self.CountAs('loopbacks_live')
     if which == 'FE':
       for d in backends.keys():
         if backends[d][BE_BHOST]:
@@ -871,6 +872,9 @@ class LoopbackTunnel(Tunnel):
           self.Log([('FE', self.server_info[self.S_NAME]),
                     ('proto', proto),
                     ('domain', domain)])
+
+  def __str__(self):
+    return '%s %s' % (Tunnel.__str__(self), self.which)
 
   def Cleanup(self, close=True):
     Tunnel.Cleanup(self, close=close)
@@ -894,14 +898,16 @@ class LoopbackTunnel(Tunnel):
 
   # FIXME: This is a zero-length tunnel, but the code relies in some places
   #        on the tunnel having a length.  We really need a pipe here, or
-  # things will go horribly wrong now and then.  Perhaps we can hack this
-  # by separating Write and Flush and looping back only on Flush.
+  # things will go horribly wrong now and then.  For now we hack this by
+  # separating Write and Flush and looping back only on Flush.
 
   def Send(self, data, try_flush=False, activity=False, just_buffer=True):
     if self.write_blocked:
       data = [self.write_blocked] + data
       self.write_blocked = ''
     if try_flush:
+      if logging.DEBUG_IO:
+        print '|%s| %s \n|%s| %s' % (self.which, self, self.which, data)
       return self.other_end.ProcessData(''.join(data))
     else:
       self.write_blocked = ''.join(data)
@@ -951,8 +957,7 @@ class UserConn(Selectable):
   def CloseTunnel(self, tunnel_closed=False):
     tunnel, self.tunnel = self.tunnel, None
     if tunnel and not tunnel_closed:
-      if not self.read_eof or not self.write_eof:
-        tunnel.SendStreamEof(self.sid, write_eof=True, read_eof=True)
+      tunnel.SendStreamEof(self.sid, write_eof=True, read_eof=True)
       tunnel.CloseStream(self.sid, stream_closed=True)
     self.ProcessTunnelEof(read_eof=True, write_eof=True)
 
@@ -997,7 +1002,8 @@ class UserConn(Selectable):
       chunk_headers = [('RIP', self.address[0]), ('RPort', self.address[1])]
       if conn.my_tls: chunk_headers.append(('RTLS', 1))
 
-    if tunnels: self.tunnel = tunnels[0]
+    if tunnels:
+      self.tunnel = tunnels[0]
     if (self.tunnel and self.tunnel.SendData(self, ''.join(body), host=host,
                                              proto=proto, port=on_port,
                                              chunk_headers=chunk_headers)
