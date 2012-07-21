@@ -932,9 +932,9 @@ class UserConn(Selectable):
 
   def __str__(self):
     if self.backend[BE_BHOST]:
-      ctype = 'be=%s:%s' % (self.backend[BE_BHOST], self.backend[BE_BPORT])
+      ctype = 'BE=%s:%s' % (self.backend[BE_BHOST], self.backend[BE_BPORT])
     else:
-      ctype = 'fe'
+      ctype = 'FE'
     return '%s %s' % (Selectable.__str__(self), ctype)
 
   def __html__(self):
@@ -949,8 +949,7 @@ class UserConn(Selectable):
     return Selectable.IsReadable(self, now)
 
   def CloseTunnel(self, tunnel_closed=False):
-    tunnel = self.tunnel
-    self.tunnel = None
+    tunnel, self.tunnel = self.tunnel, None
     if tunnel and not tunnel_closed:
       if not self.read_eof or not self.write_eof:
         tunnel.SendStreamEof(self.sid, write_eof=True, read_eof=True)
