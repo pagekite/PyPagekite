@@ -2709,7 +2709,7 @@ class PageKite(object):
                                  '' % (c, c.fd, mask))
             else:
               epoll.unregister(c.fd)
-        except IOError:
+        except (IOError, TypeError):
           # Failing to unregister is FINE, we don't complain about that.
           pass
 
