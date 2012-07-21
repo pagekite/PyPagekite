@@ -2765,7 +2765,7 @@ class PageKite(object):
       self.ProcessDead(epoll)
       self.last_loop = now
 
-      if now - self.last_barf > 600:
+      if now - self.last_barf > (logging.DEBUG_IO and 15 or 600):
         self.last_barf = now
         if epoll:
           epoll.close()

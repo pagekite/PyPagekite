@@ -147,7 +147,7 @@ class Selectable(object):
       common.gYamon.vadd(what, 1)
     self.countas = what
     global SELECTABLES
-    SELECTABLES[self.gsid] = '%s %s' % (what, self)
+    SELECTABLES[self.gsid] = '%s %s' % (self.countas, self)
 
   def Cleanup(self, close=True):
     self.peeked = self.zw = ''
@@ -172,7 +172,10 @@ class Selectable(object):
       del SELECTABLES[self.gsid]
 
   def __str__(self):
-    return '%s: %s' % (self.log_id, self.__class__)
+    return '%s: %s<%s%s%s>' % (self.log_id, self.__class__,
+                               self.read_eof and '-' or 'r',
+                               self.write_eof and '-' or 'w',
+                               len(self.write_blocked))
 
   def __html__(self):
     try:
@@ -283,6 +286,9 @@ class Selectable(object):
     elif final:
       self.Log([('eof', '1')])
 
+    global SELECTABLES
+    SELECTABLES[self.gsid] = '%s %s' % (self.countas, self)
+
   def SayHello(self):
     pass
 
@@ -291,6 +297,8 @@ class Selectable(object):
     return False
 
   def ProcessEof(self):
+    global SELECTABLES
+    SELECTABLES[self.gsid] = '%s %s' % (self.countas, self)
     if self.read_eof and self.write_eof and not self.write_blocked:
       self.Cleanup()
       return False

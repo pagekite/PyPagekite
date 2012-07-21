@@ -930,6 +930,13 @@ class UserConn(Selectable):
     Selectable.Cleanup(self, close=close)
     self.Reset()
 
+  def __str__(self):
+    if self.backend[BE_BHOST]:
+      ctype = 'be=%s:%s' % (self.backend[BE_BHOST], self.backend[BE_BPORT])
+    else:
+      ctype = 'fe'
+    return '%s %s' % (Selectable.__str__(self), ctype)
+
   def __html__(self):
     return ('<b>Tunnel</b>: <a href="/conn/%s">%s</a><br>'
             '%s') % (self.tunnel and self.tunnel.sid or '',
@@ -1186,7 +1193,8 @@ class UserConn(Selectable):
 
   def ProcessEofWrite(self, tell_tunnel=True):
     self.write_eof = True
-    if not self.write_blocked: self.Shutdown(socket.SHUT_WR)
+    if not self.write_blocked:
+      self.Shutdown(socket.SHUT_WR)
 
     if tell_tunnel and self.tunnel:
       self.tunnel.SendStreamEof(self.sid, write_eof=True)
