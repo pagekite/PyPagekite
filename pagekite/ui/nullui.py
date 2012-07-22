@@ -60,7 +60,12 @@ class NullUi(object):
 
     self.wfile = wfile
     self.rfile = rfile
+    self.welcome = welcome
 
+    self.Reset()
+    self.Splash()
+
+  def Reset(self):
     self.in_wizard = False
     self.wizard_tell = None
     self.last_tick = 0
@@ -68,10 +73,8 @@ class NullUi(object):
     self.status_tag = ''
     self.status_col = self.NORM
     self.status_msg = ''
-    self.welcome = welcome
     self.tries = 200
     self.server_info = None
-    self.Splash()
 
   def Splash(self): pass
 
@@ -99,6 +102,10 @@ class NullUi(object):
 
   def AskYesNo(self, question, default=None, pre=None, yes='Yes', no='No',
                wizard_hint=False, image=None, back=None):
+    return self.DefaultOrFail(question, default)
+
+  def AskQuestion(self, question, pre=[], default=None,
+                  wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
   def AskKiteName(self, domains, question, pre=[], default=None,

@@ -58,7 +58,7 @@ OPT_FLAGS = 'o:O:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'nullui', 'remoteui', 'uiport=', 'help', 'settings',
             'optfile=', 'optdir=', 'savefile=',
-            'friendly',
+            'friendly', 'shell',
             'signup', 'list', 'add', 'only', 'disable', 'remove', 'save',
             'service_xmlrpc=', 'controlpanel', 'controlpass',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webpath=',
@@ -318,6 +318,9 @@ class Connections(object):
       logging.LogError('Failed to remove %s: %s' % (conn, format_exc()))
       if retry:
         return self.Remove(conn, retry=False)
+
+  def Sockets(self):
+    return [s.fd for s in self.conns]
 
   def Readable(self):
     # FIXME: This is O(n)
@@ -603,6 +606,10 @@ class TunnelManager(threading.Thread):
 
   def quit(self):
     self.keep_running = False
+    try:
+      self.join()
+    except RuntimeError:
+      pass
 
   def run(self):
     self.keep_running = True
@@ -802,6 +809,7 @@ class PageKite(object):
     self.ui_comm = None
 
     self.save = 0
+    self.shell = False
     self.kite_add = False
     self.kite_only = False
     self.kite_disable = False
@@ -1179,11 +1187,20 @@ class PageKite(object):
       self.ui.Spacer()
 
   def FallDown(self, message, help=True, longhelp=False, noexit=False):
-    if self.conns and self.conns.auth: self.conns.auth.quit()
-    if self.ui_httpd: self.ui_httpd.quit()
-    if self.ui_comm: self.ui_comm.quit()
-    if self.tunnel_manager: self.tunnel_manager.quit()
+    if self.conns and self.conns.auth:
+      self.conns.auth.quit()
+    if self.ui_httpd:
+      self.ui_httpd.quit()
+    if self.ui_comm:
+      self.ui_comm.quit()
+    if self.tunnel_manager:
+      self.tunnel_manager.quit()
     self.keep_looping = False
+    for fd in (self.conns and self.conns.Sockets() or []):
+      try:
+        fd.close()
+      except (IOError, OSError, TypeError):
+        pass
     self.conns = self.ui_httpd = self.ui_comm = self.tunnel_manager = None
     if help or longhelp:
       import manual
@@ -1191,8 +1208,10 @@ class PageKite(object):
       print '***'
     else:
       self.ui.Status('exiting', message=(message or 'Good-bye!'))
-    if message: print 'Error: %s' % message
-    if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
+    if message:
+      print 'Error: %s' % message
+    if logging.DEBUG_IO:
+      traceback.print_exc(file=sys.stderr)
     if not noexit:
       self.main_loop = False
       sys.exit(1)
@@ -1509,6 +1528,8 @@ class PageKite(object):
       elif opt in ('-S', '--savefile'):
         if self.savefile: raise ConfigError('Multiple save-files!')
         self.savefile = arg
+      elif opt == '--shell':
+        self.shell = True
       elif opt == '--save':
         self.save = True
       elif opt == '--only':
@@ -2615,9 +2636,10 @@ class PageKite(object):
     else:
       try:
         logging.LogFile = fd = open(filename, "a", 0)
-        os.dup2(fd.fileno(), sys.stdin.fileno())
         os.dup2(fd.fileno(), sys.stdout.fileno())
-        if not self.ui.WANTS_STDERR: os.dup2(fd.fileno(), sys.stderr.fileno())
+        if not self.ui.WANTS_STDERR:
+          os.dup2(fd.fileno(), sys.stdin.fileno())
+          os.dup2(fd.fileno(), sys.stderr.fileno())
       except Exception, e:
         raise ConfigError('%s' % e)
 
@@ -2879,11 +2901,14 @@ class PageKite(object):
       pf.close()
 
     # Do this after creating the PID and log-files.
-    if self.daemonize: os.chdir('/')
+    if self.daemonize:
+      os.chdir('/')
 
     # Drop privileges, if we have any.
-    if self.setgid: os.setgid(self.setgid)
-    if self.setuid: os.setuid(self.setuid)
+    if self.setgid:
+      os.setgid(self.setgid)
+    if self.setuid:
+      os.setuid(self.setuid)
     if self.setuid or self.setgid:
       logging.Log([('uid', os.getuid()), ('gid', os.getgid())])
 
@@ -2897,9 +2922,12 @@ class PageKite(object):
 
     self.ui.Status('exiting', message='Stopping...')
     logging.Log([('stopping', 'pagekite.py')])
-    if self.ui_httpd: self.ui_httpd.quit()
-    if self.ui_comm: self.ui_comm.quit()
-    if self.tunnel_manager: self.tunnel_manager.quit()
+    if self.ui_httpd:
+      self.ui_httpd.quit()
+    if self.ui_comm:
+      self.ui_comm.quit()
+    if self.tunnel_manager:
+      self.tunnel_manager.quit()
     if self.conns:
       if self.conns.auth: self.conns.auth.quit()
       for conn in self.conns.conns:
@@ -2911,11 +2939,10 @@ class PageKite(object):
 def Main(pagekite, configure, uiclass=NullUi,
                               progname=None, appver=APPVER,
                               http_handler=None, http_server=None):
-  logging.ResetLog()
-  crashes = 1
   ui = uiclass()
-
+  crashes = 0
   while True:
+    logging.ResetLog()
     pk = pagekite(ui=ui, http_handler=http_handler, http_server=http_server)
     try:
       try:
@@ -2929,18 +2956,19 @@ def Main(pagekite, configure, uiclass=NullUi,
         pk.Start()
 
       except (ConfigError, getopt.GetoptError), msg:
-        pk.FallDown(msg)
+        pk.FallDown(msg, noexit=pk.shell)
 
       except KeyboardInterrupt, msg:
         pk.FallDown(None, help=False, noexit=True)
-        return
+        if not pk.shell:
+          return
 
     except SystemExit, status:
-      sys.exit(status)
+      if not pk.shell:
+        sys.exit(status)
 
     except Exception, msg:
       traceback.print_exc(file=sys.stderr)
-
       if pk.crash_report_url:
         try:
           print 'Submitting crash report to %s' % pk.crash_report_url
@@ -2954,19 +2982,27 @@ def Main(pagekite, configure, uiclass=NullUi,
           print 'FAILED: %s' % e
 
       pk.FallDown(msg, help=False, noexit=pk.main_loop)
+      crashes = min(9, crashes+1)
 
-      # If we get this far, then we're looping. Clean up.
-      sockets = pk.conns and pk.conns.Sockets() or []
-      for fd in sockets: fd.close()
+    if pk.shell:
+      try:
+        ui.Reset()
+        rv = ui.AskQuestion(os.path.basename(sys.argv[0]), back=False, pre=[
+          'Press CTRL+C again to quit, ENTER to restart or type some new',
+          'arguments to try something completely different.'
+        ])
+        sys.argv[1:] = rv.split()
+        crashes = 0
+      except KeyboardInterrupt:
+        ui.Status('quitting')
+        return
+    elif not pk.main_loop:
+      return
 
-      # Exponential fall-back.
-      logging.LogDebug('Restarting in %d seconds...' % (2 ** crashes))
-      time.sleep(2 ** crashes)
-      crashes += 1
-      if crashes > 9: crashes = 9
+    # Exponential fall-back.
+    logging.LogDebug('Restarting in %d seconds...' % (2 ** crashes))
+    time.sleep(2 ** crashes)
 
-    # No exception, do we keep looping?
-    if not pk.main_loop: return
 
 def Configure(pk):
   if '--appver' in sys.argv:
@@ -2991,6 +3027,7 @@ def Configure(pk):
       pk.RegisterNewKite(autoconfigure=True, first=True)
     if friendly_mode:
       pk.save = True
+      pk.shell = True
 
   pk.CheckConfig()
 
