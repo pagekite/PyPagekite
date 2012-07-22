@@ -2671,7 +2671,8 @@ class PageKite(object):
     except KeyboardInterrupt:
       raise
     except:
-      logging.LogError('Error in select: %s (%s/%s)' % (e, isocks, osocks))
+      logging.LogError('Error in select(%s/%s): %s' % (isocks, osocks,
+                                                       format_exc()))
       self.conns.CleanFds()
       self.last_loop -= 1
 
