@@ -1215,6 +1215,10 @@ class PageKite(object):
     if not noexit:
       self.main_loop = False
       sys.exit(1)
+    try:
+      os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+    except:
+      pass
 
   def GetTlsEndpointCtx(self, domain):
     if domain in self.tls_endpoints:
@@ -2985,14 +2989,23 @@ def Main(pagekite, configure, uiclass=NullUi,
       crashes = min(9, crashes+1)
 
     if pk.shell:
+      import manual
+      crashes = 0
+      prompt = os.path.basename(sys.argv[0])
+      pre = [
+        'Press CTRL+C again to quit, ENTER to restart or type some new',
+        'arguments to try something completely different. Or try `help`.'
+      ]
       try:
-        ui.Reset()
-        rv = ui.AskQuestion(os.path.basename(sys.argv[0]), back=False, pre=[
-          'Press CTRL+C again to quit, ENTER to restart or type some new',
-          'arguments to try something completely different.'
-        ])
-        sys.argv[1:] = rv.split()
-        crashes = 0
+        while pk.shell:
+          ui.Reset()
+          rv = ui.AskQuestion(prompt, back=False, pre=pre)
+          if rv == 'help':
+            print manual.MINIDOC
+            pre = []
+          else:
+            sys.argv[1:] = ['--shell'] + rv.split()
+            pk.shell = False
       except KeyboardInterrupt:
         ui.Status('quitting')
         return
