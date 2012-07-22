@@ -1183,10 +1183,10 @@ class UserConn(Selectable):
 
   def ProcessTunnelEof(self, read_eof=False, write_eof=False):
     rv = True
-    if read_eof and not self.write_eof:
-      rv = self.ProcessEofWrite(tell_tunnel=False) and rv
     if write_eof and not self.read_eof:
       rv = self.ProcessEofRead(tell_tunnel=False) and rv
+    if read_eof and not self.write_eof:
+      rv = self.ProcessEofWrite(tell_tunnel=False) and rv
     return rv
 
   def ProcessEofRead(self, tell_tunnel=True):
@@ -1206,7 +1206,10 @@ class UserConn(Selectable):
     if tell_tunnel and self.tunnel:
       self.tunnel.SendStreamEof(self.sid, write_eof=True)
 
-    if self.conns and self.ConnType() == 'FE' and self not in self.conns.idle:
+    if (self.conns and
+        self.ConnType() == 'FE' and
+        (not self.read_eof) and
+        self not in self.conns.idle):
       self.LogDebug('Done writing, will time out reads in 120 seconds.')
       self.created = time.time() + 120
       self.last_activity = 0
