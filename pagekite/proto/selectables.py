@@ -163,12 +163,17 @@ class Selectable(object):
         self.LogTraffic(final=True)
 
   def __del__(self):
-    if common.gYamon:
-      common.gYamon.vadd(self.countas, -1)
-      common.gYamon.vadd('selectables', -1)
-    global SELECTABLES
-    if self.gsid in SELECTABLES:
+    try:
+      if common.gYamon:
+        common.gYamon.vadd(self.countas, -1)
+        common.gYamon.vadd('selectables', -1)
+    except AttributeError:
+      pass
+    try:
+      global SELECTABLES
       del SELECTABLES[self.gsid]
+    except (KeyError, TypeError):
+      pass
 
   def __str__(self):
     return '%s: %s<%s%s%s>' % (self.log_id, self.__class__,
