@@ -156,7 +156,6 @@ class Selectable(object):
       if self.fd:
         self.fd.close()
     self.fd = None
-
     if not self.dead:
       self.dead = True
       self.CountAs('selectables_dead')
