@@ -1206,7 +1206,7 @@ class UserConn(Selectable):
     if tell_tunnel and self.tunnel:
       self.tunnel.SendStreamEof(self.sid, write_eof=True)
 
-    if self.conns and self.ConnType == 'FE' and self not in self.conns.idle:
+    if self.conns and self.ConnType() == 'FE' and self not in self.conns.idle:
       self.LogDebug('Done writing, will time out reads in 120 seconds.')
       self.created = time.time() + 120
       self.last_activity = 0
