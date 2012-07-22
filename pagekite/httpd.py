@@ -979,7 +979,10 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
       gYamon.vset('httpd_ssl_enabled', self.enable_ssl)
       gYamon.vset('errors', 0)
       gYamon.vset("bytes_all", 0)
-      gYamon.views['selectables'] = (selectables.SELECTABLES, [])
+      gYamon.views['selectables'] = (selectables.SELECTABLES, {
+        'idle': [0, 0, self.conns.idle],
+        'conns': [0, 0, self.conns.conns]
+      })
     except:
       pass
 
