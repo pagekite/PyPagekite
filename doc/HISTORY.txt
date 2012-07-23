@@ -4,7 +4,7 @@ Version history - highlights
 v0.5.1   2012.07.22
 ------
    - Fixed lots and lots of file descriptor leaks.
-   - Added "shell mode" for easier use in a GUI environment.
+   - Added --shell for easier use in a GUI environment.
 
 
 v0.5.0   2012.07.20
