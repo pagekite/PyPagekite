@@ -723,6 +723,8 @@ class ChunkParser(Selectable):
     self.header = ''
     self.chunk = ''
     self.zr = zlib.decompressobj()
+    # FIXME, bug hunting:
+    self.pd_recursion = 0
 
   def __html__(self):
     return Selectable.__html__(self)
@@ -732,71 +734,79 @@ class ChunkParser(Selectable):
     self.zr = self.chunk = self.header = None
 
   def ProcessData(self, data):
-    if self.peeking:
-      self.want_cbytes = 0
-      self.want_bytes = 0
-      self.header = ''
-      self.chunk = ''
-
-    if self.want_bytes == 0:
-      self.header += (data or '')
-      if self.header.find('\r\n') < 0:
-        if self.read_eof: return self.ProcessEofRead()
-        return True
-      try:
-        size, data = self.header.split('\r\n', 1)
+    self.pd_recursion += 1
+    try:
+      if self.peeking:
+        self.want_cbytes = 0
+        self.want_bytes = 0
         self.header = ''
-
-        if size.endswith('R'):
-          self.zr = zlib.decompressobj()
-          size = size[0:-1]
-
-        if 'Z' in size:
-          csize, zsize = size.split('Z')
-          self.compressed = True
-          self.want_cbytes = int(csize, 16)
-          self.want_bytes = int(zsize, 16)
-        else:
-          self.compressed = False
-          self.want_bytes = int(size, 16)
-
-      except ValueError, err:
-        self.LogError('ChunkParser::ProcessData: %s' % err)
-        self.Log([('bad_data', data)])
-        return False
+        self.chunk = ''
 
       if self.want_bytes == 0:
-        return False
+        self.header += (data or '')
+        if self.header.find('\r\n') < 0:
+          if self.read_eof:
+            return self.ProcessEofRead()
+          return True
 
-    process = data[:self.want_bytes]
-    leftover = data[self.want_bytes:]
-
-    self.chunk += process
-    self.want_bytes -= len(process)
-
-    result = 1
-    if self.want_bytes == 0:
-      if self.compressed:
         try:
-          cchunk = self.zr.decompress(self.chunk)
-        except zlib.error:
-          cchunk = ''
+          size, data = self.header.split('\r\n', 1)
+          self.header = ''
 
-        if len(cchunk) != self.want_cbytes:
-          result = self.ProcessCorruptChunk(self.chunk)
+          if size.endswith('R'):
+            self.zr = zlib.decompressobj()
+            size = size[0:-1]
+
+          if 'Z' in size:
+            csize, zsize = size.split('Z')
+            self.compressed = True
+            self.want_cbytes = int(csize, 16)
+            self.want_bytes = int(zsize, 16)
+          else:
+            self.compressed = False
+            self.want_bytes = int(size, 16)
+
+        except ValueError, err:
+          self.LogError('ChunkParser::ProcessData: %s' % err)
+          self.Log([('bad_data', data)])
+          return False
+
+        if self.want_bytes == 0:
+          return False
+
+      process = data[:self.want_bytes]
+      leftover = data[self.want_bytes:]
+
+      self.chunk += process
+      self.want_bytes -= len(process)
+
+      result = 1
+      if self.want_bytes == 0:
+        if self.compressed:
+          try:
+            cchunk = self.zr.decompress(self.chunk)
+          except zlib.error:
+            cchunk = ''
+
+          if len(cchunk) != self.want_cbytes:
+            result = self.ProcessCorruptChunk(self.chunk)
+          else:
+            result = self.ProcessChunk(cchunk)
         else:
-          result = self.ProcessChunk(cchunk)
-      else:
-        result = self.ProcessChunk(self.chunk)
-      self.chunk = ''
-      if result and leftover:
-        # FIXME: This blows the stack from time to time.  We need a loop
-        #        or better yet, to just process more in a subsequent
-        #        iteration of the main select() loop.
-        result = self.ProcessData(leftover)
+          result = self.ProcessChunk(self.chunk)
+        self.chunk = ''
+        if result and leftover:
+          if self.pd_recursion > 5:
+            self.LogDebug('Recursion, leftovers: >%s<' % leftover)
+            if self.pd_recursion > 20:
+              raise BugFoundError('FIXME: Too much recursion, head splody.')
+          result = self.ProcessData(leftover)
 
-    if self.read_eof: result = self.ProcessEofRead() and result
-    return result
+      if self.read_eof:
+        return self.ProcessEofRead() and result
+      return result
+    finally:
+      self.pd_recursion -= 1
 
   def ProcessCorruptChunk(self, chunk):
     self.LogError('ChunkParser::ProcessData: ProcessCorruptChunk not overridden!')
