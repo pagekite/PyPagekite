@@ -723,8 +723,6 @@ class ChunkParser(Selectable):
     self.header = ''
     self.chunk = ''
     self.zr = zlib.decompressobj()
-    # FIXME, bug hunting:
-    self.pd_recursion = 0
 
   def __html__(self):
     return Selectable.__html__(self)
@@ -734,8 +732,11 @@ class ChunkParser(Selectable):
     self.zr = self.chunk = self.header = None
 
   def ProcessData(self, data):
-    self.pd_recursion += 1
-    try:
+    loops = 1000
+    result = more = True
+    while result and more and (loops > 0):
+      loops -= 1
+
       if self.peeking:
         self.want_cbytes = 0
         self.want_bytes = 0
@@ -775,12 +776,11 @@ class ChunkParser(Selectable):
           return False
 
       process = data[:self.want_bytes]
-      leftover = data[self.want_bytes:]
+      data = more = data[self.want_bytes:]
 
       self.chunk += process
       self.want_bytes -= len(process)
 
-      result = 1
       if self.want_bytes == 0:
         if self.compressed:
           try:
@@ -795,18 +795,14 @@ class ChunkParser(Selectable):
         else:
           result = self.ProcessChunk(self.chunk)
         self.chunk = ''
-        if result and leftover:
-          if self.pd_recursion > 5:
-            self.LogDebug('Recursion, leftovers: >%s<' % leftover)
-            if self.pd_recursion > 20:
-              raise BugFoundError('FIXME: Too much recursion, head splody.')
-          result = self.ProcessData(leftover)
 
-      if self.read_eof:
-        return self.ProcessEofRead() and result
+    if result and more:
+      self.LogError('Unprocessed data: %s') % data
+      raise BugFoundError('Too much data')
+    elif self.read_eof:
+      return self.ProcessEofRead() and result
+    else:
       return result
-    finally:
-      self.pd_recursion -= 1
 
   def ProcessCorruptChunk(self, chunk):
     self.LogError('ChunkParser::ProcessData: ProcessCorruptChunk not overridden!')
