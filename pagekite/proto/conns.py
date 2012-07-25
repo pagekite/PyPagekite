@@ -1222,7 +1222,8 @@ class UserConn(Selectable):
     if self.write_eof and not self.write_blocked:
       self.Shutdown(socket.SHUT_WR)
     elif try_flush or not self.write_blocked:
-      self.tunnel.SendProgress(self.sid, self)
+      if self.tunnel:
+        self.tunnel.SendProgress(self.sid, self)
     return rv
 
   def ProcessData(self, data):
