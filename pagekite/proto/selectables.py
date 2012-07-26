@@ -342,7 +342,7 @@ class Selectable(object):
 
     now = time.time()
     maxread = maxread or self.maxread
-    flooded = self.Flooded()
+    flooded = self.Flooded(now)
     if flooded > self.max_read_speed and not self.acked_kb_delta:
       # FIXME: This is v1 flow control, kill it when 0.4.7 is "everywhere"
       last = self.throttle_until
@@ -398,10 +398,14 @@ class Selectable(object):
         if self.read_bytes > logging.LOG_THRESHOLD: self.LogTraffic()
       return self.ProcessData(data)
 
-  def Flooded(self):
-    flooded = self.read_bytes + self.all_in
-    flooded -= self.max_read_speed * 0.95 * (time.time() - self.created)
-    return flooded
+  def Flooded(self, now=None):
+    delta = ((now or time.time()) - self.created)
+    if delta >= 1:
+      flooded = self.read_bytes + self.all_in
+      flooded -= self.max_read_speed * 0.95 * delta
+      return flooded
+    else:
+      return 0
 
   def RecordProgress(self, skb, bps):
     if skb >= 0:

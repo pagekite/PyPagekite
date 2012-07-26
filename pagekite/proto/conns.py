@@ -920,8 +920,6 @@ class UserConn(Selectable):
   def __init__(self, address, ui=None):
     Selectable.__init__(self, address=address, ui=ui)
     self.Reset()
-    # UserConn objects are considered active immediately
-    self.last_activity = time.time()
 
   def Reset(self):
     self.tunnel = None
@@ -1208,12 +1206,9 @@ class UserConn(Selectable):
 
     if (self.conns and
         self.ConnType() == 'FE' and
-        (not self.read_eof) and
-        self not in self.conns.idle):
+        (not self.read_eof)):
       self.LogDebug('Done writing, will time out reads in 120 seconds.')
-      self.created = time.time() + 120
-      self.last_activity = 0
-      self.conns.idle.append(self)
+      self.conns.SetIdle(self, 120)
 
     return self.ProcessEof()
 
@@ -1263,8 +1258,9 @@ class UnknownConn(MagicProtocolParser):
 
     self.conns = conns
     self.conns.Add(self)
-    self.sid = -1
+    self.conns.SetIdle(self, 10)
 
+    self.sid = -1
     self.host = None
     self.proto = None
     self.said_hello = False
@@ -1275,13 +1271,13 @@ class UnknownConn(MagicProtocolParser):
 
   def SayHello(self):
     if self.said_hello:
-      return
+      return False
     else:
       self.said_hello = True
-
-    if self.on_port in (25, 125, ):
+    if self.on_port in (25, 125, 2525):
       # FIXME: We don't actually support SMTP yet and 125 is bogus.
       self.Send(['220 ready ESMTP PageKite Magic Proxy\n'], try_flush=True)
+    return True
 
   def __str__(self):
     return '%s (%s/%s:%s)' % (MagicProtocolParser.__str__(self),
@@ -1331,7 +1327,8 @@ class UnknownConn(MagicProtocolParser):
 
     elif self.parser.method == 'CONNECT':
       if self.parser.path.lower().startswith('pagekite:'):
-        if Tunnel.FrontEnd(self, lines, self.conns) is None: return False
+        if Tunnel.FrontEnd(self, lines, self.conns) is None:
+          return False
         done = True
 
       else:
@@ -1457,10 +1454,10 @@ class UnknownConn(MagicProtocolParser):
           if not domains[0]:
             domains = None
       except:
-        # Probably insufficient data, just return True and assume we'll have
-        # better luck on the next round.
-        if logging.DEBUG_IO:
-          self.LogError('Error in ProcessTls: %s' % format_exc())
+        # Probably insufficient data, just True and assume we'll have
+        # better luck on the next round... but with a timeout.
+        self.LogDebug('Error in ProcessTLS, will time out in 120 seconds.')
+        self.conns.SetIdle(self, 120)
         return True
 
     if domains and domains[0] is not None:
@@ -1480,6 +1477,8 @@ class UnknownConn(MagicProtocolParser):
           self.peeking = False
           self.is_tls = False
           self.my_tls = True
+          self.LogDebug('SSL OK, will time out in 120 seconds.')
+          self.conns.SetIdle(self, 120)
           return True
         else:
           return False
@@ -1602,7 +1601,6 @@ class Listener(Selectable):
 
     self.connclass = connclass
     self.port = port
-    self.last_activity = self.created + 1
     self.conns = conns
     self.conns.Add(self)
     self.CountAs('listeners_live')
@@ -1615,6 +1613,7 @@ class Listener(Selectable):
 
   def ReadData(self, maxread=None):
     try:
+      self.last_activity = time.time()
       client, address = self.fd.accept()
       if client:
         self.Log([('accept', '%s:%s' % (obfuIp(address[0]), address[1]))])

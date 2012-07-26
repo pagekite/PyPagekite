@@ -268,7 +268,6 @@ class Connections(object):
     self.auth.start()
 
   def Add(self, conn):
-    self.idle.append(conn)
     self.conns.append(conn)
 
   def SetAltId(self, conn, new_id):
@@ -277,6 +276,9 @@ class Connections(object):
     if new_id:
       self.conns_by_id[new_id] = conn
     conn.alt_id = new_id
+
+  def SetIdle(self, conn, seconds):
+    self.idle.append((time.time() + seconds, conn.last_activity, conn))
 
   def TrackIP(self, ip, domain):
     tick = '%d' % (time.time()/12)
@@ -306,8 +308,12 @@ class Connections(object):
         del self.conns_by_id[conn.alt_id]
       if conn in self.conns:
         self.conns.remove(conn)
-      if conn in self.idle:
-        self.idle.remove(conn)
+      rmp = []
+      for elc in self.idle:
+        if elc[-1] == conn:
+          rmp.append(elc)
+      for elc in rmp:
+        self.idle.remove(elc)
       for tid, tunnels in self.tunnels.items():
         if conn in tunnels:
           tunnels.remove(conn)
@@ -318,6 +324,9 @@ class Connections(object):
       logging.LogError('Failed to remove %s: %s' % (conn, format_exc()))
       if retry:
         return self.Remove(conn, retry=False)
+
+  def IdleConns(self):
+    return [p[-1] for p in self.idle]
 
   def Sockets(self):
     return [s.fd for s in self.conns]
@@ -368,6 +377,20 @@ class Connections(object):
         self.tunnels[tid].remove(conn)
       if not self.tunnels[tid]:
         del self.tunnels[tid]
+
+  def CheckIdleConns(self, now):
+    active = []
+    for elc in self.idle:
+      expire, last_activity, conn = elc
+      if conn.last_activity > last_activity:
+        active.append(elc)
+      elif expire < now:
+        logging.LogDebug('Killing idle connection: %s' % conn)
+        conn.Die(discard_buffer=True)
+      elif conn.created < now - 1:
+        conn.SayHello()
+    for pair in active:
+      self.idle.remove(pair)
 
   def Tunnel(self, proto, domain, conn=None):
     tid = '%s:%s' % (proto, domain)
@@ -558,19 +581,6 @@ class TunnelManager(threading.Thread):
     self.pkite = pkite
     self.conns = conns
 
-  def CheckIdleConns(self, now):
-    active = []
-    for conn in self.conns.idle:
-      if conn.last_activity:
-        active.append(conn)
-      elif conn.created < now - 10:
-        logging.LogDebug('Removing idle connection: %s' % conn)
-        conn.Die(discard_buffer=True)
-      elif conn.created < now - 1:
-        conn.SayHello()
-    for conn in active:
-      self.conns.idle.remove(conn)
-
   def CheckTunnelQuotas(self, now):
     for tid in self.conns.tunnels:
       for tunnel in self.conns.tunnels[tid]:
@@ -710,7 +720,7 @@ class TunnelManager(threading.Thread):
           time.sleep(1)
           if i > self.check_interval: break
           if self.pkite.isfrontend:
-            self.CheckIdleConns(time.time())
+            self.conns.CheckIdleConns(time.time())
 
   def HurryUp(self):
     self.check_interval = 0
