@@ -154,6 +154,8 @@ class Selectable(object):
     self.Die(discard_buffer=True)
     if close:
       if self.fd:
+        if logging.DEBUG_IO:
+          self.LogDebug('Closing FD: %s' % self)
         self.fd.close()
     self.fd = None
     if not self.dead:
@@ -263,13 +265,17 @@ class Selectable(object):
     logging.LogInfo(message, values)
     self.logged.append((message, values))
 
+  def LogTrafficStatus(self, final=False):
+    if self.ui:
+      self.ui.Status('traffic')
+
   def LogTraffic(self, final=False):
     if self.wrote_bytes or self.read_bytes:
       now = time.time()
       self.all_out += self.wrote_bytes
       self.all_in += self.read_bytes
 
-      if self.ui: self.ui.Status('traffic')
+      self.LogTrafficStatus(final)
 
       if common.gYamon:
         common.gYamon.vadd("bytes_all", self.wrote_bytes

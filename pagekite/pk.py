@@ -629,7 +629,8 @@ class TunnelManager(threading.Thread):
         self._run()
       except Exception, e:
         logging.LogError('TunnelManager died: %s' % e)
-        if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
+        if logging.DEBUG_IO:
+          traceback.print_exc(file=sys.stderr)
         time.sleep(5)
     logging.LogDebug('TunnelManager: done')
 
@@ -639,10 +640,9 @@ class TunnelManager(threading.Thread):
 
       # Reconnect if necessary, randomized exponential fallback.
       problem, connecting = self.pkite.CreateTunnels(self.conns)
-      if problem:
-        self.check_interval += int(1+random.random()*self.check_interval)
-        if self.check_interval > 300:
-          self.check_interval = 300
+      if problem or connecting:
+        self.check_interval = min(60, self.check_interval +
+                                     int(1+random.random()*self.check_interval))
         time.sleep(1)
       else:
         self.check_interval = 5
@@ -718,7 +718,8 @@ class TunnelManager(threading.Thread):
       for i in xrange(0, self.check_interval):
         if self.keep_running:
           time.sleep(1)
-          if i > self.check_interval: break
+          if i > self.check_interval:
+            break
           if self.pkite.isfrontend:
             self.conns.CheckIdleConns(time.time())
 

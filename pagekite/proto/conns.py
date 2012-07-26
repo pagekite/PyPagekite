@@ -79,6 +79,14 @@ class Tunnel(ChunkParser):
     return ('<b>Server name</b>: %s<br>'
             '%s') % (self.server_info[self.S_NAME], ChunkParser.__html__(self))
 
+  def LogTrafficStatus(self, final=False):
+    if self.ui:
+      if final:
+        message = 'Disconnected from: %s' % self.server_info[self.S_NAME]
+        self.ui.Status('down', color=self.ui.GREY, message=message)
+      else:
+        self.ui.Status('traffic')
+
   def GetKiteRequests(self, parse):
     requests = []
     for prefix in ('X-Beanstalk', 'X-PageKite'):
@@ -188,9 +196,9 @@ class Tunnel(ChunkParser):
         self.Log([('BE', 'Live'), ('proto', proto), ('domain', domain)] + logi)
         self.conns.Tunnel(proto, domain, self)
       if not ok:
-        if self.server_info[self.S_ADD_KITES]:
+        if self.server_info[self.S_ADD_KITES] and not bad:
           self.LogDebug('No tunnels configured, idling...')
-          self.conns.SetIdle(self, 300)
+          self.conns.SetIdle(self, 60)
         else:
           self.LogDebug('No tunnels configured, closing connection.')
           self.Die()
@@ -361,6 +369,7 @@ class Tunnel(ChunkParser):
   def HandlePageKiteResponse(self, parse):
     config = self.conns.config
     have_kites = 0
+    have_kite_info = None
 
     sname = self.server_info[self.S_NAME]
     config.ui.NotifyServer(self, self.server_info)
@@ -398,6 +407,7 @@ class Tunnel(ChunkParser):
       invalid_reasons[details[0]] = details[1]
 
     for request in parse.Header('X-PageKite-Invalid'):
+      have_kite_info = True
       proto, domain, srand = request.split(':')
       reason = invalid_reasons.get(request, 'unknown')
       self.Log([('FE', sname),
@@ -409,6 +419,7 @@ class Tunnel(ChunkParser):
       config.SetBackendStatus(domain, proto, add=BE_STATUS_ERR_TUNNEL)
 
     for request in parse.Header('X-PageKite-Duplicate'):
+      have_kite_info = True
       proto, domain, srand = request.split(':')
       self.Log([('FE', self.server_info[self.S_NAME]),
                 ('err', 'Duplicate'),
@@ -422,6 +433,7 @@ class Tunnel(ChunkParser):
       ssl_available[request] = True
 
     for request in parse.Header('X-PageKite-OK'):
+      have_kite_info = True
       have_kites += 1
       proto, domain, srand = request.split(':')
       self.conns.Tunnel(proto, domain, self)
@@ -435,7 +447,7 @@ class Tunnel(ChunkParser):
                 ('ssl', (request in ssl_available))])
       config.SetBackendStatus(domain, proto, add=status)
 
-    return have_kites
+    return have_kite_info and have_kites
 
   def _BackEnd(server, backends, require_all, conns):
     """This is the back-end end of a tunnel."""
@@ -472,7 +484,8 @@ class Tunnel(ChunkParser):
             data, parse = self._Connect(server, conns, tokens)
 
         if data and parse:
-          abort = (self.HandlePageKiteResponse(parse) < 1)
+          kites = self.HandlePageKiteResponse(parse)
+          abort = (kites is None) or (kites < 1)
 
     except socket.error:
       self.Cleanup()
@@ -780,7 +793,10 @@ class Tunnel(ChunkParser):
       request = '\r\n'.join(PageKiteRequestHeaders(server, backends, tokens))
       self.SendChunked('NOOP: 1\r\n%s\r\n\r\n!' % request,
                        compress=False, just_buffer=True)
-    self.HandlePageKiteResponse(parse)
+
+    kites = self.HandlePageKiteResponse(parse)
+    if (kites is not None) and (kites < 1):
+      self.Die()
 
   def ProcessChunk(self, data):
     # First, we process the chunk headers.
