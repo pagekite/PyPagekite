@@ -1207,7 +1207,6 @@ class UserConn(Selectable):
     if (self.conns and
         self.ConnType() == 'FE' and
         (not self.read_eof)):
-      self.LogDebug('Done writing, will time out reads in 120 seconds.')
       self.conns.SetIdle(self, 120)
 
     return self.ProcessEof()
@@ -1477,7 +1476,6 @@ class UnknownConn(MagicProtocolParser):
           self.peeking = False
           self.is_tls = False
           self.my_tls = True
-          self.LogDebug('SSL OK, will time out in 120 seconds.')
           self.conns.SetIdle(self, 120)
           return True
         else:
