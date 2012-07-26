@@ -190,9 +190,10 @@ class Tunnel(ChunkParser):
       if not ok:
         if self.server_info[self.S_ADD_KITES]:
           self.LogDebug('No tunnels configured, idling...')
+          self.conns.SetIdle(self, 300)
         else:
           self.LogDebug('No tunnels configured, closing connection.')
-          self.write_eof = self.read_eof = True
+          self.Die()
 
     return True
 
