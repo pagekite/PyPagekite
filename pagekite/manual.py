@@ -9,8 +9,8 @@ from common import *
 from compat import ts_to_iso
 
 MAN_NAME = ("""\
-    pagekite.py - Make localhost servers publicly visible.
-""")
+    pagekite.py v%s - Make localhost servers publicly visible
+""" % APPVER)
 MAN_SYNOPSIS = ("""\
     <b>pagekite.py</b> [<a>--options</a>] [<a>service</a>] <a>kite-name</a> [<a>+flags</a>]
 """)
@@ -50,22 +50,33 @@ MAN_KITES = ("""\
     Examples of services are: a local HTTP server, a local SSH server,
     a folder or a file.
 
-    As illustrated above, one simply tells the program which local services
-    to expose to the world and which names to use.  If a kite name is
-    requested which does not already exist in the configuration file and
-    program is run interactively, the user will be prompted and given the
-    option of signing up and/or creating a new kite using the <b>pagekite.net</b>
-    service.
+    A service is exposed by describing it on the command line, along with the
+    desired public kite name. If a kite name is requested which does not already
+    exist in the configuration file and program is run interactively, the user
+    will be prompted and given the option of signing up and/or creating a new
+    kite using the <b>pagekite.net</b> service.
 
     Multiple services and kites can be specified on a single command-line,
     separated by the word 'AND' (note capital letters are required).
     This may cause problems if you have many files and folders by that
     name, but that should be relatively rare. :-)
-
+""")
+MAN_KITE_EXAMPLES = ("""\
     The options <b>--list</b>, <b>--add</b>, <b>--disable</b> and \
 <b>--remove</b> can be used to
-    manipulate the kites in your configuration, if you prefer not to edit
-    the file by hand.
+    manipulate the kites and service definitions in your configuration file,
+    if you prefer not to edit it by hand.  Examples:
+
+    <pre>Adding new kites
+    $ pagekite.py --add /a/path/ NAME.pagekite.me +indexes
+    $ pagekite.py --add 80 OTHER-NAME.pagekite.me
+
+    To display the current configuration
+    $ pagekite.py --list
+
+    Disable or delete kites (--add re-enables)
+    $ pagekite.py --disable OTHER-NAME.pagekite.me
+    $ pagekite.py --remove NAME.pagekite.me
 """)
 MAN_FLAGS = ("""\
     Flags are used to tune the behavior of a particular kite, for example
@@ -245,10 +256,7 @@ MAN_OPT_SYSTEM = ("""\
             change in the near future, please pretend you didn't see them.
 """)
 MAN_CONFIG_FILES = ("""\
-    The <b>pagekite.py</b> configuration file lives in different places,
-    depending on your operating system and how you are using it.
-
-    If you are using the program as a command-line utility, it will
+    If you are using <b>pagekite.py</b> as a command-line utility, it will
     load its configuration from a file in your home directory.  The file is
     named <tt>.pagekite.rc</tt> on Unix systems (including Mac OS X), or
     <tt>pagekite.cfg</tt> on Windows.
@@ -257,9 +265,9 @@ MAN_CONFIG_FILES = ("""\
     when your computer boots, it is generally configured to load settings
     from <tt>/etc/pagekite.d/*.rc</tt> (in lexicographical order).
 
-    In all cases, the configuration files contain one or more of the same
-    options as are described above, with the difference that at most one
-    option may be present on each line, and the parser is more tolerant of
+    In both cases, the configuration files contain one or more of the same
+    options as are used on the command line, with the difference that at most
+    one option may be present on each line, and the parser is more tolerant of
     white-space.  The leading '--' may also be omitted for readability and
     blank lines and lines beginning with '#' are treated as comments.
 
@@ -285,16 +293,18 @@ MAN_LICENSE = """\
 MAN_SEE_ALSO = ("""\
     lapcat(1), <http://pagekite.org/>, <https://pagekite.net/>
 """)
-MAN_AUTHOR = ("""\
-    Bjarni R. Einarsson <http://bre.klaki.net/>
+MAN_AUTHORS = ("""\
+    <pre>- Bjarni R. Einarsson <http://bre.klaki.net/>
+    - The Beanstalks Project ehf. <https://pagekite.net/company/></pre>
 """)
 
-MANUAL = (
+MANUAL_TOC = (
   ('SH', 'Name', MAN_NAME),
   ('SH', 'Synopsis', MAN_SYNOPSIS),
   ('SH', 'Description', MAN_DESCRIPTION),
-  ('SH', 'Basic examples', MAN_EXAMPLES),
+  ('SH', 'Basic usage', MAN_EXAMPLES),
   ('SH', 'Services and kites', MAN_KITES),
+  ('SH', 'Kite configuration', MAN_KITE_EXAMPLES),
   ('SH', 'Flags', MAN_FLAGS),
   ('SS', 'Common flags', MAN_FLAGS_COMMON),
   ('SS', 'HTTP protocol flags', MAN_FLAGS_HTTP),
@@ -306,9 +316,50 @@ MANUAL = (
   ('SS', 'System options', MAN_OPT_SYSTEM),
   ('SH', 'Configuration files', MAN_CONFIG_FILES),
   ('SH', 'See Also', MAN_SEE_ALSO),
-  ('SH', 'Author', MAN_AUTHOR),
+  ('SH', 'Authors', MAN_AUTHORS),
   ('SH', 'Copyright and license', MAN_LICENSE),
 )
+
+HELP_SHELL = ("""\
+    Press ENTER to fly your kites, CTRL+C to quit or give some arguments to
+    accomplish a more specific task.
+""")
+HELP_KITES = ("""\
+""")
+HELP_TOC = (
+  ('about',    'About PageKite',                        MAN_DESCRIPTION),
+  ('basics',   'Basic usage examples',                  MAN_EXAMPLES),
+  ('kites',    'Services and kites',                    MAN_KITES),
+  ('config',   'Adding, disabling or removing kites',   MAN_KITE_EXAMPLES),
+  ('flags',    'Service flags',              '\n'.join([MAN_FLAGS,
+                                                        MAN_FLAGS_COMMON,
+                                                        MAN_FLAGS_HTTP,
+                                                        MAN_FLAGS_BUILTIN])),
+  ('files',    'Where are the config files?',           MAN_CONFIG_FILES),
+  ('credits',  'License and credits',        '\n'.join([MAN_LICENSE,
+                                                        'CREDITS:',
+                                                        MAN_AUTHORS])),
+  ('manual', 'The complete manual.  See also: http://pagekite.net/man/', None)
+)
+
+
+def HELP(args):
+  name = title = text = ''
+  if args:
+    what = args[0].strip().lower()
+    for name, title, text in HELP_TOC:
+      if name == what:
+        break
+  if name == 'manual':
+    text = DOC()
+  elif not text:
+    text = ''.join([
+      'Type `help TOPIC` to to read about one of these topics:\n\n',
+      ''.join(['  %-10.10s %s\n' % (n, t) for (n, t, x) in HELP_TOC]),
+      '\n',
+      HELP_SHELL
+    ])
+  return unindent(clean_text(text))
 
 
 def clean_text(text):
@@ -336,14 +387,10 @@ def MINIDOC():
 
 def DOC():
   doc = ''
-  for h, section, text in MANUAL:
+  for h, section, text in MANUAL_TOC:
     doc += '%s\n\n%s\n' % (h == 'SH' and section.upper() or '  '+section,
                            clean_text(text))
   return doc
-
-
-def HELP(args):
-  return unindent(clean_text(MAN_EXAMPLES))
 
 
 def MAN(pname=None):
@@ -353,7 +400,7 @@ def MAN(pname=None):
 .nh
 .ad l
 """) % ts_to_iso(time.time()).split('T')[0]
-  for h, section, text in MANUAL:
+  for h, section, text in MANUAL_TOC:
     man += ('.%s %s\n\n%s\n\n'
             ) % (h, h == 'SH' and section.upper() or section,
                  re.sub('\n +', '\n', '\n'+text.strip())
@@ -374,7 +421,7 @@ def MAN(pname=None):
 
 def MARKDOWN(pname=None):
   mkd = ''
-  for h, section, text in MANUAL:
+  for h, section, text in MANUAL_TOC:
      if h == 'SH':
        h = '##'
      else:
