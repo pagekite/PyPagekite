@@ -71,7 +71,7 @@ $ pagekite --list
 
 Disable or delete kites (--add re-enables)
 $ pagekite --disable OTHER-NAME.pagekite.me
-$ pagekite --remove NAME.pagekite.me
+$ pagekite --remove NAME.pagekite.me</pre>
 
 ## Flags ##
 

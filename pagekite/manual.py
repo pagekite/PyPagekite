@@ -76,7 +76,7 @@ MAN_KITE_EXAMPLES = ("""\
 
     Disable or delete kites (--add re-enables)
     $ pagekite.py --disable OTHER-NAME.pagekite.me
-    $ pagekite.py --remove NAME.pagekite.me
+    $ pagekite.py --remove NAME.pagekite.me</pre>
 """)
 MAN_FLAGS = ("""\
     Flags are used to tune the behavior of a particular kite, for example
