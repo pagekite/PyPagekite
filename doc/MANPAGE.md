@@ -1,6 +1,6 @@
 ## Name ##
 
-pagekite v0.5.1a+github - Make localhost servers publicly visible
+pagekite v0.5.2a - Make localhost servers publicly visible
 
 ## Synopsis ##
 
@@ -314,6 +314,28 @@ blank lines and lines beginning with '#' are treated as comments.
 
 <b>NOTE:</b> When using <b>-o</b>, <b>--optfile</b> or <b>--optdir</b> on the command line,
 it is advisable to use <b>--clean</b> to suppress the default configuration.
+
+## Security ##
+
+Please keep in mind, that whenever exposing a server to the public
+Internet, it is important to think about security. Hacked webservers are
+frequently abused as part of virus, spam or phishing campaigns and in
+some cases security breaches can compromise the entire operating system.
+
+Some advice:<pre>
+   * Switch PageKite off when not using it.
+   * Use the built-in access controls and SSL encryption.
+   * Leave the firewall enabled unless you have good reason not to.
+   * Make sure you use good passwords everywhere.
+   * Static content is very hard to hack!
+   * Always, always make frequent backups of any important work.</pre>
+
+Note that as of version 0.5, <b>pagekite</b> includes a very basic
+request firewall, which attempts to prevent access to phpMyAdmin and
+other sensitive systems.  If it gets in your way, the <b>+insecure</b>
+flag or <b>--insecure</b> option can be used to turn it off.
+
+For more, please visit: <https://pagekite.net/support/security/>
 
 ## See Also ##
 

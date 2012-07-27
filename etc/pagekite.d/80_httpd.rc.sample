@@ -2,3 +2,15 @@
 # Expose the local HTTPD
 
 service_on = http:@kitename : localhost:80 : @kitesecret
+
+#
+# Uncomment the following to globally DISABLE the request firewall.  Do this
+# if you are sure you know what you are doing, for more details please see
+#                <http://pagekite.net/support/security/>
+#
+#insecure
+#
+# To disable the firewall for one kite at a time, use lines like this::
+#
+#service_cfg = KITENAME.pagekite.me/80 : insecure : True
+#
