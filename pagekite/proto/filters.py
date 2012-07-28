@@ -168,8 +168,8 @@ class HttpSecurityFilter(HttpHeaderFilter):
 
   DISABLE = 'trusted'
   HTTP_DANGER = re.compile('(?ism)^((get|post|put|delete) '
-                           # xampp config, anything starting with /adm*
-                           '((?:/+(?:xampp|security|adm)'
+                           # xampp paths, anything starting with /adm*
+                           '((?:/+(?:xampp/|security/|licenses/|webalizer/|server-(?:status|info)|adm)'
                            '|[^\n]*/'
                              # WordPress admin pages
                              '(?:wp-admin/(?!admin-ajax|css/)|wp-config\.php'
