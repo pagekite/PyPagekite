@@ -922,7 +922,7 @@ class LoopbackTunnel(Tunnel):
     if self.write_blocked:
       data = [self.write_blocked] + data
       self.write_blocked = ''
-    if try_flush:
+    if try_flush or len(data) > 10240:
       if logging.DEBUG_IO:
         print '|%s| %s \n|%s| %s' % (self.which, self, self.which, data)
       return self.other_end.ProcessData(''.join(data))
