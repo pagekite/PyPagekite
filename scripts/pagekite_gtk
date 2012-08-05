@@ -283,199 +283,23 @@ class ShareBucket:
             'be_config=%s/80:indexes:True' % self.kitename]
 
 
-class PageKiteThread(threading.Thread):
-  def __init__(self, startup_args=None):
-    threading.Thread.__init__(self)
-    self.looping = False
-    self.stopped = True
-    self.pk = None
+class PageKiteThread(remote.PageKiteThread):
+  def postpone(self, func, argument):
+    gobject.idle_add(func, argument)
 
-    self.pk_startup_args = startup_args
-    self.pk_readlock = threading.Condition()
-    self.gui_readlock = threading.Condition()
-    self.reset()
+  def configure(self, pkobj):
+    return pk.Configure(pkobj)
 
-  def reset(self):
-    self.pk_incoming = []
-    self.pk_eof = False
-    self.gui_incoming = ''
-    self.gui_eof = False
-
-  # These routines are used by the PageKite UI, to communicate with us...
-  def readline(self):
-    try:
-      self.pk_readlock.acquire()
-      while (not self.pk_incoming) and (not self.pk_eof): self.pk_readlock.wait()
-      if self.pk_incoming:
-        line = self.pk_incoming.pop(0)
-      else:
-        line = ''
-#   print '>>PK>> %s' % line.strip()
-      return line
-    finally:
-      self.pk_readlock.release()
-
-  def write(self, data):
-#   print '>>GUI>> %s' % data.strip()
-    try:
-      self.gui_readlock.acquire()
-      if data:
-        self.gui_incoming += data
-      else:
-        self.gui_eof = True
-      self.gui_readlock.notify()
-    finally:
-      self.gui_readlock.release()
-
-  # And these are used by the GUI, to communicate with PageKite.
-  def recv(self, bytecount):
-    try:
-      self.gui_readlock.acquire()
-      while (len(self.gui_incoming) < bytecount) and (not self.gui_eof):
-        self.gui_readlock.wait()
-      data = self.gui_incoming[0:bytecount]
-      self.gui_incoming = self.gui_incoming[bytecount:]
-      return data
-    finally:
-      self.gui_readlock.release()
-
-  def send(self, data):
-    if not data.endswith('\n') and data != '':
-      raise ValueError('Please always send whole lines')
-#   print '<<PK<< %s' % data.strip()
-    try:
-      self.pk_readlock.acquire()
-      if data:
-        self.pk_incoming.append(data)
-      else:
-        self.pk_eof = True
-      self.pk_readlock.notify()
-    finally:
-      self.pk_readlock.release()
-
-  def sendall(self, data):
-    return self.send(data)
-
-  def close(self):
-    self.send('')
-    self.write('')
-
-  def Configure(self, pkobj):
-    # Remove invalid arguments that break us.
-    if '--nullui' in sys.argv: sys.argv.remove('--nullui')
-    if '--basicui' in sys.argv: sys.argv.remove('--basicui')
-    if '--friendly' in sys.argv: sys.argv.remove('--friendly')
-
-    old_argv = sys.argv[:]
-    if self.pk_startup_args:
-      sys.argv[1:1] = self.pk_startup_args[:]
-      self.pk_startup_args = None
-    try:
-      self.pk = pkobj
-      pkobj.ui_wfile = pkobj.ui.wfile = self
-      pkobj.ui_rfile = pkobj.ui.rfile = self
-      return pk.Configure(pkobj)
-    except:
-      self.pk = None
-      raise
-    finally:
-      sys.argv = old_argv[:]
-
-  def run(self):
-    self.looping = True
-    while self.looping:
-      last_loop = int(time.time())
-      if not self.stopped:
-        self.reset()
-        pk.Main(pk.PageKite, self.Configure,
-                uiclass=remote.RemoteUi,
-                http_handler=httpd.UiRequestHandler,
-                http_server=httpd.UiHttpServer)
-        self.close()
-        self.write('status_msg: Disabled\nstatus_tag: idle\n')
-        self.pk = None
-      if last_loop == int(time.time()):
-        time.sleep(1)
-
-  def stop(self, then=False):
-    self.stopped = True
-    if self.pk:
-      self.send('exit: stopping\n')
-      gobject.idle_add(self.stop, then)
-    else:
-      if then: then()
-
-  def restart(self):
-    self.stopped = False
-
-  def toggle(self):
-    if self.stopped:
-      self.restart()
-    else:
-      self.stop()
-
-  def quit(self):
-    self.looping = False
-    self.stopped = True
-    if self.pk:
-      self.send('exit: quitting\n')
-    self.close()
-    self.pk = None
-    self.join()
+  def startup(self):
+    pk.Main(pk.PageKite, self.config_wrapper,
+            uiclass=remote.RemoteUi,
+            http_handler=httpd.UiRequestHandler,
+            http_server=httpd.UiHttpServer)
 
 
-class CommThread(threading.Thread):
-  def __init__(self, pkThread):
-    threading.Thread.__init__(self)
-    self.pkThread = pkThread
-    self.looping = False
-
-    self.multi = None
-    self.multi_args = None
-
-    # Callbacks
-    self.cb = {}
-
-  def parse_line(self, line):
-#   print '<< %s' % line[:-1]
-    if line.startswith('begin_'):
-      self.multi = line[6:].strip()
-      self.multi_args = {'_raw': []}
-    elif self.multi:
-      if line.startswith('end_'):
-        if self.multi in self.cb:
-          gobject.idle_add(self.cb[self.multi], self.multi_args)
-        elif 'default' in self.multi_args:
-          self.pkThread.send(self.multi_args['default']+'\n')
-        self.multi = self.multi_args = None
-      else:
-        self.multi_args['_raw'].append(line.strip())
-        try:
-          variable, value = line.strip().split(': ', 1)
-          self.multi_args[variable] = value
-        except ValueError:
-          pass
-    else:
-      try:
-        command, args = line.strip().split(': ', 1)
-        if command in self.cb:
-          gobject.idle_add(self.cb[command], args)
-      except ValueError:
-        pass
-
-  def run(self):
-    self.pkThread.start()
-    self.looping = True
-    line = ''
-    while self.looping:
-      line += self.pkThread.recv(1)
-      if line.endswith('\n'):
-        self.parse_line(line)
-        line = ''
-
-  def quit(self):
-    self.pkThread.quit()
-    self.looping = False
+class CommThread(remote.CommThread):
+  def call_cb(self, which, args):
+    gobject.idle_add(self.cb[which], args)
 
 
 class UiContainer:
