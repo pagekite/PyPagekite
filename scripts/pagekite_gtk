@@ -283,7 +283,7 @@ class ShareBucket:
             'be_config=%s/80:indexes:True' % self.kitename]
 
 
-class PageKiteThread(remote.PageKiteThread):
+class PageKiteThread(remote.PageKiteRestarter):
   def postpone(self, func, argument):
     gobject.idle_add(func, argument)
 

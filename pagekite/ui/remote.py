@@ -250,15 +250,12 @@ class RemoteUi(NullUi):
 
 
 class PageKiteThread(threading.Thread):
-  def __init__(self, startup_args=None):
+  def __init__(self, startup_args=None, debug=False):
     threading.Thread.__init__(self)
-    self.looping = False
-    self.stopped = True
     self.pk = None
-
-    self.pk_startup_args = startup_args
     self.pk_readlock = threading.Condition()
     self.gui_readlock = threading.Condition()
+    self.debug = debug
     self.reset()
 
   def reset(self):
@@ -276,13 +273,15 @@ class PageKiteThread(threading.Thread):
         line = self.pk_incoming.pop(0)
       else:
         line = ''
-#   print '>>PK>> %s' % line.strip()
+      if self.debug:
+        print '>>PK>> %s' % line.strip()
       return line
     finally:
       self.pk_readlock.release()
 
   def write(self, data):
-#   print '>>GUI>> %s' % data.strip()
+    if self.debug:
+      print '>>GUI>> %s' % data.strip()
     try:
       self.gui_readlock.acquire()
       if data:
@@ -308,7 +307,8 @@ class PageKiteThread(threading.Thread):
   def send(self, data):
     if not data.endswith('\n') and data != '':
       raise ValueError('Please always send whole lines')
-#   print '<<PK<< %s' % data.strip()
+    if self.debug:
+      print '<<PK<< %s' % data.strip()
     try:
       self.pk_readlock.acquire()
       if data:
@@ -326,6 +326,23 @@ class PageKiteThread(threading.Thread):
     self.send('')
     self.write('')
 
+  def setup_comms(self, pkobj):
+    self.pk = pkobj
+    pkobj.ui_wfile = pkobj.ui.wfile = self
+    pkobj.ui_rfile = pkobj.ui.rfile = self
+
+  def run(self):
+    raise Exception('Unimplemented')
+
+
+class PageKiteRestarter(PageKiteThread):
+
+  def __init__(self, startup_args=None):
+    PageKiteThread.__init__(self)
+    self.pk_startup_args = startup_args
+    self.looping = False
+    self.stopped = True
+
   def config_wrapper(self, pkobj):
     old_argv = sys.argv[:]
 
@@ -338,9 +355,7 @@ class PageKiteThread(threading.Thread):
       sys.argv[1:1] = self.pk_startup_args[:]
       self.pk_startup_args = None
     try:
-      self.pk = pkobj
-      pkobj.ui_wfile = pkobj.ui.wfile = self
-      pkobj.ui_rfile = pkobj.ui.rfile = self
+      self.setup_comms(pkobj)
       return self.configure(pkobj)
     except:
       self.pk = None
@@ -360,6 +375,9 @@ class PageKiteThread(threading.Thread):
         self.pk = None
       if last_loop == int(time.time()):
         time.sleep(1)
+
+  def startup(self):
+    raise Exception('Unimplemented')
 
   def postpone(self, func, argument):
     return func(argument)
