@@ -508,6 +508,17 @@ class Tunnel(ChunkParser):
   FrontEnd = staticmethod(_FrontEnd)
   BackEnd = staticmethod(_BackEnd)
 
+  def Send(self, data, try_flush=False, activity=False, just_buffer=False):
+    try:
+      if TUNNEL_SOCKET_BLOCKS and not just_buffer:
+        self.fd.setblocking(1)
+      return ChunkParser.Send(self, data, try_flush=try_flush,
+                                          activity=activity,
+                                          just_buffer=just_buffer)
+    finally:
+      if TUNNEL_SOCKET_BLOCKS and not just_buffer:
+        self.fd.setblocking(0)
+
   def SendData(self, conn, data, sid=None, host=None, proto=None, port=None,
                                  chunk_headers=None):
     sid = int(sid or conn.sid)

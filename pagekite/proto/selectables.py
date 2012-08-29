@@ -463,27 +463,35 @@ class Selectable(object):
     sent_bytes = 0
     if sending:
       try:
-        sent_bytes = self.fd.send(sending[:(self.write_retry or SEND_MAX_BYTES)])
+        want_send = self.write_retry or min(len(sending), SEND_MAX_BYTES)
+        sent_bytes = self.fd.send(sending[:want_send])
         if logging.DEBUG_IO:
-          print '==> OUT =[%s]==(\n%s)==' % (self, sending[:min(160, sent_bytes)])
+          print ('==> OUT =[%s: %d/%d bytes]==(\n%s)=='
+                 ) % (self, sent_bytes, want_send, sending[:min(160, sent_bytes)])
         self.wrote_bytes += sent_bytes
         self.write_retry = None
+      except (SSL.WantWriteError, SSL.WantReadError), err:
+        if logging.DEBUG_IO:
+          print '=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, want_send)
+        self.write_retry = want_send
       except IOError, err:
         if err.errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s' % err)
           self.ProcessEofWrite()
           return False
         else:
-          self.write_retry = len(sending)
-      except (SSL.WantWriteError, SSL.WantReadError), err:
-        self.write_retry = len(sending)
+          if logging.DEBUG_IO:
+            print '=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send)
+          self.write_retry = want_send
       except socket.error, (errno, msg):
         if errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s (errno=%s)' % (msg, errno))
           self.ProcessEofWrite()
           return False
         else:
-          self.write_retry = len(sending)
+          if logging.DEBUG_IO:
+            print '=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send)
+          self.write_retry = want_send
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
         self.LogInfo('Error sending (SSL): %s' % err)
         self.ProcessEofWrite()
