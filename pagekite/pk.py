@@ -699,8 +699,10 @@ class TunnelManager(threading.Thread):
         if self.pkite.isfrontend:
           self.pkite.ui.Status('idle', message='Waiting for back-ends.')
         elif tunnel_total == 0:
+          self.pkite.ui.Notify('It looks like your Internet connection might be '
+                               'down! Will retry soon.')
           self.pkite.ui.Status('down', color=self.pkite.ui.GREY,
-                       message='No kites ready to fly.  Boring...')
+                       message='No kites ready to fly.  Waiting...')
         elif connecting == 0:
           self.pkite.ui.Status('down', color=self.pkite.ui.RED,
                        message='Not connected to any front-ends, will retry...')
