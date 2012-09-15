@@ -446,7 +446,7 @@ class Selectable(object):
     return self.Throttle(max_speed, remote, delay)
 
   def Send(self, data, try_flush=False, activity=False, just_buffer=False):
-    common.buffered_bytes -= len(self.write_blocked)
+    common.buffered_bytes[0] -= len(self.write_blocked)
     self.write_speed = int((self.wrote_bytes + self.all_out)
                            / max(1, (time.time() - self.created)))
 
@@ -455,7 +455,7 @@ class Selectable(object):
         ((not try_flush) and
          (len(self.write_blocked) > 0 or compat.SEND_ALWAYS_BUFFERS))):
       self.write_blocked += str(''.join(data))
-      common.buffered_bytes += len(self.write_blocked)
+      common.buffered_bytes[0] += len(self.write_blocked)
       return True
 
     sending = ''.join([self.write_blocked, str(''.join(data))])
@@ -501,7 +501,7 @@ class Selectable(object):
       self.last_activity = time.time()
 
     self.write_blocked = sending[sent_bytes:]
-    common.buffered_bytes += len(self.write_blocked)
+    common.buffered_bytes[0] += len(self.write_blocked)
 
     if self.wrote_bytes >= logging.LOG_THRESHOLD:
       self.LogTraffic()
@@ -567,7 +567,7 @@ class Selectable(object):
 
   def Die(self, discard_buffer=False):
     if discard_buffer:
-      common.buffered_bytes -= len(self.write_blocked)
+      common.buffered_bytes[0] -= len(self.write_blocked)
       self.write_blocked = ''
     self.read_eof = self.write_eof = True
     return True

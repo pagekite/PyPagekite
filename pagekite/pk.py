@@ -2810,7 +2810,7 @@ class PageKite(object):
       if oready:
         self.ProcessWritable(oready)
 
-      if common.buffered_bytes < 1024 * self.buffer_max:
+      if common.buffered_bytes[0] < 1024 * self.buffer_max:
         throttle = None
       else:
         logging.LogDebug("FIXME: Nasty pause to let buffers clear!")
