@@ -933,15 +933,18 @@ class LoopbackTunnel(Tunnel):
   def Send(self, data, try_flush=False, activity=False, just_buffer=True):
     if self.write_blocked:
       data = [self.write_blocked] + data
+      common.buffered_bytes[0] -= len(self.write_blocked)
       self.write_blocked = ''
-    if try_flush or (len(data) > 10240) or (self.buffer_count >= 100):
+    joined_data = ''.join(data)
+    if try_flush or (len(joined_data) > 10240) or (self.buffer_count >= 100):
       if logging.DEBUG_IO:
         print '|%s| %s \n|%s| %s' % (self.which, self, self.which, data)
       self.buffer_count = 0
-      return self.other_end.ProcessData(''.join(data))
+      return self.other_end.ProcessData(joined_data)
     else:
       self.buffer_count += 1
-      self.write_blocked = ''.join(data)
+      self.write_blocked = joined_data
+      common.buffered_bytes[0] += len(self.write_blocked)
       return True
 
 
