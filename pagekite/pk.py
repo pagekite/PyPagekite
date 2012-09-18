@@ -190,6 +190,7 @@ class AuthThread(threading.Thread):
             (quota, days, conns, reason
              ) = self.conns.config.GetDomainQuota(proto, domain, srand, token,
                                          sign, check_token=(conn.quota is None))
+            duplicate = self.conns.Tunnel(proto, domain)
             if not quota:
               if not reason: reason = 'quota'
               results.append(('%s-Invalid' % prefix, what))
@@ -198,8 +199,9 @@ class AuthThread(threading.Thread):
               log_info.extend([('rejected', domain),
                                ('quota', quota),
                                ('reason', reason)])
-            elif self.conns.Tunnel(proto, domain):
-              # FIXME: Allow multiple backends?
+            elif duplicate:
+              # Duplicates... is the old one dead?  Trigger a ping.
+              duplicate.TriggerPing()
               results.append(('%s-Duplicate' % prefix, what))
               log_info.extend([('rejected', domain),
                                ('duplicate', 'yes')])

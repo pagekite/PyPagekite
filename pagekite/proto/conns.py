@@ -577,6 +577,9 @@ class Tunnel(ChunkParser):
     return self.SendChunked('NOOP: 1\r\nZRST: 1\r\n\r\n!',
                             compress=False, just_buffer=True)
 
+  def TriggerPing(self):
+    self.last_ping = self.last_activity = 0
+
   def SendPing(self):
     self.last_ping = int(time.time())
     self.LogDebug("Ping", [('host', self.server_info[self.S_NAME])])
