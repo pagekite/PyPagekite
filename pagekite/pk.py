@@ -1187,6 +1187,10 @@ class PageKite(object):
     self.savefile = self.savefile or self.rcfile
     try:
       fd = open(self.savefile, 'w')
+      try:
+        os.chmod(self.savefile, 0600)
+      except OSError:
+        pass
       fd.write('\n'.join(self.GenerateConfig(safe=True)))
       fd.close()
       if not quiet:
