@@ -1485,9 +1485,10 @@ class UnknownConn(MagicProtocolParser):
       try:
         domains = self.GetSni(data)
         if not domains:
-          domains = [self.conns.LastIpDomain(self.address[0]) or self.conns.config.tls_default]
-          self.LogDebug('No SNI - trying: %s' % domains[0])
-          if not domains[0]:
+          domains = [self.conns.config.tls_default]
+          if domains[0]:
+            self.LogDebug('No SNI - trying: %s' % domains[0])
+          else:
             domains = None
       except:
         # Probably insufficient data, just True and assume we'll have
