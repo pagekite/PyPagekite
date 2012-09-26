@@ -355,11 +355,12 @@ class PageKiteRestarter(PageKiteThread):
       sys.argv[1:1] = self.pk_startup_args[:]
       self.pk_startup_args = None
     try:
-      self.setup_comms(pkobj)
-      return self.configure(pkobj)
-    except:
-      self.pk = None
-      raise
+      try:
+        self.setup_comms(pkobj)
+        return self.configure(pkobj)
+      except:
+        self.pk = None
+        raise
     finally:
       sys.argv = old_argv[:]
 
