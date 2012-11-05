@@ -1685,8 +1685,12 @@ class PageKite(object):
       elif opt in ('--proxy', '--socksify', '--torify'):
         if opt == '--proxy':
           socks.setdefaultproxy()
-          for proxy in arg.split(','):
-            socks.adddefaultproxy(*socks.parseproxy(proxy))
+          if ' ' in arg:
+            for proxy in arg.split(' '):
+              socks.adddefaultproxy(*socks.parseproxy(proxy))
+          else:
+            for proxy in arg.split(','):
+              socks.adddefaultproxy(*socks.parseproxy(proxy))
         else:
           (host, port) = arg.split(':')
           socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, host, int(port))
