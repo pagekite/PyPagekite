@@ -578,7 +578,8 @@ class Tunnel(ChunkParser):
                             compress=False, just_buffer=True)
 
   def TriggerPing(self):
-    self.last_ping = self.last_activity = 1
+    when = time.time() - PING_GRACE_MIN - PING_INTERVAL_MAX
+    self.last_ping = self.last_activity = when
 
   def SendPing(self):
     self.last_ping = int(time.time())

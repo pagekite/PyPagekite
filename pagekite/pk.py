@@ -593,16 +593,18 @@ class TunnelManager(threading.Thread):
     dead = {}
     for tid in self.conns.tunnels:
       for tunnel in self.conns.tunnels[tid]:
-        pings = 30
+        pings = PING_INTERVAL
         if tunnel.server_info[tunnel.S_IS_MOBILE]:
-          pings = 1800
-        grace = max(40, len(tunnel.write_blocked)/(tunnel.write_speed or 0.001))
+          pings = PING_INTERVAL_MOBILE
+        grace = max(PING_GRACE_DEFAULT,
+                    len(tunnel.write_blocked)/(tunnel.write_speed or 0.001))
         if tunnel.last_activity == 0:
           pass
-        elif tunnel.last_activity < tunnel.last_ping-(5+grace):
-          dead['%s' % tunnel] = tunnel
-        elif tunnel.last_activity < now-pings and tunnel.last_ping < now-2:
-          tunnel.SendPing()
+        elif tunnel.last_ping < now - PING_GRACE_MIN:
+          if tunnel.last_activity < tunnel.last_ping-(PING_GRACE_MIN+grace):
+            dead['%s' % tunnel] = tunnel
+          elif tunnel.last_activity < now-pings:
+            tunnel.SendPing()
 
     for tunnel in dead.values():
       logging.Log([('dead', tunnel.server_info[tunnel.S_NAME])])
