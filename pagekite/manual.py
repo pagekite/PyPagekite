@@ -138,12 +138,17 @@ MAN_OPT_BACKEND = ("""\
     --local</b>=<a>ports</a>   __Configure for local serving only (no remote front-end).
     --watch</b>=<a>N</a>       __Display proxied data (higher N = more verbosity).
 
+    --noproxy       __Ignore system (or config file) proxy settings.
+
     --proxy</b>=<a>type</a>:<a>server</a>:<a>port</a>,\
  <b>--socksify</b>=<a>server</a>:<a>port</a>,\
  <b>--torify</b>=<a>server</a>:<a>port</a> __
-            Connect to the front-ends using a chain of proxies, a single SOCKS
-            proxy or the Tor anonymity network.  The type can be any of
-            'ssl', 'http' or 'socks5'.
+            Connect to the front-ends using SSL, an HTTP proxy, a SOCKS proxy,
+            or the Tor anonymity network.  The type can be any of 'ssl', 'http'
+            or 'socks5'.  The server name can either be a plain hostname,
+            user@hostname or user:password@hostname.  For SSL connections the
+            user part may be a path to a client cert PEM file.  If multiple
+            proxies are defined, they will be chained one after another.
 
     --service_on</b>=<a>proto</a>:<a>kitename</a>:<a>host</a>:<a>port</a>:<a>secret</a> __
             Explicit configuration for a service kite.  Generally kites are

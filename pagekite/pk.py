@@ -74,7 +74,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'backend=', 'define_backend=', 'be_config=', 'insecure',
             'service_on=', 'service_off=', 'service_cfg=',
             'frontend=', 'nofrontend=', 'frontends=',
-            'torify=', 'socksify=', 'proxy=',
+            'torify=', 'socksify=', 'proxy=', 'noproxy',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes', 'debugio', 'watch=',
             # DEPRECATED:
@@ -792,7 +792,8 @@ class PageKite(object):
     self.tunnel_manager = None
     self.client_mode = 0
 
-    self.proxy_server = None
+    self.proxy_servers = []
+    self.no_proxy = False
     self.require_all = False
     self.no_probes = False
     self.servers = []
@@ -1094,6 +1095,22 @@ class PageKite(object):
       ])
 
     config.extend([
+      '##[ Proxy-chain settings ]##',
+      (self.no_proxy and 'noproxy' or '# noproxy'),
+    ])
+    for proxy in self.proxy_servers:
+      config.append('proxy = %s' % proxy)
+    if not self.proxy_servers:
+      config.extend([
+        '# socksify = host:port',
+        '# torify   = host:port',
+        '# proxy    = ssl:/path/to/client-cert.pem@host,CommonName:port',
+        '# proxy    = http://user:password@host:port/',
+        '# proxy    = socks://user:password@host:port/'
+      ])
+
+    config.extend([
+      '',
       '',
       '###[ Anything below this line can usually be ignored. ]#########',
       '',
@@ -1684,25 +1701,23 @@ class PageKite(object):
 
       elif opt in ('-a', '--all'): self.require_all = True
       elif opt in ('-N', '--new'): self.servers_new_only = True
+      elif opt in ('--noproxy', ):
+        self.no_proxy = True
+        self.proxy_servers = []
+        socks.setdefaultproxy()
       elif opt in ('--proxy', '--socksify', '--torify'):
         if opt == '--proxy':
-          socks.setdefaultproxy()
-          if ' ' in arg:
-            for proxy in arg.split(' '):
-              socks.adddefaultproxy(*socks.parseproxy(proxy))
-          else:
-            for proxy in arg.split(','):
-              socks.adddefaultproxy(*socks.parseproxy(proxy))
+          socks.adddefaultproxy(*socks.parseproxy(arg))
         else:
           (host, port) = arg.split(':')
-          socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, host, int(port))
+          socks.adddefaultproxy(socks.PROXY_TYPE_SOCKS5, host, int(port))
 
-        if not self.proxy_server:
+        if not self.proxy_servers:
           # Make DynDNS updates go via the proxy.
           socks.wrapmodule(urllib)
-          self.proxy_server = arg
+          self.proxy_servers = [arg]
         else:
-          self.proxy_server += ',' + arg
+          self.proxy_server.append(arg)
 
         if opt == '--torify':
           self.servers_new_only = True  # Disable initial DNS lookups (leaks)
