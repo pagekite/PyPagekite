@@ -73,6 +73,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'kitename=', 'kitesecret=', 'fingerpath=',
             'backend=', 'define_backend=', 'be_config=', 'insecure',
             'service_on=', 'service_off=', 'service_cfg=',
+            'tunnel_acl=', 'client_acl=',
             'frontend=', 'nofrontend=', 'frontends=',
             'torify=', 'socksify=', 'proxy=', 'noproxy',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
@@ -760,6 +761,9 @@ class PageKite(object):
     self.server_protos = ['http', 'http2', 'http3', 'https', 'websocket',
                           'irc', 'finger', 'httpfinger', 'raw']
 
+    self.tunnel_acls = []
+    self.client_acls = []
+
     self.tls_default = None
     self.tls_endpoints = {}
     self.fe_certname = []
@@ -857,6 +861,32 @@ class PageKite(object):
     if not os.path.exists(self.ca_certs_default):
       self.ca_certs_default = sys.argv[0]
     self.ca_certs = self.ca_certs_default
+
+  ACL_SHORTHAND = {
+    'localhost': '((::ffff:)?127\..*|::1)',
+    'any': '.*'
+  }
+  def CheckAcls(self, acls, address, which, conn=None):
+    if not acls:
+      return True
+    for policy, pattern in acls:
+      if re.match(self.ACL_SHORTHAND.get(pattern, pattern)+'$', address[0]):
+        if (policy.lower() == 'allow'):
+          return True
+        else:
+          if conn:
+            conn.LogError(('%s rejected by %s ACL: %s:%s'
+                           ) % (address[0], which, policy, pattern))
+          return False
+    if conn:
+      conn.LogError('%s rejected by default %s ACL' % (address[0], which))
+    return False
+
+  def CheckClientAcls(self, address, conn=None):
+    return self.CheckAcls(self.client_acls, address, 'client', conn)
+
+  def CheckTunnelAcls(self, address, conn=None):
+    return self.CheckAcls(self.tunnel_acls, address, 'tunnel', conn)
 
   def SetLocalSettings(self, ports):
     self.isfrontend = True
@@ -1078,11 +1108,13 @@ class PageKite(object):
         config.extend([
           '# domain = http:*.pagekite.me:SECRET1',
           '# domain = http,https,websocket:THEM.pagekite.me:SECRET2',
-          '',
         ])
 
       eprinted = 0
-      config.append('##[ Domains we terminate SSL/TLS for natively, with key/cert-files ]##')
+      config.extend([
+        '',
+        '##[ Domains we terminate SSL/TLS for natively, with key/cert-files ]##'
+      ])
       for ep in sorted(self.tls_endpoints.keys()):
         config.append('tls_endpoint = %s:%s' % (ep, self.tls_endpoints[ep][0]))
         eprinted += 1
@@ -1109,6 +1141,18 @@ class PageKite(object):
         '# proxy    = socks://user:password@host:port/'
       ])
 
+    config.extend([
+      '',
+      '##[ Front-end access controls (default=deny, if configured) ]##',
+    ])
+    for policy, pattern in self.client_acls:
+      config.append('client_acl=%s:%s' % (policy, pattern))
+    if not self.client_acls:
+      config.append('# client_acl=[allow|deny]:IP-regexp')
+    for policy, pattern in self.tunnel_acls:
+      config.append('tunnel_acl=%s:%s' % (policy, pattern))
+    if not self.tunnel_acls:
+      config.append('# tunnel_acl=[allow|deny]:IP-regexp')
     config.extend([
       '',
       '',
@@ -1701,6 +1745,12 @@ class PageKite(object):
 
       elif opt in ('-a', '--all'): self.require_all = True
       elif opt in ('-N', '--new'): self.servers_new_only = True
+      elif opt == '--client_acl':
+        policy, pattern = arg.split(':', 1)
+        self.client_acls.append((policy, pattern))
+      elif opt == '--tunnel_acl':
+        policy, pattern = arg.split(':', 1)
+        self.tunnel_acls.append((policy, pattern))
       elif opt in ('--noproxy', ):
         self.no_proxy = True
         self.proxy_servers = []
@@ -1717,7 +1767,7 @@ class PageKite(object):
           socks.wrapmodule(urllib)
           self.proxy_servers = [arg]
         else:
-          self.proxy_server.append(arg)
+          self.proxy_servers.append(arg)
 
         if opt == '--torify':
           self.servers_new_only = True  # Disable initial DNS lookups (leaks)

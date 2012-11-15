@@ -221,6 +221,14 @@ MAN_OPT_FRONTEND = ("""\
             Listen for raw connections these ports. The string '%s'
             allows arbitrary ports in HTTP CONNECT.
 
+    --client_acl</b>=<a>policy</a>:<a>regexp</a>,\
+ <b>--tunnel_acl</b>=<a>policy</a>:<a>regexp</a> __
+            Add a client connection or tunnel access control rule.
+            Policies should be 'allow' or 'deny', the regular expression
+            should be written to match IPv4 or IPv6 addresses.  If defined,
+            access rules are checkd in order and if none matches, incoming
+            connections will be rejected.
+
     --tls_default</b>=<a>name</a> __
             Default name to use for SSL, if SNI (Server Name Indication)
             is missing from incoming HTTPS connections.
