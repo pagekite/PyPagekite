@@ -959,7 +959,7 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     self.server_port = sspec[1]
 
     if ssl_pem_filename:
-      ctx = socks.SSL.Context(socks.SSL.SSLv3_METHOD)
+      ctx = socks.SSL.Context(socks.SSL.TLSv1_METHOD)
       ctx.use_privatekey_file (ssl_pem_filename)
       ctx.use_certificate_chain_file(ssl_pem_filename)
       self.socket = socks.SSL_Connect(ctx, socket.socket(self.address_family,
