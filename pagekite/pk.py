@@ -1021,7 +1021,7 @@ class PageKite(object):
         p('httpd = %s:%s', self.ui_sspec_cfg, ('host', 'port'))
       ])
       if self.ui_password: config.append('httppass=%s' % self.ui_password)
-      if self.ui_pemfile: config.append('pemfile=%s' % self.pemfile)
+      if self.ui_pemfile: config.append('pemfile=%s' % self.ui_pemfile)
       for http_host in sorted(self.ui_paths.keys()):
         for path in sorted(self.ui_paths[http_host].keys()):
           up = self.ui_paths[http_host][path]
