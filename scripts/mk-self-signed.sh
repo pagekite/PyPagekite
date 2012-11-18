@@ -25,7 +25,7 @@ done
 
 openssl genrsa -out self-signed.key 2048
 openssl req -new -key self-signed.key -out self-signed.csr \
-             -subj "/CN=$DOMAIN"
+             -subj "/CN=Anonymous/O=Independent/OU=Person"
 openssl x509 -req -extfile self-signed.cfg -days 3650 \
              -in self-signed.csr -signkey self-signed.key -out self-signed.crt
 
