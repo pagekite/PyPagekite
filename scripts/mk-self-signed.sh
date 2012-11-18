@@ -1,8 +1,34 @@
 #!/bin/bash
-DOMAIN=$1
-openssl genrsa -out server.key 2048
-openssl req -new -key server.key -out server.csr -subj "/CN=$DOMAIN"
-openssl x509 -req -days 365 -in server.csr -signkey server.key -out server.crt
-cat server.key server.crt >server.pem
-rm -f server.key server.csr server.crt
+#
+# This script will generate a self signed certificate which claims
+# validity for one or more domain names using the subjectAltName extension.
+#
+# Country, organization and other expected fields are left blank.
+#
 
+DOMAIN=$1
+if [ "$DOMAIN" = "" ]; then
+  echo "Usage: $0 maindomain.com [otherdomain1.net otherdomain2.org ...]"
+  exit 1
+fi
+
+cat <<tac >self-signed.cfg
+subjectAltName = @alt_names
+
+[alt_names]
+tac
+COUNT=1
+for dom in $@; do
+  echo "DNS.$COUNT = $dom" >>self-signed.cfg
+  let COUNT=$COUNT+1
+done
+
+openssl genrsa -out self-signed.key 2048
+openssl req -new -key self-signed.key -out self-signed.csr \
+             -subj "/CN=$DOMAIN"
+openssl x509 -req -extfile self-signed.cfg -days 3650 \
+             -in self-signed.csr -signkey self-signed.key -out self-signed.crt
+
+cat self-signed.key self-signed.crt >self-signed.pem
+
+rm -f self-signed.cfg self-signed.key self-signed.csr self-signed.crt
