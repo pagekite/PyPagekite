@@ -54,7 +54,8 @@ class RemoteUi(NullUi):
   def EndListingBackEnds(self):
     self.wfile.write('end_be_list\n')
 
-  def NotifyBE(self, bid, be, has_ssl, dpaths, is_builtin=False, now=None):
+  def NotifyBE(self, bid, be, has_ssl, dpaths,
+               is_builtin=False, fingerprint=None, now=None):
     domain = be[BE_DOMAIN]
     port = be[BE_PORT]
     proto = be[BE_PROTO]
@@ -68,7 +69,8 @@ class RemoteUi(NullUi):
                '\n') % (be[BE_STATUS], bid, domain, port, proto,
                         be[BE_BHOST], be[BE_BPORT],
                         has_ssl and '; ssl=1' or '',
-                        is_builtin and '; builtin=1' or '')
+                        is_builtin and '; builtin=1' or '',
+                        fingerprint and '; (fingerprint=%s' % fingerprint) or '')
     self.wfile.write(message)
 
     for path in dpaths:

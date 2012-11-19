@@ -692,7 +692,9 @@ class TunnelManager(threading.Thread):
           builtin = False
           dpaths = {}
 
-        self.pkite.ui.NotifyBE(bid, be, has_ssl, dpaths, is_builtin=builtin)
+        self.pkite.ui.NotifyBE(bid, be, has_ssl, dpaths,
+                               is_builtin=builtin,
+                        fingerprint=(builtin and self.pkite.ui_pemfingerprint))
       self.pkite.ui.EndListingBackEnds()
 
       if self.pkite.isfrontend:
@@ -820,6 +822,7 @@ class PageKite(object):
     self.ui_socket = None
     self.ui_password = None
     self.ui_pemfile = None
+    self.ui_pemfingerprint = None
     self.ui_magic_file = '.pagekite.magic'
     self.ui_paths = {}
     self.insecure = False
@@ -1640,6 +1643,16 @@ class PageKite(object):
       except (OSError, IOError):
         pass
 
+  def SetPem(self, filename):
+    self.ui_pemfile = filename
+    try:
+      p = os.popen('openssl x509 -noout -fingerprint -in %s' % filename, 'r')
+      data = p.read().strip()
+      p.close()
+      self.ui_pemfingerprint = data.split('=')[1]
+    except (OSError, ValueError):
+      pass
+
   def Configure(self, argv):
     self.conns = self.conns or Connections(self)
     opts, args = getopt.getopt(argv, OPT_FLAGS, OPT_ARGS)
@@ -1691,12 +1704,12 @@ class PageKite(object):
         self.main_loop = False
 
       elif opt in ('-X', '--httppass'): self.ui_password = arg
-      elif opt in ('-P', '--pemfile'): self.ui_pemfile = arg
+      elif opt in ('-P', '--pemfile'): self.SetPem(arg)
       elif opt in ('--selfsign', ):
         pf = self.rcfile.replace('.rc', '.pem').replace('.cfg', '.pem')
         if not os.path.exists(pf):
           CreateSelfSignedCert(pf, self.ui)
-        self.ui_pemfile = pf
+        self.SetPem(pf)
       elif opt in ('-H', '--httpd'):
         parts = arg.split(':')
         host = parts[0] or 'localhost'
