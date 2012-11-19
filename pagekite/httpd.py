@@ -994,7 +994,7 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
   def finish_request(self, request, client_address):
     try:
       SimpleXMLRPCServer.finish_request(self, request, client_address)
-    except socket.error:
+    except (socket.error, socks.SSL.ZeroReturnError, socks.SSL.Error):
       pass
 
 

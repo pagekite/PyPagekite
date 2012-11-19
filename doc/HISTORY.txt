@@ -1,6 +1,20 @@
 Version history - highlights
 ============================
 
+v0.5.4   2012.11.??
+------
+   - Improved --proxy argument handling to do chains properly
+   - Added --client_acl and --tunnel_acl
+   - Fixed bug in --pemfile
+   - Fixed built-in HTTPS server's silly incompatibility with SNI.
+   - Added --selfsign for easily enabling self-signed HTTPS.
+
+
+v0.5.2, v0.5.3
+--------------
+   - Forgot to document these, oops.
+
+
 v0.5.1   2012.07.22
 ------
    - Fixed lots and lots of file descriptor leaks.

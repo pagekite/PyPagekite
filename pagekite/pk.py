@@ -68,7 +68,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'authdomain=', 'motd=', 'register=', 'host=',
             'noupgradeinfo', 'upgradeinfo=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
-            'tls_default=', 'tls_endpoint=',
+            'tls_default=', 'tls_endpoint=', 'selfsign',
             'fe_certname=', 'jakenoia', 'ca_certs=',
             'kitename=', 'kitesecret=', 'fingerpath=',
             'backend=', 'define_backend=', 'be_config=', 'insecure',
@@ -735,6 +735,43 @@ class TunnelManager(threading.Thread):
     self.check_interval = 0
 
 
+def SecureCreate(path):
+  fd = open(path, 'w')
+  try:
+    os.chmod(path, 0600)
+  except OSError:
+    pass
+  return fd
+
+def CreateSelfSignedCert(pem_path, ui):
+  ui.Notify('Creating a 2048-bit self-signed TLS certificate ...',
+            prefix='-', color=ui.YELLOW)
+
+  workdir = tempfile.mkdtemp()
+  def w(fn):
+    return os.path.join(workdir, fn)
+
+  os.system(('openssl genrsa -out %s 2048') % w('key'))
+  os.system(('openssl req -batch -new -key %s -out %s'
+                        ' -subj "/CN=PageKite/O=Self-Hosted/OU=Website"'
+             ) % (w('key'), w('csr')))
+  os.system(('openssl x509 -req -days 3650 -in %s -signkey %s -out %s'
+             ) % (w('csr'), w('key'), w('crt')))
+
+  pem = SecureCreate(pem_path)
+  pem.write(open(w('key')).read())
+  pem.write('\n')
+  pem.write(open(w('crt')).read())
+  pem.close()
+
+  for fn in ['key', 'csr', 'crt']:
+    os.remove(w(fn))
+  os.rmdir(workdir)
+
+  ui.Notify('Saved certificate to: %s' % pem_path,
+            prefix='-', color=ui.YELLOW)
+
+
 class PageKite(object):
   """Configuration and master select loop."""
 
@@ -1252,11 +1289,7 @@ class PageKite(object):
   def SaveUserConfig(self, quiet=False):
     self.savefile = self.savefile or self.rcfile
     try:
-      fd = open(self.savefile, 'w')
-      try:
-        os.chmod(self.savefile, 0600)
-      except OSError:
-        pass
+      fd = SecureCreate(self.savefile)
       fd.write('\n'.join(self.GenerateConfig(safe=True)))
       fd.close()
       if not quiet:
@@ -1659,6 +1692,11 @@ class PageKite(object):
 
       elif opt in ('-X', '--httppass'): self.ui_password = arg
       elif opt in ('-P', '--pemfile'): self.ui_pemfile = arg
+      elif opt in ('--selfsign', ):
+        pf = self.rcfile.replace('.rc', '.pem').replace('.cfg', '.pem')
+        if not os.path.exists(pf):
+          CreateSelfSignedCert(pf, self.ui)
+        self.ui_pemfile = pf
       elif opt in ('-H', '--httpd'):
         parts = arg.split(':')
         host = parts[0] or 'localhost'
