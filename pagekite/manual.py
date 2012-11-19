@@ -262,6 +262,10 @@ MAN_OPT_SYSTEM = ("""\
     --pidfile</b>=<a>P</a>    __Write PID to the named file.
     --errorurl</b>=<a>U</a>   __URL to redirect to when back-ends are not found.
 
+    --selfsign __
+            Configure the built-in HTTP daemon for HTTPS, first generating a
+            new self-signed certificate using <b>openssl</b> if necessary.
+
     --httpd</b>=<a>X</a>:<a>P</a>,\
  <b>--httppass</b>=<a>X</a>,\
  <b>--pemfile</b>=<a>X</a> __
