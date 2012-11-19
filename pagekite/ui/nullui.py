@@ -216,10 +216,10 @@ class NullUi(object):
       if fingerprint and proto.startswith('https'):
         self.Notify(' - Fingerprint=%s' % fingerprint,
                     color=self.WHITE)
-        self.Notify(('   For maximum security, use a secure channel to'
-                     ' inform your guests what'),
+        self.Notify(('   IMPORTANT: For maximum security, use a secure channel'
+                     ' to inform your'),
                     color=self.YELLOW)
-        self.Notify('   fingerprint to expect.',
+        self.Notify('   guests what fingerprint to expect.',
                     color=self.YELLOW)
 
   def Status(self, tag, message=None, color=None): pass
