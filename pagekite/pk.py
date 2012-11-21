@@ -2065,7 +2065,7 @@ class PageKite(object):
         paranoid = host_config.get('hide', False)
         set_root = host_config.get('root', True)
         if len(be_paths) == 1:
-          skip = 0
+          skip = len(os.path.dirname(be_paths[0]))
         else:
           skip = len(os.path.dirname(os.path.commonprefix(be_paths)+'X'))
 
