@@ -1,7 +1,7 @@
 Version history - highlights
 ============================
 
-v0.5.4   2012.11.??
+v0.5.4   2012.11.22
 ------
    - Improved --proxy argument handling to do chains properly
    - Added --client_acl and --tunnel_acl
