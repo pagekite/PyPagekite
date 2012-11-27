@@ -2098,7 +2098,7 @@ class PageKite(object):
       if not be[BE_SECRET]:
         if self.kitesecret and be[BE_DOMAIN] == self.kitename:
           be[BE_SECRET] = self.kitesecret
-        else:
+        elif not self.kite_remove and not self.kite_disable:
           need_registration[be[BE_DOMAIN]] = True
 
     for domain in need_registration:
@@ -2128,16 +2128,22 @@ class PageKite(object):
       if self.kite_add:
         self.backends.update(just_these_backends)
       elif self.kite_remove:
-        for bid in just_these_backends:
-          be = self.backends[bid]
-          if be[BE_PROTO] in ('http', 'http2', 'http3'):
-            http_host = '%s/%s' % (be[BE_DOMAIN], be[BE_PORT] or '80')
-            if http_host in self.ui_paths: del self.ui_paths[http_host]
-            if http_host in self.be_config: del self.be_config[http_host]
-          del self.backends[bid]
+        try:
+          for bid in just_these_backends:
+            be = self.backends[bid]
+            if be[BE_PROTO] in ('http', 'http2', 'http3'):
+              http_host = '%s/%s' % (be[BE_DOMAIN], be[BE_PORT] or '80')
+              if http_host in self.ui_paths: del self.ui_paths[http_host]
+              if http_host in self.be_config: del self.be_config[http_host]
+            del self.backends[bid]
+        except KeyError:
+          raise ConfigError('No such kite: %s' % bid)
       elif self.kite_disable:
-        for bid in just_these_backends:
-          self.backends[bid][BE_STATUS] = BE_STATUS_DISABLED
+        try:
+          for bid in just_these_backends:
+            self.backends[bid][BE_STATUS] = BE_STATUS_DISABLED
+        except KeyError:
+          raise ConfigError('No such kite: %s' % bid)
       elif self.kite_only:
         for be in self.backends.values(): be[BE_STATUS] = BE_STATUS_DISABLED
         self.backends.update(just_these_backends)
