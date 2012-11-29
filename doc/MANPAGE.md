@@ -1,6 +1,6 @@
 ## Name ##
 
-pagekite v0.5.3a - Make localhost servers publicly visible
+pagekite v0.5.4 - Make localhost servers publicly visible
 
 ## Synopsis ##
 
@@ -163,10 +163,16 @@ time the program defaults will Just Work.
    * <b>--watch</b>=`N`  
      Display proxied data (higher N = more verbosity).
 
+   * <b>--noproxy</b>  
+     Ignore system (or config file) proxy settings.
+
    * <b>--proxy</b>=`type`:`server`:`port`, <b>--socksify</b>=`server`:`port`, <b>--torify</b>=`server`:`port` <br />
-     Connect to the front-ends using a chain of proxies, a single SOCKS
-     proxy or the Tor anonymity network.  The type can be any of
-     'ssl', 'http' or 'socks5'.
+     Connect to the front-ends using SSL, an HTTP proxy, a SOCKS proxy,
+     or the Tor anonymity network.  The type can be any of 'ssl', 'http'
+     or 'socks5'.  The server name can either be a plain hostname,
+     user@hostname or user:password@hostname.  For SSL connections the
+     user part may be a path to a client cert PEM file.  If multiple
+     proxies are defined, they will be chained one after another.
 
    * <b>--service_on</b>=`proto`:`kitename`:`host`:`port`:`secret` <br />
      Explicit configuration for a service kite.  Generally kites are
@@ -248,6 +254,13 @@ time the program defaults will Just Work.
      Listen for raw connections these ports. The string '%s'
      allows arbitrary ports in HTTP CONNECT.
 
+   * <b>--client_acl</b>=`policy`:`regexp`, <b>--tunnel_acl</b>=`policy`:`regexp` <br />
+     Add a client connection or tunnel access control rule.
+     Policies should be 'allow' or 'deny', the regular expression
+     should be written to match IPv4 or IPv6 addresses.  If defined,
+     access rules are checkd in order and if none matches, incoming
+     connections will be rejected.
+
    * <b>--tls_default</b>=`name` <br />
      Default name to use for SSL, if SNI (Server Name Indication)
      is missing from incoming HTTPS connections.
@@ -290,6 +303,10 @@ time the program defaults will Just Work.
      Write PID to the named file.
    * <b>--errorurl</b>=`U`  
      URL to redirect to when back-ends are not found.
+
+   * <b>--selfsign <br />
+     Configure the built-in HTTP daemon for HTTPS, first generating a
+     new self-signed certificate using <b>openssl</b> if necessary.
 
    * <b>--httpd</b>=`X`:`P`, <b>--httppass</b>=`X`, <b>--pemfile</b>=`X` <br />
      Configure the built-in HTTP daemon.  These options are likely to

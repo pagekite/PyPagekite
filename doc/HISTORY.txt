@@ -1,13 +1,14 @@
 Version history - highlights
 ============================
 
-v0.5.4   2012.11.22
+v0.5.4   2012.11.29
 ------
    - Improved --proxy argument handling to do chains properly
    - Added --client_acl and --tunnel_acl
    - Fixed bug in --pemfile
    - Fixed built-in HTTPS server's silly incompatibility with SNI.
    - Added --selfsign for easily enabling self-signed HTTPS.
+   - Fixed behavior of --remove and --disable for nonexistant kites.
 
 
 v0.5.2, v0.5.3
