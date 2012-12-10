@@ -582,27 +582,31 @@ class Tunnel(ChunkParser):
     self.last_ping = self.last_activity = when
 
   def SendPing(self):
-    self.last_ping = int(time.time())
+    now = time.time()
+    self.last_ping = int(now)
     self.LogDebug("Ping", [('host', self.server_info[self.S_NAME])])
-    return self.SendChunked('NOOP: 1\r\nPING: 1\r\n\r\n!',
+    return self.SendChunked('NOOP: 1\r\nPING: %.3f\r\n\r\n!' % now,
                             compress=False, just_buffer=True)
 
-  def SendPong(self):
+  def SendPong(self, data):
     if (self.conns.config.isfrontend and
         self.quota and (self.quota[0] >= 0)):
       # May as well make ourselves useful!
-      return self.SendQuota()
+      return self.SendQuota(pong=data[:64])
     else:
-      return self.SendChunked('NOOP: 1\r\n\r\n!',
+      return self.SendChunked('NOOP: 1\r\nPONG: %s\r\n\r\n!' % data[:64],
                               compress=False, just_buffer=True)
 
-  def SendQuota(self):
+  def SendQuota(self, pong=''):
+    if pong:
+      pong = 'PONG: %s\r\n' % pong
     if self.q_days is not None:
-      return self.SendChunked(('NOOP: 1\r\nQuota: %s\r\nQDays: %s\r\nQConns: %s\r\n\r\n!'
-                               ) % (self.quota[0], self.q_days, self.q_conns),
+      return self.SendChunked(('NOOP: 1\r\n%sQuota: %s\r\nQDays: %s\r\nQConns: %s\r\n\r\n!'
+                               ) % (pong, self.quota[0], self.q_days, self.q_conns),
                               compress=False, just_buffer=True)
     else:
-      return self.SendChunked('NOOP: 1\r\nQuota: %s\r\n\r\n!' % self.quota[0],
+      return self.SendChunked(('NOOP: 1\r\n%sQuota: %s\r\n\r\n!'
+                               ) % (pong, self.quota[0]),
                               compress=False, just_buffer=True)
 
   def SendProgress(self, sid, conn, throttle=False):
@@ -670,7 +674,7 @@ class Tunnel(ChunkParser):
 
   def ProcessChunkDirectives(self, parse):
     if parse.Header('PING'):
-      return self.SendPong()
+      return self.SendPong(parse.Header('PING')[0])
     if parse.Header('ZRST') and not self.ResetZChunks():
       return False
     if parse.Header('SPD') or parse.Header('SKB'):
