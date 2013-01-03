@@ -1432,7 +1432,7 @@ class UnknownConn(MagicProtocolParser):
                 (self.on_port, self.host) = (cport, chost)
                 self.parser = HttpLineParser()
                 self.Send(HTTP_ConnectOK(), try_flush=True)
-                return self.ProcessRaw(''.join(lines), self.host)
+                return self.ProcessProto(''.join(lines), raw, self.host)
 
           self.Send(HTTP_ConnectBad(), try_flush=True)
           return False
@@ -1566,11 +1566,12 @@ class UnknownConn(MagicProtocolParser):
               try_flush=True)
     return False
 
-  def ProcessRaw(self, data, domain):
+  def ProcessProto(self, data, proto, domain):
     if not self.conns.config.CheckClientAcls(self.address, conn=self):
       return False
+
     if UserConn.FrontEnd(self, self.address,
-                         'raw', domain, self.on_port,
+                         proto, domain, self.on_port,
                          [data], self.conns) is None:
       return False
 

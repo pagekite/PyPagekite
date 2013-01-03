@@ -610,6 +610,7 @@ class LineParser(Selectable):
 
 TLS_CLIENTHELLO = '%c' % 026
 SSL_CLIENTHELLO = '\x80'
+MINECRAFT_HANDSHAKE = '%c%c' % (0x02, 0x51)
 FLASH_POLICY_REQ = '<policy-file-request/>'
 
 # FIXME: XMPP support
@@ -653,7 +654,7 @@ class MagicProtocolParser(LineParser):
 
     domain = 'domain' in args and args['domain'] or None
     if proto == 'https': return self.ProcessTls(data, domain)
-    if proto == 'raw' and domain: return self.ProcessRaw(data, domain)
+    if proto == 'raw' and domain: return self.ProcessProto(data, 'raw', domain)
     return False
 
   def ProcessData(self, data):
@@ -665,10 +666,19 @@ class MagicProtocolParser(LineParser):
       if not (data.startswith(TLS_CLIENTHELLO) or
               data.startswith(SSL_CLIENTHELLO)):
         self.EatPeeked()
+
+        # FIXME: These only work if the full policy request or minecraft
+        #        handshake are present in the first data packet.
         if data.startswith(FLASH_POLICY_REQ):
           return self.ProcessFlashPolicyRequest(data)
-        else:
-          return LineParser.ProcessData(self, data)
+
+        if data.startswith(MINECRAFT_HANDSHAKE):
+          user, server, port = self.GetMinecraftInfo(data)
+          if user and server and port:
+            return self.ProcessProto(data, 'minecraft', server)
+
+        return LineParser.ProcessData(self, data)
+
       self.is_tls = True
 
     if self.is_tls:
@@ -717,6 +727,22 @@ class MagicProtocolParser(LineParser):
         sni.extend(self.GetSniNames(self.GetClientHelloExtensions(msg)))
     return sni
 
+  def GetMinecraftInfo(self, data):
+    try:
+      packet, version, unlen = struct.unpack('>BBh', data[0:4])
+      unlen *= 2
+      hnlen = struct.unpack('>h', data[4+unlen:6+unlen])
+      hnlen *= 2
+      port = struct.unpack('>h', data[6+unlen+hnlen:8+unlen+hnlen])
+      uname = data[4:4+unlen].decode('utf_16_be')
+      sname = data[6+unlen:6+hnlen+unlen].decode('utf_16_be')
+      self.LogDebug('Minecraft? %s %s %s' % (uname, sname, port))
+      return uame, sname, port
+    except:
+      import traceback
+      self.LogDebug('Minecraft? %s' % traceback.format_exc())
+      return None, None, None
+
   def ProcessFlashPolicyRequest(self, data):
     self.LogError('MagicProtocolParser::ProcessFlashPolicyRequest: Should be overridden!')
     return False
@@ -725,8 +751,8 @@ class MagicProtocolParser(LineParser):
     self.LogError('MagicProtocolParser::ProcessTls: Should be overridden!')
     return False
 
-  def ProcessRaw(self, data, domain):
-    self.LogError('MagicProtocolParser::ProcessRaw: Should be overridden!')
+  def ProcessProto(self, data, proto, domain):
+    self.LogError('MagicProtocolParser::ProcessProto: Should be overridden!')
     return False
 
 

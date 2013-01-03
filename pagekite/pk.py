@@ -798,7 +798,7 @@ class PageKite(object):
     self.server_portalias = {}
     self.server_aliasport = {}
     self.server_protos = ['http', 'http2', 'http3', 'https', 'websocket',
-                          'irc', 'finger', 'httpfinger', 'raw']
+                          'irc', 'finger', 'httpfinger', 'raw', 'minecraft']
 
     self.tunnel_acls = []
     self.client_acls = []
@@ -1105,6 +1105,7 @@ class PageKite(object):
         '# service_on = http/8080:YOU.pagekite.me:localhost:8080:SECRET',
         '# service_on = https:YOU.pagekite.me:localhost:443:SECRET',
         '# service_on = websocket:YOU.pagekite.me:localhost:8080:SECRET',
+        '# service_on = minecraft:YOU.pagekite.me:localhost:8080:SECRET',
         '#',
         '# service_off = http:YOU.pagekite.me:localhost:4545:SECRET',
         ''
@@ -1604,6 +1605,7 @@ class PageKite(object):
         bport = (bport or (proto in ('http', 'httpfinger', 'websocket') and 80)
                        or (proto == 'irc' and 6667)
                        or (proto == 'https' and 443)
+                       or (proto == 'minecraft' and 25565)
                        or (proto == 'finger' and 79))
         if port:
           bid = '%s-%d:%s' % (proto, int(port), fdom)
