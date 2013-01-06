@@ -588,6 +588,16 @@ class Tunnel(ChunkParser):
     return self.SendChunked('NOOP: 1\r\nPING: %.3f\r\n\r\n!' % now,
                             compress=False, just_buffer=True)
 
+  def ProcessPong(self, pong):
+    try:
+      rtt = int(1000*(time.time()-float(pong)))
+      self.Log([('host', self.server_info[self.S_NAME]),
+                ('rtt', '%d' % rtt)])
+      if common.gYamon:
+        common.gYamon.ladd('tunnel-rtt', rtt)
+    except ValueError:
+      pass
+
   def SendPong(self, data):
     if (self.conns.config.isfrontend and
         self.quota and (self.quota[0] >= 0)):
@@ -673,6 +683,8 @@ class Tunnel(ChunkParser):
                                        self.q_days, self.q_conns)
 
   def ProcessChunkDirectives(self, parse):
+    if parse.Header('PONG'):
+      self.ProcessPong(parse.Header('PONG')[0])
     if parse.Header('PING'):
       return self.SendPong(parse.Header('PING')[0])
     if parse.Header('ZRST') and not self.ResetZChunks():
