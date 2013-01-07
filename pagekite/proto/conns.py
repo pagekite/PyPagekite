@@ -953,7 +953,6 @@ class LoopbackTunnel(Tunnel):
   def Send(self, data, try_flush=False, activity=False, just_buffer=True):
     if self.write_blocked:
       data = [self.write_blocked] + data
-      common.buffered_bytes[0] -= len(self.write_blocked)
       self.write_blocked = ''
     joined_data = ''.join(data)
     if try_flush or (len(joined_data) > 10240) or (self.buffer_count >= 100):
@@ -964,7 +963,6 @@ class LoopbackTunnel(Tunnel):
     else:
       self.buffer_count += 1
       self.write_blocked = joined_data
-      common.buffered_bytes[0] += len(self.write_blocked)
       return True
 
 

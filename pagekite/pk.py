@@ -342,7 +342,10 @@ class Connections(object):
 
   def Blocked(self):
     # FIXME: This is O(n)
-    return [s.fd for s in self.conns if s.IsBlocked()]
+    # Magic side-effect: update buffered byte counter
+    blocked = [s for s in self.conns if s.IsBlocked()]
+    common.buffered_bytes[0] = sum([len(s.write_blocked) for s in blocked])
+    return [s.fd for s in blocked]
 
   def DeadConns(self):
     return [s for s in self.conns if s.IsDead()]
@@ -2883,6 +2886,7 @@ class PageKite(object):
     now = time.time()
     evs = []
     try:
+      bbc = 0
       for c in self.conns.conns:
         try:
           if c.IsDead():
@@ -2890,8 +2894,11 @@ class PageKite(object):
           else:
             fdc[c.fd.fileno()] = c.fd
             mask = 0
-            if c.IsBlocked():     mask |= select.EPOLLOUT
-            if c.IsReadable(now): mask |= select.EPOLLIN
+            if c.IsBlocked():
+              bbc += len(c.write_blocked)
+              mask |= select.EPOLLOUT
+            if c.IsReadable(now):
+              mask |= select.EPOLLIN
             if mask:
               try:
                 try:
@@ -2908,6 +2915,7 @@ class PageKite(object):
           # Failing to unregister is FINE, we don't complain about that.
           pass
 
+      common.buffered_bytes[0] = bbc
       evs.extend(epoll.poll(waittime))
     except IOError:
       pass
