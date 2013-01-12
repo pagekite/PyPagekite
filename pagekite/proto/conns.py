@@ -327,12 +327,14 @@ class Tunnel(ChunkParser):
                                        tokens,
                                      nozchunks=conns.config.disable_zchunks,
                                     replace=replace_sessionid),
-                      activity=False, try_flush=True)
-        or not self.Flush(wait=True)):
+                      activity=False, try_flush=True, allow_blocking=False)
+        or not self.Flush(wait=True, allow_blocking=False)):
+      self.LogDebug('Failed to send kite request, closing.')
       return None, None
 
     data = self._RecvHttpHeaders()
     if not data:
+      self.LogDebug('Failed to parse kite response, closing.')
       return None, None
 
     self.fd.setblocking(0)
@@ -481,7 +483,11 @@ class Tunnel(ChunkParser):
                                          compress=False, just_buffer=True)
             data = parse = None
           else:
-            data, parse = self._Connect(server, conns, tokens)
+            try:
+              data, parse = self._Connect(server, conns, tokens)
+            except:
+              logging.LogError('Error in connect: %s' % format_exc())
+              raise
 
         if data and parse:
           kites = self.HandlePageKiteResponse(parse)
@@ -508,15 +514,17 @@ class Tunnel(ChunkParser):
   FrontEnd = staticmethod(_FrontEnd)
   BackEnd = staticmethod(_BackEnd)
 
-  def Send(self, data, try_flush=False, activity=False, just_buffer=False):
+  def Send(self, data, try_flush=False, activity=False, just_buffer=False,
+                       allow_blocking=True):
     try:
-      if TUNNEL_SOCKET_BLOCKS and not just_buffer:
+      if TUNNEL_SOCKET_BLOCKS and allow_blocking and not just_buffer:
         self.fd.setblocking(1)
       return ChunkParser.Send(self, data, try_flush=try_flush,
                                           activity=activity,
-                                          just_buffer=just_buffer)
+                                          just_buffer=just_buffer,
+                                          allow_blocking=allow_blocking)
     finally:
-      if TUNNEL_SOCKET_BLOCKS and not just_buffer:
+      if TUNNEL_SOCKET_BLOCKS and allow_blocking and not just_buffer:
         self.fd.setblocking(0)
 
   def SendData(self, conn, data, sid=None, host=None, proto=None, port=None,
@@ -799,7 +807,9 @@ class Tunnel(ChunkParser):
       self.users[sid] = conn
       if proto == 'httpfinger':
         conn.fd.setblocking(1)
-        conn.Send(data, try_flush=True) or conn.Flush(wait=True)
+        conn.Send(data, try_flush=True,
+                        allow_blocking=False) or conn.Flush(wait=True,
+                                                            allow_blocking=False)
         self._RecvHttpHeaders(fd=conn.fd)
         conn.fd.setblocking(0)
         data = ''
@@ -950,7 +960,8 @@ class LoopbackTunnel(Tunnel):
   # things will go horribly wrong now and then.  For now we hack this by
   # separating Write and Flush and looping back only on Flush.
 
-  def Send(self, data, try_flush=False, activity=False, just_buffer=True):
+  def Send(self, data, try_flush=False, activity=False, just_buffer=True,
+                       allow_blocking=True):
     if self.write_blocked:
       data = [self.write_blocked] + data
       self.write_blocked = ''
@@ -1263,8 +1274,11 @@ class UserConn(Selectable):
 
     return self.ProcessEof()
 
-  def Send(self, data, try_flush=False, activity=True):
-    rv = Selectable.Send(self, data, try_flush=try_flush, activity=activity)
+  def Send(self, data, try_flush=False, activity=True, just_buffer=False,
+                       allow_blocking=True):
+    rv = Selectable.Send(self, data, try_flush=try_flush, activity=activity,
+                                     just_buffer=just_buffer,
+                                     allow_blocking=allow_blocking)
     if self.write_eof and not self.write_blocked:
       self.Shutdown(socket.SHUT_WR)
     elif try_flush or not self.write_blocked:

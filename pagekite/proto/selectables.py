@@ -445,7 +445,8 @@ class Selectable(object):
   def AutoThrottle(self, max_speed=None, remote=False, delay=0.2):
     return self.Throttle(max_speed, remote, delay)
 
-  def Send(self, data, try_flush=False, activity=False, just_buffer=False):
+  def Send(self, data, try_flush=False, activity=False,
+                       just_buffer=False, allow_blocking=False):
     self.write_speed = int((self.wrote_bytes + self.all_out)
                            / max(1, (time.time() - self.created)))
 
@@ -543,10 +544,11 @@ class Selectable(object):
       if self.lock:
         self.lock.release()
 
-  def Flush(self, loops=50, wait=False):
-    while loops != 0 and len(self.write_blocked) > 0 and self.Send([],
-                                                                try_flush=True,
-                                                                activity=False):
+  def Flush(self, loops=50, wait=False, allow_blocking=False):
+    while (loops != 0 and
+           len(self.write_blocked) > 0 and
+           self.Send([], try_flush=True, activity=False,
+                         allow_blocking=allow_blocking)):
       if wait and len(self.write_blocked) > 0:
         time.sleep(0.1)
       logging.LogDebug('Flushing...')
