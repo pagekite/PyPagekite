@@ -305,7 +305,7 @@ class Tunnel(ChunkParser):
     socks.DEBUG = (logging.DEBUG_IO or socks.DEBUG) and logging.LogDebug
     sock = socks.socksocket()
     if socks.HAVE_SSL:
-      chain = ['default']
+      chain = []
       if self.conns.config.fe_anon_tls_wrap:
         chain.append('ssl-anon!%s!%s' % (sspec[0], sspec[1]))
       if self.conns.config.fe_certname:
