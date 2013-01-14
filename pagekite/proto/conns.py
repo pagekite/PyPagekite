@@ -602,7 +602,7 @@ class Tunnel(ChunkParser):
       self.Log([('host', self.server_info[self.S_NAME]),
                 ('rtt', '%d' % rtt)])
       if common.gYamon:
-        common.gYamon.ladd('tunnel-rtt', rtt)
+        common.gYamon.ladd('tunnel_rtt', rtt)
     except ValueError:
       pass
 

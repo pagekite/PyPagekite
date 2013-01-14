@@ -978,7 +978,7 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
       gYamon.vset('version', APPVER)
       gYamon.vset('httpd_ssl_enabled', self.enable_ssl)
       gYamon.vset('errors', 0)
-      gYamon.lcreate("tunnel-rtt", 100)
+      gYamon.lcreate("tunnel_rtt", 100)
       gYamon.lists['buffered_bytes'] = [1, 0, common.buffered_bytes]
       gYamon.views['selectables'] = (selectables.SELECTABLES, {
         'idle': [0, 0, self.conns.idle],
