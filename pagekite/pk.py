@@ -1747,7 +1747,7 @@ class PageKite(object):
       elif opt == '--tls_default': self.tls_default = arg
       elif opt == '--tls_endpoint':
         name, pemfile = arg.split(':', 1)
-        ctx = SSL.Context(SSL.SSLv23_METHOD)
+        ctx = SSL.Context(SSL.SSLv3_METHOD)
         ctx.use_privatekey_file(pemfile)
         ctx.use_certificate_chain_file(pemfile)
         self.tls_endpoints[name] = (pemfile, ctx)
