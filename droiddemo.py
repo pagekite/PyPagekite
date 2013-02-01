@@ -1,7 +1,7 @@
 #!/usr/bin/python -u
 #
-# droiddemo.py, Copyright 2010, The Beanstalks Project ehf.
-#                               http://beanstalks-project.net/
+# droiddemo.py, Copyright 2010-2013, The Beanstalks Project ehf.
+#                                    http://beanstalks-project.net/
 #
 # This is a proof-of-concept PageKite enabled HTTP server for Android.
 # It has been developed and tested in the SL4A Python environment.
