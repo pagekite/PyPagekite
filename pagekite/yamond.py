@@ -182,7 +182,11 @@ class YamonD(threading.Thread):
 
   def render_vars_text(self, view=None):
     if view:
-      values, lists = self.views[view]
+      if view == 'heapy':
+        from guppy import hpy
+        return hpy().heap()
+      else:
+        values, lists = self.views[view]
     else:
       values, lists = self.values, self.lists
 
