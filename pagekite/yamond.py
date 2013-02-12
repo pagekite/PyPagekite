@@ -52,6 +52,14 @@ class YamonRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     self.end_headers()
     self.wfile.write(self.server.yamond.render_vars_text())
 
+  def do_heapy(self):
+    from guppy import hpy
+    self.send_response(200)
+    self.send_header('Content-Type', 'text/plain')
+    self.send_header('Cache-Control', 'no-cache')
+    self.end_headers()
+    self.wfile.write(hpy().heap())
+
   def do_404(self):
     self.send_response(404)
     self.send_header('Content-Type', 'text/html')
@@ -67,6 +75,8 @@ class YamonRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def handle_path(self, path, query):
     if path == '/vars.txt':
       self.do_yamon_vars()
+    elif path == '/heap.txt':
+      self.do_heapy()
     elif path == '/':
       self.do_root()
     else:
