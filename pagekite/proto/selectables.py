@@ -246,24 +246,32 @@ class Selectable(object):
     if self.log_id: values.append(('id', self.log_id))
     logging.Log(values)
     self.logged.append(('', values))
+    while len(self.logged) > logging.LOG_LENGTH:
+      self.logged.pop(0)
 
   def LogError(self, error, params=None):
     values = params or []
     if self.log_id: values.append(('id', self.log_id))
     logging.LogError(error, values)
     self.logged.append((error, values))
+    while len(self.logged) > logging.LOG_LENGTH:
+      self.logged.pop(0)
 
   def LogDebug(self, message, params=None):
     values = params or []
     if self.log_id: values.append(('id', self.log_id))
     logging.LogDebug(message, values)
     self.logged.append((message, values))
+    while len(self.logged) > logging.LOG_LENGTH:
+      self.logged.pop(0)
 
   def LogInfo(self, message, params=None):
     values = params or []
     if self.log_id: values.append(('id', self.log_id))
     logging.LogInfo(message, values)
     self.logged.append((message, values))
+    while len(self.logged) > logging.LOG_LENGTH:
+      self.logged.pop(0)
 
   def LogTrafficStatus(self, final=False):
     if self.ui:
