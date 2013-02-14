@@ -126,7 +126,6 @@ class Selectable(object):
     self.zreset = False
 
     # Logging
-    self.logged = []
     self.alt_id = None
     self.countas = 'selectables_live'
     self.sid = self.gsid = getSelectableId(self.countas)
@@ -198,8 +197,6 @@ class Selectable(object):
             '<b>Bytes in / out</b>: %s / %s<br>'
             '<b>Created</b>: %s<br>'
             '<b>Status</b>: %s<br>'
-            '<br>'
-            '<b>Logged</b>: <ul>%s</ul><br>'
             '\n') % (self.zw and ('level %d' % self.zlevel) or 'off',
                      len(self.write_blocked),
                      self.dead and '-' or (obfuIp(peer[0]), peer[1]),
@@ -208,8 +205,7 @@ class Selectable(object):
                      self.all_out + self.wrote_bytes,
                      time.strftime('%Y-%m-%d %H:%M:%S',
                                    time.localtime(self.created)),
-                     self.dead and 'dead' or 'alive',
-                     ''.join(['<li>%s' % (l, ) for l in self.logged]))
+                     self.dead and 'dead' or 'alive')
 
   def ResetZChunks(self):
     if self.zw:
@@ -245,33 +241,21 @@ class Selectable(object):
   def Log(self, values):
     if self.log_id: values.append(('id', self.log_id))
     logging.Log(values)
-    self.logged.append(('', values))
-    while len(self.logged) > logging.LOG_LENGTH:
-      self.logged.pop(0)
 
   def LogError(self, error, params=None):
     values = params or []
     if self.log_id: values.append(('id', self.log_id))
     logging.LogError(error, values)
-    self.logged.append((error, values))
-    while len(self.logged) > logging.LOG_LENGTH:
-      self.logged.pop(0)
 
   def LogDebug(self, message, params=None):
     values = params or []
     if self.log_id: values.append(('id', self.log_id))
     logging.LogDebug(message, values)
-    self.logged.append((message, values))
-    while len(self.logged) > logging.LOG_LENGTH:
-      self.logged.pop(0)
 
   def LogInfo(self, message, params=None):
     values = params or []
     if self.log_id: values.append(('id', self.log_id))
     logging.LogInfo(message, values)
-    self.logged.append((message, values))
-    while len(self.logged) > logging.LOG_LENGTH:
-      self.logged.pop(0)
 
   def LogTrafficStatus(self, final=False):
     if self.ui:
