@@ -53,7 +53,7 @@ def LogValues(values, testtime=None):
   LOG_LINE += 1
   LOG.append(wdict)
   while len(LOG) > LOG_LENGTH:
-    LOG.pop(0)
+    LOG[0:(LOG_LENGTH/10)] = []
 
   return (words, wdict)
 
