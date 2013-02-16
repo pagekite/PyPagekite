@@ -65,6 +65,7 @@ class Tunnel(ChunkParser):
     self.zhistory = {}
     self.backends = {}
     self.last_ping = 0
+    self.weighted_rtt = -1
     self.using_tls = False
     self.filters = []
 
@@ -599,10 +600,18 @@ class Tunnel(ChunkParser):
   def ProcessPong(self, pong):
     try:
       rtt = int(1000*(time.time()-float(pong)))
+      if self.weighted_rtt < 0:
+        self.weighted_rtt = rtt
+      else:
+        self.weighted_rtt = (self.weighted_rtt + rtt)/2
+
       self.Log([('host', self.server_info[self.S_NAME]),
-                ('rtt', '%d' % rtt)])
+                ('rtt', '%d' % rtt),
+                ('wrtt', '%d' % self.weighted_rtt)])
+
       if common.gYamon:
         common.gYamon.ladd('tunnel_rtt', rtt)
+        common.gYamon.ladd('tunnel_wrtt', self.weighted_rtt)
     except ValueError:
       pass
 
