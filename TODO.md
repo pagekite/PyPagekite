@@ -2,6 +2,10 @@
 
 ## Known bugs ##
 
+   * Pagekite.py tries to reregister kites inline which have been rejected,
+     which can lead to tunnels getting shut down when the rejection message
+     arrives.
+
    * XML-RPC CNAME creation fail
    * Signup message weirdness
    * Poor handling of reconfiguration
