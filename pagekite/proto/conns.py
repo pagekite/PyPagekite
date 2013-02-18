@@ -1,4 +1,3 @@
-#!/usr/bin/python -u
 """
 These are the Connection classes, relatively high level classes that handle
 incoming or outgoing network connections.

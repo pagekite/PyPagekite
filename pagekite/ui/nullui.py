@@ -1,4 +1,3 @@
-#!/usr/bin/python -u
 """
 This is a basic "Null" user interface which does nothing at all.
 """

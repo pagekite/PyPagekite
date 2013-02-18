@@ -1,4 +1,3 @@
-#!/usr/bin/python
 """
 Compatibility hacks to work around differences between Python versions.
 """

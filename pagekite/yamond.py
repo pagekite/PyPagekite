@@ -1,4 +1,3 @@
-#!/usr/bin/python -u
 """
 This is a class implementing a flexible metric-store and an HTTP
 thread for browsing the numbers.

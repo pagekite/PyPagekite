@@ -1,4 +1,3 @@
-#!/usr/bin/python -u
 """
 This is the pagekite.py built-in HTTP server.
 """

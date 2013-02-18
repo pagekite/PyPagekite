@@ -1,4 +1,3 @@
-#!/usr/bin/python
 """
 Constants and global program state.
 """

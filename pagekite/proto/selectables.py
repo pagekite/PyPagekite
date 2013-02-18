@@ -1,4 +1,3 @@
-#!/usr/bin/python -u
 """
 Selectables are low level base classes which cooperate with our select-loop.
 """

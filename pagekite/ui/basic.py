@@ -1,4 +1,3 @@
-#!/usr/bin/python
 """
 This is the "basic" text-mode user interface class.
 """

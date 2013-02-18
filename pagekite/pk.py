@@ -1,4 +1,3 @@
-#!/usr/bin/python -u
 """
 This is what is left of the original monolithic pagekite.py.
 This is slowly being refactored into smaller sub-modules.
