@@ -863,6 +863,7 @@ class PageKite(object):
     self.servers_no_ping = False
     self.servers_preferred = []
     self.servers_sessionids = {}
+    self.dns_cache = {}
 
     self.kitename = ''
     self.kitesecret = ''
@@ -2625,6 +2626,13 @@ class PageKite(object):
       rv = socket.gethostbyname_ex(host)[2]
     return rv
 
+  def CachedGetHostIpAddrs(self, host):
+    try:
+      self.dns_cache[host] = self.GetHostIpAddrs(host)
+    except:
+      logging.LogDebug('DNS lookup failed for %s' % host)
+    return self.dns_cache.get(host, [])
+
   def GetActiveBackends(self):
     active = []
     for bid in self.backends:
@@ -2651,14 +2659,12 @@ class PageKite(object):
     # Convert the hostnames into IP addresses...
     for server in self.servers_manual:
       (host, port) = server.split(':')
-      try:
-        ipaddr = self.GetHostIpAddrs(host)[0]
-        server = '%s:%s' % (ipaddr, port)
+      ipaddrs = self.CachedGetHostIpAddrs(host)
+      if ipaddrs:
+        server = '%s:%s' % (ipaddrs[0], port)
         if (server not in self.servers) and (server not in self.servers_never):
           self.servers.append(server)
           self.servers_preferred.append(ipaddr)
-      except:
-        logging.LogDebug('DNS lookup failed for %s' % host)
 
     # Lookup and choose from the auto-list (and our old domain).
     if self.servers_auto:
@@ -2668,18 +2674,15 @@ class PageKite(object):
       if not self.servers_new_only:
         for bid in self.GetActiveBackends():
           (proto, bdom) = bid.split(':')
-          try:
-            for ip in self.GetHostIpAddrs(bdom):
-              if not ip.startswith('127.'):
-                server = '%s:%s' % (ip, port)
-                if ((server not in self.servers) and
-                    (server not in self.servers_never)):
-                  self.servers.append(server)
-          except Exception, e:
-            logging.LogDebug('DNS lookup failed for %s' % bdom)
+          for ip in self.CachedGetHostIpAddrs(bdom):
+            if not ip.startswith('127.'):
+              server = '%s:%s' % (ip, port)
+              if ((server not in self.servers) and
+                  (server not in self.servers_never)):
+                self.servers.append(server)
 
       try:
-        ips = [ip for ip in self.GetHostIpAddrs(domain)
+        ips = [ip for ip in self.CachedGetHostIpAddrs(domain)
                if ('%s:%s' % (ip, port)) not in self.servers_never]
         times = [self.Ping(ip, port) for ip in ips]
       except Exception, e:
