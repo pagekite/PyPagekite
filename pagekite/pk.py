@@ -644,6 +644,78 @@ class TunnelManager(threading.Thread):
         time.sleep(5)
     logging.LogDebug('TunnelManager: done')
 
+  def DoFrontendWork(self):
+    self.CheckTunnelQuotas(time.time())
+    self.pkite.LoadMOTD()
+
+    # FIXME: Front-ends should close dead back-end tunnels.
+    for tid in self.conns.tunnels:
+      proto, domain = tid.split(':')
+      if '-' in proto:
+        proto, port = proto.split('-')
+      else:
+        port = ''
+      self.pkite.ui.NotifyFlyingFE(proto, port, domain)
+
+  def ListBackEnds(self):
+    self.pkite.ui.StartListingBackEnds()
+
+    for bid in self.pkite.backends:
+      be = self.pkite.backends[bid]
+      # Do we have auto-SSL at the front-end?
+      protoport, domain = bid.split(':', 1)
+      tunnels = self.conns.Tunnel(protoport, domain)
+      if be[BE_PROTO] in ('http', 'http2', 'http3') and tunnels:
+        has_ssl = True
+        for t in tunnels:
+          if (protoport, domain) not in t.remote_ssl:
+            has_ssl = False
+      else:
+        has_ssl = False
+
+      # Get list of webpaths...
+      domainp = '%s/%s' % (domain, be[BE_PORT] or '80')
+      if (self.pkite.ui_sspec and
+          be[BE_BHOST] == self.pkite.ui_sspec[0] and
+          be[BE_BPORT] == self.pkite.ui_sspec[1]):
+        builtin = True
+        dpaths = self.pkite.ui_paths.get(domainp, {})
+      else:
+        builtin = False
+        dpaths = {}
+
+      self.pkite.ui.NotifyBE(bid, be, has_ssl, dpaths,
+                             is_builtin=builtin,
+                         fingerprint=(builtin and self.pkite.ui_pemfingerprint))
+
+    self.pkite.ui.EndListingBackEnds()
+
+  def UpdateUiStatus(self, problem, connecting):
+    tunnel_count = len(self.pkite.conns and
+                       self.pkite.conns.TunnelServers() or [])
+    tunnel_total = len(self.pkite.servers)
+    if tunnel_count == 0:
+      if self.pkite.isfrontend:
+        self.pkite.ui.Status('idle', message='Waiting for back-ends.')
+      elif tunnel_total == 0:
+        self.pkite.ui.Notify('It looks like your Internet connection might be '
+                             'down! Will retry soon.')
+        self.pkite.ui.Status('down', color=self.pkite.ui.GREY,
+                       message='No kites ready to fly.  Waiting...')
+      elif connecting == 0:
+        self.pkite.ui.Status('down', color=self.pkite.ui.RED,
+                       message='Not connected to any front-ends, will retry...')
+    elif tunnel_count < tunnel_total:
+      self.pkite.ui.Status('flying', color=self.pkite.ui.YELLOW,
+                    message=('Only connected to %d/%d front-ends, will retry...'
+                             ) % (tunnel_count, tunnel_total))
+    elif problem:
+      self.pkite.ui.Status('flying', color=self.pkite.ui.YELLOW,
+                     message='DynDNS updates may be incomplete, will retry...')
+    else:
+      self.pkite.ui.Status('flying', color=self.pkite.ui.GREEN,
+                                   message='Kites are flying and all is well.')
+
   def _run(self):
     self.check_interval = 5
     while self.keep_running:
@@ -659,75 +731,14 @@ class TunnelManager(threading.Thread):
 
         # If all connected, make sure tunnels are really alive.
         if self.pkite.isfrontend:
-          self.CheckTunnelQuotas(time.time())
-          # FIXME: Front-ends should close dead back-end tunnels.
-          for tid in self.conns.tunnels:
-            proto, domain = tid.split(':')
-            if '-' in proto:
-              proto, port = proto.split('-')
-            else:
-              port = ''
-            self.pkite.ui.NotifyFlyingFE(proto, port, domain)
+          self.DoFrontendWork()
 
         self.PingTunnels(time.time())
 
-      self.pkite.ui.StartListingBackEnds()
-      for bid in self.pkite.backends:
-        be = self.pkite.backends[bid]
-        # Do we have auto-SSL at the front-end?
-        protoport, domain = bid.split(':', 1)
-        tunnels = self.conns.Tunnel(protoport, domain)
-        if be[BE_PROTO] in ('http', 'http2', 'http3') and tunnels:
-          has_ssl = True
-          for t in tunnels:
-            if (protoport, domain) not in t.remote_ssl:
-              has_ssl = False
-        else:
-          has_ssl = False
-
-        # Get list of webpaths...
-        domainp = '%s/%s' % (domain, be[BE_PORT] or '80')
-        if (self.pkite.ui_sspec and
-            be[BE_BHOST] == self.pkite.ui_sspec[0] and
-            be[BE_BPORT] == self.pkite.ui_sspec[1]):
-          builtin = True
-          dpaths = self.pkite.ui_paths.get(domainp, {})
-        else:
-          builtin = False
-          dpaths = {}
-
-        self.pkite.ui.NotifyBE(bid, be, has_ssl, dpaths,
-                               is_builtin=builtin,
-                        fingerprint=(builtin and self.pkite.ui_pemfingerprint))
-      self.pkite.ui.EndListingBackEnds()
-
-      if self.pkite.isfrontend:
-        self.pkite.LoadMOTD()
-
-      tunnel_count = len(self.pkite.conns and
-                         self.pkite.conns.TunnelServers() or [])
-      tunnel_total = len(self.pkite.servers)
-      if tunnel_count == 0:
-        if self.pkite.isfrontend:
-          self.pkite.ui.Status('idle', message='Waiting for back-ends.')
-        elif tunnel_total == 0:
-          self.pkite.ui.Notify('It looks like your Internet connection might be '
-                               'down! Will retry soon.')
-          self.pkite.ui.Status('down', color=self.pkite.ui.GREY,
-                       message='No kites ready to fly.  Waiting...')
-        elif connecting == 0:
-          self.pkite.ui.Status('down', color=self.pkite.ui.RED,
-                       message='Not connected to any front-ends, will retry...')
-      elif tunnel_count < tunnel_total:
-        self.pkite.ui.Status('flying', color=self.pkite.ui.YELLOW,
-                    message=('Only connected to %d/%d front-ends, will retry...'
-                             ) % (tunnel_count, tunnel_total))
-      elif problem:
-        self.pkite.ui.Status('flying', color=self.pkite.ui.YELLOW,
-                     message='DynDNS updates may be incomplete, will retry...')
-      else:
-        self.pkite.ui.Status('flying', color=self.pkite.ui.GREEN,
-                                   message='Kites are flying and all is well.')
+      # FIXME: This is constant noise, instead there should be a
+      #        command which requests this stuff.
+      self.ListBackEnds()
+      self.UpdateUiStatus(problem, connecting)
 
       for i in xrange(0, self.check_interval):
         if self.keep_running:
@@ -2686,6 +2697,28 @@ class PageKite(object):
         del times[mIdx]
         del ips[mIdx]
 
+  def ConnectFrontend(self, conns, server):
+    self.ui.Status('connect', color=self.ui.YELLOW,
+                   message='Front-end connect: %s' % server)
+    tun = Tunnel.BackEnd(server, self.backends, self.require_all, conns)
+    if tun:
+      tun.filters.append(HttpHeaderFilter(self.ui))
+      if not self.insecure:
+        tun.filters.append(HttpSecurityFilter(self.ui))
+        if self.watch_level[0] is not None:
+          tun.filters.append(TunnelWatcher(self.ui, self.watch_level))
+        logging.Log([('connect', server)])
+        return True
+      else:
+        logging.LogInfo('Failed to connect', [('FE', server)])
+        self.ui.Notify('Failed to connect to %s' % server,
+                       prefix='!', color=self.ui.YELLOW)
+        return False
+
+  def DisconnectFreontend(self, conns, server):
+    # FIXME: Disconnect unneeded frontends
+    pass
+
   def CreateTunnels(self, conns):
     live_servers = conns.TunnelServers()
     failures = 0
@@ -2706,22 +2739,14 @@ class PageKite(object):
           if not self.insecure:
             loop.filters.append(HttpSecurityFilter(self.ui))
         else:
-          self.ui.Status('connect', color=self.ui.YELLOW,
-                         message='Front-end connect: %s' % server)
-          tun = Tunnel.BackEnd(server, self.backends, self.require_all, conns)
-          if tun:
-            tun.filters.append(HttpHeaderFilter(self.ui))
-            if not self.insecure:
-              tun.filters.append(HttpSecurityFilter(self.ui))
-            if self.watch_level[0] is not None:
-              tun.filters.append(TunnelWatcher(self.ui, self.watch_level))
-            logging.Log([('connect', server)])
+          if self.ConnectFrontend(conns, server):
             connections += 1
           else:
             failures += 1
-            logging.LogInfo('Failed to connect', [('FE', server)])
-            self.ui.Notify('Failed to connect to %s' % server,
-                           prefix='!', color=self.ui.YELLOW)
+
+    for server in live_servers:
+      if server not in self.servers:
+        self.DisconnectFrontend(conns, server)
 
     if self.dyndns:
       updates = {}
