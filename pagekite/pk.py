@@ -2785,19 +2785,24 @@ class PageKite(object):
             if domain not in updates or len(update) < len(updates[domain]):
               updates[payload] = update
 
+      # FIXME: We need to check what is really in DNS and use that info alone
+      #        to decide what needs updating.
       last_updates = self.last_updates
       self.last_updates = []
       for update in updates:
-        if update not in last_updates:
+        if update in last_updates:
+          # Was successful last time, no point in doing it again.
+          self.last_updates.append(update)
+        else:
           try:
             self.ui.Status('dyndns', color=self.ui.YELLOW,
                                      message='Updating DNS...')
             result = ''.join(urllib.urlopen(updates[update]).readlines())
-            self.last_updates.append(update)
             if result.startswith('good') or result.startswith('nochg'):
               logging.Log([('dyndns', result), ('data', update)])
               self.SetBackendStatus(update.split(':')[0],
                                     sub=BE_STATUS_ERR_DNS)
+              self.last_updates.append(update)
             else:
               logging.LogInfo('DynDNS update failed: %s' % result, [('data', update)])
               self.SetBackendStatus(update.split(':')[0],
@@ -2809,10 +2814,6 @@ class PageKite(object):
             self.SetBackendStatus(update.split(':')[0],
                                   add=BE_STATUS_ERR_DNS)
             failures += 1
-      if self.last_updates:
-        self.last_updates.extend(last_updates)
-      else:
-        self.last_updates = last_updates
 
     return failures, connections
 
