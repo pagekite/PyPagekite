@@ -864,6 +864,7 @@ class PageKite(object):
     self.servers_preferred = []
     self.servers_sessionids = {}
     self.dns_cache = {}
+    self.last_frontend_choice = 0
 
     self.kitename = ''
     self.kitesecret = ''
@@ -2627,11 +2628,25 @@ class PageKite(object):
     return rv
 
   def CachedGetHostIpAddrs(self, host):
+    now = int(time.time())
+
+    if host in self.dns_cache:
+      # FIXME: Magic TTL number: 330
+      for exp in [t for t in self.dns_cache[host] if t < now-330]:
+        del self.dns_cache[host][exp]
+    else:
+      self.dns_cache[host] = {}
+
     try:
-      self.dns_cache[host] = self.GetHostIpAddrs(host)
+      self.dns_cache[host][now] = self.GetHostIpAddrs(host)
     except:
       logging.LogDebug('DNS lookup failed for %s' % host)
-    return self.dns_cache.get(host, [])
+
+    ips = {}
+    for ipaddrs in self.dns_cache[host].values():
+      for ip in ipaddrs:
+        ips[ip] = 1
+    return ips.keys()
 
   def GetActiveBackends(self):
     active = []
@@ -2646,6 +2661,7 @@ class PageKite(object):
   def ChooseFrontEnds(self):
     self.servers = []
     self.servers_preferred = []
+    self.last_frontend_choice = time.time()
 
     # Enable internal loopback
     if self.isfrontend:
@@ -2664,7 +2680,7 @@ class PageKite(object):
         server = '%s:%s' % (ipaddrs[0], port)
         if (server not in self.servers) and (server not in self.servers_never):
           self.servers.append(server)
-          self.servers_preferred.append(ipaddr)
+          self.servers_preferred.append(server)
 
     # Lookup and choose from the auto-list (and our old domain).
     if self.servers_auto:
@@ -2718,9 +2734,17 @@ class PageKite(object):
                        prefix='!', color=self.ui.YELLOW)
         return False
 
-  def DisconnectFreontend(self, conns, server):
-    # FIXME: Disconnect unneeded frontends
-    pass
+  def DisconnectFrontend(self, conns, server):
+    logging.Log([('disconnect', server)])
+    kill = []
+    for bid in conns.tunnels:
+      for tunnel in conns.tunnels[bid]:
+        if server == tunnel.server_info[tunnel.S_NAME]:
+          kill.append(tunnel)
+    for tunnel in kill:
+      if len(tunnel.users.keys()) < 1:
+        tunnel.Die()
+    return kill and True or False
 
   def CreateTunnels(self, conns):
     live_servers = conns.TunnelServers()
@@ -2728,11 +2752,18 @@ class PageKite(object):
     connections = 0
 
     if len(self.GetActiveBackends()) > 0:
+      # Re-check every 15 minutes (FIXME: Magic number)
+      if self.last_frontend_choice < time.time()-900:
+        self.servers = []
       if not self.servers or len(self.servers) > len(live_servers):
         self.ChooseFrontEnds()
     else:
       self.servers_preferred = []
       self.servers = []
+
+    if not self.servers:
+      logging.LogDebug('Not sure which servers to contact, making no changes.')
+      return 0, 0
 
     for server in self.servers:
       if server not in live_servers:
@@ -2749,7 +2780,8 @@ class PageKite(object):
 
     for server in live_servers:
       if server not in self.servers:
-        self.DisconnectFrontend(conns, server)
+        if self.DisconnectFrontend(conns, server):
+          connections += 1
 
     if self.dyndns:
       updates = {}
