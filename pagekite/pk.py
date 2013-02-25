@@ -2784,14 +2784,16 @@ class PageKite(object):
           connections += 1
 
     if self.dyndns:
-      updates = {}
       ddns_fmt, ddns_args = self.dyndns
 
+      domains = {}
       for bid in self.backends.keys():
         proto, domain = bid.split(':')
+        if domain not in domains:
+          domains[domain] = []
+
         if bid in conns.tunnels:
-          ips = []
-          bips = []
+          ips, bips = [], []
           for tunnel in conns.tunnels[bid]:
             ip = rsplit(':', tunnel.server_info[tunnel.S_NAME])[0]
             if not ip == LOOPBACK_HN:
@@ -2800,28 +2802,28 @@ class PageKite(object):
               else:
                 bips.append(ip)
 
-          if not ips: ips = bips
+          for ip in (ips or bips):
+            if ip not in domains[domain]:
+              domains[domain].append(ip)
 
-          if ips:
-            iplist = ','.join(ips)
-            payload = '%s:%s' % (domain, iplist)
-            args = {}
-            args.update(ddns_args)
-            args.update({
-              'domain': domain,
-              'ip': ips[0],
-              'ips': iplist,
-              'sign': signToken(secret=self.backends[bid][BE_SECRET],
-                                payload=payload, length=100)
-            })
-            # FIXME: This may fail if different front-ends support different
-            #        protocols. In practice, this should be rare.
-            update = ddns_fmt % args
-            if domain not in updates or len(update) < len(updates[domain]):
-              updates[payload] = update
+      updates = {}
+      for domain, ips in domains.iteritems():
+        if ips:
+          iplist = ','.join(ips)
+          payload = '%s:%s' % (domain, iplist)
+          args = {}
+          args.update(ddns_args)
+          args.update({
+            'domain': domain,
+            'ip': ips[0],
+            'ips': iplist,
+            'sign': signToken(secret=self.backends[bid][BE_SECRET],
+                              payload=payload, length=100)
+          })
+          # FIXME: This may fail if different front-ends support different
+          #        protocols. In practice, this should be rare.
+          updates[payload] = ddns_fmt % args
 
-      # FIXME: We need to check what is really in DNS and use that info alone
-      #        to decide what needs updating.
       last_updates = self.last_updates
       self.last_updates = []
       for update in updates:
@@ -2829,15 +2831,18 @@ class PageKite(object):
           # Was successful last time, no point in doing it again.
           self.last_updates.append(update)
         else:
+          domain, ips = update.split(':', 1)
           try:
             self.ui.Status('dyndns', color=self.ui.YELLOW,
-                                     message='Updating DNS...')
+                                     message='Updating DNS for %s...' % domain)
             result = ''.join(urllib.urlopen(updates[update]).readlines())
             if result.startswith('good') or result.startswith('nochg'):
               logging.Log([('dyndns', result), ('data', update)])
               self.SetBackendStatus(update.split(':')[0],
                                     sub=BE_STATUS_ERR_DNS)
               self.last_updates.append(update)
+              # Success!  Make sure we remember these IP were live.
+              self.dns_cache[domain][int(time.time())] = ips.split(',')
             else:
               logging.LogInfo('DynDNS update failed: %s' % result, [('data', update)])
               self.SetBackendStatus(update.split(':')[0],
@@ -2848,6 +2853,8 @@ class PageKite(object):
             if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
             self.SetBackendStatus(update.split(':')[0],
                                   add=BE_STATUS_ERR_DNS)
+            # Hmm, the update may have succeeded - assume the "worst".
+            self.dns_cache[domain][int(time.time())] = ips.split(',')
             failures += 1
 
     return failures, connections
