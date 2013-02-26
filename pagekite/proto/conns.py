@@ -1380,7 +1380,8 @@ class UnknownConn(MagicProtocolParser):
       return self.ProcessParsedMagic(self.parser.PROTOS, line, lines)
 
   def ProcessParsedMagic(self, protos, line, lines):
-    if self.conns.config.CheckTunnelAcls(self.address, conn=self):
+    if (self.conns and
+        self.conns.config.CheckTunnelAcls(self.address, conn=self)):
       for proto in protos:
         if UserConn.FrontEnd(self, self.address,
                              proto, self.parser.domain, self.on_port,
@@ -1544,7 +1545,8 @@ class UnknownConn(MagicProtocolParser):
     return True
 
   def ProcessTls(self, data, domain=None):
-    if not self.conns.config.CheckClientAcls(self.address, conn=self):
+    if (not self.conns or
+        not self.conns.config.CheckClientAcls(self.address, conn=self)):
       return False
 
     if domain:
@@ -1599,7 +1601,8 @@ class UnknownConn(MagicProtocolParser):
     return False
 
   def ProcessProto(self, data, proto, domain):
-    if not self.conns.config.CheckClientAcls(self.address, conn=self):
+    if (not self.conns or
+        not self.conns.config.CheckClientAcls(self.address, conn=self)):
       return False
 
     if UserConn.FrontEnd(self, self.address,

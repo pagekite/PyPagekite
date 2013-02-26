@@ -1336,7 +1336,7 @@ class PageKite(object):
     for fd in (self.conns and self.conns.Sockets() or []):
       try:
         fd.close()
-      except (IOError, OSError, TypeError):
+      except (IOError, OSError, TypeError, AttributeError):
         pass
     self.conns = self.ui_httpd = self.ui_comm = self.tunnel_manager = None
 
