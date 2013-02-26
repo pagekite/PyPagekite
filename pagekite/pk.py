@@ -208,7 +208,7 @@ class AuthThread(threading.Thread):
                                ('duplicate', 'yes')])
             else:
               results.append(('%s-OK' % prefix, what))
-              quotas.append(quota)
+              quotas.append((quota, request))
               if conns: q_conns.append(conns)
               if days: q_days.append(days)
               if (proto.startswith('http') and
@@ -232,12 +232,11 @@ class AuthThread(threading.Thread):
           if q_days and min_qdays:
             results.append(('%s-QDays' % prefix, min_qdays))
 
-          nz_quotas = [q for q in quotas if q and q > 0]
+          nz_quotas = [qp for qp in quotas if qp[0] and qp[0] > 0]
           if nz_quotas:
-            quota = min(nz_quotas)
-            if quota is not None:
-              conn.quota = [quota, requests[quotas.index(quota)], time.time()]
-              results.append(('%s-Quota' % prefix, quota))
+            quota, request = min(nz_quotas)
+            conn.quota = [quota, request, time.time()]
+            results.append(('%s-Quota' % prefix, quota))
           elif requests:
             if not conn.quota:
               conn.quota = [None, requests[0], time.time()]
