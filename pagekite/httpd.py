@@ -138,6 +138,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   E404 = { 'code': '404', 'msg': 'Not found', 'mimetype': 'text/html',
            'title': '404 Not found',
            'body': '<p>File or directory not found. Sorry!</p>' }
+  ROBOTSTXT = { 'code': '200', 'msg': 'OK', 'mimetype': 'text/plain',
+                'body': 'User-agent: *\nDisallow: /\n'}
 
   MIME_TYPES = {
     '3gp': 'video/3gpp',            'aac': 'audio/aac',
@@ -777,7 +779,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     else:
       if self.sendStaticPath(path, data['mimetype'], shtml_vars=data):
         return
-      data.update(self.E404)
+      if path == '/robots.txt':
+        data.update(self.ROBOTSTXT)
+      else:
+        data.update(self.E404)
 
     if data['mimetype'] in ('application/octet-stream', 'text/plain'):
       response = self.TEMPLATE_RAW % data
