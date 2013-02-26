@@ -2791,7 +2791,7 @@ class PageKite(object):
       for bid in self.backends.keys():
         proto, domain = bid.split(':')
         if domain not in domains:
-          domains[domain] = []
+          domains[domain] = (self.backends[bid][BE_SECRET], [])
 
         if bid in conns.tunnels:
           ips, bips = [], []
@@ -2805,10 +2805,10 @@ class PageKite(object):
 
           for ip in (ips or bips):
             if ip not in domains[domain]:
-              domains[domain].append(ip)
+              domains[domain][1].append(ip)
 
       updates = {}
-      for domain, ips in domains.iteritems():
+      for domain, (secret, ips) in domains.iteritems():
         if ips:
           iplist = ','.join(ips)
           payload = '%s:%s' % (domain, iplist)
@@ -2818,8 +2818,7 @@ class PageKite(object):
             'domain': domain,
             'ip': ips[0],
             'ips': iplist,
-            'sign': signToken(secret=self.backends[bid][BE_SECRET],
-                              payload=payload, length=100)
+            'sign': signToken(secret=secret, payload=payload, length=100)
           })
           # FIXME: This may fail if different front-ends support different
           #        protocols. In practice, this should be rare.
