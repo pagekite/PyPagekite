@@ -607,7 +607,7 @@ class TunnelManager(threading.Thread):
             dead['%s' % tunnel] = tunnel
           elif tunnel.last_activity < now-pings:
             tunnel.SendPing()
-          elif random.randint(0, pings) == 0:
+          elif random.randint(0, 10*pings) == 0:
             tunnel.SendPing()
 
     for tunnel in dead.values():
