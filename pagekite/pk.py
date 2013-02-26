@@ -234,12 +234,12 @@ class AuthThread(threading.Thread):
 
           nz_quotas = [qp for qp in quotas if qp[0] and qp[0] > 0]
           if nz_quotas:
-            quota, request = min(nz_quotas)
-            conn.quota = [quota, request, time.time()]
+            quota = min(nz_quotas)[0]
+            conn.quota = [quota, [qp[1] for qp in nz_quotas], time.time()]
             results.append(('%s-Quota' % prefix, quota))
           elif requests:
             if not conn.quota:
-              conn.quota = [None, requests[0], time.time()]
+              conn.quota = [None, requests, time.time()]
             else:
               conn.quota[2] = time.time()
 

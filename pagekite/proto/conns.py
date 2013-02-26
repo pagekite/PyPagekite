@@ -152,7 +152,7 @@ class Tunnel(ChunkParser):
         (self.quota[2] < when-900)):
       self.quota[2] = when
       self.LogDebug('Rechecking: %s' % (self.quota, ))
-      conns.auth.check([self.quota[1]], self,
+      conns.auth.check(self.quota[1], self,
                        lambda r, l: self.QuotaCallback(conns, r, l))
 
   def ProcessAuthResults(self, results, duplicates_ok=False, add_tunnels=True):
@@ -216,6 +216,7 @@ class Tunnel(ChunkParser):
       if r[0] in ('X-PageKite-OK', 'X-PageKite-Duplicate'):
         return self
 
+    # Nothing is OK anymore, give up and shut down the tunnel.
     self.Log(log_info)
     self.LogInfo('Ran out of quota or account deleted, closing tunnel.')
     self.Die()
