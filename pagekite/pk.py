@@ -2630,8 +2630,10 @@ class PageKite(object):
     now = int(time.time())
 
     if host in self.dns_cache:
-      # FIXME: Magic TTL number: 330
-      for exp in [t for t in self.dns_cache[host] if t < now-330]:
+      # FIXME: This number (900) is 3x the pagekite.net service DNS TTL, which
+      # should be about right.  BUG: nothing keeps those two numbers in sync!
+      # This number must be larger, or we prematurely disconnect frontends.
+      for exp in [t for t in self.dns_cache[host] if t < now-900]:
         del self.dns_cache[host][exp]
     else:
       self.dns_cache[host] = {}
