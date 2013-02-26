@@ -139,7 +139,9 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
            'title': '404 Not found',
            'body': '<p>File or directory not found. Sorry!</p>' }
   ROBOTSTXT = { 'code': '200', 'msg': 'OK', 'mimetype': 'text/plain',
-                'body': 'User-agent: *\nDisallow: /\n'}
+                'body': ('User-agent: *\n'
+                         'Disallow: /\n'
+                         '# pagekite.py default robots.txt\n') }
 
   MIME_TYPES = {
     '3gp': 'video/3gpp',            'aac': 'audio/aac',
