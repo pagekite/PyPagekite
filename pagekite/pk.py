@@ -2779,7 +2779,7 @@ class PageKite(object):
             failures += 1
 
     for server in live_servers:
-      if server not in self.servers:
+      if server not in self.servers and server not in self.servers_preferred:
         if self.DisconnectFrontend(conns, server):
           connections += 1
 
@@ -2796,7 +2796,7 @@ class PageKite(object):
           ips, bips = [], []
           for tunnel in conns.tunnels[bid]:
             ip = rsplit(':', tunnel.server_info[tunnel.S_NAME])[0]
-            if not ip == LOOPBACK_HN:
+            if not ip == LOOPBACK_HN and not tunnel.read_eof:
               if not self.servers_preferred or ip in self.servers_preferred:
                 ips.append(ip)
               else:
