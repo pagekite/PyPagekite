@@ -20,6 +20,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+import random
 
 PROTOVER = '0.8'
 APPVER = '0.5.5a+github'
@@ -53,6 +54,9 @@ LOOPBACK_HN = 'loopback'
 LOOPBACK_FE = LOOPBACK_HN + ':1'
 LOOPBACK_BE = LOOPBACK_HN + ':2'
 LOOPBACK = {'FE': LOOPBACK_FE, 'BE': LOOPBACK_BE}
+
+# Re-evaluate our choice of frontends every 45-60 minutes.
+FE_PING_INTERVAL     = (45 * 60) + random.randint(0, 900)
 
 PING_INTERVAL        = 90
 PING_INTERVAL_MOBILE = 1800

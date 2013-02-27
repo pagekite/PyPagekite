@@ -2754,8 +2754,7 @@ class PageKite(object):
     connections = 0
 
     if len(self.GetActiveBackends()) > 0:
-      # Re-check every 15 minutes (FIXME: Magic number)
-      if self.last_frontend_choice < time.time()-900:
+      if self.last_frontend_choice < time.time()-FE_PING_INTERVAL:
         self.servers = []
       if not self.servers or len(self.servers) > len(live_servers):
         self.ChooseFrontEnds()
