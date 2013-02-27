@@ -2740,7 +2740,8 @@ class PageKite(object):
     kill = []
     for bid in conns.tunnels:
       for tunnel in conns.tunnels[bid]:
-        if server == tunnel.server_info[tunnel.S_NAME]:
+        if (server == tunnel.server_info[tunnel.S_NAME] and
+            tunnel.countas.startswith('frontend')):
           kill.append(tunnel)
     for tunnel in kill:
       if len(tunnel.users.keys()) < 1:
