@@ -2842,6 +2842,8 @@ class PageKite(object):
                                     sub=BE_STATUS_ERR_DNS)
               self.last_updates.append(update)
               # Success!  Make sure we remember these IP were live.
+              if domain not in self.dns_cache:
+                self.dns_cache[domain] = {}
               self.dns_cache[domain][int(time.time())] = ips.split(',')
             else:
               logging.LogInfo('DynDNS update failed: %s' % result, [('data', update)])
