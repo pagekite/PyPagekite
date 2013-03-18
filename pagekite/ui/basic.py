@@ -159,7 +159,7 @@ class BasicUi(NullUi):
       self.wfile.write(' => %s ' % (Q(question), ))
       answer = self.Readline()
       if default and answer == '': return default
-      if self.EMAIL_RE.match(answer): return answer
+      if self.EMAIL_RE.match(answer.lower()): return answer
       if back is not None and answer == 'back': return back
     raise Exception('Too many tries')
 
