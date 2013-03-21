@@ -1,6 +1,11 @@
 Version history - highlights
 ============================
 
+v0.5.7   2013.??
+------
+   - ....
+
+
 v0.5.6   2013.03.18
 ------
    - Added default privacy-friendly robots.txt to built-in HTTPD.
