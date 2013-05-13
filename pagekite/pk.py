@@ -863,6 +863,7 @@ class PageKite(object):
     self.servers_preferred = []
     self.servers_sessionids = {}
     self.dns_cache = {}
+    self.ping_cache = {}
     self.last_frontend_choice = 0
 
     self.kitename = ''
@@ -2592,30 +2593,66 @@ class PageKite(object):
     if missing:
       self.FallDown('No tunnel for %s' % missing, help=False)
 
+  TMP_UUID_MAP = {
+    '2400:8900::f03c:91ff:feae:ea35:443': '106.187.99.46:443',
+    '2a01:7e00::f03c:91ff:fe96:234:443': '178.79.140.143:443',
+    '2600:3c03::f03c:91ff:fe96:2bf:443': '50.116.52.206:443',
+    '2600:3c01::f03c:91ff:fe96:257:443': '173.230.155.164:443',
+    '69.164.211.158:443': '50.116.52.206:443',
+  }
   def Ping(self, host, port):
     if self.servers_no_ping:
       return 0
 
-    start = time.time()
-    try:
-      fd = rawsocket(socket.AF_INET, socket.SOCK_STREAM)
+    cid = uuid = '%s:%s' % (host, port)
+    while ((cid not in self.ping_cache) or
+           (len(self.ping_cache[cid]) < 2) or
+           (time.time()-self.ping_cache[cid][0][0] > 60)):
+
+      start = time.time()
       try:
-        fd.settimeout(2.0) # Missing in Python 2.2
-      except Exception:
-        fd.setblocking(1)
+        try:
+          if ':' in host:
+            fd = rawsocket(socket.AF_INET6, socket.SOCK_STREAM)
+          else:
+            fd = rawsocket(socket.AF_INET, socket.SOCK_STREAM)
+        except:
+          fd = rawsocket(socket.AF_INET, socket.SOCK_STREAM)
 
-      fd.connect((host, port))
-      fd.send('HEAD / HTTP/1.0\r\n\r\n')
-      fd.recv(1024)
-      fd.close()
+        try:
+          fd.settimeout(3.0) # Missing in Python 2.2
+        except:
+          fd.setblocking(1)
 
-    except Exception, e:
-      logging.LogDebug('Ping %s:%s failed: %s' % (host, port, e))
-      return 100000
+        fd.connect((host, port))
+        fd.send('HEAD / HTTP/1.0\r\n\r\n')
+        data = fd.recv(1024)
+        fd.close()
 
-    elapsed = (time.time() - start)
-    logging.LogDebug('Pinged %s:%s: %f' % (host, port, elapsed))
-    return elapsed
+      except Exception, e:
+        logging.LogDebug('Ping %s:%s failed: %s' % (host, port, e))
+        return (100000, uuid)
+
+      elapsed = (time.time() - start)
+      try:
+        uuid = data.split('X-PageKite-UUID: ')[1].split()[0]
+      except:
+        uuid = self.TMP_UUID_MAP.get(uuid, uuid)
+
+      if cid not in self.ping_cache:
+        self.ping_cache[cid] = []
+      elif len(self.ping_cache[cid]) > 10:
+        self.ping_cache[cid][8:] = []
+
+      self.ping_cache[cid][0:0] = [(time.time(), (elapsed, uuid))]
+
+    window = min(3, len(self.ping_cache[cid]))
+    pingval = sum([e[1][0] for e in self.ping_cache[cid][:window]])/window
+    uuid = self.ping_cache[cid][0][1][1]
+
+    logging.LogDebug(('Pinged %s:%s: %f [win=%s, uuid=%s]'
+                      ) % (host, port, pingval, window, uuid))
+    return (pingval, uuid)
 
   def GetHostIpAddrs(self, host):
     rv = []
@@ -2674,48 +2711,56 @@ class PageKite(object):
         self.servers.append(LOOPBACK_FE)
 
     # Convert the hostnames into IP addresses...
+    servers_all = {}
+    servers_pref = {}
     for server in self.servers_manual:
       (host, port) = server.split(':')
       ipaddrs = self.CachedGetHostIpAddrs(host)
       if ipaddrs:
+        ptime, uuid = self.Ping(ipaddrs[0], int(port))
         server = '%s:%s' % (ipaddrs[0], port)
-        if (server not in self.servers) and (server not in self.servers_never):
-          self.servers.append(server)
-          self.servers_preferred.append(server)
+        servers_all[uuid] = servers_pref[uuid] = server
 
     # Lookup and choose from the auto-list (and our old domain).
     if self.servers_auto:
       (count, domain, port) = self.servers_auto
 
       # First, check for old addresses and always connect to those.
+      selected = {}
       if not self.servers_new_only:
         for bid in self.GetActiveBackends():
           (proto, bdom) = bid.split(':')
           for ip in self.CachedGetHostIpAddrs(bdom):
+            # FIXME: What about IPv6 localhost?
             if not ip.startswith('127.'):
               server = '%s:%s' % (ip, port)
-              if ((server not in self.servers) and
-                  (server not in self.servers_never)):
-                self.servers.append(server)
+              servers_all[self.Ping(ip, int(port))[1]] = server
 
       try:
         ips = [ip for ip in self.CachedGetHostIpAddrs(domain)
                if ('%s:%s' % (ip, port)) not in self.servers_never]
-        times = [self.Ping(ip, port) for ip in ips]
+        pings = [self.Ping(ip, port) for ip in ips]
       except Exception, e:
         logging.LogDebug('Unreachable: %s, %s' % (domain, e))
-        ips = times = []
+        ips = pings = []
 
       while count > 0 and ips:
-        count -= 1
-        mIdx = times.index(min(times))
-        server = '%s:%s' % (ips[mIdx], port)
-        if server not in self.servers:
-          self.servers.append(server)
-        if ips[mIdx] not in self.servers_preferred:
-          self.servers_preferred.append(ips[mIdx])
-        del times[mIdx]
-        del ips[mIdx]
+        mIdx = pings.index(min(pings))
+        if pings[mIdx][0] > 60:
+          # This is worthless data, abort.
+          break
+        else:
+          count -= 1
+          uuid = pings[mIdx][1]
+          server = '%s:%s' % (ips[mIdx], port)
+          if uuid not in servers_all:
+            servers_all[uuid] = server
+            servers_pref[uuid] = ips[mIdx]
+          del pings[mIdx]
+          del ips[mIdx]
+
+    self.servers = servers_all.values()
+    self.servers_preferred = servers_pref.values()
 
   def ConnectFrontend(self, conns, server):
     self.ui.Status('connect', color=self.ui.YELLOW,

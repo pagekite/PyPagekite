@@ -20,6 +20,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+import common
 from common import *
 
 
@@ -77,6 +78,8 @@ except ImportError:
   import sha
   def sha1hex(data):
     return sha.new(data).hexdigest().lower()
+
+common.MAGIC_UUID = sha1hex(common.MAGIC_UUID)
 
 try:
   from traceback import format_exc

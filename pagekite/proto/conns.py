@@ -1495,7 +1495,7 @@ class UnknownConn(MagicProtocolParser):
           self.Send(HTTP_Response(400, 'Bad request',
                     ['<html><body><h1>400 Bad request</h1>',
                      '<p>Invalid request, no Host: found.</p>',
-                     '</body></html>\n']))
+                     '</body></html>\n'], trackable=True))
           return False
 
       if self.parser.path.startswith(MAGIC_PREFIX):
