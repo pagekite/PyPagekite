@@ -2754,12 +2754,14 @@ class PageKite(object):
           server = '%s:%s' % (ips[mIdx], port)
           if uuid not in servers_all:
             servers_all[uuid] = server
+          if uuid not in servers_pref:
             servers_pref[uuid] = ips[mIdx]
           del pings[mIdx]
           del ips[mIdx]
 
     self.servers = servers_all.values()
     self.servers_preferred = servers_pref.values()
+    logging.LogDebug('Preferred: %s' % ', '.join(self.servers_preferred))
 
   def ConnectFrontend(self, conns, server):
     self.ui.Status('connect', color=self.ui.YELLOW,
