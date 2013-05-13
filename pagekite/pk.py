@@ -728,11 +728,10 @@ class TunnelManager(threading.Thread):
       else:
         self.check_interval = 5
 
-        # If all connected, make sure tunnels are really alive.
-        if self.pkite.isfrontend:
-          self.DoFrontendWork()
-
-        self.PingTunnels(time.time())
+      # Make sure tunnels are really alive.
+      if self.pkite.isfrontend:
+        self.DoFrontendWork()
+      self.PingTunnels(time.time())
 
       # FIXME: This is constant noise, instead there should be a
       #        command which requests this stuff.
