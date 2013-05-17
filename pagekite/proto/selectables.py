@@ -603,7 +603,7 @@ class LineParser(Selectable):
 
 TLS_CLIENTHELLO = '%c' % 026
 SSL_CLIENTHELLO = '\x80'
-MINECRAFT_HANDSHAKE = '%c%c' % (0x02, 0x33)
+MINECRAFT_HANDSHAKE = '%c' % (0x02, )
 FLASH_POLICY_REQ = '<policy-file-request/>'
 
 # FIXME: XMPP support
