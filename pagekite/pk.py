@@ -1040,7 +1040,7 @@ class PageKite(object):
         config.append('# frontend = hostname:port')
         config.append('# nofrontend = hostname:port  # never connect')
 
-      for server in sorted(self.fe_certname):
+      for server in self.fe_certname:
         config.append('fe_certname = %s' % server)
       if self.ca_certs != self.ca_certs_default:
         config.append('ca_certs = %s' % self.ca_certs)
@@ -1855,7 +1855,6 @@ class PageKite(object):
         else:
           cert = arg.lower()
           if cert not in self.fe_certname: self.fe_certname.append(cert)
-          self.fe_certname.sort()
       elif opt == '--service_xmlrpc': self.service_xmlrpc = arg
       elif opt == '--frontend': self.servers_manual.append(arg)
       elif opt == '--nofrontend': self.servers_never.append(arg)
