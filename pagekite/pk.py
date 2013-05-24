@@ -2699,6 +2699,9 @@ class PageKite(object):
     self.servers_preferred = []
     self.last_frontend_choice = time.time()
 
+    servers_all = {}
+    servers_pref = {}
+
     # Enable internal loopback
     if self.isfrontend:
       need_loopback = False
@@ -2706,18 +2709,17 @@ class PageKite(object):
         if be[BE_BHOST]:
           need_loopback = True
       if need_loopback:
-        self.servers.append(LOOPBACK_FE)
+        servers_all['loopback'] = servers_pref['loopback'] = LOOPBACK_FE
 
     # Convert the hostnames into IP addresses...
-    servers_all = {}
-    servers_pref = {}
     for server in self.servers_manual:
       (host, port) = server.split(':')
       ipaddrs = self.CachedGetHostIpAddrs(host)
       if ipaddrs:
         ptime, uuid = self.Ping(ipaddrs[0], int(port))
         server = '%s:%s' % (ipaddrs[0], port)
-        servers_all[uuid] = servers_pref[uuid] = server
+        if server not in self.servers_never:
+          servers_all[uuid] = servers_pref[uuid] = server
 
     # Lookup and choose from the auto-list (and our old domain).
     if self.servers_auto:
@@ -2732,7 +2734,8 @@ class PageKite(object):
             # FIXME: What about IPv6 localhost?
             if not ip.startswith('127.'):
               server = '%s:%s' % (ip, port)
-              servers_all[self.Ping(ip, int(port))[1]] = server
+              if server not in self.servers_never:
+                servers_all[self.Ping(ip, int(port))[1]] = server
 
       try:
         ips = [ip for ip in self.CachedGetHostIpAddrs(domain)

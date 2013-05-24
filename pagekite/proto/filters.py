@@ -50,10 +50,14 @@ class TunnelFilter:
     self.clean_idle_sids(now=now)
 
   def filter_data_in(self, tunnel, sid, data):
+    if sid not in self.sid:
+      self.sid[sid] = {}
     self.sid[sid]['_ts'] = time.time()
     return data
 
   def filter_data_out(self, tunnel, sid, data):
+    if sid not in self.sid:
+      self.sid[sid] = {}
     self.sid[sid]['_ts'] = time.time()
     return data
 
