@@ -1,6 +1,6 @@
 ## Name ##
 
-pagekite v0.5.6b - Make localhost servers publicly visible
+pagekite v0.5.6c - Make localhost servers publicly visible
 
 ## Synopsis ##
 
