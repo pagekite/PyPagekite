@@ -1,13 +1,16 @@
 Version history - highlights
 ============================
 
-v0.5.7   2013.??
-------
-   - ....
+v0.5.6b   2013.05.24
+-------
+   - Fixed bug where PageKite would not recover from network errors
+   - Fixed IPv6 frontend selection behavior
+   - Avoid duplicate connection woes when a frontend has multiple IPs
+   - Fixed incorrect frontend certificate priority (bogus sorting)
 
 
-v0.5.6   2013.03.18
-------
+v0.5.6a  2013.03.18
+-------
    - Added default privacy-friendly robots.txt to built-in HTTPD.
    - Fixed bugs in DNS update logic
    - Improved frontend selection algorithm to fail back to faster hosts
