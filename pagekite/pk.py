@@ -1828,7 +1828,7 @@ class PageKite(object):
         if opt == '--proxy':
           socks.adddefaultproxy(*socks.parseproxy(arg))
         else:
-          (host, port) = arg.split(':')
+          (host, port) = arg.rsplit(':', 1)
           socks.adddefaultproxy(socks.PROXY_TYPE_SOCKS5, host, int(port))
 
         if not self.proxy_servers:
@@ -2611,11 +2611,11 @@ class PageKite(object):
       try:
         try:
           if ':' in host:
-            fd = rawsocket(socket.AF_INET6, socket.SOCK_STREAM)
+            fd = socks.socksocket(socket.AF_INET6, socket.SOCK_STREAM)
           else:
-            fd = rawsocket(socket.AF_INET, socket.SOCK_STREAM)
+            fd = socks.socksocket(socket.AF_INET, socket.SOCK_STREAM)
         except:
-          fd = rawsocket(socket.AF_INET, socket.SOCK_STREAM)
+          fd = socks.socksocket(socket.AF_INET, socket.SOCK_STREAM)
 
         try:
           fd.settimeout(3.0) # Missing in Python 2.2
