@@ -2599,10 +2599,11 @@ class PageKite(object):
     '69.164.211.158:443': '50.116.52.206:443',
   }
   def Ping(self, host, port):
-    if self.servers_no_ping:
-      return 0
-
     cid = uuid = '%s:%s' % (host, port)
+
+    if self.servers_no_ping:
+      return (0, uuid)
+
     while ((cid not in self.ping_cache) or
            (len(self.ping_cache[cid]) < 2) or
            (time.time()-self.ping_cache[cid][0][0] > 60)):
