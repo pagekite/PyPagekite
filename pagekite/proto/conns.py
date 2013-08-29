@@ -812,6 +812,11 @@ class Tunnel(ChunkParser):
         conn.Die()
         conn = None
 
+    elif not conn and proto == 'https':
+      if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
+                              TLS_Unavailable()), just_buffer=True):
+        return False, False
+
     if conn:
       self.users[sid] = conn
       if proto == 'httpfinger':

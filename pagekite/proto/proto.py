@@ -23,6 +23,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 import base64
 import os
 import random
+import struct
 import time
 
 from pagekite.compat import *
@@ -243,3 +244,9 @@ def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None,
     return HTTP_Response(code, status,
                          ['<html><body>', message, '</body></html>\n'],
                          headers=headers)
+
+def TLS_Unavailable():
+  """Generate a TLS alert record aborting this connectin."""
+  return struct.pack('>BBBBBBB', 0x15, 3, 0, 0, 2,
+                                 2,  # Level = 2, fatal
+                                 80) # Internal Error
