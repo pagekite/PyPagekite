@@ -1,6 +1,16 @@
 Version history - highlights
 ============================
 
+v0.5.6e     2013.0?.??
+-------
+   - HTTPS Back-end generates TLSv1 Internal Error alerts if server is down
+
+
+v0.5.6d     2013.06.14
+-------
+   - Fixed bug in proxy and Tor support
+
+
 v0.5.6b,c   2013.05.24
 ---------
    - Fixed bug where PageKite would not recover from network errors
