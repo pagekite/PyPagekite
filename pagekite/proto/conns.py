@@ -814,7 +814,8 @@ class Tunnel(ChunkParser):
 
     elif not conn and proto == 'https':
       if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
-                              TLS_Unavailable()), just_buffer=True):
+                              TLS_Unavailable(unavailable=True)),
+                              just_buffer=True):
         return False, False
 
     if conn:
@@ -1556,6 +1557,7 @@ class UnknownConn(MagicProtocolParser):
   def ProcessTls(self, data, domain=None):
     if (not self.conns or
         not self.conns.config.CheckClientAcls(self.address, conn=self)):
+      self.Send(TLS_Unavailable(forbidden=True), try_flush=True)
       return False
 
     if domain:
@@ -1596,8 +1598,10 @@ class UnknownConn(MagicProtocolParser):
           self.conns.SetIdle(self, 120)
           return True
         else:
+          self.Send(TLS_Unavailable(unavailable=True), try_flush=True)
           return False
 
+    self.Send(TLS_Unavailable(unavailable=True), try_flush=True)
     return False
 
   def ProcessFlashPolicyRequest(self, data):

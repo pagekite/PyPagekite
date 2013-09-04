@@ -245,8 +245,10 @@ def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None,
                          ['<html><body>', message, '</body></html>\n'],
                          headers=headers)
 
-def TLS_Unavailable():
+def TLS_Unavailable(forbidden=False, unavailable=False):
   """Generate a TLS alert record aborting this connectin."""
-  return struct.pack('>BBBBBBB', 0x15, 3, 0, 0, 2,
-                                 2,  # Level = 2, fatal
-                                 80) # Internal Error
+  # FIXME: Should we really be ignoring forbidden and unavailable?
+  # Unfortunately, Chrome/ium only honors code 49, any other code will
+  # cause it to transparently retry with SSLv3. So although this is a
+  # bit misleading, this is what we send...
+  return struct.pack('>BBBBBBB', 0x15, 3, 3, 0, 2, 2, 49) # 49 = Access denied
