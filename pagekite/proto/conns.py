@@ -1347,6 +1347,7 @@ class UnknownConn(MagicProtocolParser):
     self.host = None
     self.proto = None
     self.said_hello = False
+    self.bad_loops = 0
 
   def Cleanup(self, close=True):
     MagicProtocolParser.Cleanup(self, close=close)
@@ -1574,9 +1575,15 @@ class UnknownConn(MagicProtocolParser):
       except:
         # Probably insufficient data, just True and assume we'll have
         # better luck on the next round... but with a timeout.
-        self.LogDebug('Error in ProcessTLS, will time out in 120 seconds.')
-        self.conns.SetIdle(self, 120)
-        return True
+        self.bad_loops += 1
+        if self.bad_loops < 25:
+          self.LogDebug('Error in ProcessTLS, will time out in 120 seconds.')
+          self.conns.SetIdle(self, 120)
+          return True
+        else:
+          self.LogDebug('Persistent error in ProcessTLS, aborting.')
+          self.Send(TLS_Unavailable(unavailable=True), try_flush=True)
+          return False
 
     if domains and domains[0] is not None:
       if UserConn.FrontEnd(self, self.address,
