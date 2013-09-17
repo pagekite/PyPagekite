@@ -471,7 +471,7 @@ class Tunnel(ChunkParser):
         self.ParsePageKiteCapabilities(parse)
 
         for sessionid in parse.Header('X-PageKite-SessionID'):
-          self.conns.SetAltId(self, sessionid)
+          conns.SetAltId(self, sessionid)
           conns.config.servers_sessionids[server] = sessionid
 
         tryagain, tokens = self.CheckForTokens(parse)
