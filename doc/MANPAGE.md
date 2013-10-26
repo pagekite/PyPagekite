@@ -254,6 +254,12 @@ time the program defaults will Just Work.
      Listen for raw connections these ports. The string '%s'
      allows arbitrary ports in HTTP CONNECT.
 
+   * <b>--accept_acl_file</b>=`/path/to/file` <br />
+     Consult an external access control file before accepting an
+     incoming connection. Quick'n'dirty for mitigating abuse. The
+     format is one rule per line: `rule policy comment` where a
+     rule is an IP or regexp and policy is 'allow' or 'deny'.
+
    * <b>--client_acl</b>=`policy`:`regexp`, <b>--tunnel_acl</b>=`policy`:`regexp` <br />
      Add a client connection or tunnel access control rule.
      Policies should be 'allow' or 'deny', the regular expression

@@ -72,7 +72,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'kitename=', 'kitesecret=', 'fingerpath=',
             'backend=', 'define_backend=', 'be_config=', 'insecure',
             'service_on=', 'service_off=', 'service_cfg=',
-            'tunnel_acl=', 'client_acl=',
+            'tunnel_acl=', 'client_acl=', 'accept_acl_file=',
             'frontend=', 'nofrontend=', 'frontends=',
             'torify=', 'socksify=', 'proxy=', 'noproxy',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
@@ -813,6 +813,7 @@ class PageKite(object):
     self.server_protos = ['http', 'http2', 'http3', 'https', 'websocket',
                           'irc', 'finger', 'httpfinger', 'raw', 'minecraft']
 
+    self.accept_acl_file = None
     self.tunnel_acls = []
     self.client_acls = []
 
@@ -1201,6 +1202,7 @@ class PageKite(object):
     config.extend([
       '',
       '##[ Front-end access controls (default=deny, if configured) ]##',
+      p('accept_acl_file = %s', self.accept_acl_file, '/path/to/file'),
     ])
     for policy, pattern in self.client_acls:
       config.append('client_acl=%s:%s' % (policy, pattern))
@@ -1814,6 +1816,8 @@ class PageKite(object):
 
       elif opt in ('-a', '--all'): self.require_all = True
       elif opt in ('-N', '--new'): self.servers_new_only = True
+      elif opt == '--accept_acl_file':
+        self.accept_acl_file = arg
       elif opt == '--client_acl':
         policy, pattern = arg.split(':', 1)
         self.client_acls.append((policy, pattern))
@@ -3143,13 +3147,15 @@ class PageKite(object):
       if self.isfrontend:
         self.ui.Notify('This is a PageKite front-end server.')
         for port in self.server_ports:
-          Listener(self.server_host, port, conns)
+          Listener(self.server_host, port, conns, acl=self.accept_acl_file)
         for port in self.server_raw_ports:
           if port != VIRTUAL_PN and port > 0:
-            Listener(self.server_host, port, conns, connclass=RawConn)
+            Listener(self.server_host, port, conns,
+                     connclass=RawConn, acl=self.accept_acl_file)
 
       if self.ui_port:
-        Listener('127.0.0.1', self.ui_port, conns, connclass=UiConn)
+        Listener('127.0.0.1', self.ui_port, conns,
+                 connclass=UiConn, acl=self.accept_acl_file)
 
       # Create the Tunnel Manager
       self.tunnel_manager = TunnelManager(self, conns)

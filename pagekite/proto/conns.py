@@ -1723,11 +1723,14 @@ class Listener(Selectable):
   """This class listens for incoming connections and accepts them."""
 
   def __init__(self, host, port, conns, backlog=100,
-                     connclass=UnknownConn, quiet=False):
+                     connclass=UnknownConn, quiet=False, acl=None):
     Selectable.__init__(self, bind=(host, port), backlog=backlog)
     self.Log([('listen', '%s:%s' % (host, port))])
     if not quiet:
       conns.config.ui.Notify(' - Listening on %s:%s' % (host or '*', port))
+
+    self.acl = acl
+    self.acl_match = None
 
     self.connclass = connclass
     self.port = port
@@ -1741,13 +1744,48 @@ class Listener(Selectable):
   def __html__(self):
     return '<p>Listening on port %s for %s</p>' % (self.port, self.connclass)
 
+  def check_acl(self, ipaddr, default=True):
+    if self.acl:
+      try:
+        ipaddr = '%s' % ipaddr
+        lc = 0
+        for line in open(self.acl, 'r'):
+          line = line.lower().strip()
+          lc += 1
+          if line.startswith('#') or not line:
+            continue
+          try:
+            words = line.split()
+            pattern, rule = words[:2]
+            reason = ' '.join(words[2:])
+            if ipaddr == pattern:
+              self.acl_match = (lc, pattern, rule, reason)
+              return bool('allow' in rule)
+            elif re.compile(pattern).match(ipaddr):
+              self.acl_match = (lc, pattern, rule, reason)
+              return bool('allow' in rule)
+          except IndexError:
+            self.LogDebug('Invalid line %d in ACL %s' % (lc, self.acl))
+      except:
+        self.LogDebug('Failed to read/parse %s' % self.acl)
+    self.acl_match = (0, '.*', default and 'allow' or 'reject', 'Default')
+    return default
+
   def ReadData(self, maxread=None):
     try:
       self.last_activity = time.time()
       client, address = self.fd.accept()
       if client:
-        self.Log([('accept', '%s:%s' % (obfuIp(address[0]), address[1]))])
-        uc = self.connclass(client, address, self.port, self.conns)
+        if self.check_acl(address[0]):
+          log_info = [('accept', '%s:%s' % (obfuIp(address[0]), address[1]))]
+          uc = self.connclass(client, address, self.port, self.conns)
+        else:
+          log_info = [('reject', '%s:%s' % (obfuIp(address[0]), address[1]))]
+          client.close()
+        if self.acl:
+          log_info.extend([('acl_line', '%s' % self.acl_match[0]),
+                           ('reason', self.acl_match[3])])
+        self.Log(log_info)
         return True
 
     except IOError, err:

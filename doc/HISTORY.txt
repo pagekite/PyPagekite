@@ -4,6 +4,7 @@ Version history - highlights
 v0.5.6e     2013.0?.??
 -------
    - HTTPS Back-end generates TLSv1 Internal Error alerts if server is down
+   - Added --accept_acl_file=/... for mitigating frontend abuse and DDoS.
 
 
 v0.5.6d     2013.06.14

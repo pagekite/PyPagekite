@@ -221,6 +221,12 @@ MAN_OPT_FRONTEND = ("""\
             Listen for raw connections these ports. The string '%s'
             allows arbitrary ports in HTTP CONNECT.
 
+    --accept_acl_file</b>=<a>/path/to/file</a> __
+            Consult an external access control file before accepting an
+            incoming connection. Quick'n'dirty for mitigating abuse. The
+            format is one rule per line: `rule policy comment` where a
+            rule is an IP or regexp and policy is 'allow' or 'deny'.
+
     --client_acl</b>=<a>policy</a>:<a>regexp</a>,\
  <b>--tunnel_acl</b>=<a>policy</a>:<a>regexp</a> __
             Add a client connection or tunnel access control rule.
