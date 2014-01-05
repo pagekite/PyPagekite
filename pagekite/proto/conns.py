@@ -159,6 +159,11 @@ class Tunnel(ChunkParser):
     ok = []
     bad = []
 
+    if not self.conns:
+      # This can be delayed until the connecting client gives up, which
+      # means we may have already called Die().  In that case, just abort.
+      return True
+
     ok_results = ['X-PageKite-OK']
     bad_results = ['X-PageKite-Invalid']
     if duplicates_ok is True:
