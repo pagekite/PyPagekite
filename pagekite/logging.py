@@ -29,6 +29,7 @@ from compat import *
 from common import *
 
 syslog = compat.syslog
+org_stdout = sys.stdout
 
 DEBUG_IO = False
 
@@ -69,11 +70,13 @@ def LogSyslog(values, wdict=None, words=None):
 def LogToFile(values, wdict=None, words=None):
   if values:
     words, wdict = LogValues(values)
+  global LogFile
   LogFile.write('; '.join(['='.join(x) for x in words]))
   LogFile.write('\n')
 
 def LogToMemory(values, wdict=None, words=None):
-  if values: LogValues(values)
+  if values:
+    LogValues(values)
 
 def FlushLogMemory():
   global LOG
@@ -99,8 +102,8 @@ def LogInfo(msg, parms=None):
   Log(emsg)
 
 def ResetLog():
-  global LogFile, Log
-  LogFile = sys.stdout
+  global LogFile, Log, org_stdout
+  LogFile = org_stdout
   Log = LogToMemory
 
 ResetLog()

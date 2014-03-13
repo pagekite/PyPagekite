@@ -127,6 +127,11 @@ time the program defaults will Just Work.
 
 ### Back-end options ###
 
+   * <b>--shell</b>  
+     Run PageKite in an interactive shell.
+   * <b>--nullui</b>  
+     Silent UI for scripting. Assumes Yes on all questions.
+
    * <b>--list</b>  
      List all configured kites.
    * <b>--add</b>  
@@ -140,9 +145,6 @@ time the program defaults will Just Work.
 
    * <b>--insecure</b>  
      Allow access to phpMyAdmin, /admin, etc. (global).
-
-   * <b>--nullui</b>  
-     Silent UI for scripting. Assumes Yes on all questions.
 
    * <b>--local</b>=`ports`  
      Configure for local serving only (no remote front-end).

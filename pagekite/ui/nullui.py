@@ -42,8 +42,8 @@ class NullUi(object):
   }
 
   def __init__(self, welcome=None, wfile=sys.stderr, rfile=sys.stdin):
-    if sys.platform in ('win32', 'os2', 'os2emx'):
-      self.CLEAR = '\n\n'
+    if sys.platform[:3] in ('win', 'os2'):
+      self.CLEAR = '\n\n%s\n\n' % ('=' * 79)
       self.NORM = self.WHITE = self.GREY = self.GREEN = self.YELLOW = ''
       self.BLUE = self.RED = self.MAGENTA = self.CYAN = ''
     else:
@@ -60,7 +60,12 @@ class NullUi(object):
 
     self.wfile = wfile
     self.rfile = rfile
+    self.welcome = welcome
 
+    self.Reset()
+    self.Splash()
+
+  def Reset(self):
     self.in_wizard = False
     self.wizard_tell = None
     self.last_tick = 0
@@ -68,16 +73,14 @@ class NullUi(object):
     self.status_tag = ''
     self.status_col = self.NORM
     self.status_msg = ''
-    self.welcome = welcome
     self.tries = 200
     self.server_info = None
-    self.Splash()
 
   def Splash(self): pass
 
   def Welcome(self): pass
   def StartWizard(self, title): pass
-  def EndWizard(self): pass
+  def EndWizard(self, quietly=False): pass
   def Spacer(self): pass
 
   def Browse(self, url):
@@ -99,6 +102,10 @@ class NullUi(object):
 
   def AskYesNo(self, question, default=None, pre=None, yes='Yes', no='No',
                wizard_hint=False, image=None, back=None):
+    return self.DefaultOrFail(question, default)
+
+  def AskQuestion(self, question, pre=[], default=None,
+                  wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
   def AskKiteName(self, domains, question, pre=[], default=None,
@@ -138,17 +145,22 @@ class NullUi(object):
     self.Notify('REJECTED: %s:%s (%s)' % (proto, domain, reason),
                 prefix='!', color=(crit and self.RED or self.YELLOW))
 
+  def NotifyList(self, prefix, items, color):
+    items = items[:]
+    while items:
+      show = []
+      while items and len(prefix) + len(' '.join(show)) < 65:
+        show.append(items.pop(0))
+      self.Notify(' - %s: %s' % (prefix, ' '.join(show)), color=color)
+
   def NotifyServer(self, obj, server_info):
     self.server_info = server_info
     self.Notify('Connecting to front-end %s ...' % server_info[obj.S_NAME],
                 color=self.GREY)
-    self.Notify(' - Protocols: %s' % ' '.join(server_info[obj.S_PROTOS]),
-                color=self.GREY)
-    self.Notify(' - Ports: %s' % ' '.join(server_info[obj.S_PORTS]),
-                color=self.GREY)
+    self.NotifyList('Protocols', server_info[obj.S_PROTOS], self.GREY)
+    self.NotifyList('Ports', server_info[obj.S_PORTS], self.GREY)
     if 'raw' in server_info[obj.S_PROTOS]:
-      self.Notify(' - Raw ports: %s' % ' '.join(server_info[obj.S_RAW_PORTS]),
-                  color=self.GREY)
+      self.NotifyList('Raw ports', server_info[obj.S_RAW_PORTS], self.GREY)
 
   def NotifyQuota(self, quota, q_days, q_conns):
     qMB = 1024
@@ -210,7 +222,11 @@ class NullUi(object):
                  ], error=True)
     elif error in ('domaintaken', 'domain', 'subdomain'):
       self.Tell([title, '',
-                 'Sorry, that domain (%s) is unavailable.' % subject
+                 'Sorry, that domain (%s) is unavailable.' % subject,
+                 '',
+                 'If you registered it already, perhaps you need to log on with',
+                 'a different e-mail address?',
+                 ''
                  ], error=True)
     elif error == 'checkfailed':
       self.Tell([title, '',

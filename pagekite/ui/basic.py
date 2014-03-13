@@ -87,12 +87,14 @@ class BasicUi(NullUi):
       self.Status(self.status_tag, self.status_msg)
 
   def NotifyMOTD(self, frontend, motd_message):
-    self.Notify('Message of the day:', prefix=' ++', color=self.WHITE)
     lc = 1
+    self.Notify('  ')
     for line in Q(motd_message).splitlines():
-      self.Notify((line.strip() or ' ' * (lc+2)))
+      self.Notify((line.strip() or ' ' * (lc+2)),
+                  prefix=' ++', color=self.WHITE)
       lc += 1
-    self.Notify(' ' * (lc+2), alignright='[from %s]' % frontend)
+    self.Notify(' ' * (lc+2), alignright='[MOTD from %s]' % frontend)
+    self.Notify('   ')
 
   def Status(self, tag, message=None, color=None):
     self.status_tag = tag
@@ -133,22 +135,30 @@ class BasicUi(NullUi):
     self.tries -= 1
     return self.tries
 
-  def EndWizard(self):
-    if self.wizard_tell: self.Welcome()
+  def EndWizard(self, quietly=False):
+    if self.wizard_tell:
+      self.Welcome()
     self.in_wizard = None
-    if sys.platform in ('win32', 'os2', 'os2emx'):
+    if sys.platform in ('win32', 'os2', 'os2emx') and not quietly:
       self.wfile.write('\n<<< press ENTER to continue >>>\n')
       self.rfile.readline()
 
   def Spacer(self):
     self.wfile.write('\n')
 
+  def Readline(self):
+    line = self.rfile.readline()
+    if line:
+      return line.strip()
+    else:
+      raise IOError('EOF')
+
   def AskEmail(self, question, default=None, pre=[],
                wizard_hint=False, image=None, back=None, welcome=True):
     if welcome: self.Welcome(pre)
     while self.Retry():
       self.wfile.write(' => %s ' % (Q(question), ))
-      answer = self.rfile.readline().strip()
+      answer = self.Readline()
       if default and answer == '': return default
       if self.EMAIL_RE.match(answer): return answer
       if back is not None and answer == 'back': return back
@@ -178,11 +188,17 @@ class BasicUi(NullUi):
                 ) or ('[y/n]')
     while self.Retry():
       self.wfile.write(' => %s %s ' % (Q(question), yn))
-      answer = self.rfile.readline().strip().lower()
+      answer = self.Readline().lower()
       if default is not None and answer == '': answer = default and 'y' or 'n'
       if back is not None and answer.startswith('b'): return back
       if answer in ('y', 'n'): return (answer == 'y')
     raise Exception('Too many tries')
+
+  def AskQuestion(self, question, pre=[], default=None,
+                  wizard_hint=False, image=None, back=None):
+    self.Welcome(pre)
+    self.wfile.write(' => %s ' % Q(question))
+    return self.Readline()
 
   def AskKiteName(self, domains, question, pre=[], default=None,
                   wizard_hint=False, image=None, back=None):
@@ -197,7 +213,7 @@ class BasicUi(NullUi):
       self.wfile.write('\n')
     while self.Retry():
       self.wfile.write('\n => %s ' % Q(question))
-      answer = self.rfile.readline().strip().lower()
+      answer = self.Readline().lower()
       if back is not None and answer == 'back':
         return back
       elif len(domains) == 1:
@@ -224,7 +240,7 @@ class BasicUi(NullUi):
       d = default and (', default=%d' % default) or ''
       self.wfile.write(' => %s [1-%d%s] ' % (Q(question), len(choices), d))
       try:
-        answer = self.rfile.readline().strip()
+        answer = self.Readline().strip()
         if back is not None and answer.startswith('b'): return back
         choice = int(answer or default)
         if choice > 0 and choice <= len(choices): return choice

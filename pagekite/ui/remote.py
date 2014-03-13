@@ -105,8 +105,8 @@ class RemoteUi(NullUi):
       raise Exception('Too many tries')
     return self.tries
 
-  def EndWizard(self):
-    self.wfile.write('end_wizard: done\n')
+  def EndWizard(self, quietly=False):
+    self.wfile.write('end_wizard: %s\n' % (quietly and 'quietly' or 'done'))
 
   def Spacer(self):
     pass
