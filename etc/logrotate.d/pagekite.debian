@@ -3,7 +3,7 @@
 	missingok
 	rotate 7
 	postrotate
-		[ ! -f /var/run/pagekite.py.pid ] || kill -HUP `cat /var/run/pagekite.py.pid`
+		[ ! -f /var/run/pagekite.pid ] || kill -HUP `cat /var/run/pagekite.pid`
 	endscript
 	compress
 	notifempty

@@ -1,5 +1,9 @@
 #################################[ This file is placed in the Public Domain. ]#
 # Front-end selection
+#
+# Front-ends accept incoming requests on your behalf and forward them to
+# your PageKite, which in turn forwards them to the actual server.  You
+# probably need at least one, the service defaults will choose one for you.
 
 # Use the pagekite.net service defaults.
 defaults
