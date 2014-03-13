@@ -1,6 +1,6 @@
 ## Name ##
 
-pagekite - Make localhost servers publicly visible.
+pagekite v0.5.2c - Make localhost servers publicly visible
 
 ## Synopsis ##
 
@@ -24,7 +24,7 @@ and the remote "front-end" reverse-proxy relay.  For convenience,
 files and directories to the World Wide Web for casual sharing and
 collaboration.
 
-## Basic examples ##
+## Basic usage ##
 
 <pre>Basic usage, gives `http://localhost:80/` a public name:
 $ pagekite NAME.pagekite.me
@@ -45,21 +45,33 @@ is used to expose local services to the outside world.
 Examples of services are: a local HTTP server, a local SSH server,
 a folder or a file.
 
-As illustrated above, one simply tells the program which local services
-to expose to the world and which names to use.  If a kite name is
-requested which does not already exist in the configuration file and
-program is run interactively, the user will be prompted and given the
-option of signing up and/or creating a new kite using the <b>pagekite.net</b>
-service.
+A service is exposed by describing it on the command line, along with the
+desired public kite name. If a kite name is requested which does not already
+exist in the configuration file and program is run interactively, the user
+will be prompted and given the option of signing up and/or creating a new
+kite using the <b>pagekite.net</b> service.
 
 Multiple services and kites can be specified on a single command-line,
 separated by the word 'AND' (note capital letters are required).
 This may cause problems if you have many files and folders by that
 name, but that should be relatively rare. :-)
 
+## Kite configuration ##
+
 The options <b>--list</b>, <b>--add</b>, <b>--disable</b> and <b>--remove</b> can be used to
-manipulate the kites in your configuration, if you prefer not to edit
-the file by hand.
+manipulate the kites and service definitions in your configuration file,
+if you prefer not to edit it by hand.  Examples:
+
+<pre>Adding new kites
+$ pagekite --add /a/path/ NAME.pagekite.me +indexes
+$ pagekite --add 80 OTHER-NAME.pagekite.me
+
+To display the current configuration
+$ pagekite --list
+
+Disable or delete kites (--add re-enables)
+$ pagekite --disable OTHER-NAME.pagekite.me
+$ pagekite --remove NAME.pagekite.me</pre>
 
 ## Flags ##
 
@@ -285,10 +297,7 @@ time the program defaults will Just Work.
 
 ## Configuration files ##
 
-The <b>pagekite</b> configuration file lives in different places,
-depending on your operating system and how you are using it.
-
-If you are using the program as a command-line utility, it will
+If you are using <b>pagekite</b> as a command-line utility, it will
 load its configuration from a file in your home directory.  The file is
 named `.pagekite.rc` on Unix systems (including Mac OS X), or
 `pagekite.cfg` on Windows.
@@ -297,22 +306,45 @@ If you are using <b>pagekite</b> as a system-daemon which starts up
 when your computer boots, it is generally configured to load settings
 from `/etc/pagekite.d/*.rc` (in lexicographical order).
 
-In all cases, the configuration files contain one or more of the same
-options as are described above, with the difference that at most one
-option may be present on each line, and the parser is more tolerant of
+In both cases, the configuration files contain one or more of the same
+options as are used on the command line, with the difference that at most
+one option may be present on each line, and the parser is more tolerant of
 white-space.  The leading '--' may also be omitted for readability and
 blank lines and lines beginning with '#' are treated as comments.
 
 <b>NOTE:</b> When using <b>-o</b>, <b>--optfile</b> or <b>--optdir</b> on the command line,
 it is advisable to use <b>--clean</b> to suppress the default configuration.
 
+## Security ##
+
+Please keep in mind, that whenever exposing a server to the public
+Internet, it is important to think about security. Hacked webservers are
+frequently abused as part of virus, spam or phishing campaigns and in
+some cases security breaches can compromise the entire operating system.
+
+Some advice:<pre>
+   * Switch PageKite off when not using it.
+   * Use the built-in access controls and SSL encryption.
+   * Leave the firewall enabled unless you have good reason not to.
+   * Make sure you use good passwords everywhere.
+   * Static content is very hard to hack!
+   * Always, always make frequent backups of any important work.</pre>
+
+Note that as of version 0.5, <b>pagekite</b> includes a very basic
+request firewall, which attempts to prevent access to phpMyAdmin and
+other sensitive systems.  If it gets in your way, the <b>+insecure</b>
+flag or <b>--insecure</b> option can be used to turn it off.
+
+For more, please visit: <https://pagekite.net/support/security/>
+
 ## See Also ##
 
 lapcat(1), <http://pagekite.org/>, <https://pagekite.net/>
 
-## Author ##
+## Authors ##
 
-Bjarni R. Einarsson <http://bre.klaki.net/>
+<pre>- Bjarni R. Einarsson <http://bre.klaki.net/>
+- The Beanstalks Project ehf. <https://pagekite.net/company/></pre>
 
 ## Copyright and license ##
 

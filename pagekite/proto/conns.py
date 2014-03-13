@@ -79,6 +79,14 @@ class Tunnel(ChunkParser):
     return ('<b>Server name</b>: %s<br>'
             '%s') % (self.server_info[self.S_NAME], ChunkParser.__html__(self))
 
+  def LogTrafficStatus(self, final=False):
+    if self.ui:
+      if final:
+        message = 'Disconnected from: %s' % self.server_info[self.S_NAME]
+        self.ui.Status('down', color=self.ui.GREY, message=message)
+      else:
+        self.ui.Status('traffic')
+
   def GetKiteRequests(self, parse):
     requests = []
     for prefix in ('X-Beanstalk', 'X-PageKite'):
@@ -188,11 +196,12 @@ class Tunnel(ChunkParser):
         self.Log([('BE', 'Live'), ('proto', proto), ('domain', domain)] + logi)
         self.conns.Tunnel(proto, domain, self)
       if not ok:
-        if self.server_info[self.S_ADD_KITES]:
+        if self.server_info[self.S_ADD_KITES] and not bad:
           self.LogDebug('No tunnels configured, idling...')
+          self.conns.SetIdle(self, 60)
         else:
           self.LogDebug('No tunnels configured, closing connection.')
-          self.write_eof = self.read_eof = True
+          self.Die()
 
     return True
 
@@ -360,6 +369,7 @@ class Tunnel(ChunkParser):
   def HandlePageKiteResponse(self, parse):
     config = self.conns.config
     have_kites = 0
+    have_kite_info = None
 
     sname = self.server_info[self.S_NAME]
     config.ui.NotifyServer(self, self.server_info)
@@ -397,6 +407,7 @@ class Tunnel(ChunkParser):
       invalid_reasons[details[0]] = details[1]
 
     for request in parse.Header('X-PageKite-Invalid'):
+      have_kite_info = True
       proto, domain, srand = request.split(':')
       reason = invalid_reasons.get(request, 'unknown')
       self.Log([('FE', sname),
@@ -408,6 +419,7 @@ class Tunnel(ChunkParser):
       config.SetBackendStatus(domain, proto, add=BE_STATUS_ERR_TUNNEL)
 
     for request in parse.Header('X-PageKite-Duplicate'):
+      have_kite_info = True
       proto, domain, srand = request.split(':')
       self.Log([('FE', self.server_info[self.S_NAME]),
                 ('err', 'Duplicate'),
@@ -421,6 +433,7 @@ class Tunnel(ChunkParser):
       ssl_available[request] = True
 
     for request in parse.Header('X-PageKite-OK'):
+      have_kite_info = True
       have_kites += 1
       proto, domain, srand = request.split(':')
       self.conns.Tunnel(proto, domain, self)
@@ -434,7 +447,7 @@ class Tunnel(ChunkParser):
                 ('ssl', (request in ssl_available))])
       config.SetBackendStatus(domain, proto, add=status)
 
-    return have_kites
+    return have_kite_info and have_kites
 
   def _BackEnd(server, backends, require_all, conns):
     """This is the back-end end of a tunnel."""
@@ -471,7 +484,8 @@ class Tunnel(ChunkParser):
             data, parse = self._Connect(server, conns, tokens)
 
         if data and parse:
-          abort = (self.HandlePageKiteResponse(parse) < 1)
+          kites = self.HandlePageKiteResponse(parse)
+          abort = (kites is None) or (kites < 1)
 
     except socket.error:
       self.Cleanup()
@@ -779,7 +793,10 @@ class Tunnel(ChunkParser):
       request = '\r\n'.join(PageKiteRequestHeaders(server, backends, tokens))
       self.SendChunked('NOOP: 1\r\n%s\r\n\r\n!' % request,
                        compress=False, just_buffer=True)
-    self.HandlePageKiteResponse(parse)
+
+    kites = self.HandlePageKiteResponse(parse)
+    if (kites is not None) and (kites < 1):
+      self.Die()
 
   def ProcessChunk(self, data):
     # First, we process the chunk headers.
@@ -920,8 +937,6 @@ class UserConn(Selectable):
   def __init__(self, address, ui=None):
     Selectable.__init__(self, address=address, ui=ui)
     self.Reset()
-    # UserConn objects are considered active immediately
-    self.last_activity = time.time()
 
   def Reset(self):
     self.tunnel = None
@@ -1208,12 +1223,8 @@ class UserConn(Selectable):
 
     if (self.conns and
         self.ConnType() == 'FE' and
-        (not self.read_eof) and
-        self not in self.conns.idle):
-      self.LogDebug('Done writing, will time out reads in 120 seconds.')
-      self.created = time.time() + 120
-      self.last_activity = 0
-      self.conns.idle.append(self)
+        (not self.read_eof)):
+      self.conns.SetIdle(self, 120)
 
     return self.ProcessEof()
 
@@ -1222,7 +1233,8 @@ class UserConn(Selectable):
     if self.write_eof and not self.write_blocked:
       self.Shutdown(socket.SHUT_WR)
     elif try_flush or not self.write_blocked:
-      self.tunnel.SendProgress(self.sid, self)
+      if self.tunnel:
+        self.tunnel.SendProgress(self.sid, self)
     return rv
 
   def ProcessData(self, data):
@@ -1262,8 +1274,9 @@ class UnknownConn(MagicProtocolParser):
 
     self.conns = conns
     self.conns.Add(self)
-    self.sid = -1
+    self.conns.SetIdle(self, 10)
 
+    self.sid = -1
     self.host = None
     self.proto = None
     self.said_hello = False
@@ -1274,13 +1287,13 @@ class UnknownConn(MagicProtocolParser):
 
   def SayHello(self):
     if self.said_hello:
-      return
+      return False
     else:
       self.said_hello = True
-
-    if self.on_port in (25, 125, ):
+    if self.on_port in (25, 125, 2525):
       # FIXME: We don't actually support SMTP yet and 125 is bogus.
       self.Send(['220 ready ESMTP PageKite Magic Proxy\n'], try_flush=True)
+    return True
 
   def __str__(self):
     return '%s (%s/%s:%s)' % (MagicProtocolParser.__str__(self),
@@ -1330,7 +1343,8 @@ class UnknownConn(MagicProtocolParser):
 
     elif self.parser.method == 'CONNECT':
       if self.parser.path.lower().startswith('pagekite:'):
-        if Tunnel.FrontEnd(self, lines, self.conns) is None: return False
+        if Tunnel.FrontEnd(self, lines, self.conns) is None:
+          return False
         done = True
 
       else:
@@ -1456,10 +1470,10 @@ class UnknownConn(MagicProtocolParser):
           if not domains[0]:
             domains = None
       except:
-        # Probably insufficient data, just return True and assume we'll have
-        # better luck on the next round.
-        if logging.DEBUG_IO:
-          self.LogError('Error in ProcessTls: %s' % format_exc())
+        # Probably insufficient data, just True and assume we'll have
+        # better luck on the next round... but with a timeout.
+        self.LogDebug('Error in ProcessTLS, will time out in 120 seconds.')
+        self.conns.SetIdle(self, 120)
         return True
 
     if domains and domains[0] is not None:
@@ -1479,6 +1493,7 @@ class UnknownConn(MagicProtocolParser):
           self.peeking = False
           self.is_tls = False
           self.my_tls = True
+          self.conns.SetIdle(self, 120)
           return True
         else:
           return False
@@ -1601,7 +1616,6 @@ class Listener(Selectable):
 
     self.connclass = connclass
     self.port = port
-    self.last_activity = self.created + 1
     self.conns = conns
     self.conns.Add(self)
     self.CountAs('listeners_live')
@@ -1614,6 +1628,7 @@ class Listener(Selectable):
 
   def ReadData(self, maxread=None):
     try:
+      self.last_activity = time.time()
       client, address = self.fd.accept()
       if client:
         self.Log([('accept', '%s:%s' % (obfuIp(address[0]), address[1]))])

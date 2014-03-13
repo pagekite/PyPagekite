@@ -268,7 +268,6 @@ class Connections(object):
     self.auth.start()
 
   def Add(self, conn):
-    self.idle.append(conn)
     self.conns.append(conn)
 
   def SetAltId(self, conn, new_id):
@@ -277,6 +276,9 @@ class Connections(object):
     if new_id:
       self.conns_by_id[new_id] = conn
     conn.alt_id = new_id
+
+  def SetIdle(self, conn, seconds):
+    self.idle.append((time.time() + seconds, conn.last_activity, conn))
 
   def TrackIP(self, ip, domain):
     tick = '%d' % (time.time()/12)
@@ -306,8 +308,12 @@ class Connections(object):
         del self.conns_by_id[conn.alt_id]
       if conn in self.conns:
         self.conns.remove(conn)
-      if conn in self.idle:
-        self.idle.remove(conn)
+      rmp = []
+      for elc in self.idle:
+        if elc[-1] == conn:
+          rmp.append(elc)
+      for elc in rmp:
+        self.idle.remove(elc)
       for tid, tunnels in self.tunnels.items():
         if conn in tunnels:
           tunnels.remove(conn)
@@ -318,6 +324,9 @@ class Connections(object):
       logging.LogError('Failed to remove %s: %s' % (conn, format_exc()))
       if retry:
         return self.Remove(conn, retry=False)
+
+  def IdleConns(self):
+    return [p[-1] for p in self.idle]
 
   def Sockets(self):
     return [s.fd for s in self.conns]
@@ -368,6 +377,20 @@ class Connections(object):
         self.tunnels[tid].remove(conn)
       if not self.tunnels[tid]:
         del self.tunnels[tid]
+
+  def CheckIdleConns(self, now):
+    active = []
+    for elc in self.idle:
+      expire, last_activity, conn = elc
+      if conn.last_activity > last_activity:
+        active.append(elc)
+      elif expire < now:
+        logging.LogDebug('Killing idle connection: %s' % conn)
+        conn.Die(discard_buffer=True)
+      elif conn.created < now - 1:
+        conn.SayHello()
+    for pair in active:
+      self.idle.remove(pair)
 
   def Tunnel(self, proto, domain, conn=None):
     tid = '%s:%s' % (proto, domain)
@@ -558,19 +581,6 @@ class TunnelManager(threading.Thread):
     self.pkite = pkite
     self.conns = conns
 
-  def CheckIdleConns(self, now):
-    active = []
-    for conn in self.conns.idle:
-      if conn.last_activity:
-        active.append(conn)
-      elif conn.created < now - 10:
-        logging.LogDebug('Removing idle connection: %s' % conn)
-        conn.Die(discard_buffer=True)
-      elif conn.created < now - 1:
-        conn.SayHello()
-    for conn in active:
-      self.conns.idle.remove(conn)
-
   def CheckTunnelQuotas(self, now):
     for tid in self.conns.tunnels:
       for tunnel in self.conns.tunnels[tid]:
@@ -619,7 +629,8 @@ class TunnelManager(threading.Thread):
         self._run()
       except Exception, e:
         logging.LogError('TunnelManager died: %s' % e)
-        if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
+        if logging.DEBUG_IO:
+          traceback.print_exc(file=sys.stderr)
         time.sleep(5)
     logging.LogDebug('TunnelManager: done')
 
@@ -629,10 +640,9 @@ class TunnelManager(threading.Thread):
 
       # Reconnect if necessary, randomized exponential fallback.
       problem, connecting = self.pkite.CreateTunnels(self.conns)
-      if problem:
-        self.check_interval += int(1+random.random()*self.check_interval)
-        if self.check_interval > 300:
-          self.check_interval = 300
+      if problem or connecting:
+        self.check_interval = min(60, self.check_interval +
+                                     int(1+random.random()*self.check_interval))
         time.sleep(1)
       else:
         self.check_interval = 5
@@ -708,9 +718,10 @@ class TunnelManager(threading.Thread):
       for i in xrange(0, self.check_interval):
         if self.keep_running:
           time.sleep(1)
-          if i > self.check_interval: break
+          if i > self.check_interval:
+            break
           if self.pkite.isfrontend:
-            self.CheckIdleConns(time.time())
+            self.conns.CheckIdleConns(time.time())
 
   def HurryUp(self):
     self.check_interval = 0
@@ -1196,12 +1207,19 @@ class PageKite(object):
     if self.tunnel_manager:
       self.tunnel_manager.quit()
     self.keep_looping = False
+
     for fd in (self.conns and self.conns.Sockets() or []):
       try:
         fd.close()
       except (IOError, OSError, TypeError):
         pass
     self.conns = self.ui_httpd = self.ui_comm = self.tunnel_manager = None
+
+    try:
+      os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+    except:
+      pass
+    print
     if help or longhelp:
       import manual
       print longhelp and manual.DOC() or manual.MINIDOC()
@@ -1210,15 +1228,12 @@ class PageKite(object):
       self.ui.Status('exiting', message=(message or 'Good-bye!'))
     if message:
       print 'Error: %s' % message
+
     if logging.DEBUG_IO:
       traceback.print_exc(file=sys.stderr)
     if not noexit:
       self.main_loop = False
       sys.exit(1)
-    try:
-      os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
-    except:
-      pass
 
   def GetTlsEndpointCtx(self, domain):
     if domain in self.tls_endpoints:
@@ -1849,7 +1864,13 @@ class PageKite(object):
         if len(be) > 2:
           raise ConfigError('Bad back-end definition: %s' % be_spec)
         if len(be) < 2:
-          be = ['localhost', be[0]]
+          try:
+            if be[0] != 'builtin':
+              int(be[0])
+            be = ['localhost', be[0]]
+          except ValueError:
+            raise ConfigError('`%s` should be a file, directory, port or '
+                              'protocol' % be_spec)
 
       # Extract the path prefix from the fe_spec
       fe_urlp = fe_spec.split('/', 3)
@@ -1948,6 +1969,10 @@ class PageKite(object):
           be[BE_SECRET] = self.kitesecret
         else:
           need_registration[be[BE_DOMAIN]] = True
+
+    for domain in need_registration:
+      if '.' not in domain:
+        raise ConfigError('Not valid domain: %s' % domain)
 
     for domain in need_registration:
       result = self.RegisterNewKite(kitename=domain)
@@ -3008,6 +3033,7 @@ def Main(pagekite, configure, uiclass=NullUi,
         shell_mode = 'more'
       except (KeyboardInterrupt, IOError, OSError):
         ui.Status('quitting')
+        print
         return
     elif not pk.main_loop:
       return
@@ -3024,24 +3050,32 @@ def Shell(pk, ui, shell_mode):
     if shell_mode != 'more':
       ui.StartWizard('The PageKite Shell')
       pre = [
-        'Press CTRL+C to quit, ENTER to fly your kites or type some',
-        'arguments to try other things.  Type `help` for help.'
+        'Press ENTER to fly your kites or CTRL+C to quit.  Or, type some',
+        'arguments to and try other things.  Type `help` for help.'
       ]
     else:
       pre = ''
 
     prompt = os.path.basename(sys.argv[0])
     while True:
-      rv = ui.AskQuestion(prompt, back=False, pre=pre).strip().split()
+      rv = ui.AskQuestion(prompt, prompt='  $', back=False, pre=pre
+                          ).strip().split()
       ui.EndWizard(quietly=True)
+      while rv and rv[0] in ('pagekite.py', prompt):
+        rv.pop(0)
       if rv and rv[0] == 'help':
         ui.welcome = '>>> ' + ui.WHITE + ' '.join(rv) + ui.NORM
         ui.Tell(manual.HELP(rv[1:]).splitlines())
         pre = []
+      elif rv and rv[0] == 'quit':
+        raise KeyboardInterrupt()
       else:
+        if rv and rv[0] in OPT_ARGS:
+          rv[0] = '--'+rv[0]
         return rv
   finally:
     ui.EndWizard(quietly=True)
+    print
 
 
 def Configure(pk):
@@ -3056,7 +3090,7 @@ def Configure(pk):
   friendly_mode = (('--friendly' in sys.argv) or
                    (sys.platform[:3] in ('win', 'os2', 'dar')))
   if friendly_mode and sys.stdout.isatty():
-    pk.shell = (len(sys.argv) < 2) and 'auto' or True
+    pk.shell = (len(sys.argv) < 2) and 'auto'
 
   pk.Configure(sys.argv[1:])
 

@@ -104,7 +104,7 @@ class NullUi(object):
                wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
-  def AskQuestion(self, question, pre=[], default=None,
+  def AskQuestion(self, question, pre=[], default=None, prompt=None,
                   wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
