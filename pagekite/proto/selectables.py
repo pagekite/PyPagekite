@@ -5,7 +5,7 @@ Selectables are low level base classes which cooperate with our select-loop.
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
-Copyright 2010-2012, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+Copyright 2010-2013, the Beanstalks Project ehf. and Bjarni Runar Einarsson
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the  GNU  Affero General Public License as published by the Free
@@ -445,8 +445,8 @@ class Selectable(object):
   def AutoThrottle(self, max_speed=None, remote=False, delay=0.2):
     return self.Throttle(max_speed, remote, delay)
 
-  def Send(self, data, try_flush=False, activity=False, just_buffer=False):
-    common.buffered_bytes[0] -= len(self.write_blocked)
+  def Send(self, data, try_flush=False, activity=False,
+                       just_buffer=False, allow_blocking=False):
     self.write_speed = int((self.wrote_bytes + self.all_out)
                            / max(1, (time.time() - self.created)))
 
@@ -455,7 +455,6 @@ class Selectable(object):
         ((not try_flush) and
          (len(self.write_blocked) > 0 or compat.SEND_ALWAYS_BUFFERS))):
       self.write_blocked += str(''.join(data))
-      common.buffered_bytes[0] += len(self.write_blocked)
       return True
 
     sending = ''.join([self.write_blocked, str(''.join(data))])
@@ -501,7 +500,6 @@ class Selectable(object):
       self.last_activity = time.time()
 
     self.write_blocked = sending[sent_bytes:]
-    common.buffered_bytes[0] += len(self.write_blocked)
 
     if self.wrote_bytes >= logging.LOG_THRESHOLD:
       self.LogTraffic()
@@ -519,33 +517,38 @@ class Selectable(object):
     # Stop compressing streams that just get bigger.
     if zhistory and (zhistory[0] < zhistory[1]): compress = False
     try:
-      if self.lock:
-        self.lock.acquire()
-      sdata = ''.join(data)
-      if self.zw and compress:
-        try:
-          zdata = self.zw.compress(sdata) + self.zw.flush(zlib.Z_SYNC_FLUSH)
-          if zhistory:
-            zhistory[0] = len(sdata)
-            zhistory[1] = len(zdata)
-          return self.Send(['%xZ%x%s\r\n%s' % (len(sdata), len(zdata), rst, zdata)],
-                           activity=False,
-                           try_flush=(not just_buffer), just_buffer=just_buffer)
-        except zlib.error:
-          logging.LogError('Error compressing, resetting ZChunks.')
-          self.ResetZChunks()
+      try:
+        if self.lock:
+          self.lock.acquire()
+        sdata = ''.join(data)
+        if self.zw and compress and len(sdata) > 64:
+          try:
+            zdata = self.zw.compress(sdata) + self.zw.flush(zlib.Z_SYNC_FLUSH)
+            if zhistory:
+              zhistory[0] = len(sdata)
+              zhistory[1] = len(zdata)
+            return self.Send(['%xZ%x%s\r\n' % (len(sdata), len(zdata), rst), zdata],
+                             activity=False,
+                             try_flush=(not just_buffer), just_buffer=just_buffer)
+          except zlib.error:
+            logging.LogError('Error compressing, resetting ZChunks.')
+            self.ResetZChunks()
 
-      return self.Send(['%x%s\r\n%s' % (len(sdata), rst, sdata)],
-                       activity=False,
-                       try_flush=(not just_buffer), just_buffer=just_buffer)
+        return self.Send(['%x%s\r\n' % (len(sdata), rst), sdata],
+                         activity=False,
+                         try_flush=(not just_buffer), just_buffer=just_buffer)
+      except UnicodeDecodeError:
+        logging.LogError('UnicodeDecodeError in SendChunked, wtf?')
+        return False
     finally:
       if self.lock:
         self.lock.release()
 
-  def Flush(self, loops=50, wait=False):
-    while loops != 0 and len(self.write_blocked) > 0 and self.Send([],
-                                                                try_flush=True,
-                                                                activity=False):
+  def Flush(self, loops=50, wait=False, allow_blocking=False):
+    while (loops != 0 and
+           len(self.write_blocked) > 0 and
+           self.Send([], try_flush=True, activity=False,
+                         allow_blocking=allow_blocking)):
       if wait and len(self.write_blocked) > 0:
         time.sleep(0.1)
       logging.LogDebug('Flushing...')
@@ -567,7 +570,6 @@ class Selectable(object):
 
   def Die(self, discard_buffer=False):
     if discard_buffer:
-      common.buffered_bytes[0] -= len(self.write_blocked)
       self.write_blocked = ''
     self.read_eof = self.write_eof = True
     return True
@@ -610,6 +612,7 @@ class LineParser(Selectable):
 
 TLS_CLIENTHELLO = '%c' % 026
 SSL_CLIENTHELLO = '\x80'
+MINECRAFT_HANDSHAKE = '%c%c' % (0x02, 0x33)
 FLASH_POLICY_REQ = '<policy-file-request/>'
 
 # FIXME: XMPP support
@@ -653,10 +656,15 @@ class MagicProtocolParser(LineParser):
 
     domain = 'domain' in args and args['domain'] or None
     if proto == 'https': return self.ProcessTls(data, domain)
-    if proto == 'raw' and domain: return self.ProcessRaw(data, domain)
+    if proto == 'raw' and domain: return self.ProcessProto(data, 'raw', domain)
     return False
 
   def ProcessData(self, data):
+    # Uncomment when adding support for new protocols:
+    #
+    #self.LogDebug(('DATA: >%s<'
+    #               ) % ' '.join(['%2.2x' % ord(d) for d in data]))
+
     if data.startswith(MAGIC_PREFIX):
       return self.ProcessMagic(data)
 
@@ -665,10 +673,19 @@ class MagicProtocolParser(LineParser):
       if not (data.startswith(TLS_CLIENTHELLO) or
               data.startswith(SSL_CLIENTHELLO)):
         self.EatPeeked()
+
+        # FIXME: These only work if the full policy request or minecraft
+        #        handshake are present in the first data packet.
         if data.startswith(FLASH_POLICY_REQ):
           return self.ProcessFlashPolicyRequest(data)
-        else:
-          return LineParser.ProcessData(self, data)
+
+        if data.startswith(MINECRAFT_HANDSHAKE):
+          user, server, port = self.GetMinecraftInfo(data)
+          if user and server:
+            return self.ProcessProto(data, 'minecraft', server)
+
+        return LineParser.ProcessData(self, data)
+
       self.is_tls = True
 
     if self.is_tls:
@@ -717,6 +734,19 @@ class MagicProtocolParser(LineParser):
         sni.extend(self.GetSniNames(self.GetClientHelloExtensions(msg)))
     return sni
 
+  def GetMinecraftInfo(self, data):
+    try:
+      (packet, version, unlen) = struct.unpack('>bbh', data[0:4])
+      unlen *= 2
+      (hnlen, ) = struct.unpack('>h', data[4+unlen:6+unlen])
+      hnlen *= 2
+      (port, ) = struct.unpack('>i', data[6+unlen+hnlen:10+unlen+hnlen])
+      uname = data[4:4+unlen].decode('utf_16_be').encode('utf-8')
+      sname = data[6+unlen:6+hnlen+unlen].decode('utf_16_be').encode('utf-8')
+      return uname, sname, port
+    except:
+      return None, None, None
+
   def ProcessFlashPolicyRequest(self, data):
     self.LogError('MagicProtocolParser::ProcessFlashPolicyRequest: Should be overridden!')
     return False
@@ -725,8 +755,8 @@ class MagicProtocolParser(LineParser):
     self.LogError('MagicProtocolParser::ProcessTls: Should be overridden!')
     return False
 
-  def ProcessRaw(self, data, domain):
-    self.LogError('MagicProtocolParser::ProcessRaw: Should be overridden!')
+  def ProcessProto(self, data, proto, domain):
+    self.LogError('MagicProtocolParser::ProcessProto: Should be overridden!')
     return False
 
 

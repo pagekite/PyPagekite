@@ -5,7 +5,7 @@ This is the pagekite.py built-in HTTP server.
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
-Copyright 2010-2012, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+Copyright 2010-2013, the Beanstalks Project ehf. and Bjarni Runar Einarsson
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the  GNU  Affero General Public License as published by the Free
@@ -978,7 +978,7 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
       gYamon.vset('version', APPVER)
       gYamon.vset('httpd_ssl_enabled', self.enable_ssl)
       gYamon.vset('errors', 0)
-      gYamon.vset("bytes_all", 0)
+      gYamon.lcreate("tunnel_rtt", 100)
       gYamon.lists['buffered_bytes'] = [1, 0, common.buffered_bytes]
       gYamon.views['selectables'] = (selectables.SELECTABLES, {
         'idle': [0, 0, self.conns.idle],

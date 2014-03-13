@@ -6,7 +6,7 @@ This is slowly being refactored into smaller sub-modules.
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
-Copyright 2010-2012, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+Copyright 2010-2013, the Beanstalks Project ehf. and Bjarni Runar Einarsson
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the  GNU  Affero General Public License as published by the Free
@@ -342,7 +342,10 @@ class Connections(object):
 
   def Blocked(self):
     # FIXME: This is O(n)
-    return [s.fd for s in self.conns if s.IsBlocked()]
+    # Magic side-effect: update buffered byte counter
+    blocked = [s for s in self.conns if s.IsBlocked()]
+    common.buffered_bytes[0] = sum([len(s.write_blocked) for s in blocked])
+    return [s.fd for s in blocked]
 
   def DeadConns(self):
     return [s for s in self.conns if s.IsDead()]
@@ -798,7 +801,7 @@ class PageKite(object):
     self.server_portalias = {}
     self.server_aliasport = {}
     self.server_protos = ['http', 'http2', 'http3', 'https', 'websocket',
-                          'irc', 'finger', 'httpfinger', 'raw']
+                          'irc', 'finger', 'httpfinger', 'raw', 'minecraft']
 
     self.tunnel_acls = []
     self.client_acls = []
@@ -1105,6 +1108,7 @@ class PageKite(object):
         '# service_on = http/8080:YOU.pagekite.me:localhost:8080:SECRET',
         '# service_on = https:YOU.pagekite.me:localhost:443:SECRET',
         '# service_on = websocket:YOU.pagekite.me:localhost:8080:SECRET',
+        '# service_on = minecraft:YOU.pagekite.me:localhost:8080:SECRET',
         '#',
         '# service_off = http:YOU.pagekite.me:localhost:4545:SECRET',
         ''
@@ -1604,6 +1608,7 @@ class PageKite(object):
         bport = (bport or (proto in ('http', 'httpfinger', 'websocket') and 80)
                        or (proto == 'irc' and 6667)
                        or (proto == 'https' and 443)
+                       or (proto == 'minecraft' and 25565)
                        or (proto == 'finger' and 79))
         if port:
           bid = '%s-%d:%s' % (proto, int(port), fdom)
@@ -2881,6 +2886,7 @@ class PageKite(object):
     now = time.time()
     evs = []
     try:
+      bbc = 0
       for c in self.conns.conns:
         try:
           if c.IsDead():
@@ -2888,8 +2894,11 @@ class PageKite(object):
           else:
             fdc[c.fd.fileno()] = c.fd
             mask = 0
-            if c.IsBlocked():     mask |= select.EPOLLOUT
-            if c.IsReadable(now): mask |= select.EPOLLIN
+            if c.IsBlocked():
+              bbc += len(c.write_blocked)
+              mask |= select.EPOLLOUT
+            if c.IsReadable(now):
+              mask |= select.EPOLLIN
             if mask:
               try:
                 try:
@@ -2906,6 +2915,7 @@ class PageKite(object):
           # Failing to unregister is FINE, we don't complain about that.
           pass
 
+      common.buffered_bytes[0] = bbc
       evs.extend(epoll.poll(waittime))
     except IOError:
       pass

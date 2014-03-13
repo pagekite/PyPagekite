@@ -6,7 +6,7 @@ incoming or outgoing network connections.
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
-Copyright 2010-2012, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+Copyright 2010-2013, the Beanstalks Project ehf. and Bjarni Runar Einarsson
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the  GNU  Affero General Public License as published by the Free
@@ -305,7 +305,7 @@ class Tunnel(ChunkParser):
     socks.DEBUG = (logging.DEBUG_IO or socks.DEBUG) and logging.LogDebug
     sock = socks.socksocket()
     if socks.HAVE_SSL:
-      chain = ['default']
+      chain = []
       if self.conns.config.fe_anon_tls_wrap:
         chain.append('ssl-anon!%s!%s' % (sspec[0], sspec[1]))
       if self.conns.config.fe_certname:
@@ -327,12 +327,14 @@ class Tunnel(ChunkParser):
                                        tokens,
                                      nozchunks=conns.config.disable_zchunks,
                                     replace=replace_sessionid),
-                      activity=False, try_flush=True)
-        or not self.Flush(wait=True)):
+                      activity=False, try_flush=True, allow_blocking=False)
+        or not self.Flush(wait=True, allow_blocking=False)):
+      self.LogDebug('Failed to send kite request, closing.')
       return None, None
 
     data = self._RecvHttpHeaders()
     if not data:
+      self.LogDebug('Failed to parse kite response, closing.')
       return None, None
 
     self.fd.setblocking(0)
@@ -481,7 +483,11 @@ class Tunnel(ChunkParser):
                                          compress=False, just_buffer=True)
             data = parse = None
           else:
-            data, parse = self._Connect(server, conns, tokens)
+            try:
+              data, parse = self._Connect(server, conns, tokens)
+            except:
+              logging.LogError('Error in connect: %s' % format_exc())
+              raise
 
         if data and parse:
           kites = self.HandlePageKiteResponse(parse)
@@ -508,15 +514,17 @@ class Tunnel(ChunkParser):
   FrontEnd = staticmethod(_FrontEnd)
   BackEnd = staticmethod(_BackEnd)
 
-  def Send(self, data, try_flush=False, activity=False, just_buffer=False):
+  def Send(self, data, try_flush=False, activity=False, just_buffer=False,
+                       allow_blocking=True):
     try:
-      if TUNNEL_SOCKET_BLOCKS and not just_buffer:
+      if TUNNEL_SOCKET_BLOCKS and allow_blocking and not just_buffer:
         self.fd.setblocking(1)
       return ChunkParser.Send(self, data, try_flush=try_flush,
                                           activity=activity,
-                                          just_buffer=just_buffer)
+                                          just_buffer=just_buffer,
+                                          allow_blocking=allow_blocking)
     finally:
-      if TUNNEL_SOCKET_BLOCKS and not just_buffer:
+      if TUNNEL_SOCKET_BLOCKS and allow_blocking and not just_buffer:
         self.fd.setblocking(0)
 
   def SendData(self, conn, data, sid=None, host=None, proto=None, port=None,
@@ -582,27 +590,41 @@ class Tunnel(ChunkParser):
     self.last_ping = self.last_activity = when
 
   def SendPing(self):
-    self.last_ping = int(time.time())
+    now = time.time()
+    self.last_ping = int(now)
     self.LogDebug("Ping", [('host', self.server_info[self.S_NAME])])
-    return self.SendChunked('NOOP: 1\r\nPING: 1\r\n\r\n!',
+    return self.SendChunked('NOOP: 1\r\nPING: %.3f\r\n\r\n!' % now,
                             compress=False, just_buffer=True)
 
-  def SendPong(self):
+  def ProcessPong(self, pong):
+    try:
+      rtt = int(1000*(time.time()-float(pong)))
+      self.Log([('host', self.server_info[self.S_NAME]),
+                ('rtt', '%d' % rtt)])
+      if common.gYamon:
+        common.gYamon.ladd('tunnel_rtt', rtt)
+    except ValueError:
+      pass
+
+  def SendPong(self, data):
     if (self.conns.config.isfrontend and
         self.quota and (self.quota[0] >= 0)):
       # May as well make ourselves useful!
-      return self.SendQuota()
+      return self.SendQuota(pong=data[:64])
     else:
-      return self.SendChunked('NOOP: 1\r\n\r\n!',
+      return self.SendChunked('NOOP: 1\r\nPONG: %s\r\n\r\n!' % data[:64],
                               compress=False, just_buffer=True)
 
-  def SendQuota(self):
+  def SendQuota(self, pong=''):
+    if pong:
+      pong = 'PONG: %s\r\n' % pong
     if self.q_days is not None:
-      return self.SendChunked(('NOOP: 1\r\nQuota: %s\r\nQDays: %s\r\nQConns: %s\r\n\r\n!'
-                               ) % (self.quota[0], self.q_days, self.q_conns),
+      return self.SendChunked(('NOOP: 1\r\n%sQuota: %s\r\nQDays: %s\r\nQConns: %s\r\n\r\n!'
+                               ) % (pong, self.quota[0], self.q_days, self.q_conns),
                               compress=False, just_buffer=True)
     else:
-      return self.SendChunked('NOOP: 1\r\nQuota: %s\r\n\r\n!' % self.quota[0],
+      return self.SendChunked(('NOOP: 1\r\n%sQuota: %s\r\n\r\n!'
+                               ) % (pong, self.quota[0]),
                               compress=False, just_buffer=True)
 
   def SendProgress(self, sid, conn, throttle=False):
@@ -669,8 +691,10 @@ class Tunnel(ChunkParser):
                                        self.q_days, self.q_conns)
 
   def ProcessChunkDirectives(self, parse):
+    if parse.Header('PONG'):
+      self.ProcessPong(parse.Header('PONG')[0])
     if parse.Header('PING'):
-      return self.SendPong()
+      return self.SendPong(parse.Header('PING')[0])
     if parse.Header('ZRST') and not self.ResetZChunks():
       return False
     if parse.Header('SPD') or parse.Header('SKB'):
@@ -783,7 +807,9 @@ class Tunnel(ChunkParser):
       self.users[sid] = conn
       if proto == 'httpfinger':
         conn.fd.setblocking(1)
-        conn.Send(data, try_flush=True) or conn.Flush(wait=True)
+        conn.Send(data, try_flush=True,
+                        allow_blocking=False) or conn.Flush(wait=True,
+                                                            allow_blocking=False)
         self._RecvHttpHeaders(fd=conn.fd)
         conn.fd.setblocking(0)
         data = ''
@@ -934,10 +960,10 @@ class LoopbackTunnel(Tunnel):
   # things will go horribly wrong now and then.  For now we hack this by
   # separating Write and Flush and looping back only on Flush.
 
-  def Send(self, data, try_flush=False, activity=False, just_buffer=True):
+  def Send(self, data, try_flush=False, activity=False, just_buffer=True,
+                       allow_blocking=True):
     if self.write_blocked:
       data = [self.write_blocked] + data
-      common.buffered_bytes[0] -= len(self.write_blocked)
       self.write_blocked = ''
     joined_data = ''.join(data)
     if try_flush or (len(joined_data) > 10240) or (self.buffer_count >= 100):
@@ -948,7 +974,6 @@ class LoopbackTunnel(Tunnel):
     else:
       self.buffer_count += 1
       self.write_blocked = joined_data
-      common.buffered_bytes[0] += len(self.write_blocked)
       return True
 
 
@@ -1249,8 +1274,11 @@ class UserConn(Selectable):
 
     return self.ProcessEof()
 
-  def Send(self, data, try_flush=False, activity=True):
-    rv = Selectable.Send(self, data, try_flush=try_flush, activity=activity)
+  def Send(self, data, try_flush=False, activity=True, just_buffer=False,
+                       allow_blocking=True):
+    rv = Selectable.Send(self, data, try_flush=try_flush, activity=activity,
+                                     just_buffer=just_buffer,
+                                     allow_blocking=allow_blocking)
     if self.write_eof and not self.write_blocked:
       self.Shutdown(socket.SHUT_WR)
     elif try_flush or not self.write_blocked:
@@ -1428,7 +1456,7 @@ class UnknownConn(MagicProtocolParser):
                 (self.on_port, self.host) = (cport, chost)
                 self.parser = HttpLineParser()
                 self.Send(HTTP_ConnectOK(), try_flush=True)
-                return self.ProcessRaw(''.join(lines), self.host)
+                return self.ProcessProto(''.join(lines), raw, self.host)
 
           self.Send(HTTP_ConnectBad(), try_flush=True)
           return False
@@ -1562,11 +1590,12 @@ class UnknownConn(MagicProtocolParser):
               try_flush=True)
     return False
 
-  def ProcessRaw(self, data, domain):
+  def ProcessProto(self, data, proto, domain):
     if not self.conns.config.CheckClientAcls(self.address, conn=self):
       return False
+
     if UserConn.FrontEnd(self, self.address,
-                         'raw', domain, self.on_port,
+                         proto, domain, self.on_port,
                          [data], self.conns) is None:
       return False
 

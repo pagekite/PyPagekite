@@ -5,7 +5,7 @@ Compatibility hacks to work around differences between Python versions.
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
-Copyright 2010-2012, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+Copyright 2010-2013, the Beanstalks Project ehf. and Bjarni Runar Einarsson
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the  GNU  Affero General Public License as published by the Free
@@ -112,9 +112,9 @@ if socks.HAVE_PYOPENSSL:
   TUNNEL_SOCKET_BLOCKS = False
 
 elif socks.HAVE_SSL:
+  SSL = socks.SSL
   SEND_ALWAYS_BUFFERS = True
   SEND_MAX_BYTES = 4 * 1024
-  SSL = socks.SSL
   TUNNEL_SOCKET_BLOCKS = True # Workaround for http://bugs.python.org/issue8240
 
 else:
