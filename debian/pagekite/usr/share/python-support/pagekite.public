@@ -1,10 +1,10 @@
 pyversions=2.3-
 
-/usr/share/pyshared/pagekite-0.4.4e.egg-info/PKG-INFO
-/usr/share/pyshared/pagekite-0.4.4e.egg-info/SOURCES.txt
-/usr/share/pyshared/pagekite-0.4.4e.egg-info/dependency_links.txt
-/usr/share/pyshared/pagekite-0.4.4e.egg-info/requires.txt
-/usr/share/pyshared/pagekite-0.4.4e.egg-info/top_level.txt
+/usr/share/pyshared/pagekite-0.4.4f.egg-info/PKG-INFO
+/usr/share/pyshared/pagekite-0.4.4f.egg-info/SOURCES.txt
+/usr/share/pyshared/pagekite-0.4.4f.egg-info/dependency_links.txt
+/usr/share/pyshared/pagekite-0.4.4f.egg-info/requires.txt
+/usr/share/pyshared/pagekite-0.4.4f.egg-info/top_level.txt
 /usr/share/pyshared/pagekite/__android__.py
 /usr/share/pyshared/pagekite/__dropper__.py
 /usr/share/pyshared/pagekite/__init__.py
