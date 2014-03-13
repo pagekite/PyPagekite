@@ -4,13 +4,13 @@ Source: http://pagekite.net/pk/src/pagekite-@VERSION@.tar.gz
 
 Files: *
 Copyright: 
-           2011 Bjarni Runar Einarsson
-           2011 The Beanstalks Project ehf.
+           2013 Bjarni Runar Einarsson
+           2013 The Beanstalks Project ehf.
 License: AGPL-3+
  See the file COPYING, included with this distribution.
 
 Files: debian/*
-Copyright: 2011 PageKite Packaging Team <packages@pagekite.net>
+Copyright: 2013 PageKite Packaging Team <packages@pagekite.net>
 License: GPL-2+
  This package is free software; you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by

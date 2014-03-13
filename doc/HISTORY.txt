@@ -1,6 +1,15 @@
 Version history - highlights
 ============================
 
+v0.5.5   2013.02.01
+------
+   - Fixed broken internal buffered byte counter
+   - Log and allow monitoring of tunnel round-trip-times
+   - Minecraft protocol support at the frontend
+   - Fixed connection bug: native Python SSL + no SSL on front-end = fail
+   - Dropped support for the insecure SSLv2
+
+
 v0.5.4   2012.11.29
 ------
    - Improved --proxy argument handling to do chains properly

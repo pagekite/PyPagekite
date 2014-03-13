@@ -1,6 +1,6 @@
 ## Name ##
 
-pagekite v0.5.4a - Make localhost servers publicly visible
+pagekite v0.5.5a - Make localhost servers publicly visible
 
 ## Synopsis ##
 
@@ -364,10 +364,12 @@ instead.
 
 lapcat(1), <http://pagekite.org/>, <https://pagekite.net/>
 
-## Authors ##
+## Credits ##
 
 <pre>- Bjarni R. Einarsson <http://bre.klaki.net/>
-- The Beanstalks Project ehf. <https://pagekite.net/company/></pre>
+- The Beanstalks Project ehf. <https://pagekite.net/company/>
+- The Rannis Technology Development Fund <http://www.rannis.is/>
+- Joar Wandborg <http://wandborg.se/></pre>
 
 ## Copyright and license ##
 

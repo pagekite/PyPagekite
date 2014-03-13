@@ -336,9 +336,11 @@ MAN_BUGS = ("""\
 MAN_SEE_ALSO = ("""\
     lapcat(1), <http://pagekite.org/>, <https://pagekite.net/>
 """)
-MAN_AUTHORS = ("""\
+MAN_CREDITS = ("""\
     <pre>- Bjarni R. Einarsson <http://bre.klaki.net/>
-    - The Beanstalks Project ehf. <https://pagekite.net/company/></pre>
+    - The Beanstalks Project ehf. <https://pagekite.net/company/>
+    - The Rannis Technology Development Fund <http://www.rannis.is/>
+    - Joar Wandborg <http://wandborg.se/></pre>
 """)
 
 MANUAL_TOC = (
@@ -361,7 +363,7 @@ MANUAL_TOC = (
   ('SH', 'Security', MAN_SECURITY),
   ('SH', 'Bugs', MAN_BUGS),
   ('SH', 'See Also', MAN_SEE_ALSO),
-  ('SH', 'Authors', MAN_AUTHORS),
+  ('SH', 'Credits', MAN_CREDITS),
   ('SH', 'Copyright and license', MAN_LICENSE),
 )
 
@@ -384,7 +386,7 @@ HELP_TOC = (
   ('security', 'A few words about security.',           MAN_SECURITY),
   ('credits',  'License and credits',        '\n'.join([MAN_LICENSE,
                                                         'CREDITS:',
-                                                        MAN_AUTHORS])),
+                                                        MAN_CREDITS])),
   ('manual', 'The complete manual.  See also: http://pagekite.net/man/', None)
 )
 
