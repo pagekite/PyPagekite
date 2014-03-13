@@ -43,6 +43,7 @@ from pagekite.common import *
 from pagekite.compat import *
 import pagekite.common as common
 import pagekite.logging as logging
+import pagekite.proto.selectables as selectables
 import sockschain as socks
 
 
@@ -717,7 +718,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
     if path == self.host_config.get('yamon', False):
       if common.gYamon:
-        data['body'] = common.gYamon.render_vars_text()
+        data['body'] = common.gYamon.render_vars_text(qs.get('view', [None])[0])
       else:
         data['body'] = ''
 
@@ -978,6 +979,7 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
       gYamon.vset('httpd_ssl_enabled', self.enable_ssl)
       gYamon.vset('errors', 0)
       gYamon.vset("bytes_all", 0)
+      gYamon.views['selectables'] = (selectables.SELECTABLES, [])
     except:
       pass
 

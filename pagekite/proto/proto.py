@@ -237,8 +237,8 @@ def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None,
                          ['<html><frameset cols="*">',
                           '<frame target="_top" src="', frame_url, '" />',
                           '<noframes>', message, '</noframes>',
-                          '</frameset></html>'], headers=headers)
+                          '</frameset></html>\n'], headers=headers)
   else:
     return HTTP_Response(code, status,
-                         ['<html><body>', message, '</body></html>'],
+                         ['<html><body>', message, '</body></html>\n'],
                          headers=headers)
