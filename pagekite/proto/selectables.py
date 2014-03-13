@@ -742,7 +742,7 @@ class ChunkParser(Selectable):
     self.zr = self.chunk = self.header = None
 
   def ProcessData(self, data):
-    loops = 1000
+    loops = 1500
     result = more = True
     while result and more and (loops > 0):
       loops -= 1
@@ -807,7 +807,7 @@ class ChunkParser(Selectable):
         self.chunk = ''
 
     if result and more:
-      self.LogError('Unprocessed data: %s') % data
+      self.LogError('Unprocessed data: %s' % data)
       raise BugFoundError('Too much data')
     elif self.read_eof:
       return self.ProcessEofRead() and result
