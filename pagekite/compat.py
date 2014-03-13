@@ -64,6 +64,15 @@ except:
     return tmp
 
 try:
+  sum([1, 2, 3])
+except:
+  def sum(l):
+    s = 0
+    for v in l:
+      s += v
+    return s
+
+try:
   from urlparse import parse_qs, urlparse
 except ImportError, e:
   from cgi import parse_qs

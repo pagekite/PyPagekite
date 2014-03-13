@@ -1828,7 +1828,7 @@ class PageKite(object):
         if opt == '--proxy':
           socks.adddefaultproxy(*socks.parseproxy(arg))
         else:
-          (host, port) = arg.split(':')
+          (host, port) = arg.rsplit(':', 1)
           socks.adddefaultproxy(socks.PROXY_TYPE_SOCKS5, host, int(port))
 
         if not self.proxy_servers:
@@ -2599,10 +2599,11 @@ class PageKite(object):
     '69.164.211.158:443': '50.116.52.206:443',
   }
   def Ping(self, host, port):
-    if self.servers_no_ping:
-      return 0
-
     cid = uuid = '%s:%s' % (host, port)
+
+    if self.servers_no_ping:
+      return (0, uuid)
+
     while ((cid not in self.ping_cache) or
            (len(self.ping_cache[cid]) < 2) or
            (time.time()-self.ping_cache[cid][0][0] > 60)):
@@ -2611,11 +2612,11 @@ class PageKite(object):
       try:
         try:
           if ':' in host:
-            fd = rawsocket(socket.AF_INET6, socket.SOCK_STREAM)
+            fd = socks.socksocket(socket.AF_INET6, socket.SOCK_STREAM)
           else:
-            fd = rawsocket(socket.AF_INET, socket.SOCK_STREAM)
+            fd = socks.socksocket(socket.AF_INET, socket.SOCK_STREAM)
         except:
-          fd = rawsocket(socket.AF_INET, socket.SOCK_STREAM)
+          fd = socks.socksocket(socket.AF_INET, socket.SOCK_STREAM)
 
         try:
           fd.settimeout(3.0) # Missing in Python 2.2
