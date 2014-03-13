@@ -1,12 +1,13 @@
 Version history - highlights
 ============================
 
-v0.5.6b   2013.05.24
--------
+v0.5.6b,c   2013.05.24
+---------
    - Fixed bug where PageKite would not recover from network errors
    - Fixed IPv6 frontend selection behavior
    - Avoid duplicate connection woes when a frontend has multiple IPs
    - Fixed incorrect frontend certificate priority (bogus sorting)
+   - Fixed loopback tunnel bugs introduced by new FE selection
 
 
 v0.5.6a  2013.03.18

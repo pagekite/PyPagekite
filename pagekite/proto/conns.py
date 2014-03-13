@@ -924,6 +924,7 @@ class LoopbackTunnel(Tunnel):
 
     if self.fd:
       self.fd = None
+    self.weighted_rtt = -1000
     self.lock = None
     self.backends = backends
     self.require_all = True
@@ -1075,6 +1076,8 @@ class UserConn(Selectable):
       if conn.my_tls: chunk_headers.append(('RTLS', 1))
 
     if tunnels:
+      if len(tunnels) > 1:
+        tunnels.sort(key=lambda t: t.weighted_rtt)
       self.tunnel = tunnels[0]
     if (self.tunnel and self.tunnel.SendData(self, ''.join(body), host=host,
                                              proto=proto, port=on_port,
