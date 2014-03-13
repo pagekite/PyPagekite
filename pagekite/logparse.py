@@ -1,4 +1,3 @@
-#!/usr/bin/python -u
 """
 A basic tool for processing and parsing the Pagekite logs. This class
 doesn't actually do anything much, it's meant for subclassing.

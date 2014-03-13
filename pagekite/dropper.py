@@ -1,4 +1,3 @@
-#!/usr/bin/python
 """
 This is a "dropper template".  A dropper is a single-purpose PageKite
 back-end connector which embeds its own configuration.

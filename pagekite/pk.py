@@ -1,4 +1,3 @@
-#!/usr/bin/python -u
 """
 This is what is left of the original monolithic pagekite.py.
 This is slowly being refactored into smaller sub-modules.
@@ -209,7 +208,7 @@ class AuthThread(threading.Thread):
                                ('duplicate', 'yes')])
             else:
               results.append(('%s-OK' % prefix, what))
-              quotas.append(quota)
+              quotas.append((quota, request))
               if conns: q_conns.append(conns)
               if days: q_days.append(days)
               if (proto.startswith('http') and
@@ -233,15 +232,14 @@ class AuthThread(threading.Thread):
           if q_days and min_qdays:
             results.append(('%s-QDays' % prefix, min_qdays))
 
-          nz_quotas = [q for q in quotas if q and q > 0]
+          nz_quotas = [qp for qp in quotas if qp[0] and qp[0] > 0]
           if nz_quotas:
-            quota = min(nz_quotas)
-            if quota is not None:
-              conn.quota = [quota, requests[quotas.index(quota)], time.time()]
-              results.append(('%s-Quota' % prefix, quota))
+            quota = min(nz_quotas)[0]
+            conn.quota = [quota, [qp[1] for qp in nz_quotas], time.time()]
+            results.append(('%s-Quota' % prefix, quota))
           elif requests:
             if not conn.quota:
-              conn.quota = [None, requests[0], time.time()]
+              conn.quota = [None, requests, time.time()]
             else:
               conn.quota[2] = time.time()
 
@@ -609,6 +607,8 @@ class TunnelManager(threading.Thread):
             dead['%s' % tunnel] = tunnel
           elif tunnel.last_activity < now-pings:
             tunnel.SendPing()
+          elif random.randint(0, 10*pings) == 0:
+            tunnel.SendPing()
 
     for tunnel in dead.values():
       logging.Log([('dead', tunnel.server_info[tunnel.S_NAME])])
@@ -643,6 +643,78 @@ class TunnelManager(threading.Thread):
         time.sleep(5)
     logging.LogDebug('TunnelManager: done')
 
+  def DoFrontendWork(self):
+    self.CheckTunnelQuotas(time.time())
+    self.pkite.LoadMOTD()
+
+    # FIXME: Front-ends should close dead back-end tunnels.
+    for tid in self.conns.tunnels:
+      proto, domain = tid.split(':')
+      if '-' in proto:
+        proto, port = proto.split('-')
+      else:
+        port = ''
+      self.pkite.ui.NotifyFlyingFE(proto, port, domain)
+
+  def ListBackEnds(self):
+    self.pkite.ui.StartListingBackEnds()
+
+    for bid in self.pkite.backends:
+      be = self.pkite.backends[bid]
+      # Do we have auto-SSL at the front-end?
+      protoport, domain = bid.split(':', 1)
+      tunnels = self.conns.Tunnel(protoport, domain)
+      if be[BE_PROTO] in ('http', 'http2', 'http3') and tunnels:
+        has_ssl = True
+        for t in tunnels:
+          if (protoport, domain) not in t.remote_ssl:
+            has_ssl = False
+      else:
+        has_ssl = False
+
+      # Get list of webpaths...
+      domainp = '%s/%s' % (domain, be[BE_PORT] or '80')
+      if (self.pkite.ui_sspec and
+          be[BE_BHOST] == self.pkite.ui_sspec[0] and
+          be[BE_BPORT] == self.pkite.ui_sspec[1]):
+        builtin = True
+        dpaths = self.pkite.ui_paths.get(domainp, {})
+      else:
+        builtin = False
+        dpaths = {}
+
+      self.pkite.ui.NotifyBE(bid, be, has_ssl, dpaths,
+                             is_builtin=builtin,
+                         fingerprint=(builtin and self.pkite.ui_pemfingerprint))
+
+    self.pkite.ui.EndListingBackEnds()
+
+  def UpdateUiStatus(self, problem, connecting):
+    tunnel_count = len(self.pkite.conns and
+                       self.pkite.conns.TunnelServers() or [])
+    tunnel_total = len(self.pkite.servers)
+    if tunnel_count == 0:
+      if self.pkite.isfrontend:
+        self.pkite.ui.Status('idle', message='Waiting for back-ends.')
+      elif tunnel_total == 0:
+        self.pkite.ui.Notify('It looks like your Internet connection might be '
+                             'down! Will retry soon.')
+        self.pkite.ui.Status('down', color=self.pkite.ui.GREY,
+                       message='No kites ready to fly.  Waiting...')
+      elif connecting == 0:
+        self.pkite.ui.Status('down', color=self.pkite.ui.RED,
+                       message='Not connected to any front-ends, will retry...')
+    elif tunnel_count < tunnel_total:
+      self.pkite.ui.Status('flying', color=self.pkite.ui.YELLOW,
+                    message=('Only connected to %d/%d front-ends, will retry...'
+                             ) % (tunnel_count, tunnel_total))
+    elif problem:
+      self.pkite.ui.Status('flying', color=self.pkite.ui.YELLOW,
+                     message='DynDNS updates may be incomplete, will retry...')
+    else:
+      self.pkite.ui.Status('flying', color=self.pkite.ui.GREEN,
+                                   message='Kites are flying and all is well.')
+
   def _run(self):
     self.check_interval = 5
     while self.keep_running:
@@ -658,75 +730,14 @@ class TunnelManager(threading.Thread):
 
         # If all connected, make sure tunnels are really alive.
         if self.pkite.isfrontend:
-          self.CheckTunnelQuotas(time.time())
-          # FIXME: Front-ends should close dead back-end tunnels.
-          for tid in self.conns.tunnels:
-            proto, domain = tid.split(':')
-            if '-' in proto:
-              proto, port = proto.split('-')
-            else:
-              port = ''
-            self.pkite.ui.NotifyFlyingFE(proto, port, domain)
+          self.DoFrontendWork()
 
         self.PingTunnels(time.time())
 
-      self.pkite.ui.StartListingBackEnds()
-      for bid in self.pkite.backends:
-        be = self.pkite.backends[bid]
-        # Do we have auto-SSL at the front-end?
-        protoport, domain = bid.split(':', 1)
-        tunnels = self.conns.Tunnel(protoport, domain)
-        if be[BE_PROTO] in ('http', 'http2', 'http3') and tunnels:
-          has_ssl = True
-          for t in tunnels:
-            if (protoport, domain) not in t.remote_ssl:
-              has_ssl = False
-        else:
-          has_ssl = False
-
-        # Get list of webpaths...
-        domainp = '%s/%s' % (domain, be[BE_PORT] or '80')
-        if (self.pkite.ui_sspec and
-            be[BE_BHOST] == self.pkite.ui_sspec[0] and
-            be[BE_BPORT] == self.pkite.ui_sspec[1]):
-          builtin = True
-          dpaths = self.pkite.ui_paths.get(domainp, {})
-        else:
-          builtin = False
-          dpaths = {}
-
-        self.pkite.ui.NotifyBE(bid, be, has_ssl, dpaths,
-                               is_builtin=builtin,
-                        fingerprint=(builtin and self.pkite.ui_pemfingerprint))
-      self.pkite.ui.EndListingBackEnds()
-
-      if self.pkite.isfrontend:
-        self.pkite.LoadMOTD()
-
-      tunnel_count = len(self.pkite.conns and
-                         self.pkite.conns.TunnelServers() or [])
-      tunnel_total = len(self.pkite.servers)
-      if tunnel_count == 0:
-        if self.pkite.isfrontend:
-          self.pkite.ui.Status('idle', message='Waiting for back-ends.')
-        elif tunnel_total == 0:
-          self.pkite.ui.Notify('It looks like your Internet connection might be '
-                               'down! Will retry soon.')
-          self.pkite.ui.Status('down', color=self.pkite.ui.GREY,
-                       message='No kites ready to fly.  Waiting...')
-        elif connecting == 0:
-          self.pkite.ui.Status('down', color=self.pkite.ui.RED,
-                       message='Not connected to any front-ends, will retry...')
-      elif tunnel_count < tunnel_total:
-        self.pkite.ui.Status('flying', color=self.pkite.ui.YELLOW,
-                    message=('Only connected to %d/%d front-ends, will retry...'
-                             ) % (tunnel_count, tunnel_total))
-      elif problem:
-        self.pkite.ui.Status('flying', color=self.pkite.ui.YELLOW,
-                     message='DynDNS updates may be incomplete, will retry...')
-      else:
-        self.pkite.ui.Status('flying', color=self.pkite.ui.GREEN,
-                                   message='Kites are flying and all is well.')
+      # FIXME: This is constant noise, instead there should be a
+      #        command which requests this stuff.
+      self.ListBackEnds()
+      self.UpdateUiStatus(problem, connecting)
 
       for i in xrange(0, self.check_interval):
         if self.keep_running:
@@ -851,6 +862,8 @@ class PageKite(object):
     self.servers_no_ping = False
     self.servers_preferred = []
     self.servers_sessionids = {}
+    self.dns_cache = {}
+    self.last_frontend_choice = 0
 
     self.kitename = ''
     self.kitesecret = ''
@@ -1323,7 +1336,7 @@ class PageKite(object):
     for fd in (self.conns and self.conns.Sockets() or []):
       try:
         fd.close()
-      except (IOError, OSError, TypeError):
+      except (IOError, OSError, TypeError, AttributeError):
         pass
     self.conns = self.ui_httpd = self.ui_comm = self.tunnel_manager = None
 
@@ -2613,6 +2626,29 @@ class PageKite(object):
       rv = socket.gethostbyname_ex(host)[2]
     return rv
 
+  def CachedGetHostIpAddrs(self, host):
+    now = int(time.time())
+
+    if host in self.dns_cache:
+      # FIXME: This number (900) is 3x the pagekite.net service DNS TTL, which
+      # should be about right.  BUG: nothing keeps those two numbers in sync!
+      # This number must be larger, or we prematurely disconnect frontends.
+      for exp in [t for t in self.dns_cache[host] if t < now-900]:
+        del self.dns_cache[host][exp]
+    else:
+      self.dns_cache[host] = {}
+
+    try:
+      self.dns_cache[host][now] = self.GetHostIpAddrs(host)
+    except:
+      logging.LogDebug('DNS lookup failed for %s' % host)
+
+    ips = {}
+    for ipaddrs in self.dns_cache[host].values():
+      for ip in ipaddrs:
+        ips[ip] = 1
+    return ips.keys()
+
   def GetActiveBackends(self):
     active = []
     for bid in self.backends:
@@ -2626,6 +2662,7 @@ class PageKite(object):
   def ChooseFrontEnds(self):
     self.servers = []
     self.servers_preferred = []
+    self.last_frontend_choice = time.time()
 
     # Enable internal loopback
     if self.isfrontend:
@@ -2639,14 +2676,12 @@ class PageKite(object):
     # Convert the hostnames into IP addresses...
     for server in self.servers_manual:
       (host, port) = server.split(':')
-      try:
-        ipaddr = self.GetHostIpAddrs(host)[0]
-        server = '%s:%s' % (ipaddr, port)
+      ipaddrs = self.CachedGetHostIpAddrs(host)
+      if ipaddrs:
+        server = '%s:%s' % (ipaddrs[0], port)
         if (server not in self.servers) and (server not in self.servers_never):
           self.servers.append(server)
-          self.servers_preferred.append(ipaddr)
-      except:
-        logging.LogDebug('DNS lookup failed for %s' % host)
+          self.servers_preferred.append(server)
 
     # Lookup and choose from the auto-list (and our old domain).
     if self.servers_auto:
@@ -2656,18 +2691,15 @@ class PageKite(object):
       if not self.servers_new_only:
         for bid in self.GetActiveBackends():
           (proto, bdom) = bid.split(':')
-          try:
-            for ip in self.GetHostIpAddrs(bdom):
-              if not ip.startswith('127.'):
-                server = '%s:%s' % (ip, port)
-                if ((server not in self.servers) and
-                    (server not in self.servers_never)):
-                  self.servers.append(server)
-          except Exception, e:
-            logging.LogDebug('DNS lookup failed for %s' % bdom)
+          for ip in self.CachedGetHostIpAddrs(bdom):
+            if not ip.startswith('127.'):
+              server = '%s:%s' % (ip, port)
+              if ((server not in self.servers) and
+                  (server not in self.servers_never)):
+                self.servers.append(server)
 
       try:
-        ips = [ip for ip in self.GetHostIpAddrs(domain)
+        ips = [ip for ip in self.CachedGetHostIpAddrs(domain)
                if ('%s:%s' % (ip, port)) not in self.servers_never]
         times = [self.Ping(ip, port) for ip in ips]
       except Exception, e:
@@ -2685,17 +2717,54 @@ class PageKite(object):
         del times[mIdx]
         del ips[mIdx]
 
+  def ConnectFrontend(self, conns, server):
+    self.ui.Status('connect', color=self.ui.YELLOW,
+                   message='Front-end connect: %s' % server)
+    tun = Tunnel.BackEnd(server, self.backends, self.require_all, conns)
+    if tun:
+      tun.filters.append(HttpHeaderFilter(self.ui))
+      if not self.insecure:
+        tun.filters.append(HttpSecurityFilter(self.ui))
+        if self.watch_level[0] is not None:
+          tun.filters.append(TunnelWatcher(self.ui, self.watch_level))
+        logging.Log([('connect', server)])
+        return True
+      else:
+        logging.LogInfo('Failed to connect', [('FE', server)])
+        self.ui.Notify('Failed to connect to %s' % server,
+                       prefix='!', color=self.ui.YELLOW)
+        return False
+
+  def DisconnectFrontend(self, conns, server):
+    logging.Log([('disconnect', server)])
+    kill = []
+    for bid in conns.tunnels:
+      for tunnel in conns.tunnels[bid]:
+        if (server == tunnel.server_info[tunnel.S_NAME] and
+            tunnel.countas.startswith('frontend')):
+          kill.append(tunnel)
+    for tunnel in kill:
+      if len(tunnel.users.keys()) < 1:
+        tunnel.Die()
+    return kill and True or False
+
   def CreateTunnels(self, conns):
     live_servers = conns.TunnelServers()
     failures = 0
     connections = 0
 
     if len(self.GetActiveBackends()) > 0:
+      if self.last_frontend_choice < time.time()-FE_PING_INTERVAL:
+        self.servers = []
       if not self.servers or len(self.servers) > len(live_servers):
         self.ChooseFrontEnds()
     else:
       self.servers_preferred = []
       self.servers = []
+
+    if not self.servers:
+      logging.LogDebug('Not sure which servers to contact, making no changes.')
+      return 0, 0
 
     for server in self.servers:
       if server not in live_servers:
@@ -2705,73 +2774,77 @@ class PageKite(object):
           if not self.insecure:
             loop.filters.append(HttpSecurityFilter(self.ui))
         else:
-          self.ui.Status('connect', color=self.ui.YELLOW,
-                         message='Front-end connect: %s' % server)
-          tun = Tunnel.BackEnd(server, self.backends, self.require_all, conns)
-          if tun:
-            tun.filters.append(HttpHeaderFilter(self.ui))
-            if not self.insecure:
-              tun.filters.append(HttpSecurityFilter(self.ui))
-            if self.watch_level[0] is not None:
-              tun.filters.append(TunnelWatcher(self.ui, self.watch_level))
-            logging.Log([('connect', server)])
+          if self.ConnectFrontend(conns, server):
             connections += 1
           else:
             failures += 1
-            logging.LogInfo('Failed to connect', [('FE', server)])
-            self.ui.Notify('Failed to connect to %s' % server,
-                           prefix='!', color=self.ui.YELLOW)
+
+    for server in live_servers:
+      if server not in self.servers and server not in self.servers_preferred:
+        if self.DisconnectFrontend(conns, server):
+          connections += 1
 
     if self.dyndns:
-      updates = {}
       ddns_fmt, ddns_args = self.dyndns
 
+      domains = {}
       for bid in self.backends.keys():
         proto, domain = bid.split(':')
+        if domain not in domains:
+          domains[domain] = (self.backends[bid][BE_SECRET], [])
+
         if bid in conns.tunnels:
-          ips = []
-          bips = []
+          ips, bips = [], []
           for tunnel in conns.tunnels[bid]:
             ip = rsplit(':', tunnel.server_info[tunnel.S_NAME])[0]
-            if not ip == LOOPBACK_HN:
+            if not ip == LOOPBACK_HN and not tunnel.read_eof:
               if not self.servers_preferred or ip in self.servers_preferred:
                 ips.append(ip)
               else:
                 bips.append(ip)
 
-          if not ips: ips = bips
+          for ip in (ips or bips):
+            if ip not in domains[domain]:
+              domains[domain][1].append(ip)
 
-          if ips:
-            iplist = ','.join(ips)
-            payload = '%s:%s' % (domain, iplist)
-            args = {}
-            args.update(ddns_args)
-            args.update({
-              'domain': domain,
-              'ip': ips[0],
-              'ips': iplist,
-              'sign': signToken(secret=self.backends[bid][BE_SECRET],
-                                payload=payload, length=100)
-            })
-            # FIXME: This may fail if different front-ends support different
-            #        protocols. In practice, this should be rare.
-            update = ddns_fmt % args
-            if domain not in updates or len(update) < len(updates[domain]):
-              updates[payload] = update
+      updates = {}
+      for domain, (secret, ips) in domains.iteritems():
+        if ips:
+          iplist = ','.join(ips)
+          payload = '%s:%s' % (domain, iplist)
+          args = {}
+          args.update(ddns_args)
+          args.update({
+            'domain': domain,
+            'ip': ips[0],
+            'ips': iplist,
+            'sign': signToken(secret=secret, payload=payload, length=100)
+          })
+          # FIXME: This may fail if different front-ends support different
+          #        protocols. In practice, this should be rare.
+          updates[payload] = ddns_fmt % args
 
       last_updates = self.last_updates
       self.last_updates = []
       for update in updates:
-        if update not in last_updates:
+        if update in last_updates:
+          # Was successful last time, no point in doing it again.
+          self.last_updates.append(update)
+        else:
+          domain, ips = update.split(':', 1)
           try:
             self.ui.Status('dyndns', color=self.ui.YELLOW,
-                                     message='Updating DNS...')
+                                     message='Updating DNS for %s...' % domain)
             result = ''.join(urllib.urlopen(updates[update]).readlines())
-            self.last_updates.append(update)
             if result.startswith('good') or result.startswith('nochg'):
               logging.Log([('dyndns', result), ('data', update)])
               self.SetBackendStatus(update.split(':')[0],
                                     sub=BE_STATUS_ERR_DNS)
+              self.last_updates.append(update)
+              # Success!  Make sure we remember these IP were live.
+              if domain not in self.dns_cache:
+                self.dns_cache[domain] = {}
+              self.dns_cache[domain][int(time.time())] = ips.split(',')
             else:
               logging.LogInfo('DynDNS update failed: %s' % result, [('data', update)])
               self.SetBackendStatus(update.split(':')[0],
@@ -2782,11 +2855,9 @@ class PageKite(object):
             if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
             self.SetBackendStatus(update.split(':')[0],
                                   add=BE_STATUS_ERR_DNS)
+            # Hmm, the update may have succeeded - assume the "worst".
+            self.dns_cache[domain][int(time.time())] = ips.split(',')
             failures += 1
-      if self.last_updates:
-        self.last_updates.extend(last_updates)
-      else:
-        self.last_updates = last_updates
 
     return failures, connections
 

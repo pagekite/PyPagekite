@@ -1,4 +1,3 @@
-#!/usr/bin/python -u
 """
 This is the pagekite.py built-in HTTP server.
 """
@@ -139,6 +138,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   E404 = { 'code': '404', 'msg': 'Not found', 'mimetype': 'text/html',
            'title': '404 Not found',
            'body': '<p>File or directory not found. Sorry!</p>' }
+  ROBOTSTXT = { 'code': '200', 'msg': 'OK', 'mimetype': 'text/plain',
+                'body': ('User-agent: *\n'
+                         'Disallow: /\n'
+                         '# pagekite.py default robots.txt\n') }
 
   MIME_TYPES = {
     '3gp': 'video/3gpp',            'aac': 'audio/aac',
@@ -778,7 +781,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     else:
       if self.sendStaticPath(path, data['mimetype'], shtml_vars=data):
         return
-      data.update(self.E404)
+      if path == '/robots.txt':
+        data.update(self.ROBOTSTXT)
+      else:
+        data.update(self.E404)
 
     if data['mimetype'] in ('application/octet-stream', 'text/plain'):
       response = self.TEMPLATE_RAW % data
@@ -979,6 +985,7 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
       gYamon.vset('httpd_ssl_enabled', self.enable_ssl)
       gYamon.vset('errors', 0)
       gYamon.lcreate("tunnel_rtt", 100)
+      gYamon.lcreate("tunnel_wrtt", 100)
       gYamon.lists['buffered_bytes'] = [1, 0, common.buffered_bytes]
       gYamon.views['selectables'] = (selectables.SELECTABLES, {
         'idle': [0, 0, self.conns.idle],

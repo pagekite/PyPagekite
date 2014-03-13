@@ -1,6 +1,17 @@
 Version history - highlights
 ============================
 
+v0.5.6   2013.03.18
+------
+   - Added default privacy-friendly robots.txt to built-in HTTPD.
+   - Fixed bugs in DNS update logic
+   - Improved frontend selection algorithm to fail back to faster hosts
+   - Improved frontend selection algorithm to disconnect unused tunnels
+   - Fixed major front-end memory leak
+   - Started measuring round-trip-times within tunnels
+   - Fixed multiple bugs in frontend quota rechecking code.
+
+
 v0.5.5   2013.02.01
 ------
    - Fixed broken internal buffered byte counter

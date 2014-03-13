@@ -1,4 +1,3 @@
-#!/usr/bin/python -u
 """
 These are filters placed at the end of a tunnel for watching or modifying
 the traffic.
