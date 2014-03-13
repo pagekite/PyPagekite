@@ -880,6 +880,7 @@ class LoopbackTunnel(Tunnel):
     self.server_info[self.S_NAME] = LOOPBACK[which]
     self.other_end = None
     self.which = which
+    self.buffer_count = 0
     self.CountAs('loopbacks_live')
     if which == 'FE':
       for d in backends.keys():
@@ -922,11 +923,13 @@ class LoopbackTunnel(Tunnel):
     if self.write_blocked:
       data = [self.write_blocked] + data
       self.write_blocked = ''
-    if try_flush:
+    if try_flush or (len(data) > 10240) or (self.buffer_count >= 100):
       if logging.DEBUG_IO:
         print '|%s| %s \n|%s| %s' % (self.which, self, self.which, data)
+      self.buffer_count = 0
       return self.other_end.ProcessData(''.join(data))
     else:
+      self.buffer_count += 1
       self.write_blocked = ''.join(data)
       return True
 
