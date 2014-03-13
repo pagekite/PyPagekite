@@ -154,6 +154,8 @@ class Selectable(object):
     self.Die(discard_buffer=True)
     if close:
       if self.fd:
+        if logging.DEBUG_IO:
+          self.LogDebug('Closing FD: %s' % self)
         self.fd.close()
     self.fd = None
     if not self.dead:
@@ -263,13 +265,17 @@ class Selectable(object):
     logging.LogInfo(message, values)
     self.logged.append((message, values))
 
+  def LogTrafficStatus(self, final=False):
+    if self.ui:
+      self.ui.Status('traffic')
+
   def LogTraffic(self, final=False):
     if self.wrote_bytes or self.read_bytes:
       now = time.time()
       self.all_out += self.wrote_bytes
       self.all_in += self.read_bytes
 
-      if self.ui: self.ui.Status('traffic')
+      self.LogTrafficStatus(final)
 
       if common.gYamon:
         common.gYamon.vadd("bytes_all", self.wrote_bytes
@@ -342,7 +348,7 @@ class Selectable(object):
 
     now = time.time()
     maxread = maxread or self.maxread
-    flooded = self.Flooded()
+    flooded = self.Flooded(now)
     if flooded > self.max_read_speed and not self.acked_kb_delta:
       # FIXME: This is v1 flow control, kill it when 0.4.7 is "everywhere"
       last = self.throttle_until
@@ -398,10 +404,14 @@ class Selectable(object):
         if self.read_bytes > logging.LOG_THRESHOLD: self.LogTraffic()
       return self.ProcessData(data)
 
-  def Flooded(self):
-    flooded = self.read_bytes + self.all_in
-    flooded -= self.max_read_speed * 0.95 * (time.time() - self.created)
-    return flooded
+  def Flooded(self, now=None):
+    delta = ((now or time.time()) - self.created)
+    if delta >= 1:
+      flooded = self.read_bytes + self.all_in
+      flooded -= self.max_read_speed * 0.95 * delta
+      return flooded
+    else:
+      return 0
 
   def RecordProgress(self, skb, bps):
     if skb >= 0:
@@ -732,71 +742,77 @@ class ChunkParser(Selectable):
     self.zr = self.chunk = self.header = None
 
   def ProcessData(self, data):
-    if self.peeking:
-      self.want_cbytes = 0
-      self.want_bytes = 0
-      self.header = ''
-      self.chunk = ''
+    loops = 1000
+    result = more = True
+    while result and more and (loops > 0):
+      loops -= 1
 
-    if self.want_bytes == 0:
-      self.header += (data or '')
-      if self.header.find('\r\n') < 0:
-        if self.read_eof: return self.ProcessEofRead()
-        return True
-      try:
-        size, data = self.header.split('\r\n', 1)
+      if self.peeking:
+        self.want_cbytes = 0
+        self.want_bytes = 0
         self.header = ''
-
-        if size.endswith('R'):
-          self.zr = zlib.decompressobj()
-          size = size[0:-1]
-
-        if 'Z' in size:
-          csize, zsize = size.split('Z')
-          self.compressed = True
-          self.want_cbytes = int(csize, 16)
-          self.want_bytes = int(zsize, 16)
-        else:
-          self.compressed = False
-          self.want_bytes = int(size, 16)
-
-      except ValueError, err:
-        self.LogError('ChunkParser::ProcessData: %s' % err)
-        self.Log([('bad_data', data)])
-        return False
+        self.chunk = ''
 
       if self.want_bytes == 0:
-        return False
+        self.header += (data or '')
+        if self.header.find('\r\n') < 0:
+          if self.read_eof:
+            return self.ProcessEofRead()
+          return True
 
-    process = data[:self.want_bytes]
-    leftover = data[self.want_bytes:]
-
-    self.chunk += process
-    self.want_bytes -= len(process)
-
-    result = 1
-    if self.want_bytes == 0:
-      if self.compressed:
         try:
-          cchunk = self.zr.decompress(self.chunk)
-        except zlib.error:
-          cchunk = ''
+          size, data = self.header.split('\r\n', 1)
+          self.header = ''
 
-        if len(cchunk) != self.want_cbytes:
-          result = self.ProcessCorruptChunk(self.chunk)
+          if size.endswith('R'):
+            self.zr = zlib.decompressobj()
+            size = size[0:-1]
+
+          if 'Z' in size:
+            csize, zsize = size.split('Z')
+            self.compressed = True
+            self.want_cbytes = int(csize, 16)
+            self.want_bytes = int(zsize, 16)
+          else:
+            self.compressed = False
+            self.want_bytes = int(size, 16)
+
+        except ValueError, err:
+          self.LogError('ChunkParser::ProcessData: %s' % err)
+          self.Log([('bad_data', data)])
+          return False
+
+        if self.want_bytes == 0:
+          return False
+
+      process = data[:self.want_bytes]
+      data = more = data[self.want_bytes:]
+
+      self.chunk += process
+      self.want_bytes -= len(process)
+
+      if self.want_bytes == 0:
+        if self.compressed:
+          try:
+            cchunk = self.zr.decompress(self.chunk)
+          except zlib.error:
+            cchunk = ''
+
+          if len(cchunk) != self.want_cbytes:
+            result = self.ProcessCorruptChunk(self.chunk)
+          else:
+            result = self.ProcessChunk(cchunk)
         else:
-          result = self.ProcessChunk(cchunk)
-      else:
-        result = self.ProcessChunk(self.chunk)
-      self.chunk = ''
-      if result and leftover:
-        # FIXME: This blows the stack from time to time.  We need a loop
-        #        or better yet, to just process more in a subsequent
-        #        iteration of the main select() loop.
-        result = self.ProcessData(leftover)
+          result = self.ProcessChunk(self.chunk)
+        self.chunk = ''
 
-    if self.read_eof: result = self.ProcessEofRead() and result
-    return result
+    if result and more:
+      self.LogError('Unprocessed data: %s') % data
+      raise BugFoundError('Too much data')
+    elif self.read_eof:
+      return self.ProcessEofRead() and result
+    else:
+      return result
 
   def ProcessCorruptChunk(self, chunk):
     self.LogError('ChunkParser::ProcessData: ProcessCorruptChunk not overridden!')

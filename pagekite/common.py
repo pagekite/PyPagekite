@@ -23,7 +23,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 ##############################################################################
 
 PROTOVER = '0.8'
-APPVER = '0.5.1a'
+APPVER = '0.5.2c'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -111,6 +111,9 @@ class ConfigError(Exception):
 
 class ConnectError(Exception):
   """This error gets thrown on connection errors."""
+
+class BugFoundError(Exception):
+  """Throw this anywhere a bug is detected and we want a crash."""
 
 
 ##[ Ugly fugly globals ]#######################################################

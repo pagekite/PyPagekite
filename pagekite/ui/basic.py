@@ -194,10 +194,10 @@ class BasicUi(NullUi):
       if answer in ('y', 'n'): return (answer == 'y')
     raise Exception('Too many tries')
 
-  def AskQuestion(self, question, pre=[], default=None,
+  def AskQuestion(self, question, pre=[], default=None, prompt=' =>',
                   wizard_hint=False, image=None, back=None):
     self.Welcome(pre)
-    self.wfile.write(' => %s ' % Q(question))
+    self.wfile.write('%s %s ' % (prompt, Q(question)))
     return self.Readline()
 
   def AskKiteName(self, domains, question, pre=[], default=None,

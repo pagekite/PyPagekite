@@ -181,10 +181,10 @@ class YamonD(threading.Thread):
       data.append('%s: %s\n' % (var, values[var]))
 
     for lname in lists:
-      (elems, offset, list) = lists[lname]
-      l = list[offset:]
-      l.extend(list[:offset])
-      data.append('%s: %s\n' % (lname, ' '.join(['%s' % x for x in l])))
+      (elems, offset, lst) = lists[lname]
+      l = lst[offset:]
+      l.extend(lst[:offset])
+      data.append('%s: %s\n' % (lname, ' '.join(['%s' % (x, ) for x in l])))
 
     data.sort()
     return ''.join(data)
