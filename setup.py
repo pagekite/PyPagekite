@@ -1,7 +1,8 @@
 #!/usr/bin/python
+import time
 from datetime import date
 from setuptools import setup
-from pagekite import APPVER
+from pagekite.common import APPVER
 import os
 
 try:
@@ -12,8 +13,7 @@ except:
 
 setup(
     name="pagekite",
-    version=APPVER.replace('github',
-                           'dev'+date.today().isoformat().replace('-', '')),
+    version=APPVER.replace('github', 'dev%d' % time.time()),
     license="AGPLv3+",
     author="Bjarni R. Einarsson",
     author_email="bre@pagekite.net",
@@ -32,7 +32,7 @@ Partially supported protocols: IRC, Finger
 Any other TCP-based service, including SSH and VNC, may be exposed
 as well to clients supporting HTTP Proxies.
 """,
-   packages=['pagekite'],
+   packages=['pagekite', 'pagekite.ui', 'pagekite.proto'],
    scripts=['scripts/pagekite', 'scripts/lapcat'],
-   install_requires=['SocksipyChain >= 2.0']
+   install_requires=['SocksipyChain >= 2.0.9']
 )

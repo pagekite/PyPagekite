@@ -1,31 +1,31 @@
 #!/usr/bin/python -u
-#
-# pagekite_logparse.py, Copyright 2010, The Beanstalks Project ehf.
-#                                       http://beanstalks-project.net/
-#
-# Basic tool for processing and parsing the Pagekite logs. This class
-# doesn't actually do anything much, it's meant for subclassing.
-#
-#############################################################################
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as
-# published by the Free Software Foundation, either version 3 of the
-# License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-#############################################################################
-#
+"""
+A basic tool for processing and parsing the Pagekite logs. This class
+doesn't actually do anything much, it's meant for subclassing.
+"""
+##############################################################################
+LICENSE = """\
+This file is part of pagekite.py.
+Copyright 2010-2012, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the  GNU  Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful,  but  WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more
+details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see: <http://www.gnu.org/licenses/>
+"""
+##############################################################################
 import os
 import sys
 import time
- 
+
 
 class PageKiteLogParser(object):
   def __init__(self):
@@ -48,7 +48,7 @@ class PageKiteLogParser(object):
     self.ProcessData(self.ParseLine(line, data))
 
   def Follow(self, fd, filename):
-    # Record last position...      
+    # Record last position...
     pos = fd.tell()
 
     try:
@@ -75,9 +75,13 @@ class PageKiteLogParser(object):
     first = True
     while first or follow:
       for line in fd:
-        data = self.ParseLine(line.strip())
-        if after is None or ('ts' in data and int(data['ts'], 16) > after):
-          self.ProcessData(data)
+        if line.endswith('\n'):
+          data = self.ParseLine(line.strip())
+          if after is None or ('ts' in data and int(data['ts'], 16) > after):
+            self.ProcessData(data)
+        else:
+          fd.seek(fd.tell() - len(line))
+          break
 
       if follow: fd = self.Follow(fd, filename)
       first = False
@@ -88,14 +92,18 @@ class PageKiteLogParser(object):
     first = True
     while first or follow:
       for line in fd:
-        try:
-          parts = line.split(':', 3)
-          if parts[2].find(tag) > -1:
-            data = self.ParseLine(parts[3].strip())
-            if after is None or int(data['ts'], 16) > after:
-              self.ProcessData(data) 
-        except ValueError, e:
-          pass
+        if line.endswith('\n'):
+          try:
+            parts = line.split(':', 3)
+            if parts[2].find(tag) > -1:
+              data = self.ParseLine(parts[3].strip())
+              if after is None or int(data['ts'], 16) > after:
+                self.ProcessData(data)
+          except ValueError, e:
+            pass
+        else:
+          fd.seek(fd.tell() - len(line))
+          break
 
       if follow: fd = self.Follow(fd, filename)
       first = False
@@ -129,7 +137,7 @@ class PageKiteLogTracker(PageKiteLogParser):
   def ProcessData(self, data):
     if 'id' in data:
       # This is info about a specific stream...
-      sid = data['id'] 
+      sid = data['id']
 
       if 'proto' in data and 'domain' in data and sid not in self.streams:
         self.ProcessNewStream(data, data)

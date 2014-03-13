@@ -1,27 +1,28 @@
 #!/usr/bin/python -u
-#
-# yamond.py, Copyright 2010, The Beanstalks Project ehf.
-#                            http://beanstalks-project.net/
-#
-# This is a class implementing a flexible metric-store and an HTTP
-# thread for browsing the numbers.
-#
-#############################################################################
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as
-# published by the Free Software Foundation, either version 3 of the
-# License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-#############################################################################
-#
+"""
+This is a class implementing a flexible metric-store and an HTTP
+thread for browsing the numbers.
+"""
+##############################################################################
+LICENSE = """\
+This file is part of pagekite.py.
+Copyright 2010-2012, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the  GNU  Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful,  but  WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more
+details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see: <http://www.gnu.org/licenses/>
+"""
+##############################################################################
+
 import getopt
 import os
 import random
@@ -72,7 +73,7 @@ class YamonRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.do_404()
 
   def do_GET(self):
-    (scheme, netloc, path, params, query, frag) = urlparse(self.path) 
+    (scheme, netloc, path, params, query, frag) = urlparse(self.path)
     qs = parse_qs(query)
     return self.handle_path(path, query)
 
@@ -86,10 +87,11 @@ class YamonHttpServer(BaseHTTPServer.HTTPServer):
 class YamonD(threading.Thread):
   """Handle HTTP in a separate thread."""
 
-  def __init__(self, sspec, 
+  def __init__(self, sspec,
                server=YamonHttpServer,
                handler=YamonRequestHandler):
     threading.Thread.__init__(self)
+    self.lock = threading.Lock()
     self.server = server
     self.handler = handler
     self.sspec = sspec
@@ -99,36 +101,73 @@ class YamonD(threading.Thread):
     self.lists = {}
 
   def vmax(self, var, value):
-    if value > self.values[var]: self.values[var] = value
+    try:
+      self.lock.acquire()
+      if value > self.values[var]:
+        self.values[var] = value
+    finally:
+      self.lock.release()
 
   def vscale(self, var, ratio, add=0):
-    if var not in self.values: self.values[var] = 0
-    self.values[var] *= ratio
-    self.values[var] += add
+    try:
+      self.lock.acquire()
+      if var not in self.values:
+        self.values[var] = 0
+      self.values[var] *= ratio
+      self.values[var] += add
+    finally:
+      self.lock.release()
 
   def vset(self, var, value):
-    self.values[var] = value
+    try:
+      self.lock.acquire()
+      self.values[var] = value
+    finally:
+      self.lock.release()
 
   def vadd(self, var, value, wrap=None):
-    if var not in self.values: self.values[var] = 0
-    self.values[var] += value
-    if wrap is not None and self.values[var] >= wrap:
-      self.values[var] -= wrap
+    try:
+      self.lock.acquire()
+      if var not in self.values:
+        self.values[var] = 0
+      self.values[var] += value
+      if wrap is not None and self.values[var] >= wrap:
+        self.values[var] -= wrap
+    finally:
+      self.lock.release()
 
   def vmin(self, var, value):
-    if value < self.values[var]: self.values[var] = value
+    try:
+      self.lock.acquire()
+      if value < self.values[var]:
+        self.values[var] = value
+    finally:
+      self.lock.release()
 
   def vdel(self, var):
-    if var in self.values: del self.values[var]
+    try:
+      self.lock.acquire()
+      if var in self.values:
+        del self.values[var]
+    finally:
+      self.lock.release()
 
   def lcreate(self, listn, elems):
-    self.lists[listn] = [elems, 0, ['' for x in xrange(0, elems)]]
+    try:
+      self.lock.acquire()
+      self.lists[listn] = [elems, 0, ['' for x in xrange(0, elems)]]
+    finally:
+      self.lock.release()
 
   def ladd(self, listn, value):
-    list = self.lists[listn]
-    list[2][list[1]] = value
-    list[1] += 1
-    list[1] %= list[0]
+    try:
+      self.lock.acquire()
+      lst = self.lists[listn]
+      lst[2][lst[1]] = value
+      lst[1] += 1
+      lst[1] %= lst[0]
+    finally:
+      self.lock.release()
 
   def render_vars_text(self):
     data = []
@@ -141,6 +180,7 @@ class YamonD(threading.Thread):
       l.extend(list[:offset])
       data.append('%s: %s\n' % (lname, ' '.join(['%s' % x for x in l])))
 
+    data.sort()
     return ''.join(data)
 
   def quit(self):

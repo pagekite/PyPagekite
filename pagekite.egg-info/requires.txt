@@ -1,1 +1,1 @@
-SocksipyChain >= 2.0
+SocksipyChain >= 2.0.9

@@ -9,6 +9,6 @@
 defaults
 
 # If you want to use your own, use something like:
-#     frontend=hostname:port
+#     frontend = hostname:port
 # or:
-#     frontends=COUNT:dnsname:port
+#     frontends = COUNT:dnsname:port

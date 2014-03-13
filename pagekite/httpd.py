@@ -1,23 +1,26 @@
 #!/usr/bin/python -u
-#
-# pagekite.py, Copyright 2010, 2011, the Beanstalks Project ehf.
-#                                    and Bjarni Runar Einarsson
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as
-# published by the Free Software Foundation, either version 3 of the
-# License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-#
-###############################################################################
+"""
+This is the pagekite.py built-in HTTP server.
+"""
+##############################################################################
+LICENSE = """\
+This file is part of pagekite.py.
+Copyright 2010-2012, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the  GNU  Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful,  but  WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more
+details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see: <http://www.gnu.org/licenses/>
+"""
+##############################################################################
 import base64
 import cgi
 from cgi import escape as escape_html
@@ -36,7 +39,10 @@ from CGIHTTPServer import CGIHTTPRequestHandler
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 import Cookie
 
-import pagekite
+from pagekite.common import *
+from pagekite.compat import *
+import pagekite.common as common
+import pagekite.logging as logging
 import sockschain as socks
 
 
@@ -184,7 +190,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                '<div id=body>%(body)s</div>\n'
                '<div id=footer><hr><i>Powered by <b>pagekite.py'
                 ' v%(ver)s</b> and'
-                ' <a href="'+ pagekite.WWWHOME +'"><i>PageKite.net</i></a>.<br>'
+                ' <a href="'+ WWWHOME +'"><i>PageKite.net</i></a>.<br>'
                 'Local time is %(now)s.</i></div>\n'
               '</body></html>\n')
 
@@ -198,7 +204,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       SimpleXMLRPCRequestHandler.setup(self)
 
   def log_message(self, format, *args):
-    pagekite.Log([('uireq', format % args)])
+    logging.Log([('uireq', format % args)])
 
   def send_header(self, header, value):
     self.wfile.write('%s: %s\r\n' % (header, value))
@@ -209,7 +215,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   def sendStdHdrs(self, header_list=[], cachectrl='private',
                                         mimetype='text/html'):
     if mimetype.startswith('text/') and ';' not in mimetype:
-      mimetype += ('; charset=%s' % pagekite.DEFAULT_CHARSET)
+      mimetype += ('; charset=%s' % DEFAULT_CHARSET)
     self.send_header('Cache-Control', cachectrl)
     self.send_header('Content-Type', mimetype)
     for header in header_list:
@@ -218,12 +224,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def sendChunk(self, chunk):
     if self.chunked:
-      if pagekite.DEBUG_IO: print '<== SENDING CHUNK ===\n%s\n' % chunk
+      if logging.DEBUG_IO: print '<== SENDING CHUNK ===\n%s\n' % chunk
       self.wfile.write('%x\r\n' % len(chunk))
       self.wfile.write(chunk)
       self.wfile.write('\r\n')
     else:
-      if pagekite.DEBUG_IO: print '<== SENDING ===\n%s\n' % chunk
+      if logging.DEBUG_IO: print '<== SENDING ===\n%s\n' % chunk
       self.wfile.write(chunk)
 
   def sendEof(self):
@@ -290,9 +296,9 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       return True
 
     except (ValueError, KeyError, AuthError), e:
-      pagekite.LogDebug('HTTP Auth failed: %s' % e)
+      logging.LogDebug('HTTP Auth failed: %s' % e)
     else:
-      pagekite.LogDebug('HTTP Auth failed: Unauthorized')
+      logging.LogDebug('HTTP Auth failed: Unauthorized')
 
     self.sendResponse('<h1>Unauthorized</h1>\n', code=401, msg='Forbidden')
     return False
@@ -321,10 +327,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       http_host = None
       for bid in sorted(self.server.pkite.backends.keys()):
         be = self.server.pkite.backends[bid]
-        if (be[pagekite.BE_BPORT] == self.server.pkite.ui_sspec[1] and
-            be[pagekite.BE_STATUS] not in pagekite.BE_INACTIVE):
-          http_host = '%s:%s' % (be[pagekite.BE_DOMAIN],
-                                 be[pagekite.BE_PORT] or 80)
+        if (be[BE_BPORT] == self.server.pkite.ui_sspec[1] and
+            be[BE_STATUS] not in BE_INACTIVE):
+          http_host = '%s:%s' % (be[BE_DOMAIN],
+                                 be[BE_PORT] or 80)
     if not http_host:
       if self.server.pkite.be_config.keys():
         http_host = sorted(self.server.pkite.be_config.keys()
@@ -347,9 +353,11 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     try:
       return self.handleHttpRequest(scheme, netloc, path, params, query, frag,
                                     qs, None)
+    except socket.error:
+      pass
     except Exception, e:
-      pagekite.Log([('err', 'GET error at %s: %s' % (path, e))])
-      if pagekite.DEBUG_IO: print '=== ERROR\n%s\n===' % traceback.format_exc()
+      logging.Log([('err', 'GET error at %s: %s' % (path, e))])
+      if logging.DEBUG_IO: print '=== ERROR\n%s\n===' % format_exc()
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
   def do_HEAD(self):
@@ -395,8 +403,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         return RCI._END(SimpleXMLRPCRequestHandler.do_POST(RCI._BEGIN(self)))
 
       self.post_data.seek(0)
+    except socket.error:
+      pass
     except Exception, e:
-      pagekite.Log([('err', 'POST error at %s: %s' % (path, e))])
+      logging.Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
       self.rfile = self.old_rfile
       self.post_data = None
@@ -406,8 +416,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     try:
       return self.handleHttpRequest(scheme, netloc, path, params, query, frag,
                                     qs, posted)
+    except socket.error:
+      pass
     except Exception, e:
-      pagekite.Log([('err', 'POST error at %s: %s' % (path, e))])
+      logging.Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
     self.rfile = self.old_rfile
@@ -450,7 +462,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                       for f in sorted(os.listdir(full_path))]
 
     # Remove dot-files and PageKite metadata files
-    if self.host_config.get('indexes') != pagekite.WEB_INDEX_ALL:
+    if self.host_config.get('indexes') != WEB_INDEX_ALL:
       files = [f for f in files if not (f[0].startswith('.') or
                                         f[0].startswith('_pagekite'))]
 
@@ -644,8 +656,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
     elif shtml_vars and not self.suppress_body:
       shtml_vars['title'] = '//%s%s' % (shtml_vars['http_host'], path)
-      if self.host_config.get('indexes') in (True, pagekite.WEB_INDEX_ON,
-                                                   pagekite.WEB_INDEX_ALL):
+      if self.host_config.get('indexes') in (True, WEB_INDEX_ON,
+                                                   WEB_INDEX_ALL):
         shtml_vars['body'] = self.renderIndex(full_path, files=index_list)
       else:
         shtml_vars['body'] = ('<p><i>Directory listings disabled and</i> '
@@ -682,7 +694,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       'body': '',
       'msg': 'OK',
       'now': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
-      'ver': pagekite.APPVER
+      'ver': APPVER
     }
     for key in self.headers.keys():
       data['http_'+key.lower()] = self.headers.get(key)
@@ -704,7 +716,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     console = self.host_config.get('console', False)
 
     if path == self.host_config.get('yamon', False):
-      data['body'] = pagekite.gYamon.render_vars_text()
+      if common.gYamon:
+        data['body'] = common.gYamon.render_vars_text()
+      else:
+        data['body'] = ''
 
     elif console and path.startswith('/_pagekite/logout/'):
       parts = path.split('/')
@@ -728,7 +743,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                           ])
         return
       else:
-        pagekite.LogDebug("Invalid token, %s != %s" % (token,
+        logging.LogDebug("Invalid token, %s != %s" % (token,
                                                        self.server.secret))
         data.update(self.E404)
 
@@ -783,11 +798,10 @@ class RemoteControlInterface(object):
   ACL_READ = 'r'
   ACL_WRITE = 'w'
 
-  def __init__(self, httpd, pkite, conns, yamon):
+  def __init__(self, httpd, pkite, conns):
     self.httpd = httpd
     self.pkite = pkite
     self.conns = conns
-    self.yamon = yamon
     self.modified = False
 
     self.lock = threading.Lock()
@@ -800,7 +814,7 @@ class RemoteControlInterface(object):
     # Javascript apps can create these for implementing chat etc.
     self.channels = {'LOG': {'access': self.ACL_READ,
                              'tokens': self.auth_tokens,
-                             'data': pagekite.LOG}}
+                             'data': logging.LOG}}
 
   def _BEGIN(self, request_object):
     self.lock.acquire()
@@ -869,7 +883,7 @@ class RemoteControlInterface(object):
 
     if kite_id in self.pkite.backends:
       del self.pkite.backends[kite_id]
-      pagekite.Log([('reconfigured', '1'), ('removed', kite_id)])
+      logging.Log([('reconfigured', '1'), ('removed', kite_id)])
       self.modified = True
     return self.get_kites(auth_token)
 
@@ -944,11 +958,11 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     self.server_port = sspec[1]
 
     if ssl_pem_filename:
-      ctx = pagekite.SSL.Context(pagekite.SSL.SSLv3_METHOD)
+      ctx = socks.SSL.Context(socks.SSL.SSLv3_METHOD)
       ctx.use_privatekey_file (ssl_pem_filename)
       ctx.use_certificate_chain_file(ssl_pem_filename)
-      self.socket = pagekite.SSL_Connect(ctx, socket.socket(self.address_family,
-                                                            self.socket_type),
+      self.socket = socks.SSL_Connect(ctx, socket.socket(self.address_family,
+                                                         self.socket_type),
                                          server_side=True)
       self.server_bind()
       self.server_activate()
@@ -958,19 +972,23 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
 
     try:
       from pagekite import yamond
-      pagekite.YamonD = yamond.YamonD
+      gYamon = common.gYamon = yamond.YamonD(sspec)
+      gYamon.vset('started', int(time.time()))
+      gYamon.vset('version', APPVER)
+      gYamon.vset('httpd_ssl_enabled', self.enable_ssl)
+      gYamon.vset('errors', 0)
+      gYamon.vset("bytes_all", 0)
     except:
       pass
 
-    gYamon = pagekite.gYamon = pagekite.YamonD(sspec)
-    gYamon.vset('started', int(time.time()))
-    gYamon.vset('version', pagekite.APPVER)
-    gYamon.vset('httpd_ssl_enabled', self.enable_ssl)
-    gYamon.vset('errors', 0)
-    gYamon.vset("bytes_all", 0)
-
-    self.RCI = RemoteControlInterface(self, pkite, conns, gYamon)
+    self.RCI = RemoteControlInterface(self, pkite, conns)
     self.register_introspection_functions()
     self.register_instance(self.RCI)
+
+  def finish_request(self, request, client_address):
+    try:
+      SimpleXMLRPCServer.finish_request(self, request, client_address)
+    except socket.error:
+      pass
 
 
