@@ -99,6 +99,7 @@ class YamonD(threading.Thread):
     self.running = False
     self.values = {}
     self.lists = {}
+    self.views = {}
 
   def vmax(self, var, value):
     try:
@@ -169,13 +170,18 @@ class YamonD(threading.Thread):
     finally:
       self.lock.release()
 
-  def render_vars_text(self):
-    data = []
-    for var in self.values:
-      data.append('%s: %s\n' % (var, self.values[var]))
+  def render_vars_text(self, view=None):
+    if view:
+      values, lists = self.views[view]
+    else:
+      values, lists = self.values, self.lists
 
-    for lname in self.lists:
-      (elems, offset, list) = self.lists[lname]
+    data = []
+    for var in values:
+      data.append('%s: %s\n' % (var, values[var]))
+
+    for lname in lists:
+      (elems, offset, list) = lists[lname]
       l = list[offset:]
       l.extend(list[:offset])
       data.append('%s: %s\n' % (lname, ' '.join(['%s' % x for x in l])))
