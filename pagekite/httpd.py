@@ -449,15 +449,19 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     files = files or [(f, os.path.join(full_path, f))
                       for f in sorted(os.listdir(full_path))]
 
-    # Remove dot-files
+    # Remove dot-files and PageKite metadata files
     if self.host_config.get('indexes') != pagekite.WEB_INDEX_ALL:
-      files = [f for f in files if not f[0].startswith('.')]
+      files = [f for f in files if not (f[0].startswith('.') or
+                                        f[0].startswith('_pagekite'))]
 
     fhtml = ['<table>']
     if files:
       for (fn, fpath) in files:
         fmimetype = self.getMimeType(fn)
-        fsize = os.path.getsize(fpath) or ''
+        try:
+          fsize = os.path.getsize(fpath) or ''
+        except OSError:
+          fsize = 0
         ops = [ ]
         if os.path.isdir(fpath):
           fclass = ['dir']
@@ -479,7 +483,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         ophtml = ', '.join([('<a class="%s" href="%s?%s=/%s">%s</a>'
                              ) % (op, qfn, op, qfn, op)
                             for op in sorted(ops)])
-        mtime = full_path and int(os.path.getmtime(fpath)) or time.time()
+        try:
+          mtime = full_path and int(os.path.getmtime(fpath) or time.time())
+        except OSError:
+          mtime = int(time.time())
         fhtml.append(('<tr class="%s">'
                        '<td class="ops">%s</td>'
                        '<td class="size">%s</td>'
@@ -552,7 +559,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                           ])
         return True
 
-      indexes = ['index.html', 'index.htm']
+      indexes = ['index.html', 'index.htm', '_pagekite.html']
 
       dynamic_suffixes = []
       if self.host_config.get('pk-shtml'):

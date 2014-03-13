@@ -51,9 +51,14 @@ __DOC__ = """\
 import getopt, os, select, socket, subprocess, sys
 import sockschain as socks
 
-def DebugPrint(text): sys.stderr.write(text+'\n')
-DEBUG = False
-# DEBUG = DebugPrint
+def DebugPrint(text):
+  sys.stderr.write(text+'\n')
+  sys.stderr.flush()
+
+global TRACE
+global DEBUG
+TRACE = DEBUG = False
+TRACE = False
 
 SYS_CONF_DIR = '/etc/lapcat'
 USER_CONF_DIR = '~/.lapcat'
@@ -312,29 +317,57 @@ class LapCatConfig(object):
 def NetCat(host, port, input_fd, output_fd):
   try:
     network = GetNetworkId()
-    socks.usesystemdefaults()
     socks.netcat(LapCatConfig(host, port, network).configure().connect(),
                  input_fd, output_fd)
   except IOError:
     DebugPrint('%s' % (sys.exc_info(), ))
     sys.exit(1)
 
-def HttpProxy(input_fd, output_fd):
-  # FIXME: Make this actually work.  It does nothing at the moment.
+def SetProcTitle(title):
   try:
-    host = 'lapcat-http-proxy'
-    network = GetNetworkId()
-    socks.usesystemdefaults()
-    socks.netcat(LapCatConfig(host, 0, network).configure().connect(),
-                 input_fd, output_fd)
-    return
-  except IOError:
+    import setproctitle
+    setproctitle.setproctitle(title)
+  except:
+    pass
+
+def HttpProxy(input_fd, output_fd):
+  try:
+    # Get the initial request
+    request = ''
+    loops = 1024
+    while not (loops < 1 or
+               request.endswith('\n\n') or
+               request.endswith('\r\n\r\n')):
+      request += os.read(input_fd.fileno(), 1)
+      loops -= 1
+
+    if TRACE: TRACE('<<< Got request (l:%s):\n%s<<<\n' % (1024-loops, request))
+
+    # If it is a HTTP CONNECT, we connect directly.
+    words = request.split()
+    if (len(words) >= 3 and
+        words[0].upper() == 'CONNECT' and
+        words[2].upper().startswith('HTTP/')):
+      output_fd.write('HTTP/1.1 200 Tunnel established\r\n\r\n')
+      output_fd.flush()
+      host, port = words[1].split(':')
+      if DEBUG: DEBUG('Using native lapcat connection to %s:%s' % (host, port))
+      SetProcTitle('lapcat: %s:%s' % (host, port))
+      NetCat(host, port, input_fd, output_fd)
+
+    # Otherwise, forward this to a real HTTP Proxy for processing.
+    elif len(words) > 2:
+      if DEBUG: DEBUG('Connecting via. lapcat-http-proxy')
+      host = 'lapcat-http-proxy'
+      network = GetNetworkId()
+      SetProcTitle('lapcat: %s' % words[1])
+      conn = LapCatConfig(host, 0, network).configure().connect()
+      conn.sendall(request)
+      socks.netcat(conn, input_fd, output_fd)
+
+  except (ValueError, IOError):
     DebugPrint('%s' % (sys.exc_info(), ))
     sys.exit(1)
-
-  # Get the initial request...
-  #try:
-  #  if words[0].upper() == 'CONNECT':
 
 
 class FileWrapper(object):
@@ -346,20 +379,20 @@ class FileWrapper(object):
   def fileno(self): return self.sock.fileno()
 
 
-def ForkAndListen(outfmt, baseport=0, tries=1, relative=False):
+def ForkAndListen(outfmt, baseport=0, tries=1, loop=False, relative=False):
   for t in range(0, tries):
     try:
       try:
         srv = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
       except:
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+      srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
       srv.bind(('', baseport+t))
       break
     except:
-      pass
+      srv = None
 
   srv.listen(3)
-  srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
   if relative:
     sys.stdout.write((outfmt+'\n') % (srv.getsockname()[1]-baseport))
@@ -369,65 +402,86 @@ def ForkAndListen(outfmt, baseport=0, tries=1, relative=False):
   sys.stdout.flush()
   os.close(sys.stdout.fileno())
   os.close(sys.stdin.fileno())
-  if os.fork() != 0: os._exit(0)
+  if not loop and os.fork() != 0: os._exit(0)
 
-  # Wait for a connection OR DIE.
-  i, o, e = select.select([srv], [], [], 15)
-  if srv not in i: os._exit(0)
-
-  client, address = srv.accept()
-  if DEBUG: DEBUG('Accepted: %s' % (address, ))
-  fw = FileWrapper(client)
-  return fw, fw
+  while True:
+    # Wait for a connection...
+    i, o, e = select.select([srv], [], [], 15)
+    if srv in i:
+      client, address = srv.accept()
+      if DEBUG: DEBUG('Accepted: %s' % (address, ))
+      if not (loop and (os.fork() != 0)):
+        srv.close()
+        fw = FileWrapper(client)
+        return fw, fw
+      client.close()
+    elif not loop:
+      # Or die?
+      os._exit(0)
 
 
 if __name__ == '__main__':
-  opts, args = getopt.getopt(sys.argv[1:],
-                             'hNPtv', ['tc', 'tp', 'tf=', 'vnc', 'rdp'])
+  opts, args = getopt.getopt(sys.argv[1:], 'hl:NPRtvV:',
+                             ['listen=', 'tc', 'tp', 'tf=', 'vnc', 'rdp'])
 
   if len(args) == 1 and ':' in args[0]:
     args = args[0].split(':')
 
+  use_sysdefaults = True
   mode, portadd, inlinefmt, inlineargs = 'netcat', 0, '', {}
+
   for opt, arg in opts:
+    if '-V' == opt:
+      opt = '-v'
+      sys.stderr = open(arg, 'a')
     if '-v' == opt:
+      if DEBUG and socks.DEBUG: TRACE = DebugPrint
       if DEBUG: socks.DEBUG = DebugPrint
       DEBUG = DebugPrint
 
     if '-N' == opt: mode = 'networkid'
     elif '-P' == opt: mode = 'httpproxy'
+    elif '-R' == opt: use_sysdefaults = False
     else:
-      if mode != 'netcat':
+      if mode not in ('netcat', 'httpproxy'):
         mode = 'invalid'
         break
-      elif '-t' == opt:   mode, inlinefmt = 'inline', '127.0.0.1 %d'
-      elif '--tc' == opt: mode, inlinefmt = 'inline', '127.0.0.1:%d'
-      elif '--tp' == opt: mode, inlinefmt = 'inline', '%d'
-      elif '--tf' == opt: mode, inlinefmt = 'inline', arg
+      elif '-t' == opt:   inlinefmt = '127.0.0.1 %d'
+      elif '--tc' == opt: inlinefmt = '127.0.0.1:%d'
+      elif '--tp' == opt: inlinefmt = '%d'
+      elif '--tf' == opt: inlinefmt = arg
       elif '--rdp' == opt:
-        mode, inlinefmt = 'inline', '127.0.0.1:%d'
+        inlinefmt = '127.0.0.1:%d'
         if len(args) == 1: args.append('3389')
       elif '--vnc' == opt:
-        mode, inlinefmt, portadd = 'inline', '127.0.0.1:%d', 5900
+        inlinefmt, portadd = '127.0.0.1:%d', 5900
         inlineargs = {'baseport': 5900, 'tries': 20, 'relative': True}
         if len(args) == 1: args.append('0')
+      elif opt in ('-l', '--listen'):
+        inlinefmt = '127.0.0.1:%d'
+        inlineargs = {'baseport': int(arg), 'tries': 1, 'loop': True}
 
-  if mode == 'netcat' and len(args) == 2:
-    NetCat(args[0], int(args[1].replace(':', '')), sys.stdin, sys.stdout)
+  if use_sysdefaults:
+    socks.usesystemdefaults()
 
-  elif mode == 'inline' and len(args) == 2:
+  # Set up the listener, if necessary...
+  if inlinefmt and ((mode == 'netcat' and len(args) == 2) or
+                    (mode == 'httpproxy')):
     fin, fout = ForkAndListen(inlinefmt, **inlineargs)
-    NetCat(args[0], portadd + int(args[1].replace(':', '')), fin, fout)
+  else:
+    fin, fout = sys.stdin, sys.stdout
 
+  # Do proxy stuff!
+  if mode == 'netcat' and len(args) == 2:
+    NetCat(args[0], portadd + int(args[1].replace(':', '')), fin, fout)
+  elif mode == 'httpproxy' and len(args) == 0:
+    HttpProxy(fin, fout)
+
+  # Or print information!
   elif mode == 'networkid' and len(args) == 0:
     print('%s' % GetNetworkId())
-
-  elif mode == 'httpproxy' and len(args) == 0:
-    HttpProxy(sys.stdin, sys.stdout)
-
   elif len(args) == 1 and args[0] in ('-h', '--help'):
     DebugPrint(__DOC__)
-
   else:
     print((
       '%(p)s: Location Aware Proxy Chooser And Tunneler / NetCat for Laptops\n'
@@ -437,8 +491,9 @@ if __name__ == '__main__':
       '       %(p)s --tf=<fmt>     host port     # Inline proxy mode\n'
       '       %(p)s --rdp          host [port]   # Inline RDP proxy mode\n'
       '       %(p)s --vnc          host [screen] # Inline VNC proxy mode\n'
+      '       %(p)s -l port        host port     # Local port <=> host proxy\n'
       '       %(p)s -N                           # Show current network ID\n'
-#     '       %(p)s -P                           # Behave like an HTTP Proxy\n'
+      '       %(p)s -P                           # Behave like an HTTP Proxy\n'
       '       %(p)s -h                           # Print instructions\n'
       '\n'
       'To use with ssh, add to ~/.ssh/config:\n'

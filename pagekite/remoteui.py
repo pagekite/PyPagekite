@@ -1,43 +1,75 @@
 import re, sys, time
+import pagekite
 from pagekite import NullUi
 
 class RemoteUi(NullUi):
   """Stdio based user interface for interacting with other processes."""
 
+  DAEMON_FRIENDLY = True
+  ALLOWS_INPUT = True
   WANTS_STDERR = True
   EMAIL_RE = re.compile(r'^[a-z0-9!#$%&\'\*\+\/=?^_`{|}~-]+'
                          '(?:\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'
                          '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
                          '(?:[a-zA-Z]{2,4}|museum)$')
 
+  def __init__(self, welcome=None, wfile=sys.stderr, rfile=sys.stdin):
+    NullUi.__init__(self, welcome=welcome, wfile=wfile, rfile=rfile)
+    self.CLEAR = ''
+    self.NORM = self.WHITE = self.GREY = self.GREEN = self.YELLOW = ''
+    self.BLUE = self.RED = self.MAGENTA = self.CYAN = ''
+
+  def StartListingBackEnds(self):
+    self.wfile.write('begin_be_list\n')
+
+  def EndListingBackEnds(self):
+    self.wfile.write('end_be_list\n')
+
+  def NotifyBE(self, bid, be, has_ssl, dpaths, is_builtin=False, now=None):
+    domain = be[pagekite.BE_DOMAIN]
+    port = be[pagekite.BE_PORT]
+    proto = be[pagekite.BE_PROTO]
+    prox = (proto == 'raw') and ' (HTTP proxied)' or ''
+    if proto == 'raw' and port in ('22', 22): proto = 'ssh'
+    url = '%s://%s%s' % (proto, domain, port and (':%s' % port) or '')
+
+    message = (' be_status:'
+               ' status=%x; bid=%s; domain=%s; port=%s; proto=%s;'
+               ' bhost=%s; bport=%s%s%s'
+               '\n') % (be[pagekite.BE_STATUS], bid, domain, port, proto,
+                        be[pagekite.BE_BHOST], be[pagekite.BE_BPORT],
+                        has_ssl and '; ssl=1' or '',
+                        is_builtin and '; builtin=1' or '')
+    self.wfile.write(message)
+
+    for path in dpaths:
+      message = (' be_path: domain=%s; port=%s; path=%s; policy=%s; src=%s\n'
+                 ) % (domain, port or 80, path,
+                      dpaths[path][0], dpaths[path][1])
+      self.wfile.write(message)
+
   def Notify(self, message, prefix=' ',
              popup=False, color=None, now=None, alignright=''):
-
-    # We suppress duplicates that are either new or recent.
-    keys = self.notify_history.keys()
-    if len(keys) > 20:
-      for key in keys:
-        if self.notify_history[key] < now-300:
-          del self.notify_history[key]
-
     message = '%s' % message
-    if message not in self.notify_history:
-      self.notify_history[message] = now
-      sys.stderr.write('notify: %s\n' % message)
+    self.wfile.write('notify: %s\n' % message)
+
+  def NotifyMOTD(self, frontend, message):
+    self.wfile.write('motd: %s %s\n' % (frontend,
+                                        message.replace('\n', '  ')))
 
   def Status(self, tag, message=None, color=None):
     self.status_tag = tag
     self.status_msg = '%s' % (message or self.status_msg)
     if message:
-      sys.stderr.write('status_msg: %s\n' % message)
+      self.wfile.write('status_msg: %s\n' % message)
     if tag:
-      sys.stderr.write('status_tag: %s\n' % tag)
+      self.wfile.write('status_tag: %s\n' % tag)
 
   def Welcome(self, pre=None):
-    sys.stderr.write('welcome: %s\n' % (pre or '').replace('\n', ' '))
+    self.wfile.write('welcome: %s\n' % (pre or '').replace('\n', '  '))
 
   def StartWizard(self, title):
-    sys.stderr.write('start_wizard: %s\n' % title)
+    self.wfile.write('start_wizard: %s\n' % title)
 
   def Retry(self):
     self.tries -= 1
@@ -46,7 +78,7 @@ class RemoteUi(NullUi):
     return self.tries
 
   def EndWizard(self):
-    sys.stderr.write('end_wizard\n')
+    self.wfile.write('end_wizard: done\n')
 
   def Spacer(self):
     pass
@@ -54,98 +86,136 @@ class RemoteUi(NullUi):
   def AskEmail(self, question, default=None, pre=[],
                wizard_hint=False, image=None, back=None, welcome=True):
     while self.Retry():
-      sys.stderr.write('begin_ask_email\n')
+      self.wfile.write('begin_ask_email\n')
       if pre:
-        sys.stderr.write(' preamble: %s\n' % ' '.join(pre).replace('\n', ' '))
+        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       if default:
-        sys.stderr.write(' default: %s\n' % default)
-      sys.stderr.write(' question: %s\n' % (question or '').replace('\n', ' '))
-      sys.stderr.write(' expect: email\n')
-      sys.stderr.write('end_ask_email\n')
+        self.wfile.write(' default: %s\n' % default)
+      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
+      self.wfile.write(' expect: email\n')
+      self.wfile.write('end_ask_email\n')
 
-      answer = sys.stdin.readline().strip()
+      answer = self.rfile.readline().strip()
       if self.EMAIL_RE.match(answer): return answer
       if back is not None and answer == 'back': return back
 
   def AskLogin(self, question, default=None, email=None, pre=None,
                wizard_hint=False, image=None, back=None):
     while self.Retry():
-      sys.stderr.write('begin_ask_login\n')
+      self.wfile.write('begin_ask_login\n')
       if pre:
-        sys.stderr.write(' preamble: %s\n' % ' '.join(pre).replace('\n', ' '))
+        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       if email:
-        sys.stderr.write(' default: %s\n' % email)
-      sys.stderr.write(' question: %s\n' % (question or '').replace('\n', ' '))
-      sys.stderr.write(' expect: email\n')
-      sys.stderr.write(' expect: password\n')
-      sys.stderr.write('end_ask_login\n')
+        self.wfile.write(' default: %s\n' % email)
+      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
+      self.wfile.write(' expect: email\n')
+      self.wfile.write(' expect: password\n')
+      self.wfile.write('end_ask_login\n')
 
-      answer_email = sys.stdin.readline().strip()
+      answer_email = self.rfile.readline().strip()
       if back is not None and answer_email == 'back': return back
 
-      answer_pass = sys.stdin.readline().strip()
+      answer_pass = self.rfile.readline().strip()
       if back is not None and answer_pass == 'back': return back
 
       if self.EMAIL_RE.match(answer_email) and answer_pass:
         return (answer_email, answer_pass)
 
-  def AskYesNo(self, question, default=None, pre=[],
+  def AskYesNo(self, question, default=None, pre=[], yes='Yes', no='No',
                wizard_hint=False, image=None, back=None):
     while self.Retry():
-      sys.stderr.write('begin_ask_yesno\n')
+      self.wfile.write('begin_ask_yesno\n')
+      if yes:
+        self.wfile.write(' yes: %s\n' % yes)
+      if no:
+        self.wfile.write(' no: %s\n' % no)
       if pre:
-        sys.stderr.write(' preamble: %s\n' % ' '.join(pre).replace('\n', ' '))
+        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       if default:
-        sys.stderr.write(' default: %s\n' % default)
-      sys.stderr.write(' question: %s\n' % (question or '').replace('\n', ' '))
-      sys.stderr.write(' expect: yesno\n')
-      sys.stderr.write('end_ask_yesno\n')
+        self.wfile.write(' default: %s\n' % default)
+      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
+      self.wfile.write(' expect: yesno\n')
+      self.wfile.write('end_ask_yesno\n')
 
-      answer = sys.stdin.readline().strip().lower()
+      answer = self.rfile.readline().strip().lower()
       if back is not None and answer == 'back': return back
       if answer in ('y', 'n'): return (answer == 'y')
+      if answer == str(default).lower(): return default
 
   def AskKiteName(self, domains, question, pre=[], default=None,
                   wizard_hint=False, image=None, back=None):
     while self.Retry():
-      sys.stderr.write('begin_ask_kitename\n')
+      self.wfile.write('begin_ask_kitename\n')
       if pre:
-        sys.stderr.write(' preamble: %s\n' % ' '.join(pre).replace('\n', ' '))
+        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       for domain in domains:
-        sys.stderr.write(' domain: %s\n' % domain)
+        self.wfile.write(' domain: %s\n' % domain)
       if default:
-        sys.stderr.write(' default: %s\n' % default)
-      sys.stderr.write(' question: %s\n' % (question or '').replace('\n', ' '))
-      sys.stderr.write(' expect: kitename\n')
-      sys.stderr.write('end_ask_kitename\n')
+        self.wfile.write(' default: %s\n' % default)
+      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
+      self.wfile.write(' expect: kitename\n')
+      self.wfile.write('end_ask_kitename\n')
 
-      answer = sys.stdin.readline().strip().lower()
+      answer = self.rfile.readline().strip().lower()
       if back is not None and answer == 'back': return back
-      if answer: return answer
+      if answer:
+        for d in domains:
+          if answer.endswith(d) or answer.endswith(d): return answer
+        return answer+domains[0]
+
+  def AskBackends(self, kitename, protos, ports, rawports, question, pre=[],
+                  default=None, wizard_hint=False, image=None, back=None):
+    while self.Retry():
+      self.wfile.write('begin_ask_backends\n')
+      if pre:
+        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
+      count = 0
+      if self.server_info:
+        protos = self.server_info[pagekite.Tunnel.S_PROTOS]
+        ports = self.server_info[pagekite.Tunnel.S_PORTS]
+        rawports = self.server_info[pagekite.Tunnel.S_RAW_PORTS]
+      self.wfile.write(' kitename: %s\n' % kitename)
+      self.wfile.write(' protos: %s\n' % ', '.join(protos))
+      self.wfile.write(' ports: %s\n' % ', '.join(ports))
+      self.wfile.write(' rawports: %s\n' % ', '.join(rawports))
+      if default:
+        self.wfile.write(' default: %s\n' % default)
+      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
+      self.wfile.write(' expect: backends\n')
+      self.wfile.write('end_ask_backends\n')
+
+      answer = self.rfile.readline().strip().lower()
+      if back is not None and answer == 'back': return back
+      return answer
 
   def AskMultipleChoice(self, choices, question, pre=[], default=None,
                         wizard_hint=False, image=None, back=None):
     while self.Retry():
-      sys.stderr.write('begin_ask_multiplechoice\n')
+      self.wfile.write('begin_ask_multiplechoice\n')
       if pre:
-        sys.stderr.write(' preamble: %s\n' % ' '.join(pre).replace('\n', ' '))
+        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
+      count = 0
       for choice in choices:
-        sys.stderr.write(' choice: %s\n' % choice)
+        count += 1
+        self.wfile.write(' choice_%d: %s\n' % (count, choice))
       if default:
-        sys.stderr.write(' default: %s\n' % default)
-      sys.stderr.write(' question: %s\n' % (question or '').replace('\n', ' '))
-      sys.stderr.write(' expect: choice_index\n')
-      sys.stderr.write('end_ask_multiplechoice\n')
+        self.wfile.write(' default: %s\n' % default)
+      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
+      self.wfile.write(' expect: choice_index\n')
+      self.wfile.write('end_ask_multiplechoice\n')
 
-      answer = sys.stdin.readline().strip().lower()
+      answer = self.rfile.readline().strip().lower()
       try:
         ch = int(answer)
         if ch > 0 and ch <= len(choices): return ch
-      except: 
+      except:
         pass
       if back is not None and answer == 'back': return back
 
   def Tell(self, lines, error=False, back=None):
     dialog = error and 'error' or 'message'
-    sys.stderr.write('tell_%s: %s\n' % (dialog, ' '.join(lines)))
+    self.wfile.write('tell_%s: %s\n' % (dialog, '  '.join(lines)))
+
+  def Working(self, message):
+    self.wfile.write('working: %s\n' % message)
 

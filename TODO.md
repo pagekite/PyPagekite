@@ -2,12 +2,8 @@
 
 ## General ##
 
-   * 0.4.4: Release RPM and DEB packages.
-
-   * 0.4.5/launch: DOCUMENT IMPORTANT STUFF.
-   * 0.4.5/launch: Add UI to report time/conn quota problems.
-
-   * 0.4.6/launch: COMPLETE DOCUMENTATION. Bugfixes.
+   * 0.4.7/launch: Add UI to report time/conn quota problems.
+   * 0.4.7/launch: COMPLETE DOCUMENTATION. Bugfixes.
 
    * 0.5.x: Add UI to report available upgrades at the back-end.
    * 0.5.x: Windows: Auto upgrades?

@@ -1,0 +1,1957 @@
+#!/usr/bin/env python
+import datetime
+import getopt
+import gobject
+import gtk
+import os
+from random import randint
+import sys
+import socket
+import threading
+import traceback
+import time
+import webbrowser
+
+import pagekite
+from pagekite import sha1hex, globalSecret, remoteui, httpd
+from pagekite.basicui import clean_html
+
+
+SHARE_DIR = "~/PageKite"
+
+URL_HOME = ('https://pagekite.net/home/')
+URL_HELP = ('https://pagekite.net/support/')  # FIXME: App specific help!
+
+IMG_DIR_WINDOWS = '.SELF/gui/icons-16'
+IMG_DIR_DEFAULT = '.SELF/gui/icons-127'
+IMG_FILE_WIZARD  = '.SELF/gui/dreki.png'
+IMG_FILE_WIZBACK = '.SELF/gui/background.jpg'
+ICON_FILE_ACTIVE  = 'pk-active.png'
+ICON_FILE_TRAFFIC = 'pk-traffic.png'
+ICON_FILE_IDLE    = 'pk-idle.png'
+
+
+try:
+  # If this works, we are inside a PyBreeder archive
+  PIXBUF_WIZBACK = gtk_open_image(IMG_FILE_WIZBACK)
+except NameError:
+  def gtk_open_image(fn): return gtk.gdk.pixbuf_new_from_file(fn)
+  PIXBUF_WIZBACK = gtk_open_image(IMG_FILE_WIZBACK)
+
+
+def ExposeFancyBackground(widget, ev):
+  try:
+    alloc = widget.get_allocation()
+    pixbuf = PIXBUF_WIZBACK.scale_simple(alloc.width, alloc.height,
+                                         gtk.gdk.INTERP_BILINEAR)
+    widget.window.draw_pixbuf(widget.style.bg_gc[gtk.STATE_NORMAL],
+                              pixbuf, 0, 0, alloc.x, alloc.y)
+    if hasattr(widget, 'get_child') and widget.get_child() is not None:
+      widget.propagate_expose(widget.get_child(), ev)
+      return True
+  except:
+    traceback.print_exc()
+  return False
+
+
+def ShowInfoDialog(message, d_type=gtk.MESSAGE_INFO):
+  dlg = gtk.MessageDialog(type=d_type,
+                          buttons=gtk.BUTTONS_CLOSE,
+                          message_format=message.replace('  ', '\n'))
+  dlg.set_position(gtk.WIN_POS_CENTER)
+  dlg.get_action_area().get_children()[0].connect('clicked',
+                                                lambda w: dlg.destroy())
+# dlg.connect('expose-event', ExposeFancyBackground)
+  dlg.show()
+  if d_type != gtk.MESSAGE_ERROR:
+    def killit():
+      dlg.destroy()
+      return False
+    gobject.timeout_add(5000, killit)
+
+
+def ShowErrorDialog(message):
+  ShowInfoDialog(message, d_type=gtk.MESSAGE_ERROR)
+
+
+def Button(stock_id, text, action):
+  b = gtk.Button()
+  l = gtk.Label()
+  l.set_markup_with_mnemonic(text)
+  l.set_mnemonic_widget(b)
+  hb = gtk.HBox()
+  hb.pack_start(gtk.image_new_from_stock(stock_id, gtk.ICON_SIZE_MENU))
+  hb.pack_start(l, padding=5)
+  b.add(hb)
+  b.connect('clicked', action)
+  return b
+
+
+def DescribeKite(domain, protoport, info):
+  proto = protoport.split('/')[0]
+  fdesc = protoport
+  url = None
+
+  if proto.startswith('https'):
+    fdesc = 'Secure Website (end-to-end)'
+    url = 'https://%s%s' % (domain, info['port'] and ':%s' % info['port'] or '')
+  elif proto.startswith('http'):
+    secure = (('ssl' in info or info['proto'] == 'https')
+              and 'Secure ' or '')
+    pdesc = info['port'] and ' on port %s' % info['port'] or ''
+    fdesc = '%sWebsite%s' % (secure, pdesc)
+    url = '%s://%s%s' % (secure and 'https' or 'http', domain,
+                         info['port'] and ':%s' % info['port'] or '')
+  elif proto in ('ssh', 'raw'):
+    if info['port'] == '22':
+      fdesc = 'SSH (HTTP proxied)'
+    else:
+      fdesc = 'TCP Port %s (HTTP proxied)' % info['port']
+
+  bdesc = ('builtin' in info and 'PageKite Sharing'
+                              or '%s:%s' % (info['bhost'], info['bport']))
+
+  status = ['Unknown']
+  code = int(info['status'], 16)
+  if code in pagekite.BE_INACTIVE:
+    status = ['Disabled']
+  else:
+    if code & pagekite.BE_STATUS_OK:
+      status = ['Flying']
+    elif code & pagekite.BE_STATUS_ERR_ANY:
+      status = ['Error']
+      if code & pagekite.BE_STATUS_ERR_DNS:
+        status.append('DNS')
+      if code & pagekite.BE_STATUS_ERR_BE:
+        status.append('Server down')
+      if code & pagekite.BE_STATUS_ERR_TUNNEL:
+        status.append('Rejected')
+
+  return (url and 'WWW, %s/' % url or fdesc), bdesc, ', '.join(status), url
+
+
+def GetScreenShot():
+  w = gtk.gdk.get_default_root_window()
+  sz = w.get_size()
+  pb = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False, 8, sz[0], sz[1])
+  pb = pb.get_from_drawable(w, w.get_colormap(), 0,0,0,0, sz[0], sz[1])
+  return pb
+
+
+def mkdirs(path, perms, touch=None, touchparents=None):
+  if not os.path.exists(path):
+    mkdirs(os.path.dirname(path), perms, touch=(touch or touchparents))
+    os.mkdir(path, perms)
+    for fn in [os.path.join(path, c) for c in (touch or [])]:
+      open(fn, 'a').close()
+
+
+class ShareBucket:
+
+  S_CLIPBOARD = 1
+  S_PATHS = 2
+  S_SCREENSHOT = 3
+
+  T_TEXT = 1
+  T_HTML = 2
+  T_MARKDOWN = 3
+
+  JSON_INDEX = """\
+{"title": %(title)s,
+ "date": %(date)s,
+ "expires": %(expires)s,
+ "content": %(content)s,
+ "files": [\n\t%(files)s\n ]}\
+  """
+
+  HTML_INDEX = """\
+<!DOCTYPE html><!-- PageKite expire=%(expires)s -->
+<html><head>
+ <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+ <title>%(title)s</title>
+</head><body>
+ <h1 class='title'>%(title)s</h1>
+ <h2 class='date'>Last modified on %(date)s</h2>
+ <div class='content'>%(content)s</div>
+ <ul class='files'>\n  %(files)s\n </ul>
+</body></html>
+  """
+
+  def __init__(self, kitename, kiteport, title=None, dirname=None, random=False):
+    self.share_dir = os.path.expanduser(SHARE_DIR)
+    self.kite_dir = os.path.join(self.share_dir, kitename)
+    if dirname:
+      self.fullpath = os.path.join(self.kite_dir, dirname)
+    else:
+      while True:
+        randcrap = sha1hex('%s%s' % (randint(0, 0x7ffffffe), globalSecret()))
+
+        dirparts = datetime.datetime.now().strftime("%Y/%m-%d").split('/')
+        if random: dirparts[-1] = randcrap[:16]
+
+        dirparts = [os.path.join(*dirparts)]
+        if title: dirparts.append(title.replace(' ', '_'))
+        dirparts.append(randcrap[-5:])
+
+        dirname = '.'.join(dirparts)
+        self.fullpath = os.path.join(self.kite_dir, dirname)
+        if not os.path.exists(self.fullpath): break
+
+    self.dirname = os.path.join('.', dirname)[1:]
+    self.kitename = kitename
+    self.kiteport = kiteport
+
+    self.webpath = None
+
+    self.title = title or 'Shared with PageKite'
+    self.content = (self.T_TEXT, '')
+
+    # Create directory!
+    mkdirs(self.fullpath, 0700, touchparents=['_pagekite.html'])
+
+  def load(self):
+    return self
+
+  def fmt_title(self, ftype='html'):
+    if ftype == 'json':
+      # FIXME: Escape better
+      return '"%s"' % self.title.replace('"', '\\"')
+    else:
+      # FIXME: Escape better
+      return '%s' % self.title
+
+  def fmt_content(self, ftype='html'):
+    if ftype == 'json':
+      # FIXME: Escape better
+      return '"%s"' % self.content[1].replace('"', '\\"')
+    else:
+      # FIXME: Escape better
+      return '<pre>%s</pre>' % self.content[1]
+
+  def fmt_file(self, filename, ftype='html'):
+    # FIXME: Do something friendly with file types/extensions
+    if ftype == 'json':
+      # FIXME: Escape better
+      return '"%s"' % filename.replace('"', '\\"')
+    else:
+      # FIXME: Escape better
+      return ('<li class="file"><a href="%s">%s</a></li>'
+              ) % (filename, os.path.basename(filename))
+
+  def save(self):
+    filelist = []
+    for fn in os.listdir(self.fullpath):
+      if not (fn.startswith('.') or fn in ('_pagekite.html', '_pagekite.json')):
+        filelist.append(fn)
+
+    SEP = {'html': '\n  ', 'json': ',\n  '}
+    for ft, tp in (#('html', self.HTML_INDEX),
+                   ('json', self.JSON_INDEX), ):
+      fd = open(os.path.join(self.fullpath, '_pagekite.%s' % ft), 'w')
+      fd.write(tp % {
+        'title': self.fmt_title(ft),
+        'date': 0,
+        'expires': 0,
+        'content': self.fmt_content(ft),
+        'files': SEP[ft].join([self.fmt_file(f, ft) for f in sorted(filelist)])
+      })
+      fd.close()
+
+    return self
+
+  def set_title(self, title):
+    self.title = title
+    return self
+
+  def set_content(self, content, ctype=T_TEXT):
+    self.content = (ctype, content)
+    return self
+
+  def add_paths(self, paths):
+    for path in paths:
+      os.symlink(path, os.path.join(self.fullpath, os.path.basename(path)))
+    return self
+
+  def add_screenshot(self, screenshot):
+    screenshot.save(os.path.join(self.fullpath, 'screenshot.png'), 'png')
+    return self
+
+  def pk_config(self):
+    # This is just one config line per PageKite hostname, finer granularity
+    # just makes things more confusing.
+    return ['webpath=%s/80:/:default:%s' % (self.kitename, self.kite_dir),
+            'be_config=%s/80:indexes:True' % self.kitename]
+
+
+class PageKiteThread(threading.Thread):
+  def __init__(self, startup_args=None):
+    threading.Thread.__init__(self)
+    self.looping = False
+    self.stopped = True
+    self.pk = None
+
+    self.pk_startup_args = startup_args
+    self.pk_readlock = threading.Condition()
+    self.gui_readlock = threading.Condition()
+    self.reset()
+
+  def reset(self):
+    self.pk_incoming = []
+    self.pk_eof = False
+    self.gui_incoming = ''
+    self.gui_eof = False
+
+  # These routines are used by the PageKite UI, to communicate with us...
+  def readline(self):
+    try:
+      self.pk_readlock.acquire()
+      while (not self.pk_incoming) and (not self.pk_eof): self.pk_readlock.wait()
+      if self.pk_incoming:
+        line = self.pk_incoming.pop(0)
+      else:
+        line = ''
+#   print '>>PK>> %s' % line.strip()
+      return line
+    finally:
+      self.pk_readlock.release()
+
+  def write(self, data):
+#   print '>>GUI>> %s' % data.strip()
+    try:
+      self.gui_readlock.acquire()
+      if data:
+        self.gui_incoming += data
+      else:
+        self.gui_eof = True
+      self.gui_readlock.notify()
+    finally:
+      self.gui_readlock.release()
+
+  # And these are used by the GUI, to communicate with PageKite.
+  def recv(self, bytecount):
+    try:
+      self.gui_readlock.acquire()
+      while (len(self.gui_incoming) < bytecount) and (not self.gui_eof):
+        self.gui_readlock.wait()
+      data = self.gui_incoming[0:bytecount]
+      self.gui_incoming = self.gui_incoming[bytecount:]
+      return data
+    finally:
+      self.gui_readlock.release()
+
+  def send(self, data):
+    if not data.endswith('\n') and data != '':
+      raise ValueError('Please always send whole lines')
+#   print '<<PK<< %s' % data.strip()
+    try:
+      self.pk_readlock.acquire()
+      if data:
+        self.pk_incoming.append(data)
+      else:
+        self.pk_eof = True
+      self.pk_readlock.notify()
+    finally:
+      self.pk_readlock.release()
+
+  def sendall(self, data):
+    return self.send(data)
+
+  def close(self):
+    self.send('')
+    self.write('')
+
+  def Configure(self, pk):
+    # Remove invalid arguments that break us.
+    if '--nullui' in sys.argv: sys.argv.remove('--nullui')
+    if '--basicui' in sys.argv: sys.argv.remove('--basicui')
+    if '--friendly' in sys.argv: sys.argv.remove('--friendly')
+
+    old_argv = sys.argv[:]
+    if self.pk_startup_args:
+      sys.argv[1:1] = self.pk_startup_args[:]
+      self.pk_startup_args = None
+    try:
+      self.pk = pk
+      pk.ui_wfile = pk.ui.wfile = self
+      pk.ui_rfile = pk.ui.rfile = self
+      return pagekite.Configure(pk)
+    except:
+      self.pk = None
+      raise
+    finally:
+      sys.argv = old_argv[:]
+
+  def run(self):
+    self.looping = True
+    while self.looping:
+      last_loop = int(time.time())
+      if not self.stopped:
+        self.reset()
+        pagekite.Main(pagekite.PageKite, self.Configure,
+                      uiclass=remoteui.RemoteUi,
+                      http_handler=httpd.UiRequestHandler,
+                      http_server=httpd.UiHttpServer)
+        self.close()
+        self.write('status_msg: Disabled\nstatus_tag: idle\n')
+        self.pk = None
+      if last_loop == int(time.time()):
+        time.sleep(1)
+
+  def stop(self, then=False):
+    self.stopped = True
+    if self.pk:
+      self.send('exit: stopping\n')
+      gobject.idle_add(self.stop, then)
+    else:
+      if then: then()
+
+  def restart(self):
+    self.stopped = False
+
+  def toggle(self):
+    if self.stopped:
+      self.restart()
+    else:
+      self.stop()
+
+  def quit(self):
+    self.looping = False
+    self.stopped = True
+    if self.pk:
+      self.send('exit: quitting\n')
+    self.close()
+    self.pk = None
+    self.join()
+
+
+class CommThread(threading.Thread):
+  def __init__(self, pkThread):
+    threading.Thread.__init__(self)
+    self.pkThread = pkThread
+    self.looping = False
+
+    self.multi = None
+    self.multi_args = None
+
+    # Callbacks
+    self.cb = {}
+
+  def parse_line(self, line):
+#   print '<< %s' % line[:-1]
+    if line.startswith('begin_'):
+      self.multi = line[6:].strip()
+      self.multi_args = {'_raw': []}
+    elif self.multi:
+      if line.startswith('end_'):
+        if self.multi in self.cb:
+          gobject.idle_add(self.cb[self.multi], self.multi_args)
+        elif 'default' in self.multi_args:
+          self.pkThread.send(self.multi_args['default']+'\n')
+        self.multi = self.multi_args = None
+      else:
+        self.multi_args['_raw'].append(line.strip())
+        try:
+          variable, value = line.strip().split(': ', 1)
+          self.multi_args[variable] = value
+        except ValueError:
+          pass
+    else:
+      try:
+        command, args = line.strip().split(': ', 1)
+        if command in self.cb:
+          gobject.idle_add(self.cb[command], args)
+      except ValueError:
+        pass
+
+  def run(self):
+    self.pkThread.start()
+    self.looping = True
+    line = ''
+    while self.looping:
+      line += self.pkThread.recv(1)
+      if line.endswith('\n'):
+        self.parse_line(line)
+        line = ''
+
+  def quit(self):
+    self.pkThread.quit()
+    self.looping = False
+
+
+class UiContainer:
+  def cfg(self, title, width, height):
+    self.window.set_size_request(width, height)
+    self.window.set_position(gtk.WIN_POS_CENTER)
+    if title: self.window.set_title(title)
+
+  def win(self, title=None, child=None, width=500, height=400, cls=gtk.Window):
+    self.window = cls()
+    self.cfg(title, width, height)
+    if child: self.window.add(child)
+    self.window.show_all()
+    return self
+
+class UiWizard(UiContainer):
+  def __init__(self):
+    pass
+
+
+class PageKiteWizard:
+  def __init__(self, title=''):
+    self.window = UiContainer().win(width=500, height=300,
+                                    cls=gtk.Dialog).window
+
+    # Just keep window open forever and ever
+    self.window.connect("delete_event", lambda w, e: True)
+    self.window.connect("destroy", lambda w: False)
+
+    # Prepare our standard widgets
+    self.title = gtk.Label("PageKite")
+    self.title.set_justify(gtk.JUSTIFY_CENTER)
+    self.question = gtk.Label('Welcome to PageKite!')
+    self.question.set_justify(gtk.JUSTIFY_LEFT)
+    self.decoration = gtk.Image()
+    self.decoration.set_from_pixbuf(gtk_open_image(IMG_FILE_WIZARD))
+    self.inputprefix = gtk.Label('')
+    self.textinput = gtk.Entry()
+    self.textinput.set_activates_default(True)
+    self.inputsuffix = gtk.Label('')
+
+    # Set up our packing...
+    self.right = gtk.VBox(False, spacing=15)
+    self.left = gtk.VBox(False, spacing=5)
+    self.hbox = gtk.HBox(False, spacing=0)
+    self.input_hbox = gtk.HBox(False, spacing=0)
+    self.hbox.pack_start(self.right, expand=False, fill=False, padding=10)
+    self.hbox.pack_start(self.left, expand=True, fill=True, padding=10)
+
+    self.right.pack_start(self.decoration, expand=True, fill=True)
+    self.left.pack_start(self.question, expand=True, fill=True)
+    self.input_hbox.pack_start(self.inputprefix, expand=False, fill=False)
+    self.input_hbox.pack_start(self.textinput, expand=True, fill=True)
+    self.input_hbox.pack_start(self.inputsuffix, expand=False, fill=False)
+    self.left.pack_start(self.input_hbox, expand=True, fill=True)
+
+    self.window.vbox.pack_start(self.title, expand=False, fill=False, padding=5)
+    self.window.vbox.pack_start(self.hbox, expand=True, fill=True, padding=0)
+
+    # Draw a fancy background!
+    #self.window.vbox.connect('expose-event', ExposeFancyBackground)
+
+    if title: self.set_title(title)
+
+    self.buttons = []
+    self.window.show_all()
+    self.show_input_area(False)
+
+  def show_input_area(self, really):
+    if really:
+      self.input_hbox.show()
+      self.textinput.grab_focus()
+      self.question.set_alignment(0, 1)
+    else:
+      self.input_hbox.hide()
+      self.question.set_alignment(0, 0.5)
+
+  def set_title(self, title):
+    self.title.set_markup('<big> <b>%s</b> </big>' % title)
+
+  def click_last(self, w, e):
+    if self.buttons: self.buttons[-1][0](e)
+
+  def clear_buttons(self):
+    for b in self.buttons:
+      self.window.action_area.remove(b)
+    self.buttons = []
+
+  def set_question(self, question):
+    self.question.set_markup(question.replace('  ', '\n'))
+    self.question.set_justify(gtk.JUSTIFY_LEFT)
+
+  def set_buttons(self, buttonlist):
+    self.clear_buttons()
+    last = None
+    for label, callback in buttonlist:
+      button = gtk.Button(label)
+      button.connect('clicked', callback)
+      button.show()
+      last = button
+      self.window.action_area.pack_start(button)
+      self.buttons.append(button)
+    if last:
+      last.set_flags(gtk.CAN_DEFAULT)
+      last.grab_default()
+
+  def close(self):
+    self.clear_buttons()
+    self.window.hide()
+    self.window.destroy()
+    self.window = self.buttons = None
+
+
+class SharingDialog(gtk.Dialog):
+
+  DEFAULT_EXPIRATION = 0
+  EXPIRATION = {
+    "Never expires": 0,
+    "Expires in 2 days": 2*24*3600,
+    "Expires in 7 days": 7*24*3600,
+    "Expires in 14 days": 14*24*3600,
+    "Expires in 30 days": 30*24*3600,
+    "Expires in 90 days": 90*24*3600,
+    "Expires in 180 days": 180*24*3600,
+    "Expires in 365 days": 365*24*3600
+  }
+
+  def __init__(self, kites, stype, sdata, title=''):
+    gtk.Dialog.__init__(self, title='Sharing Details',
+                        buttons=(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+                                 gtk.STOCK_OK, gtk.RESPONSE_OK))
+    self.set_position(gtk.WIN_POS_CENTER)
+
+    horizontal = gtk.HBox()
+    table = gtk.Table()
+    t_row = 0
+
+    def ta_factory(tr):
+      def ta(left, right=None, hint=None, yalign=0.5, rright=2, **rargs):
+        left = gtk.Label('%s ' % left)
+        table.attach(left, 0, right and 1 or rright, tr[0], tr[0]+1)
+        if right:
+          left.set_alignment(1, yalign)
+          table.attach(right, 1, rright, tr[0], tr[0]+1, **rargs)
+          if hint:
+            hint = gtk.Label(' %s' % hint)
+            hint.set_alignment(0, yalign)
+            table.attach(hint, rright, rright+1, tr[0], tr[0]+1)
+        else:
+          left.set_alignment(0.5, yalign)
+        tr[0] += 1
+      return ta
+    table_append = ta_factory([t_row])
+
+    preview_box = gtk.Label("FIXME: Cropper")
+
+    kitelist = []
+    for domain in kites:
+      for bid in kites[domain]:
+        if 'builtin' in kites[domain][bid] and bid.startswith('http/'):
+          kitelist.append('%s:%s' % (domain, bid[5:]))
+    if len(kitelist) > 1:
+      combo = gtk.combo_box_new_text()
+      kitelist.sort(key=lambda k: len(k))
+      for kite in kitelist: combo.append_text(kite)
+      combo.set_active(0)
+      table_append("Share on:", combo)
+      self.kite_chooser = combo
+    elif len(kitelist) == 1:
+      table_append("Sharing on %s" % kitelist[0])
+      self.kite_chooser = kitelist[0]
+    else:
+      table_append("No kites!")
+      self.kite_chooser = None
+
+    self.title_box = gtk.Entry()
+    self.title_box.set_text(title)
+    table_append("Title:", self.title_box)
+
+    self.description = gtk.TextView()
+    self.description.set_wrap_mode(gtk.WRAP_WORD)
+    self.description.set_border_width(1)
+    dbox = gtk.ScrolledWindow()
+    dbox.set_size_request(250, 75)
+    dbox.set_policy('automatic', 'automatic')
+    dbox.set_shadow_type('out')
+    dbox.add(self.description)
+    table_append("Description:", dbox,
+                 rright=3, yalign=0.1, xpadding=2, ypadding=2)
+
+    elist = (self.EXPIRATION.keys()[:])
+    elist.sort(key=lambda k: self.EXPIRATION[k])
+    self.expiration = ecombo = gtk.combo_box_new_text()
+    for exp in elist: ecombo.append_text(exp)
+    ecombo.set_active(self.DEFAULT_EXPIRATION)
+    table_append("Expiration:", ecombo)
+
+    self.password_box = gtk.Entry()
+    table_append("Password:", self.password_box, 'optional')
+
+    self.open_browser = gtk.CheckButton('Open in browser')
+    self.open_browser.set_active(True)
+    self.action_area.pack_start(self.open_browser, expand=True, fill=True, padding=0)
+    self.action_area.reorder_child(self.open_browser, 0)
+
+    horizontal.pack_start(preview_box, expand=False, fill=False, padding=10)
+    horizontal.pack_end(table, expand=True, fill=True, padding=0)
+    self.vbox.pack_start(horizontal, expand=True, fill=True, padding=0)
+    self.show_all()
+
+  def get_kiteinfo(self):
+    if str(type(self.kite_chooser)) == "<type 'gtk.ComboBox'>":
+      return self.kite_chooser.get_model()[self.kite_chooser.get_active()][0]
+    else:
+      return self.kite_chooser
+
+  def get_kitename(self):
+    return (self.get_kiteinfo() or ':').split(':')[0]
+
+  def get_kiteport(self):
+    return int((self.get_kiteinfo() or ':').split(':')[1])
+
+  def get_password(self):
+    return self.password_box.get_text()
+
+  def get_expiration(self):
+    return self.password_box.get_text()
+
+  def get_title(self):
+    return self.title_box.get_text()
+
+  def get_description(self):
+    buf = self.description.get_buffer()
+    return buf.get_text(buf.get_start_iter(), buf.get_end_iter())
+
+
+class PageKiteManagerPage:
+  def __init__(self, parent, status=None):
+    self.parent = parent
+    self.cancel = Button(gtk.STOCK_CLOSE, '_Close', self.parent.close)
+
+    self.actions = gtk.HBox()
+    self.actions.pack_end(self.cancel, expand=False, fill=False, padding=1)
+    action_frame = gtk.Frame()
+    action_frame.add(self.actions)
+
+    self.content = gtk.VBox()
+    self.inactive = gtk.Label('Loading ...')
+
+    self.page = gtk.VBox()
+    self.page.pack_start(self.inactive, expand=True, fill=True)
+    self.page.pack_start(self.content, expand=True, fill=True)
+    self.page.pack_end(action_frame, expand=False, fill=False)
+
+  def set_active(self):
+    self.inactive.hide()
+    self.content.show_all()
+    self.actions.show_all()
+
+  def set_inactive(self, reason):
+    self.inactive.set_text(reason)
+    self.inactive.show()
+    self.content.hide()
+    self.actions.hide()
+
+  def update(self, kites, visible=False):
+    self.set_active()
+
+  def update_status(self, status):
+    pass
+
+  def update_motd(self, motd):
+    pass
+
+
+class PageKiteConfigEditor(PageKiteManagerPage):
+  def __init__(self, parent, status=None):
+    PageKiteManagerPage.__init__(self, parent)
+
+    self.save = Button(gtk.STOCK_SAVE, '_Save and Restart', self.on_save)
+    self.refresh = Button(gtk.STOCK_REFRESH, '_Reload', self.on_refresh)
+
+    self.edit = gtk.TextView()
+    ebox = gtk.ScrolledWindow()
+    ebox.add(self.edit)
+
+    self.actions.pack_start(self.save, expand=False, fill=False, padding=1)
+    self.actions.pack_start(self.refresh, expand=False, fill=False, padding=1)
+    self.content.pack_start(ebox, expand=True, fill=True, padding=0)
+    self.config = ''
+
+  def get_text(self):
+    buf = self.edit.get_buffer()
+    return buf.get_text(buf.get_start_iter(), buf.get_end_iter())
+
+  def update(self, kites=None, visible=False):
+    if self.parent.pkt.pk:
+      config = '\n'.join(self.parent.pkt.pk.GenerateConfig())
+      if not self.config or not visible or self.get_text() == self.config:
+        self.config = config
+        self.edit.get_buffer().set_text(self.config)
+    self.set_active()
+
+  def on_refresh(self, ev):
+    self.config = ''
+    self.update()
+
+  def on_save(self, ev):
+    self.parent.set_all_inactive('Saving changes and restarting ...')
+    self.parent.pkt.stop(then=self.do_save)
+
+  def do_save(self):
+    ln = None
+    lines = self.get_text().split('\n')
+    try:
+      new_pk = pagekite.PageKite(http_handler=httpd.UiRequestHandler,
+                                 http_server=httpd.UiHttpServer)
+      for ln in range(1, len(lines)+1):
+        new_pk.ConfigureFromFile(data=[lines[ln-1]])
+      ln = None
+      new_pk.CheckConfig()
+      new_pk.SaveUserConfig()
+      if new_pk.ui_httpd: new_pk.ui_httpd.quit()
+      new_pk = None
+
+      # We are definitely not clean anymore!
+      if '--clean' in sys.argv: sys.argv.remove('--clean')
+      self.config = ''
+    except (IndexError, ValueError, getopt.GetoptError, pagekite.ConfigError), e:
+      ShowInfoDialog(('Oops! Invalid configuration, not saved.\n'
+                      '%s') % (ln and 'Bad line %s: %s\n' % (ln, lines[ln-1])
+                                   or str(e)))
+    self.parent.pkt.restart()
+
+
+class PageKiteKiteList(PageKiteManagerPage):
+  def __init__(self, parent, status=None):
+    PageKiteManagerPage.__init__(self, parent)
+
+    self.kite_count  = 0
+    self.kite_add    = Button(gtk.STOCK_NEW,    '_New Kite',    self.add_kite)
+    self.hint        = gtk.Label('Select a kite or service for more options.')
+    self.kite_remove = Button(gtk.STOCK_DELETE, '_Delete Kite', self.remove_kite)
+    self.svc_add     = Button(gtk.STOCK_ADD,    '_Add Service', self.add_service)
+    self.svc_remove  = Button(gtk.STOCK_REMOVE, '_Remove',      self.remove_service)
+    self.svc_disable = Button(gtk.STOCK_STOP,   '_Disable',     self.disable_service)
+    self.svc_enable  = Button(gtk.STOCK_YES,    '_Enable',      self.enable_service)
+
+    self.actions.pack_start(self.kite_add,    expand=False, fill=False, padding=1)
+    self.actions.pack_start(self.hint,        expand=False, fill=False, padding=5)
+    self.actions.pack_start(self.svc_add,     expand=False, fill=False, padding=1)
+    self.actions.pack_start(self.svc_enable,  expand=False, fill=False, padding=1)
+    self.actions.pack_start(self.svc_disable, expand=False, fill=False, padding=1)
+    self.actions.pack_end(self.svc_remove,  expand=False, fill=False, padding=1)
+    self.actions.pack_end(self.kite_remove, expand=False, fill=False, padding=1)
+
+    self.kites, self.kites_sig = {}, None
+    # FIXME: name, backend, status, actions
+    self.store = gtk.TreeStore(str, str, str, str)
+    self.textcell = gtk.CellRendererText()
+    self.view = gtk.TreeView(self.store)
+    for order, title, cell, attrs in (
+      ( 0, 'Kites',    self.textcell, [('text', 0)]),
+      ( 1, 'Services', self.textcell, [('text', 1)]),
+      ( 2, 'Status',   self.textcell, [('text', 2)]),
+#     (-1, '',         self.textcell, [('text', 3)]),
+    ):
+      kc = gtk.TreeViewColumn(title, cell)
+      if title and order >= 0:
+        kc.set_sort_column_id(order)
+      for attname, attorder in attrs:
+        kc.add_attribute(cell, attname, attorder)
+      self.view.append_column(kc)
+
+    self.view.connect('cursor-changed', self.update_buttons)
+
+    sw = gtk.ScrolledWindow()
+    sw.set_policy('automatic', 'automatic')
+    sw.add(self.view)
+
+    self.content.pack_start(sw, expand=True, fill=True)
+
+  def add_kite(self, w):
+    self.parent.pkt.send('addkite: None\n')
+
+  def remove_kite(self, w):
+    print 'FIXME: delete %s' % self.get_kite()
+
+  def get_kite(self):
+    model, row = self.view.get_selection().get_selected()
+    if not row: return None
+    return model.get_value(model.iter_parent(row) or row, 0)
+
+  def get_service(self):
+    model, row = self.view.get_selection().get_selected()
+    if not row or not model.iter_parent(row): return None
+    return (model.get_value(row, 3), model.get_value(row, 2))
+
+  def update_buttons(self, w=None, hide=False):
+    svc = self.get_service()
+    if svc and not hide:
+      for w in (self.hint, self.kite_remove, self.svc_add):
+        w.hide()
+      self.svc_remove.show()
+      #self.svc_remove.set_sensitive(self.kite_count > 1)
+      if svc[1].lower() == 'disabled':
+        self.svc_enable.show()
+        self.svc_disable.hide()
+      else:
+        self.svc_enable.hide()
+        self.svc_disable.show()
+    else:
+      for w in (self.svc_remove, self.svc_enable, self.svc_disable):
+        w.hide()
+      if self.get_kite() and not hide:
+        self.hint.hide()
+        self.svc_add.show()
+#       self.kite_remove.show()
+      else:
+        for w in (self.svc_add, self.kite_remove):
+          w.hide()
+        if self.kite_count:
+          self.hint.show()
+        else:
+          self.hint.hide()
+
+  def update(self, kites, visible=False):
+    self.store.clear()
+    self.kite_count = 0
+    for k in kites:
+      pid = self.store.append(None, ['%s' % k, '', '', ''])
+      for key in sorted(kites[k]):
+        svc = kites[k][key]
+        fdesc, bdesc, status, url = DescribeKite(k, key, svc)
+
+        # FIXME: Report if front-end HTTPS is available for WWW services
+
+        self.store.append(pid, [fdesc, bdesc, status, svc['bid']])
+        self.kite_count += 1
+
+    self.view.expand_all()
+    self.set_active()
+
+  def add_service(self, w):
+    kite = self.get_kite()
+    if not kite:
+      return ShowErrorDialog('Please choose a kite from the list above.')
+    self.parent.pkt.send('addkite: %s\n' % kite)
+
+  def set_active(self):
+    PageKiteManagerPage.set_active(self)
+    self.update_buttons()
+
+  def set_inactive(self, reason):
+    PageKiteManagerPage.set_inactive(self, reason)
+    self.update_buttons(hide=True)
+
+  def remove_service(self, w):
+    self.parent.pkt.send('delkite: %s\n' % self.get_service()[0])
+    self.parent.pkt.send('save: quietly\n')
+
+  def disable_service(self, w):
+    self.parent.pkt.send('disablekite: %s\n' % self.get_service()[0])
+    self.parent.pkt.send('save: quietly\n')
+
+  def enable_service(self, w):
+    self.parent.pkt.send('enablekite: %s\n' % self.get_service()[0])
+    self.parent.pkt.send('save: quietly\n')
+
+
+class PageKiteShareList(PageKiteManagerPage):
+  def __init__(self, parent, status=None):
+    PageKiteManagerPage.__init__(self, parent)
+
+    self.status = gtk.Label('Loading kite information ...')
+    self.content.pack_start(self.status, expand=True, fill=True)
+
+
+class PageKiteLogView(PageKiteManagerPage):
+  def __init__(self, parent, status=None):
+    PageKiteManagerPage.__init__(self, parent)
+    self.status = gtk.Label('Loading PageKite log ...')
+    self.content.pack_start(self.status, expand=True, fill=True)
+
+
+class PageKiteHome(PageKiteManagerPage):
+  def __init__(self, parent, status='Starting up ...'):
+    PageKiteManagerPage.__init__(self, parent)
+    self.status = gtk.Label('Welcome to PageKite!')
+    self.content.pack_start(self.status, expand=True, fill=True)
+
+    self.info = gtk.Label(status)
+    self.info.set_alignment(0, 0.5)
+
+    self.quit = Button(gtk.STOCK_QUIT, '_Quit', self.parent.quit)
+    self.actions.pack_end(self.quit, expand=False, fill=False, padding=1)
+
+    self.actions.pack_start(self.info, expand=True, fill=True, padding=5)
+    self.content.connect('expose-event', ExposeFancyBackground)
+
+  def update_motd(self, motd):
+    if motd:
+      self.status.set_markup(clean_html(motd))
+    else:
+      self.status.set_markup('Welcome to PageKite!')
+
+  def update_status(self, status):
+    self.info.set_text(status)
+
+  def set_inactive(self, message):
+    pass
+
+
+class PageKiteManager:
+
+  PAGE_HOME = '_PageKite'
+  PAGE_KITES = 'My _Kites'
+  PAGE_SHARING = 'S_haring'
+  PAGE_CONFIG = 'Config _File'
+  PAGE_LOG = '_Log'
+
+  def __init__(self, pkm, pkt, development=False):
+    self.pkm = pkm
+    self.pkt = pkt
+    self.development = development
+
+    self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
+    self.window.set_title('PageKite Manager')
+    self.window.set_position(gtk.WIN_POS_CENTER)
+    self.window.set_size_request(520, 320)
+    self.window.connect("delete_event", self.close)
+    self.window.connect("destroy", self.close)
+
+    self.notebook = gtk.Notebook()
+    self.notebook.set_tab_pos(gtk.POS_TOP)
+    self.pages = [
+      (self.PAGE_HOME,    PageKiteHome(self, status=pkm.status),        False),
+      (self.PAGE_KITES,   PageKiteKiteList(self, status=pkm.status),    False),
+      (self.PAGE_SHARING, PageKiteShareList(self, status=pkm.status),   True),
+      (self.PAGE_CONFIG,  PageKiteConfigEditor(self, status=pkm.status),False),
+      (self.PAGE_LOG,     PageKiteLogView(self, status=pkm.status),     True),
+    ]
+
+    for t, p, dev in self.pages:
+      if not dev or development:
+        l = gtk.Label()
+        self.notebook.append_page(p.page, l)
+        l.set_markup_with_mnemonic(t)
+
+    vbox = gtk.VBox()
+    vbox.pack_start(self.notebook, expand=True, fill=True)
+
+    if not self.pkm.is_embedded():
+      for title, page, dev in self.pages:
+        page.actions.remove(page.cancel)
+
+    self.window.add(vbox)
+    self.window.show_all()
+
+  def is_visible(self, which):
+    return (self.pages[self.notebook.get_current_page()][1] == which)
+
+  def show_page(self, which):
+    for i in range(0, len(self.pages)):
+      title, page, dev = self.pages[i]
+      if i == which or title == which or page == which:
+        self.notebook.set_current_page(i)
+
+  def update(self, kites):
+    for title, page, dev in self.pages:
+      if self.development or not dev:
+        page.update(kites, visible=self.is_visible(page))
+
+  def update_status(self, status):
+    for title, page, dev in self.pages:
+      if self.development or not dev:
+        page.update_status(status)
+
+  def update_motd(self, motd):
+    for title, page, dev in self.pages:
+      page.update_motd(motd)
+
+  def set_all_inactive(self, reason):
+    for title, page, dev in self.pages:
+      if self.development or not dev:
+        page.set_inactive(reason)
+
+  def close(self, a, aa=None):
+    self.window.destroy()
+    self.window = self.pages = self.notebook = ()
+    return True
+
+  def quit(self, a, aa=None):
+    self.set_all_inactive('Shutting down ...')
+    self.update_status('Shutting down ...')
+    gobject.idle_add(self.quit2, a)
+
+  def quit2(self, a):
+    self.pkm.quit(a)
+    self.close(a)
+
+
+class PageKiteStatusIcon(gtk.StatusIcon):
+  MENU_TEMPLATE = '''
+      <ui>
+       <menubar name="Menubar">
+        <menu action="Menu">
+         <menuitem action="ShareClipboard"/>
+         <menuitem action="SharePath"/>
+         <menuitem action="ShareScreenshot"/>
+        <separator/>
+         %(kitelist)s
+         <menuitem action="CfgKites"/>
+        <separator/>
+         <menu action="HelpMenu">
+          <menuitem action="OpenHelp"/>
+          <menuitem action="About"/>
+         </menu>
+         <menuitem action="Quit"/>
+        </menu>
+       </menubar>
+      </ui>
+  '''
+
+  def __init__(self, pkComm, development=False, open_manager=False):
+    gtk.StatusIcon.__init__(self)
+
+    self.development = development
+    self.open_manager = open_manager
+
+    self.menu = None
+    self.motd = None
+    self.wizard = None
+    self.kite_manager = None
+    self.suppress_updates = False
+    self.pkComm = pkComm
+    self.pkComm.cb.update({
+      'status_tag': self.set_status_tag,
+      'status_msg': self.set_status_msg,
+      'motd': self.set_motd,
+      'tell_message': ShowInfoDialog,
+      'tell_error': ShowErrorDialog,
+      'working': self.show_working,
+      'start_wizard': self.start_wizard,
+      'end_wizard': self.end_wizard,
+      'ask_yesno': self.ask_yesno,
+      'ask_email': self.ask_email,
+      'ask_kitename': self.ask_kitename,
+      'ask_backends': self.ask_backends,
+      'ask_multiplechoice': self.ask_multiplechoice,
+      'ask_login': self.ask_login,
+      'be_list': self.update_be_list,
+    })
+    self.status = 'PageKite'
+    self.set_tooltip(self.status)
+
+    self.icon_file = ICON_FILE_IDLE
+    if sys.platform in ('win32', 'os2', 'os2emx'):
+      self.icon_dir = IMG_DIR_WINDOWS
+    else:
+      self.icon_dir = IMG_DIR_DEFAULT
+    self.set_from_pixbuf(gtk_open_image(os.path.join(self.icon_dir,
+                                                     self.icon_file)))
+
+    self.connect('activate', self.on_activate)
+    self.connect('popup-menu', self.on_popup_menu)
+    #gobject.timeout_add_seconds(1, self.on_tick)
+
+    self.kites, self.kites_sig = {}, None
+
+    try:
+      GetScreenShot()
+      self.have_screenshots = True
+    except:
+      self.have_screenshots = False
+    self.have_sharing = False
+
+    self.pkComm.start()
+    self.set_visible(True)
+
+  def create_menu(self):
+    self.manager = gtk.UIManager()
+    ag = gtk.ActionGroup('Actions')
+    ag.add_actions([
+      ('Menu',  None, 'Menu'),
+       ('QuotaDisplay', None, 'XX.YY GB of Quota left'),
+       ('GetQuota', None, 'Get _More Quota...', None, 'Get more Quota from PageKite.net', self.on_stub),
+       ('SharePath', None, 'Share _File or Folder', None, 'Make a file or folder visible to the Web', self.share_path),
+       ('ShareClipboard', None, '_Paste to Web', None, 'Make the contents of the clipboard visible to the Web', self.share_clipboard),
+       ('ShareScreenshot', None, 'Share _Screenshot', None, 'Put a screenshot of your desktop on the Web', self.share_screenshot),
+        ('CfgKites', None, '_Manage ...', None, 'Manage Kites and Sharing', self.manage_kites),
+       ('HelpMenu', None, '_Help'),
+        ('OpenHelp', None, '_PageKite.net Support', None, 'Access the PageKite.net support site', self.on_help),
+        ('About', gtk.STOCK_ABOUT, '_About', None, 'About PageKite', self.on_about),
+       ('Quit', None, '_Quit PageKite', None, 'Turn PageKite off completely', self.quit),
+    ])
+    ag.add_toggle_actions([
+      ('EnablePageKite', None, '_Enable PageKite', None, 'Enable local PageKite', self.toggle_enable, (not self.pkComm.pkThread.stopped)),
+      ('VerboseLog', None, 'Verbose Logging', None, 'Verbose logging facilitate troubleshooting.', self.on_stub, False),
+    ])
+
+    self.manager.insert_action_group(ag, 0)
+    self.manager.add_ui_from_string(self.MENU_TEMPLATE % {
+      'kitelist': self.kite_menu(action_group=ag),
+    })
+    #self.manager.get_widget('/Menubar/Menu/QuotaDisplay').set_sensitive(False)
+    self.menu = self.manager.get_widget('/Menubar/Menu/Quit').props.parent
+    if not self.menu:
+      print '%s' % dir(self.manager)
+
+  def kite_menu(self, action_group=None):
+    xml, actions, toggles = [], [], []
+    mc = 0
+
+    def a(elem, tit, action=None, tooltip=None, close=True,
+                     cb=None, toggle=None):
+      if elem == 'menu': close = False
+      if not action:
+        action = 'PageKiteList_%s' % mc
+      xml.append('<%s action="%s"%s>' % (elem, action, close and '/' or ''))
+      if toggle is not None:
+        toggles.append((action,  None, tit, None, tooltip, cb, toggle))
+      else:
+        actions.append((action,  None, tit, None, tooltip, cb))
+      return 1
+
+    def sn(path):
+      p = path[-30:]
+      if p != path:
+        if '/' in p:
+          p = '/'.join(('...', p.split('/', 1)[1]))
+        elif '\\' in p:
+          p = '\\'.join(('...', p.split('\\', 1)[1]))
+      return p
+
+    def make_cb(func, *data):
+      def tmp(what): return func(what, *data)
+      return tmp
+
+    domains = sorted(self.kites.keys())
+    if len(domains):
+      a('menuitem', 'My Kites:', action='PageKiteList')
+      for domain in domains:
+        mc += a('menu', '  %s' % domain)
+
+        www = [k for k in self.kites[domain].keys() if k.startswith('http')]
+        www.sort(key=lambda x: int(self.kites[domain][x]['port'] or
+                                   self.kites[domain][x]['bport'] or 0))
+        for protoport in www:
+          info = self.kites[domain][protoport]
+          fdesc, bdesc, status, url = DescribeKite(domain, protoport, info)
+
+          live = (status != 'Disabled')
+          mc += a('menuitem', '%s to %s' % (fdesc, bdesc),
+                  cb=make_cb(self.kite_toggle, info, live),
+                  toggle=live)
+
+#         if pagekite.BE_STATUS_OK & int(info['status'], 16):
+#           mc += a('menuitem', 'Open in Browser',
+#                   cb=make_cb(self.open_url, url), tooltip=url)
+
+          if live:
+            if ('paths' not in info) or not development:
+              mc += a('menuitem', 'Copy Link to Site',
+                      cb=make_cb(self.copy_url, url), tooltip=url)
+
+            elif len(info['paths'].keys()):
+              for path in sorted(info['paths'].keys()):
+                mc += a('menu', '  ' + sn(info['paths'][path]['src']))
+                if pagekite.BE_STATUS_OK & int(info['status'], 16):
+                  mc += a('menuitem', 'Open in Browser',
+                          cb=make_cb(self.open_url, url+path), tooltip=url+path)
+                mc += a('menuitem', ('Copy Link to: %s'
+                                     ) % (path == '/' and 'Home page' or path),
+                        cb=make_cb(self.copy_url, url+path), tooltip=url+path)
+                mc += a('menuitem', 'Stop Sharing')
+                xml.append('</menu>')
+
+          xml.append('<separator/>')
+
+        others = [k for k in self.kites[domain].keys() if k not in www]
+        others.sort(key=lambda x: int(self.kites[domain][x]['port'] or
+                                      self.kites[domain][x]['bport'] or 0))
+        for protoport in others:
+          info = self.kites[domain][protoport]
+          fdesc, bdesc, status, url = DescribeKite(domain, protoport, info)
+          live = (status != 'Disabled')
+          mc += a('menuitem', '%s to %s' % (fdesc, bdesc),
+                  cb=make_cb(self.kite_toggle, info, live),
+                  toggle=live)
+
+        xml.append('</menu>')
+    else:
+      a('menuitem', 'No Kites Yet', action='PageKiteList')
+
+    if action_group and actions: action_group.add_actions(actions)
+    if action_group and toggles: action_group.add_toggle_actions(toggles)
+    return ''.join(xml)
+
+  def set_status_msg(self, message):
+    self.status = message
+    self.set_tooltip('PageKite: %s' % self.status)
+    if self.kite_manager:
+      self.kite_manager.update_status(self.status)
+
+  def set_status_tag(self, status):
+    old_if = self.icon_file
+    km = self.kite_manager
+
+    if status in ('traffic', 'serving'):
+      self.icon_file = ICON_FILE_TRAFFIC
+    # Connecting..
+    elif status == 'connect':
+      self.icon_file = ICON_FILE_ACTIVE
+      if km: km.set_all_inactive('Connecting ...')
+    elif status == 'dyndns': self.icon_file = ICON_FILE_IDLE
+    elif status == 'startup':
+      self.icon_file = ICON_FILE_IDLE
+      if km: km.set_all_inactive('Starting up ...')
+    elif status == 'reconfig':
+      self.icon_file = ICON_FILE_ACTIVE
+      if km: km.set_all_inactive('Updating configuration ...')
+    # Inactive, boo
+    elif status in ('idle', 'down'):
+      self.icon_file = ICON_FILE_IDLE
+    elif status == 'exiting':
+      self.icon_file = ICON_FILE_IDLE
+      if km: km.set_all_inactive('Disconnecting ...')
+    # Ready and waiting
+    elif status in ('active', 'flying'):
+      self.icon_file = ICON_FILE_ACTIVE
+
+    # Ignore bogus updates which would cause the screen to flicker.
+    self.set_suppress_updates(status in ('reconnecting', 'exiting'))
+
+    if self.icon_file != old_if:
+      self.set_from_pixbuf(gtk_open_image(os.path.join(self.icon_dir,
+                                                       self.icon_file)))
+    if self.open_manager:
+      # This will open the manager on first run...
+      self.manage_kites(None, page=0)
+      self.open_manager = False
+
+    elif not self.is_embedded():
+      # This will also open the manager if we fail to embed the icon and
+      # in that case, we also quit the programmer when the manager is closed.
+      if not self.kite_manager:
+        self.manage_kites(None, page=0)
+      elif not self.kite_manager.window:
+        self.quit(None, set_status_tag=False)
+
+  def set_motd(self, args):
+    frontend, message = args.split(' ', 1)
+    self.motd = message.strip()
+    if self.kite_manager:
+      self.kite_manager.update_motd(self.motd)
+
+  def on_activate(self, ignored):
+    if self.wizard:
+      self.wizard.window.hide()
+      self.wizard.window.show()
+    elif self.kite_manager and self.kite_manager.window:
+      self.kite_manager.window.destroy()
+      self.kite_manager = None
+    else:
+      self.manage_kites(None, page=0)
+      #self.emit('popup-menu', 2, 0)
+    return False
+
+  def on_popup_menu(self, status, button, when):
+    if self.menu and self.menu.props.visible:
+      self.menu.popdown()
+    else:
+      if not self.menu: self.create_menu()
+      self.show_menu(button, when)
+    return False
+
+  def ui_full(self):
+    return (not self.pkComm.pkThread.stopped and not self.wizard)
+
+  def show_menu(self, button, when):
+    w = self.manager.get_widget
+
+    for item in ('/Menubar/Menu/PageKiteList',
+                 '/Menubar/Menu/SharedItems',
+                 '/Menubar/Menu/SharePath',
+                 '/Menubar/Menu/ShareClipboard',
+                 '/Menubar/Menu/ShareScreenshot',
+                 '/Menubar/Menu/AdvancedMenu/ViewLog',
+                 '/Menubar/Menu/AdvancedMenu/VerboseLog'):
+      try:
+        w(item).set_sensitive(self.ui_full())
+      except:
+        pass
+
+    for item in ('/Menubar/Menu/PageKiteList',
+                 ):
+      try:
+        w(item).set_sensitive(False)
+      except:
+        pass
+
+    if not self.have_screenshots:
+      w('/Menubar/Menu/ShareScreenshot').hide()
+
+    if not self.have_sharing or not self.development:
+      w('/Menubar/Menu/ShareScreenshot').hide()
+      w('/Menubar/Menu/ShareClipboard').hide()
+      w('/Menubar/Menu/SharePath').hide()
+
+    for item in ('/Menubar/Menu/CfgKites',
+                 ):
+      try:
+        if self.pkComm.pkThread.stopped:
+          w(item).hide()
+        else:
+          w(item).show()
+      except:
+        pass
+
+    self.menu.popup(None, None, gtk.status_icon_position_menu,
+                    button, when, self)
+
+  def set_suppress_updates(self, yesno):
+    if self.suppress_updates != yesno:
+      self.kites_sig = '-reload-'
+    self.suppress_updates = yesno
+
+  def update_be_list(self, args):
+    if self.suppress_updates: return
+
+    ks = self.kites_sig
+    self.kites_sig = '\n'.join(args.get('_raw', []))
+    if ks == self.kites_sig:
+      return
+
+    self.menu = None
+    self.kites = {}
+    self.have_sharing = False
+
+    for line in args.get('_raw', []):
+      self.parse_status(line.strip().split(': ', 1)[1])
+
+    if self.kite_manager:
+      self.kite_manager.update(self.kites)
+
+  def parse_status(self, argtext):
+    args = {}
+    for arg in argtext.split('; '):
+      var, val = arg.split('=', 1)
+      args[var] = val
+
+    if 'domain' in args:
+      domain_info = self.kites.get(args['domain'], {})
+      proto = args.get('proto', 'http')
+      port = args.get('port') or '80' # FIXME: this is dumb
+      bid = '%s/%s' % (proto, port)
+      backend_info = domain_info.get(bid, {})
+      if 'path' in args:
+        path_info = backend_info.get('paths', {})
+        if 'delete' in args:
+          if args['path'] in path_info: del path_info[args['path']]
+        else:
+          path_info[args['path']] = {
+            'domain': args['domain'],
+            'policy': args['policy'],
+            'port': port,
+            'src': args['src']
+          }
+          backend_info['paths'] = path_info
+          domain_info[bid] = backend_info
+      else:
+        if 'delete' in args:
+          if bid in domain_info: del domain_info[bid]
+        else:
+          if 'builtin' in args: self.have_sharing = True
+          for i in ('proto', 'port', 'status', 'bhost', 'bport',
+                    'bid', 'ssl', 'builtin'):
+            if i in args:
+              backend_info[i] = args[i]
+          domain_info[bid] = backend_info
+      self.kites[args['domain']] = domain_info
+
+  def show_working(self, message):
+    self.wizard.set_question('Communicating with PageKite.net.\n'
+                             'This may take a moment or two.\n\n'
+                             '<b>%s ...</b>' % message)
+    self.wizard.show_input_area(False)
+
+  def wizard_prepare(self, args):
+    if 'preamble' in args:
+      question = ''.join([args['preamble'].replace('  ', '\n'),
+                          '\n\n<b>', args['question'], '</b>'])
+    else:
+      question = '<b>%s</b>' % args['question']
+
+    wizard = self.wizard
+    if not wizard: wizard = PageKiteWizard(title='A question!')
+    wizard.set_question(question)
+
+    return question, wizard
+
+  def ask_yesno(self, args):
+    question, wizard = self.wizard_prepare(args)
+    wizard.show_input_area(False)
+
+    def respond(window, what):
+      self.pkComm.pkThread.send('%s\n' % what)
+      self.wizard_first = False
+      if not self.wizard: wizard.close()
+    buttons = []
+    if 'no' in args: buttons.append((args['no'], lambda w: respond(w, 'n')))
+    if 'yes' in args: buttons.append((args['yes'], lambda w: respond(w, 'y')))
+    wizard.set_buttons(buttons)
+
+  def ask_question(self, args,
+                   valid_re, prefix='  ', callback=None, password=False):
+    question, wizard = self.wizard_prepare(args)
+    wizard.textinput.set_text(args.get('default', ''))
+    wizard.textinput.set_visibility(not password)
+    wizard.inputprefix.set_text(prefix)
+    wizard.inputsuffix.set_text(args.get('domain', '')+'     ')
+    wizard.show_input_area(True)
+
+    def respond(window, what):
+      wizard.inputprefix.set_text('')
+      wizard.inputsuffix.set_text('')
+      self.wizard_first = False
+      if not self.wizard: wizard.close()
+      if callback:
+        callback(window, what)
+      else:
+        self.pkComm.pkThread.send('%s\n' % what)
+    wizard.set_buttons([
+      ((self.wizard and not self.wizard_first) and '<<' or 'Cancel',
+                                                  lambda w: respond(w, 'back')),
+      (self.wizard and 'Next' or 'OK',
+                             lambda w: respond(w, wizard.textinput.get_text())),
+    ])
+
+  def ask_email(self, args):
+    return self.ask_question(args, '.*@.*$') # FIXME
+
+  def ask_kitename(self, args):
+    return self.ask_question(args, '.*') # FIXME
+
+  def ask_login(self, args):
+    def askpass(window, what):
+      if 'default' in args: del args['default']
+      self.pkComm.pkThread.send('%s\n' % what)
+      self.ask_question(args, '.*', prefix='Password: ', password=True)
+    if 'default' in args:
+      return askpass(None, args['default'])
+    else:
+      return self.ask_question(args, '.*', prefix='E-mail: ', callback=askpass)
+
+  def ask_backends(self, args):
+    question, wizard = self.wizard_prepare(args)
+    wizard.show_input_area(False)
+    choices = gtk.VBox(False, spacing=5)
+
+    protos = args.get('protos', '').split(', ')
+    ports = args.get('ports', '').split(', ')
+    rawports = args.get('rawports', '').split(', ')
+
+    ktypes = []
+    if 'http' in args['protos']:
+      if self.development:
+        ktypes.append(('builtin', 'PageKite Sharing',  None, ports))
+      ktypes.append(('http',           'HTTP server',  '80', ports))
+    if 'https' in args['protos']:
+      ktypes.append(('https',         'HTTPS server', '443', ports))
+    if 'raw' in args['protos']:
+      ktypes.append(('ssh',             'SSH server',  '22', rawports))
+      ktypes.append(('raw',         'Raw TCP server','1234', rawports))
+
+    fly, flyb = gtk.HBox(), gtk.HBox()
+    fly_cb = gtk.combo_box_new_text()
+    for t, o, bp, fpl in ktypes:
+      fly_cb.append_text(o)
+
+    fly_on = gtk.Label()
+    fly_on.set_markup(' on <b>localhost:</b>')
+    fly_port = gtk.Entry()
+    fly_port.set_width_chars(5)
+
+    fly_asbb, fly_asb = gtk.HBox(), gtk.HBox()
+    fly_ast = gtk.Label()
+    fly_as = gtk.combo_box_new_text()
+
+    hint = gtk.Label()
+    hint.set_markup('<b>Note:</b> New services may replace old ones.')
+    hint.set_alignment(0, 1)
+
+    flyb.pack_start(fly_cb, expand=False, fill=False, padding=0)
+    flyb.pack_start(fly_on, expand=False, fill=False, padding=0)
+    flyb.pack_start(fly_port, expand=False, fill=False, padding=0)
+    fly.pack_start(flyb, expand=True, fill=False, padding=0)
+    fly_asbb.pack_start(fly_ast, expand=False, fill=False, padding=0)
+    fly_asbb.pack_start(fly_as, expand=False, fill=False, padding=0)
+    fly_asb.pack_start(fly_asbb, expand=True, fill=False, padding=0)
+    choices.pack_start(fly, expand=False, fill=False, padding=5)
+    choices.pack_start(fly_asb, expand=True, fill=False, padding=5)
+    choices.pack_end(hint, expand=True, fill=True, padding=5)
+
+    # FIXME: update() should set the backend string for our reponse
+    def update(w, choice):
+      chosen = fly_cb.get_active_text()
+      kitename = args['kitename']
+      for t, o, bp, fpl in ktypes:
+        if o == chosen:
+          if w == fly_cb:
+            fly_port.set_sensitive(bp is not None)
+            fly_port.set_text(bp or '--')
+
+          lport = fly_port.get_text()
+          proto = (t == 'builtin') and 'http' or t
+
+          if proto in ('raw', 'ssh'):
+            fly_as.hide()
+            if 'virtual' in rawports or lport in rawports:
+              fly_ast.set_markup(('Fly as <b>%s:%s</b> (HTTP proxied)'
+                                  ) % (kitename, lport))
+            choice[0] = 'raw-%s:%%s:localhost:%s' % (lport, lport)
+
+          elif w == fly_cb:
+            fly_ast.set_text('Fly as: ')
+            fly_as.get_model().clear()
+            fly_as.show()
+            if proto.startswith('http'):
+              fly_as.append_text('%s://%s' % (proto, kitename))
+              if t == 'builtin':
+                choice[0] = '%s:builtin'
+              else:
+                choice[0] = '%s:%%s:localhost:%s' % (proto, lport)
+              for port in fpl:
+                fly_as.append_text('%s://%s:%s' % (proto, kitename, port))
+            fly_as.set_active(0)
+
+          else:
+            fly_as_text = (fly_as.get_active_text() or '').split(':')
+            if len(fly_as_text) > 2:
+              port = fly_as_text[2]
+              if t == 'builtin':
+                choice[0] = 'http-%s:%%s:builtin' % port
+              else:
+                choice[0] = '%s-%s:%%s:localhost:%s' % (proto, port, lport)
+            else:
+              if t == 'builtin':
+                choice[0] = '%s:builtin'
+              else:
+                choice[0] = '%s:%%s:localhost:%s' % (proto, lport)
+
+    choice = [None]
+    choices.show_all()
+    update(None, choice)
+    fly_cb.connect('changed', lambda w: update(w, choice))
+    fly_as.connect('changed', lambda w: update(w, choice))
+    fly_port.connect('changed', lambda w: update(w, choice))
+    fly_cb.set_active(0)
+
+    self.wizard.left.pack_start(choices)
+
+    def respond(window, ch=None):
+      self.wizard_first = False
+      self.wizard.left.remove(choices)
+      self.pkComm.pkThread.send('%s\n' % (ch or choice)[0])
+      if not self.wizard: wizard.close()
+    wizard.set_buttons([
+      ((self.wizard and not self.wizard_first) and '<<' or 'Cancel',
+                                                lambda w: respond(w, ['back'])),
+      (self.wizard and 'Next' or 'OK', lambda w: respond(w)),
+    ])
+
+  def ask_multiplechoice(self, args):
+    question, wizard = self.wizard_prepare(args)
+    wizard.show_input_area(False)
+
+    choices = gtk.VBox(False, spacing=5)
+    clist = []
+    rb = None
+    for ch in sorted([k for k in args if k.startswith('choice_')]):
+      rb = gtk.RadioButton(rb, args[ch])
+      clist.append((rb, int(ch[7:])))
+      choices.pack_start(rb, expand=False, fill=False)
+    choices.show_all()
+    self.wizard.left.pack_start(choices)
+
+    def respond(window, choice=None):
+      if not choice:
+        choice = args.get('default', None)
+        for cw, cn in clist:
+          if cw.get_active(): choice = cn
+      self.wizard_first = False
+      self.wizard.left.remove(choices)
+      print 'Choice is: %s' % choice
+      self.pkComm.pkThread.send('%s\n' % choice)
+      if not self.wizard: wizard.close()
+    wizard.set_buttons([
+      ((self.wizard and not self.wizard_first) and '<<' or 'Cancel',
+                                                  lambda w: respond(w, 'back')),
+      (self.wizard and 'Next' or 'OK', lambda w: respond(w)),
+    ])
+
+  def kite_toggle(self, ev, kite_info, live):
+    bid = kite_info['bid']
+    if live:
+      self.pkComm.pkThread.send('disablekite: %s\n' % bid)
+      ShowInfoDialog('Disabling %s ...' % bid)
+    else:
+      self.pkComm.pkThread.send('enablekite: %s\n' % bid)
+      ShowInfoDialog('Enabling %s ...' % bid)
+    return False
+
+  def copy_url(self, junk, url):
+    gtk.clipboard_get('CLIPBOARD').set_text(url, len=-1)
+
+  def open_url(self, junk, url):
+    webbrowser.open(url)
+
+  def share_clipboard_cb(self, clipboard, text, data):
+    print 'CB: %s / %s / %s' % (clipboard, text, data)
+    ShowErrorDialog('Unimplemented... %s [%s/%s]' % (text, clipboard, data))
+
+  def share_clipboard(self, data):
+    cb = gtk.clipboard_get(gtk.gdk.SELECTION_CLIPBOARD)
+    cb.request_text(self.share_clipboard_cb)
+
+  def get_sharebucket(self, title, dtype, data):
+    self.wizard = sd = SharingDialog(self.kites, dtype, data, title=title)
+    if sd.run() == gtk.RESPONSE_OK:
+      kitename = sd.get_kitename()
+      kiteport = sd.get_kiteport()
+    else:
+      kitename = kiteport = None
+
+    sd.hide()
+    self.wizard = None
+    if not kitename: return None, None, None, None
+
+    sb = ShareBucket(kitename, kiteport, title=title)
+    return kitename, kiteport, sb, sd
+
+  def save_configuration(self, lines):
+    for line in lines:
+      self.pkComm.pkThread.send('config: %s\n' % line)
+    self.pkComm.pkThread.send('save: quietly\n')
+    if '--clean' in sys.argv: sys.argv.remove('--clean')
+
+  def share_path(self, data):
+    try:
+      RESPONSE_SHARE = gtk.RESPONSE_CANCEL + gtk.RESPONSE_OK + 1000
+      self.wizard = fs = gtk.FileChooserDialog('Share Files or Folders', None,
+                                               gtk.FILE_CHOOSER_ACTION_OPEN,
+                                         (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+                                          "Share!", RESPONSE_SHARE))
+      fs.set_default_response(RESPONSE_SHARE)
+      fs.set_select_multiple(True)
+      expl = gtk.Label("Hint: You can share multiple files or folders "
+                       "by holding the <CTRL> key.")
+      expl.show()
+      fs.set_extra_widget(expl)
+
+      paths = (fs.run() == RESPONSE_SHARE) and fs.get_filenames()
+
+      fs.destroy()
+      expl.destroy()
+      self.wizard = None
+
+      if paths:
+        kitename, kiteport, sb, sd = self.get_sharebucket('Shared',
+                                                     ShareBucket.S_PATHS, paths)
+        if not sb: return
+
+        sb.add_paths(paths).save()
+        self.save_configuration(sb.pk_config())
+        url = 'http://%s:%s%s' % (kitename, kiteport, sb.dirname)
+        self.copy_url(None, url)
+        self.open_url(None, url)
+    except:
+      ShowErrorDialog('Sharing failed: %s' % (sys.exc_info(), ))
+
+  def share_screenshot(self, data, title='Screenshot'):
+    self.menu.hide()
+    try:
+      screenshot = GetScreenShot()
+      kitename, kiteport, sb, sd = self.get_sharebucket('Screenshot',
+                                           ShareBucket.S_SCREENSHOT, screenshot)
+      if not sb: return
+
+      sb.add_screenshot(screenshot).save()
+      self.save_configuration(sb.pk_config())
+      url = 'http://%s:%s%s' % (kitename, kiteport, sb.dirname)
+      self.copy_url(None, url)
+      self.open_url(None, url)
+    except:
+      ShowErrorDialog('Screenshot failed: %s' % (sys.exc_info(), ))
+
+  def new_kite(self, data):
+    self.pkComm.pkThread.send('addkite: None\n')
+
+  def manage_kites(self, data, page=PageKiteManager.PAGE_KITES):
+    if self.kite_manager and self.kite_manager.pages:
+      self.kite_manager.window.present()
+    else:
+      self.kite_manager = PageKiteManager(self, self.pkComm.pkThread,
+                                          development=self.development)
+    self.kite_manager.update(self.kites)
+    self.kite_manager.update_motd(self.motd)
+    self.kite_manager.show_page(page)
+    return False
+
+  def show_about(self):
+    dialog = gtk.AboutDialog()
+    dialog.set_position(gtk.WIN_POS_CENTER)
+    dialog.set_name('PageKite')
+    dialog.set_version(pagekite.APPVER)
+    dialog.set_comments('PageKite is a tool for running personal servers, '
+                        'sharing work and communicating over the WWW.')
+    dialog.set_website(pagekite.WWWHOME)
+    dialog.set_license(pagekite.LICENSE)
+    dialog.connect('expose-event', ExposeFancyBackground)
+    dialog.run()
+    dialog.destroy()
+
+  def toggle_verboselog(self, data):
+    pass
+
+  def toggle_enable(self, data):
+    pkt = self.pkComm.pkThread
+    pkt.toggle()
+    data.set_active(not pkt.stopped)
+    if pkt.stopped:
+      self.kites, self.kites_sig = {}, None
+
+  def start_wizard(self, title):
+    if self.wizard:
+      self.wizard.set_title(title)
+    else:
+      self.wizard = PageKiteWizard(title=title)
+      self.wizard_first = True
+
+  def end_wizard(self, message):
+    if self.wizard:
+      self.wizard.close()
+    self.wizard = None
+    self.pkComm.pkThread.send('save: quietly\n')
+    if '--clean' in sys.argv: sys.argv.remove('--clean')
+
+  def on_stub(self, data):
+    print 'Stub'
+
+  def on_help(self, data):
+    ShowInfoDialog('Opening %s in your web browser ...' % URL_HELP)
+    self.open_url(None, URL_HELP)
+
+  def on_about(self, data):
+    self.show_about()
+
+  def quit(self, data, set_status_tag=True):
+    if set_status_tag:
+      self.set_status_tag('exiting')
+    self.set_status_msg('Shutting down...')
+    gobject.timeout_add_seconds(1, self.quitting)
+    self.pkComm.quit()
+
+  def quitting(self):
+    if self.pkComm and self.pkComm.pkThread and self.pkComm.pkThread.pk:
+      return
+    gtk.main_quit()
+
+
+if __name__ == '__main__':
+  pkt = pksi = ct = None
+  try:
+    pkt = PageKiteThread(startup_args=['--friendly'])
+
+    if '--remote' in sys.argv:
+      sys.argv.remove('--remote')
+      pkt.stopped = True
+    else:
+      pkt.stopped = False
+
+    if '--dev' in sys.argv:
+      sys.argv.remove('--dev')
+      development = True
+    else:
+      development = False
+
+    if '--nomanager' in sys.argv:
+      sys.argv.remove('--nomanager')
+      open_manager = False
+    else:
+      open_manager = True
+
+    ct = CommThread(pkt)
+    pksi = PageKiteStatusIcon(ct, development=development,
+                                  open_manager=open_manager)
+    gobject.threads_init()
+    gtk.main()
+  except:
+    traceback.print_exc()
+
+  finally:
+    if pkt: pkt.quit()
+    if ct: ct.quit()
+
+
+##############################################################################
+CERTS="""\
+StartCom Ltd.
+=============
+-----BEGIN CERTIFICATE-----
+MIIFFjCCBH+gAwIBAgIBADANBgkqhkiG9w0BAQQFADCBsDELMAkGA1UEBhMCSUwxDzANBgNVBAgT
+BklzcmFlbDEOMAwGA1UEBxMFRWlsYXQxFjAUBgNVBAoTDVN0YXJ0Q29tIEx0ZC4xGjAYBgNVBAsT
+EUNBIEF1dGhvcml0eSBEZXAuMSkwJwYDVQQDEyBGcmVlIFNTTCBDZXJ0aWZpY2F0aW9uIEF1dGhv
+cml0eTEhMB8GCSqGSIb3DQEJARYSYWRtaW5Ac3RhcnRjb20ub3JnMB4XDTA1MDMxNzE3Mzc0OFoX
+DTM1MDMxMDE3Mzc0OFowgbAxCzAJBgNVBAYTAklMMQ8wDQYDVQQIEwZJc3JhZWwxDjAMBgNVBAcT
+BUVpbGF0MRYwFAYDVQQKEw1TdGFydENvbSBMdGQuMRowGAYDVQQLExFDQSBBdXRob3JpdHkgRGVw
+LjEpMCcGA1UEAxMgRnJlZSBTU0wgQ2VydGlmaWNhdGlvbiBBdXRob3JpdHkxITAfBgkqhkiG9w0B
+CQEWEmFkbWluQHN0YXJ0Y29tLm9yZzCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkCgYEA7YRgACOe
+yEpRKSfeOqE5tWmrCbIvNP1h3D3TsM+x18LEwrHkllbEvqoUDufMOlDIOmKdw6OsWXuO7lUaHEe+
+o5c5s7XvIywI6Nivcy+5yYPo7QAPyHWlLzRMGOh2iCNJitu27Wjaw7ViKUylS7eYtAkUEKD4/mJ2
+IhULpNYILzUCAwEAAaOCAjwwggI4MA8GA1UdEwEB/wQFMAMBAf8wCwYDVR0PBAQDAgHmMB0GA1Ud
+DgQWBBQcicOWzL3+MtUNjIExtpidjShkjTCB3QYDVR0jBIHVMIHSgBQcicOWzL3+MtUNjIExtpid
+jShkjaGBtqSBszCBsDELMAkGA1UEBhMCSUwxDzANBgNVBAgTBklzcmFlbDEOMAwGA1UEBxMFRWls
+YXQxFjAUBgNVBAoTDVN0YXJ0Q29tIEx0ZC4xGjAYBgNVBAsTEUNBIEF1dGhvcml0eSBEZXAuMSkw
+JwYDVQQDEyBGcmVlIFNTTCBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0eTEhMB8GCSqGSIb3DQEJARYS
+YWRtaW5Ac3RhcnRjb20ub3JnggEAMB0GA1UdEQQWMBSBEmFkbWluQHN0YXJ0Y29tLm9yZzAdBgNV
+HRIEFjAUgRJhZG1pbkBzdGFydGNvbS5vcmcwEQYJYIZIAYb4QgEBBAQDAgAHMC8GCWCGSAGG+EIB
+DQQiFiBGcmVlIFNTTCBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0eTAyBglghkgBhvhCAQQEJRYjaHR0
+cDovL2NlcnQuc3RhcnRjb20ub3JnL2NhLWNybC5jcmwwKAYJYIZIAYb4QgECBBsWGWh0dHA6Ly9j
+ZXJ0LnN0YXJ0Y29tLm9yZy8wOQYJYIZIAYb4QgEIBCwWKmh0dHA6Ly9jZXJ0LnN0YXJ0Y29tLm9y
+Zy9pbmRleC5waHA/YXBwPTExMTANBgkqhkiG9w0BAQQFAAOBgQBscSXhnjSRIe/bbL0BCFaPiNhB
+OlP1ct8nV0t2hPdopP7rPwl+KLhX6h/BquL/lp9JmeaylXOWxkjHXo0Hclb4g4+fd68p00UOpO6w
+NnQt8M2YI3s3S9r+UZjEHjQ8iP2ZO1CnwYszx8JSFhKVU2Ui77qLzmLbcCOxgN8aIDjnfg==
+-----END CERTIFICATE-----
+
+StartCom Certification Authority
+================================
+-----BEGIN CERTIFICATE-----
+MIIHyTCCBbGgAwIBAgIBATANBgkqhkiG9w0BAQUFADB9MQswCQYDVQQGEwJJTDEWMBQGA1UEChMN
+U3RhcnRDb20gTHRkLjErMCkGA1UECxMiU2VjdXJlIERpZ2l0YWwgQ2VydGlmaWNhdGUgU2lnbmlu
+ZzEpMCcGA1UEAxMgU3RhcnRDb20gQ2VydGlmaWNhdGlvbiBBdXRob3JpdHkwHhcNMDYwOTE3MTk0
+NjM2WhcNMzYwOTE3MTk0NjM2WjB9MQswCQYDVQQGEwJJTDEWMBQGA1UEChMNU3RhcnRDb20gTHRk
+LjErMCkGA1UECxMiU2VjdXJlIERpZ2l0YWwgQ2VydGlmaWNhdGUgU2lnbmluZzEpMCcGA1UEAxMg
+U3RhcnRDb20gQ2VydGlmaWNhdGlvbiBBdXRob3JpdHkwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAw
+ggIKAoICAQDBiNsJvGxGfHiflXu1M5DycmLWwTYgIiRezul38kMKogZkpMyONvg45iPwbm2xPN1y
+o4UcodM9tDMr0y+v/uqwQVlntsQGfQqedIXWeUyAN3rfOQVSWff0G0ZDpNKFhdLDcfN1YjS6LIp/
+Ho/u7TTQEceWzVI9ujPW3U3eCztKS5/CJi/6tRYccjV3yjxd5srhJosaNnZcAdt0FCX+7bWgiA/d
+eMotHweXMAEtcnn6RtYTKqi5pquDSR3l8u/d5AGOGAqPY1MWhWKpDhk6zLVmpsJrdAfkK+F2PrRt
+2PZE4XNiHzvEvqBTViVsUQn3qqvKv3b9bZvzndu/PWa8DFaqr5hIlTpL36dYUNk4dalb6kMMAv+Z
+6+hsTXBbKWWc3apdzK8BMewM69KN6Oqce+Zu9ydmDBpI125C4z/eIT574Q1w+2OqqGwaVLRcJXrJ
+osmLFqa7LH4XXgVNWG4SHQHuEhANxjJ/GP/89PrNbpHoNkm+Gkhpi8KWTRoSsmkXwQqQ1vp5Iki/
+untp+HDH+no32NgN0nZPV/+Qt+OR0t3vwmC3Zzrd/qqc8NSLf3Iizsafl7b4r4qgEKjZ+xjGtrVc
+UjyJthkqcwEKDwOzEmDyei+B26Nu/yYwl/WL3YlXtq09s68rxbd2AvCl1iuahhQqcvbjM4xdCUsT
+37uMdBNSSwIDAQABo4ICUjCCAk4wDAYDVR0TBAUwAwEB/zALBgNVHQ8EBAMCAa4wHQYDVR0OBBYE
+FE4L7xqkQFulF2mHMMo0aEPQQa7yMGQGA1UdHwRdMFswLKAqoCiGJmh0dHA6Ly9jZXJ0LnN0YXJ0
+Y29tLm9yZy9zZnNjYS1jcmwuY3JsMCugKaAnhiVodHRwOi8vY3JsLnN0YXJ0Y29tLm9yZy9zZnNj
+YS1jcmwuY3JsMIIBXQYDVR0gBIIBVDCCAVAwggFMBgsrBgEEAYG1NwEBATCCATswLwYIKwYBBQUH
+AgEWI2h0dHA6Ly9jZXJ0LnN0YXJ0Y29tLm9yZy9wb2xpY3kucGRmMDUGCCsGAQUFBwIBFilodHRw
+Oi8vY2VydC5zdGFydGNvbS5vcmcvaW50ZXJtZWRpYXRlLnBkZjCB0AYIKwYBBQUHAgIwgcMwJxYg
+U3RhcnQgQ29tbWVyY2lhbCAoU3RhcnRDb20pIEx0ZC4wAwIBARqBl0xpbWl0ZWQgTGlhYmlsaXR5
+LCByZWFkIHRoZSBzZWN0aW9uICpMZWdhbCBMaW1pdGF0aW9ucyogb2YgdGhlIFN0YXJ0Q29tIENl
+cnRpZmljYXRpb24gQXV0aG9yaXR5IFBvbGljeSBhdmFpbGFibGUgYXQgaHR0cDovL2NlcnQuc3Rh
+cnRjb20ub3JnL3BvbGljeS5wZGYwEQYJYIZIAYb4QgEBBAQDAgAHMDgGCWCGSAGG+EIBDQQrFilT
+dGFydENvbSBGcmVlIFNTTCBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0eTANBgkqhkiG9w0BAQUFAAOC
+AgEAFmyZ9GYMNPXQhV59CuzaEE44HF7fpiUFS5Eyweg78T3dRAlbB0mKKctmArexmvclmAk8jhvh
+3TaHK0u7aNM5Zj2gJsfyOZEdUauCe37Vzlrk4gNXcGmXCPleWKYK34wGmkUWFjgKXlf2Ysd6AgXm
+vB618p70qSmD+LIU424oh0TDkBreOKk8rENNZEXO3SipXPJzewT4F+irsfMuXGRuczE6Eri8sxHk
+fY+BUZo7jYn0TZNmezwD7dOaHZrzZVD1oNB1ny+v8OqCQ5j4aZyJecRDjkZy42Q2Eq/3JR44iZB3
+fsNrarnDy0RLrHiQi+fHLB5LEUTINFInzQpdn4XBidUaePKVEFMy3YCEZnXZtWgo+2EuvoSoOMCZ
+EoalHmdkrQYuL6lwhceWD3yJZfWOQ1QOq92lgDmUYMA0yZZwLKMS9R9Ie70cfmu3nZD0Ijuu+Pwq
+yvqCUqDvr0tVk+vBtfAii6w0TiYiBKGHLHVKt+V9E9e4DGTANtLJL4YSjCMJwRuCO3NJo2pXh5Tl
+1njFmUNj403gdy3hZZlyaQQaRwnmDwFWJPsfvw55qVguucQJAX6Vum0ABj6y6koQOdjQK/W/7HW/
+lwLFCRsI3FU34oH7N4RDYiDK51ZLZer+bMEkkyShNOsF/5oirpt9P/FlUQqmMGqz9IgcgA38coro
+g14=
+-----END CERTIFICATE-----
+"""

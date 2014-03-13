@@ -1,22 +1,22 @@
 #!/usr/bin/python -u
-#
-# pagekite.py, Copyright 2010, 2011, the Beanstalks Project ehf.
-#                                    and Bjarni Runar Einarsson
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as
-# published by the Free Software Foundation, either version 3 of the
-# License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-#
+LICENSE = """\
+pagekite.py, Copyright 2010, 2011, the Beanstalks Project ehf.
+                                   and Bjarni Runar Einarsson
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the  GNU  Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful,  but  WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more
+details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see: <http://www.gnu.org/licenses/>
+
+"""
 ##[ Maybe TODO: ]##############################################################
 #
 # Optimization:
@@ -94,7 +94,7 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.4.5'
+APPVER = '0.4.6a'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -179,6 +179,7 @@ Front-end Options:
 
  --isfrontend   -f      Enable front-end mode.
  --authdomain=X -A X    Use X as a remote authentication domain.
+ --motd=/path/to/motd   Send the contents of this file to new back-ends.
  --host=H       -h H    Listen on H (hostname).
  --ports=A,B,C  -p A,B  Listen on ports A, B, C, ...
  --portalias=A:B        Report port A as port B to backends.
@@ -199,6 +200,7 @@ Back-end Options:
               is used as a port number, pagekite.py's HTTP server will be used.
 
  --define_backend=...   Same as --backend, except not enabled by default.
+ --delete_backend=...   Delete a given back-end.
  --frontends=N:X:P      Choose N front-ends from X (a DNS domain name), port P.
  --frontend=host:port   Connect to the named front-end server.
  --fe_certname=N        Connect using SSL, accepting valid certs for domain N.
@@ -284,22 +286,22 @@ SERVICE_TOS_URL = 'https://pagekite.net/support/terms/'
 
 OPT_FLAGS = 'o:O:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
-            'nullui', 'remoteui', 'help', 'settings',
+            'nullui', 'remoteui', 'uiport=', 'help', 'settings',
             'optfile=', 'optdir=', 'savefile=', 'reloadfile=',
-            'autosave', 'noautosave',
+            'autosave', 'noautosave', 'friendly',
             'signup', 'list', 'add', 'only', 'disable', 'remove', 'save',
             'service_xmlrpc=', 'controlpanel', 'controlpass',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webpath=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings',
             'defaults', 'local=', 'domain=',
-            'authdomain=', 'authhelpurl=', 'register=', 'host=',
-            'noupgradeinfo', 'upgradeinfo=', 'motd=',
+            'authdomain=', 'motd=', 'register=', 'host=',
+            'noupgradeinfo', 'upgradeinfo=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
             'tls_default=', 'tls_endpoint=',
             'fe_certname=', 'jakenoia', 'ca_certs=',
-            'kitename=', 'kitesecret=',
-            'backend=', 'define_backend=', 'be_config=', 'fingerpath=',
+            'kitename=', 'kitesecret=', 'fingerpath=',
+            'backend=', 'define_backend=', 'be_config=', 'delete_backend',
             'frontend=', 'frontends=', 'torify=', 'socksify=', 'proxy=',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes', 'debugio',
@@ -308,6 +310,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
 
 DEBUG_IO = False
 DEFAULT_CHARSET = 'utf-8'
+DEFAULT_BUFFER_MAX = 1024
 
 AUTH_ERRORS           = '255.255.255.'
 AUTH_ERR_USER_UNKNOWN = '.0'
@@ -341,12 +344,15 @@ BE_BPORT = 4
 BE_SECRET = 5
 BE_STATUS = 6
 
-BE_STATUS_OK = 100
-BE_STATUS_BE_FAIL = 2
-BE_STATUS_NO_TUNNEL = 1
-BE_STATUS_DISABLED = -1
-BE_STATUS_UNKNOWN = -2
-BE_STATUS_DISABLE_ONCE = -3
+BE_STATUS_REMOTE_SSL   = 0x0010000
+BE_STATUS_OK           = 0x0001000
+BE_STATUS_ERR_DNS      = 0x0000100
+BE_STATUS_ERR_BE       = 0x0000010
+BE_STATUS_ERR_TUNNEL   = 0x0000001
+BE_STATUS_ERR_ANY      = 0x0000fff
+BE_STATUS_UNKNOWN      = 0
+BE_STATUS_DISABLED     = 0x8000000
+BE_STATUS_DISABLE_ONCE = 0x4000000
 BE_INACTIVE = (BE_STATUS_DISABLED, BE_STATUS_DISABLE_ONCE)
 
 BE_NONE = ['', '', None, None, None, '', BE_STATUS_UNKNOWN]
@@ -518,6 +524,26 @@ class MockYamonD(object):
 
 YamonD = MockYamonD
 gYamon = YamonD(())
+
+
+class MockPageKiteXmlRpc:
+  def __init__(self, config):
+    self.config = config
+
+  def getSharedSecret(self, email, p):
+    for be in self.config.backends.values():
+      if be[BE_SECRET]: return be[BE_SECRET]
+
+  def getAvailableDomains(self, a, b):
+    return ['.%s' % x for x in SERVICE_DOMAINS]
+
+  def signUp(self, a, b):
+    return {
+      'secret': self.getSharedSecret(a, b)
+    }
+
+  def addCnameKite(self, a, s, k): return {}
+  def addKite(self, a, s, k): return {}
 
 
 ##[ PageKite.py code starts here! ]############################################
@@ -727,8 +753,11 @@ LOG_LENGTH = 300
 LOG_THRESHOLD = 256 * 1024
 
 def LogValues(values, testtime=None):
-  global LOG_LINE
-  words = [('ts', '%x' % (testtime or time.time())), ('ll', '%x' % LOG_LINE)]
+  global LOG_LINE, LOG_LAST_TIME
+  now = int(testtime or time.time())
+  words = [('ts', '%x' % now),
+           ('t',  '%s' % datetime.datetime.fromtimestamp(now).isoformat()),
+           ('ll', '%x' % LOG_LINE)]
   words.extend([(kv[0], ('%s' % kv[1]).replace('\t', ' ')
                                       .replace('\r', ' ')
                                       .replace('\n', ' ')
@@ -809,6 +838,10 @@ class AuthThread(threading.Thread):
     self.keep_running = False
     self.qc.notify()
     self.qc.release()
+    try:
+      self.join()
+    except RuntimeError:
+      pass
 
   def run(self):
     self.keep_running = True
@@ -818,6 +851,7 @@ class AuthThread(threading.Thread):
       except Exception, e:
         LogError('AuthThread died: %s' % e)
         time.sleep(5)
+    LogDebug('AuthThread: done')
 
   def _run(self):
     self.qc.acquire()
@@ -853,12 +887,18 @@ class AuthThread(threading.Thread):
                                                     domain, srand, token, sign,
                                                check_token=(conn.quota is None))
             if not quota:
+              if not reason: reason = 'quota'
               results.append(('%s-Invalid' % prefix, what))
               results.append(('%s-Invalid-Why' % prefix,
                               '%s;%s' % (what, reason)))
+              Log([('rejected', domain),
+                   ('quota', quota),
+                   ('reason', reason)])
             elif self.conns.Tunnel(proto, domain):
               # FIXME: Allow multiple backends?
               results.append(('%s-Duplicate' % prefix, what))
+              Log([('rejected', domain),
+                   ('duplicate', 'yes')])
             else:
               results.append(('%s-OK' % prefix, what))
               quotas.append(quota)
@@ -868,8 +908,9 @@ class AuthThread(threading.Thread):
 
         results.append(('%s-SessionID' % prefix,
                         '%x:%s' % (now, sha1hex(session))))
-        if self.conns.config.motd:
-          results.append(('%s-MOTD' % prefix, self.conns.config.motd))
+        results.append(('%s-Misc' % prefix, urllib.urlencode({
+                          'motd': (self.conns.config.motd_message or ''),
+                        })))
         for upgrade in self.conns.config.upgrade_info:
           results.append(('%s-Upgrade' % prefix, ';'.join(upgrade)))
 
@@ -1430,11 +1471,11 @@ class Selectable(object):
         self.LogInfo('Error reading socket: %s (errno=%s)' % (msg, errno))
         return False
 
+    self.last_activity = time.time()
     if data is None or data == '':
       self.read_eof = True
       return self.ProcessData('')
     else:
-      self.last_activity = time.time()
       if not self.peeking:
         self.read_bytes += len(data)
         if self.read_bytes > LOG_THRESHOLD: self.LogTraffic()
@@ -1582,16 +1623,20 @@ class Connections(object):
     return domain
 
   def Remove(self, conn):
-    if conn.alt_id and conn.alt_id in self.conns_by_id:
-      del self.conns_by_id[conn.alt_id]
-    if conn in self.conns:
-      self.conns.remove(conn)
-    if conn in self.idle:
-      self.idle.remove(conn)
-    for tid in self.tunnels.keys():
-      if conn in self.tunnels[tid]:
-        self.tunnels[tid].remove(conn)
-        if not self.tunnels[tid]: del self.tunnels[tid]
+    try:
+      if conn.alt_id and conn.alt_id in self.conns_by_id:
+        del self.conns_by_id[conn.alt_id]
+      if conn in self.conns:
+        self.conns.remove(conn)
+      if conn in self.idle:
+        self.idle.remove(conn)
+      for tid in self.tunnels.keys():
+        if conn in self.tunnels[tid]:
+          self.tunnels[tid].remove(conn)
+          if not self.tunnels[tid]: del self.tunnels[tid]
+    except ValueError:
+      # Let's not asplode if another thread races us for this.
+      pass
 
   def Readable(self):
     # FIXME: This is O(n)
@@ -1881,6 +1926,9 @@ class ChunkParser(Selectable):
         result = self.ProcessChunk(self.chunk)
       self.chunk = ''
       if result and leftover:
+        # FIXME: This blows the stack from time to time.  We need a loop
+        #        or better yet, to just process more in a subsequent
+        #        iteration of the main select() loop.
         result = self.ProcessData(leftover)
 
     if self.read_eof: result = self.ProcessEofRead() and result
@@ -2141,24 +2189,21 @@ class Tunnel(ChunkParser):
 
         if data and parse:
           sname = self.server_info[self.S_NAME]
-          conns.config.ui.Notify('Connecting to front-end %s ...' % sname,
-                                 color=conns.config.ui.GREY)
-          conns.config.ui.Notify(' - Protocols: %s' % ' '.join(self.server_info[self.S_PROTOS]),
-                                 color=conns.config.ui.GREY)
-          conns.config.ui.Notify(' - Ports: %s' % ' '.join(self.server_info[self.S_PORTS]),
-                                 color=conns.config.ui.GREY)
-          if 'raw' in self.server_info[self.S_PROTOS]:
-            conns.config.ui.Notify(' - Raw ports: %s' % ' '.join(self.server_info[self.S_RAW_PORTS]),
-                                   color=conns.config.ui.GREY)
+          conns.config.ui.NotifyServer(self, self.server_info)
+
+          for misc in parse.Header('X-PageKite-Misc'):
+            args = parse_qs(misc)
+            logdata = [('FE', sname)]
+            for arg in args:
+              logdata.append((arg, args[arg][0]))
+            Log(logdata)
+            if 'motd' in args and args['motd'][0]:
+              conns.config.ui.NotifyMOTD(sname, args['motd'][0])
 
           for quota in parse.Header('X-PageKite-Quota'):
             self.quota = [int(quota), None, None]
             self.Log([('FE', sname), ('quota', quota)])
-            qMB = 1024
-            conns.config.ui.Notify(('You have %.2f MB of quota left.'
-                                    ) % (float(quota) / qMB),
-                                   prefix=(int(quota) < qMB) and '!' or ' ',
-                                   color=conns.config.ui.MAGENTA)
+            conns.config.ui.NotifyQuota(float(quota))
 
           invalid_reasons = {}
           for request in parse.Header('X-PageKite-Invalid-Why'):
@@ -2174,9 +2219,9 @@ class Tunnel(ChunkParser):
                       ('proto', proto),
                       ('reason', reason),
                       ('domain', domain)])
-            conns.config.ui.Notify(('REJECTED: %s:%s (invalid or out of quota)'
-                                    ) % (proto, domain),
-                                   prefix='!', color=conns.config.ui.RED)
+            conns.config.ui.NotifyKiteRejected(proto, domain, reason, crit=True)
+            conns.config.SetBackendStatus(domain, proto,
+                                          add=BE_STATUS_ERR_TUNNEL)
 
           for request in parse.Header('X-PageKite-Duplicate'):
             abort = True
@@ -2185,9 +2230,9 @@ class Tunnel(ChunkParser):
                       ('err', 'Duplicate'),
                       ('proto', proto),
                       ('domain', domain)])
-            conns.config.ui.Notify(('REJECTED: %s:%s (duplicate)'
-                                    ) % (proto, domain),
-                                   prefix='!', color=conns.config.ui.YELLOW)
+            conns.config.ui.NotifyKiteRejected(proto, domain, 'duplicate')
+            conns.config.SetBackendStatus(domain, proto,
+                                          add=BE_STATUS_ERR_TUNNEL)
 
           if not conns.config.disable_zchunks:
             for feature in parse.Header('X-PageKite-Features'):
@@ -2201,12 +2246,15 @@ class Tunnel(ChunkParser):
             abort = False
             proto, domain, srand = request.split(':')
             conns.Tunnel(proto, domain, self)
+            status = BE_STATUS_OK
             if request in ssl_available:
+              status |= BE_STATUS_REMOTE_SSL
               self.remote_ssl[(proto, domain)] = True
             self.Log([('FE', sname),
                       ('proto', proto),
-                      ('ssl', (request in ssl_available)),
-                      ('domain', domain)])
+                      ('domain', domain),
+                      ('ssl', (request in ssl_available))])
+            conns.config.SetBackendStatus(domain, proto, add=status)
 
         self.rtt = (time.time() - begin)
 
@@ -2529,6 +2577,8 @@ class UserConn(Selectable):
     self.conns = None
     self.backend = BE_NONE[:]
     self.config = {}
+    # UserConn objects are considered active immediately
+    self.last_activity = time.time()
 
   def __html__(self):
     return ('<b>Tunnel</b>: <a href="/conn/%s">%s</a><br>'
@@ -2601,8 +2651,9 @@ class UserConn(Selectable):
                     and self.conns):
       self.Log([('domain', self.host), ('on_port', on_port), ('proto', self.proto), ('is', 'FE')])
       self.conns.Add(self)
-      self.conns.TrackIP(address[0], host)
-      # FIXME: Use the tracked data to detect & mitigate abuse?
+      if proto.startswith('http'):
+        self.conns.TrackIP(address[0], host)
+        # FIXME: Use the tracked data to detect & mitigate abuse?
       return self
     else:
       self.LogDebug('No back-end', [('on_port', on_port), ('proto', self.proto),
@@ -2915,10 +2966,15 @@ class UnknownConn(MagicProtocolParser):
               self.Send(HTTP_ConnectOK(), try_flush=True)
               return True
 
+          whost = chost
+          if '.' in whost:
+            whost = '*.' + '.'.join(whost.split('.')[1:])
+
           if cport == 443:
             if (('https'+sid1) in tunnels) or (
                 ('https'+sid2) in tunnels) or (
-                chost in self.conns.config.tls_endpoints):
+                chost in self.conns.config.tls_endpoints) or (
+                whost in self.conns.config.tls_endpoints):
               (self.on_port, self.host) = (cport, chost)
               self.parser = HttpLineParser()
               self.Send(HTTP_ConnectOK(), try_flush=True)
@@ -3007,17 +3063,6 @@ class UnknownConn(MagicProtocolParser):
         # better luck on the next round.
         return True
 
-    if domains:
-      # If we know how to terminate the TLS/SSL, do so!
-      ctx = self.conns.config.GetTlsEndpointCtx(domains[0])
-      if ctx:
-        self.fd = socks.SSL_Connect(ctx, self.fd,
-                                    accepted=True, server_side=True)
-        self.peeking = False
-        self.is_tls = False
-        self.my_tls = True
-        return True
-
     if domains and domains[0] is not None:
       if UserConn.FrontEnd(self, self.address,
                            'https', domains[0], self.on_port,
@@ -3034,6 +3079,7 @@ class UnknownConn(MagicProtocolParser):
                                       accepted=True, server_side=True)
           self.peeking = False
           self.is_tls = False
+          self.my_tls = True
           return True
         else:
           return False
@@ -3049,6 +3095,75 @@ class UnknownConn(MagicProtocolParser):
     # We are done!
     self.Cleanup(close=False)
     return True
+
+
+class UiConn(LineParser):
+
+  STATE_PASSWORD = 0
+  STATE_LIVE     = 1
+
+  def __init__(self, fd, address, on_port, conns):
+    LineParser.__init__(self, fd=fd, address=address, on_port=on_port)
+    self.state = self.STATE_PASSWORD
+
+    self.conns = conns
+    self.conns.Add(self)
+    self.lines = []
+    self.qc = threading.Condition()
+
+    self.challenge = sha1hex('%s%8.8x' % (globalSecret(),
+                                          random.randint(0, 0x7FFFFFFD)+1))
+    self.expect = signToken(token=self.challenge,
+                            secret=self.conns.config.ConfigSecret(),
+                            payload=self.challenge,
+                            length=1000)
+    LogDebug('Expecting: %s' % self.expect)
+    self.Send('PageKite? %s\r\n' % self.challenge)
+
+
+  def readline(self):
+    self.qc.acquire()
+    while not self.lines: self.qc.wait()
+    line = self.lines.pop(0)
+    self.qc.release()
+    return line
+
+  def write(self, data):
+    self.conns.config.ui_wfile.write(data)
+    self.Send(data)
+
+  def Cleanup(self):
+    self.conns.config.ui.wfile = self.conns.config.ui_wfile
+    self.conns.config.ui.rfile = self.conns.config.ui_rfile
+    self.lines = self.conns.config.ui_conn = None
+    self.conns = None
+    LineParser.Cleanup(self)
+
+  def Disconnect(self):
+    self.Send('Goodbye')
+    self.Cleanup()
+
+  def ProcessLine(self, line, lines):
+    if self.state == self.STATE_LIVE:
+      self.qc.acquire()
+      self.lines.append(line)
+      self.qc.notify()
+      self.qc.release()
+      return True
+    elif self.state == self.STATE_PASSWORD:
+      if line.strip() == self.expect:
+        if self.conns.config.ui_conn: self.conns.config.ui_conn.Disconnect()
+        self.conns.config.ui_conn = self
+        self.conns.config.ui.wfile = self
+        self.conns.config.ui.rfile = self
+        self.state = self.STATE_LIVE
+        self.Send('OK!\r\n')
+        return True
+      else:
+        self.Send('Sorry.\r\n')
+        return False
+    else:
+      return False
 
 
 class RawConn(Selectable):
@@ -3070,10 +3185,12 @@ class RawConn(Selectable):
 class Listener(Selectable):
   """This class listens for incoming connections and accepts them."""
 
-  def __init__(self, host, port, conns, backlog=100, connclass=UnknownConn):
+  def __init__(self, host, port, conns, backlog=100,
+                     connclass=UnknownConn, quiet=False):
     Selectable.__init__(self, bind=(host, port), backlog=backlog)
     self.Log([('listen', '%s:%s' % (host, port))])
-    conns.config.ui.Notify(' - Listening on %s:%s' % (host or '*', port))
+    if not quiet:
+      conns.config.ui.Notify(' - Listening on %s:%s' % (host or '*', port))
 
     self.connclass = connclass
     self.port = port
@@ -3085,7 +3202,7 @@ class Listener(Selectable):
     return '%s port=%s' % (Selectable.__str__(self), self.port)
 
   def __html__(self):
-    return '<p>Listening on port %s</p>' % self.port
+    return '<p>Listening on port %s for %s</p>' % (self.port, self.connclass)
 
   def ReadData(self, maxread=None):
     try:
@@ -3123,6 +3240,7 @@ class HttpUiThread(threading.Thread):
     threading.Thread.__init__(self)
     if not (server and handler):
       self.serve = False
+      self.httpd = None
       return
 
     self.ui_sspec = pkite.ui_sspec
@@ -3140,8 +3258,16 @@ class HttpUiThread(threading.Thread):
       knock = rawsocket(socket.AF_INET, socket.SOCK_STREAM)
       knock.connect(self.ui_sspec)
       knock.close()
-    except Exception:
+    except IOError:
       pass
+    try:
+      self.join()
+    except RuntimeError:
+      try:
+        if self.httpd and self.httpd.socket:
+          self.httpd.socket.close()
+      except IOError:
+        pass
 
   def run(self):
     while self.serve:
@@ -3151,9 +3277,112 @@ class HttpUiThread(threading.Thread):
         self.serve = False
       except Exception, e:
         LogInfo('HTTP UI caught exception: %s' % e)
+    if self.httpd: self.httpd.socket.close()
     LogDebug('HttpUiThread: done')
-    self.httpd.socket.close()
 
+
+class UiCommunicator(threading.Thread):
+  """Listen for interactive commands."""
+
+  def __init__(self, config, conns):
+    threading.Thread.__init__(self)
+    self.looping = False
+    self.config = config
+    self.conns = conns
+    LogDebug('UiComm: Created')
+
+  def run(self):
+    self.looping = True
+    while self.looping:
+      if not self.config or not self.config.ui.ALLOWS_INPUT:
+        time.sleep(1)
+        continue
+
+      line = ''
+      try:
+        i, o, e = select.select([self.config.ui.rfile], [], [], 1)
+        if not i: continue
+      except:
+        pass
+
+      if self.config:
+        line = self.config.ui.rfile.readline().strip()
+        if line: self.Parse(line)
+
+    LogDebug('UiCommunicator: done')
+
+  def Reconnect(self):
+    if self.config.tunnel_manager:
+      self.config.ui.Status('reconfig')
+      self.config.tunnel_manager.CloseTunnels()
+      self.config.tunnel_manager.HurryUp()
+
+  def Parse(self, line):
+    try:
+      command, args = line.split(': ', 1)
+      LogDebug('UiComm: %s(%s)' % (command, args))
+
+      if args.lower() == 'none': args = None
+      elif args.lower() == 'true': args = True
+      elif args.lower() == 'false': args = False
+
+      if command == 'exit':
+        self.config.keep_looping = False
+        self.config.main_loop = False
+      elif command == 'restart':
+        self.config.keep_looping = False
+        self.config.main_loop = True
+      elif command == 'config':
+        command = 'change settings'
+        self.config.Configure(['--%s' % args])
+      elif command == 'enablekite':
+        command = 'enable kite'
+        if args and args in self.config.backends:
+          self.config.backends[args][BE_STATUS] = BE_STATUS_UNKNOWN
+          self.Reconnect()
+        else:
+          raise Exception('No such kite: %s' % args)
+      elif command == 'disablekite':
+        command = 'disable kite'
+        if args and args in self.config.backends:
+          self.config.backends[args][BE_STATUS] = BE_STATUS_DISABLED
+          self.Reconnect()
+        else:
+          raise Exception('No such kite: %s' % args)
+      elif command == 'delkite':
+        command = 'remove kite'
+        if args and args in self.config.backends:
+          del self.config.backends[args]
+          self.Reconnect()
+        else:
+          raise Exception('No such kite: %s' % args)
+      elif command == 'addkite':
+        command = 'create new kite'
+        args = (args or '').strip().split() or ['']
+        if self.config.RegisterNewKite(kitename=args[0],
+                                       autoconfigure=True, ask_be=True):
+          self.Reconnect()
+      elif command == 'save':
+        command = 'save configuration'
+        self.config.SaveUserConfig(quiet=(args == 'quietly'))
+
+    except ValueError:
+      LogDebug('UiComm: bogus: %s' % line)
+    except SystemExit:
+      self.config.keep_looping = False
+      self.config.main_loop = False
+    except:
+      LogDebug('UiComm: %s' % (sys.exc_info(), ))
+      self.config.ui.Tell(['Oops!', '', 'Failed to %s, details:' % command,
+                           '', '%s' % (sys.exc_info(), )], error=True)
+
+  def quit(self):
+    self.looping = False
+    self.conns = None
+    try:
+      self.join()
+    except RuntimeError:
+      pass
 
 
 class TunnelManager(threading.Thread):
@@ -3202,6 +3431,16 @@ class TunnelManager(threading.Thread):
       self.conns.Remove(tunnel)
       tunnel.Cleanup()
 
+  def CloseTunnels(self):
+    close = []
+    for tid in self.conns.tunnels:
+      for tunnel in self.conns.tunnels[tid]:
+        close.append(tunnel)
+    for tunnel in close:
+      Log([('closing', tunnel.server_info[tunnel.S_NAME])])
+      self.conns.Remove(tunnel)
+      tunnel.Cleanup()
+
   def quit(self):
     self.keep_running = False
 
@@ -3213,21 +3452,23 @@ class TunnelManager(threading.Thread):
         self._run()
       except Exception, e:
         LogError('TunnelManager died: %s' % e)
+        if DEBUG_IO: traceback.print_exc(file=sys.stderr)
         time.sleep(5)
+    LogDebug('TunnelManager: done')
 
   def _run(self):
-    check_interval = 5
+    self.check_interval = 5
     while self.keep_running:
 
       # Reconnect if necessary, randomized exponential fallback.
       problem = False
       if self.pkite.CreateTunnels(self.conns) > 0:
-        check_interval += int(random.random()*check_interval)
-        if check_interval > 300: check_interval = 300
+        self.check_interval += int(1+random.random()*self.check_interval)
+        if self.check_interval > 300: self.check_interval = 300
         problem = True
         time.sleep(1)
       else:
-        check_interval = 5
+        self.check_interval = 5
 
         # If all connected, make sure tunnels are really alive.
         if self.pkite.isfrontend:
@@ -3239,44 +3480,39 @@ class TunnelManager(threading.Thread):
               proto, port = proto.split('-')
             else:
               port = ''
-            self.pkite.ui.Notify(('Flying: %s://%s%s/'
-                                  ) % (proto, domain, port and ':'+port or ''),
-                                 prefix='~<>', color=self.pkite.ui.CYAN)
+            self.pkite.ui.NotifyFlyingFE(proto, port, domain)
 
-        if len(self.pkite.backends.keys()):
-          self.pkite.ui.Status('flying')
-          for tid in self.conns.tunnels:
-            be = self.pkite.backends.get(tid)
-            if be and be[BE_STATUS] not in BE_INACTIVE:
-              domain = be[BE_DOMAIN]
-              port = be[BE_PORT]
-              proto = be[BE_PROTO]
+        self.PingTunnels(time.time())
 
-              # Do we have auto-SSL at the front-end?
-              protoport = (port and ('%s-%s' % (proto, port)) or proto)
-              tunnels = self.conns.Tunnel(protoport, domain)
-              if proto in ('http', 'http2', 'http3') and tunnels:
-                proto = 'https'
-                for t in tunnels:
-                  if (protoport, domain) not in t.remote_ssl: proto = 'http'
+      self.pkite.ui.StartListingBackEnds()
+      for bid in self.pkite.backends:
+        be = self.pkite.backends[bid]
+        # Do we have auto-SSL at the front-end?
+        protoport, domain = bid.split(':', 1)
+        tunnels = self.conns.Tunnel(protoport, domain)
+        if be[BE_PROTO] in ('http', 'http2', 'http3') and tunnels:
+          has_ssl = True
+          for t in tunnels:
+            if (protoport, domain) not in t.remote_ssl: has_ssl = False
+        else:
+          has_ssl = False
 
-              prox = (proto == 'raw') and ' (HTTP proxied)' or ''
-              if proto == 'raw' and port in ('22', 22): proto = 'ssh'
-              url = '%s://%s%s' % (proto, domain, port and (':%s' % port) or '')
-              self.pkite.ui.Notify(('Flying %s:%s as %s/%s'
-                                    ) % (be[BE_BHOST], be[BE_BPORT], url, prox),
-                                    prefix='~<>', color=self.pkite.ui.CYAN)
-              domainp = '%s/%s' % (domain, port or '80')
-              if (self.pkite.ui_sspec and
-                  domainp in self.pkite.ui_paths and
-                  be[BE_BHOST] == self.pkite.ui_sspec[0] and
-                  be[BE_BPORT] == self.pkite.ui_sspec[1]):
-                dpaths = self.pkite.ui_paths[domainp]
-                for dp in sorted(dpaths.keys()):
-                  self.pkite.ui.Notify(' - %s%s' % (url, dp),
-                                       color=self.pkite.ui.BLUE)
+        # Get list of webpaths...
+        domainp = '%s/%s' % (domain, be[BE_PORT] or '80')
+        if (self.pkite.ui_sspec and
+            be[BE_BHOST] == self.pkite.ui_sspec[0] and
+            be[BE_BPORT] == self.pkite.ui_sspec[1]):
+          builtin = True
+          dpaths = self.pkite.ui_paths.get(domainp, {})
+        else:
+          builtin = False
+          dpaths = {}
 
-          self.PingTunnels(time.time())
+        self.pkite.ui.NotifyBE(bid, be, has_ssl, dpaths, is_builtin=builtin)
+      self.pkite.ui.EndListingBackEnds()
+
+      if self.pkite.isfrontend:
+        self.pkite.LoadMOTD()
 
       tunnel_count = len(self.pkite.conns and
                          self.pkite.conns.TunnelServers() or [])
@@ -3284,6 +3520,9 @@ class TunnelManager(threading.Thread):
       if tunnel_count == 0:
         if self.pkite.isfrontend:
           self.pkite.ui.Status('idle', message='Waiting for back-ends.')
+        elif tunnel_total == 0:
+          self.pkite.ui.Status('down', color=self.pkite.ui.GREY,
+                       message='No kites ready to fly.  Boring...')
         else:
           self.pkite.ui.Status('down', color=self.pkite.ui.RED,
                        message='Not connected to any front-ends, will retry...')
@@ -3293,21 +3532,37 @@ class TunnelManager(threading.Thread):
                              ) % (tunnel_count, tunnel_total))
       elif problem:
         self.pkite.ui.Status('flying', color=self.pkite.ui.YELLOW,
-                      message='DynDNS updates may be incomplete, will retry...')
+                     message='DynDNS updates may be incomplete, will retry...')
+      else:
+        self.pkite.ui.Status('flying', color=self.pkite.ui.GREEN,
+                                   message='Kites are flying and all is well.')
 
-      for i in xrange(0, check_interval):
+      for i in xrange(0, self.check_interval):
         if self.keep_running:
           time.sleep(1)
+          if i > self.check_interval: break
           if self.pkite.isfrontend:
             self.CheckIdleConns(time.time())
+
+  def HurryUp(self):
+    self.check_interval = 0
 
 
 class NullUi(object):
   """This is a UI that always returns default values or raises errors."""
 
+  DAEMON_FRIENDLY = True
+  ALLOWS_INPUT = False
   WANTS_STDERR = False
+  REJECTED_REASONS = {
+    'quota': 'You are out of quota',
+    'nodays': 'Your subscription has expired',
+    'noquota': 'You are out of quota',
+    'noconns': 'You are flying too many kites',
+    'unauthorized': 'Invalid account or shared secret'
+  }
 
-  def __init__(self, welcome=None):
+  def __init__(self, welcome=None, wfile=sys.stderr, rfile=sys.stdin):
     if sys.platform in ('win32', 'os2', 'os2emx'):
       self.CLEAR = '\n\n'
       self.NORM = self.WHITE = self.GREY = self.GREEN = self.YELLOW = ''
@@ -3324,6 +3579,9 @@ class NullUi(object):
       self.MAGENTA = '\033[35;1m'
       self.CYAN = '\033[36;1m'
 
+    self.wfile = wfile
+    self.rfile = rfile
+
     self.in_wizard = False
     self.wizard_tell = None
     self.last_tick = 0
@@ -3333,6 +3591,7 @@ class NullUi(object):
     self.status_msg = ''
     self.welcome = welcome
     self.tries = 200
+    self.server_info = None
     self.Splash()
 
   def Splash(self): pass
@@ -3344,7 +3603,7 @@ class NullUi(object):
 
   def Browse(self, url):
     import webbrowser
-    self.Tell(['Opening %s in your browser...' % url], error=True)
+    self.Tell(['Opening %s in your browser...' % url])
     webbrowser.open(url)
 
   def DefaultOrFail(self, question, default):
@@ -3359,7 +3618,7 @@ class NullUi(object):
                wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
-  def AskYesNo(self, question, default=None, pre=None,
+  def AskYesNo(self, question, default=None, pre=None, yes='Yes', no='No',
                wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
 
@@ -3370,6 +3629,12 @@ class NullUi(object):
   def AskMultipleChoice(self, choices, question, pre=[], default=None,
                         wizard_hint=False, image=None, back=None):
     return self.DefaultOrFail(question, default)
+
+  def AskBackends(self, kitename, protos, ports, rawports, question, pre=[],
+                  default=None, wizard_hint=False, image=None, back=None):
+    return self.DefaultOrFail(question, default)
+
+  def Working(self, message): pass
 
   def Tell(self, lines, error=False, back=None):
     if error:
@@ -3385,23 +3650,93 @@ class NullUi(object):
                                         alignright and ' ' or '',
                                         alignright))])
 
+  def NotifyMOTD(self, frontend, message):
+    pass
+
+  def NotifyKiteRejected(self, proto, domain, reason, crit=False):
+    if reason in self.REJECTED_REASONS:
+      reason = self.REJECTED_REASONS[reason]
+    self.Notify('REJECTED: %s:%s (%s)' % (proto, domain, reason),
+                prefix='!', color=(crit and self.RED or self.YELLOW))
+
+  def NotifyServer(self, obj, server_info):
+    self.server_info = server_info
+    self.Notify('Connecting to front-end %s ...' % server_info[obj.S_NAME],
+                color=self.GREY)
+    self.Notify(' - Protocols: %s' % ' '.join(server_info[obj.S_PROTOS]),
+                color=self.GREY)
+    self.Notify(' - Ports: %s' % ' '.join(server_info[obj.S_PORTS]),
+                color=self.GREY)
+    if 'raw' in server_info[obj.S_PROTOS]:
+      self.Notify(' - Raw ports: %s' % ' '.join(server_info[obj.S_RAW_PORTS]),
+                  color=self.GREY)
+
+  def NotifyQuota(self, quota):
+    qMB = 1024
+    self.Notify('You have %.2f MB of quota left.' % (quota / qMB),
+                prefix=(int(quota) < qMB) and '!' or ' ',
+                color=self.MAGENTA)
+
+  def NotifyFlyingFE(self, proto, port, domain, be=None):
+    self.Notify(('Flying: %s://%s%s/'
+                 ) % (proto, domain, port and ':'+port or ''),
+                prefix='~<>', color=self.CYAN)
+
+  def StartListingBackEnds(self): pass
+  def EndListingBackEnds(self): pass
+
+  def NotifyBE(self, bid, be, has_ssl, dpaths, is_builtin=False):
+    domain, port, proto = be[BE_DOMAIN], be[BE_PORT], be[BE_PROTO]
+    prox = (proto == 'raw') and ' (HTTP proxied)' or ''
+    if proto == 'raw' and port in ('22', 22): proto = 'ssh'
+    url = '%s://%s%s' % (proto, domain, port and (':%s' % port) or '')
+
+    if be[BE_STATUS] == BE_STATUS_UNKNOWN: return
+    if be[BE_STATUS] & BE_STATUS_OK:
+      if be[BE_STATUS] & BE_STATUS_ERR_ANY:
+        status = 'Trying'
+        color = self.YELLOW
+        prefix = '   '
+      else:
+        status = 'Flying'
+        color = self.CYAN
+        prefix = '~<>'
+    else:
+      return
+
+    self.Notify(('%s %s:%s as %s/%s'
+                 ) % (status, be[BE_BHOST], be[BE_BPORT], url, prox),
+                prefix=prefix, color=color)
+
+    if status == 'Flying':
+      for dp in sorted(dpaths.keys()):
+        self.Notify(' - %s%s' % (url, dp), color=self.BLUE)
+
   def Status(self, tag, message=None, color=None): pass
 
   def ExplainError(self, error, title, subject=None):
     if error == 'pleaselogin':
-      self.Tell([title, 'You already have an account. Log in to continue.'
+      self.Tell([title, '', 'You already have an account. Log in to continue.'
                  ], error=True)
     elif error == 'email':
-      self.Tell([title, 'Invalid e-mail address. Please try again?'
+      self.Tell([title, '', 'Invalid e-mail address. Please try again?'
                  ], error=True)
     elif error == 'honey':
-      self.Tell([title, 'Hmm. Somehow, you triggered the spam-filter.'
+      self.Tell([title, '', 'Hmm. Somehow, you triggered the spam-filter.'
                  ], error=True)
     elif error in ('domaintaken', 'domain', 'subdomain'):
-      self.Tell([title, 'Sorry, that domain (%s) is unavailable.' % subject
+      self.Tell([title, '',
+                 'Sorry, that domain (%s) is unavailable.' % subject
                  ], error=True)
     elif error == 'checkfailed':
-      self.Tell([title, 'That domain (%s) is not correctly set up.' % subject
+      self.Tell([title, '',
+                 'That domain (%s) is not correctly set up.' % subject
+                 ], error=True)
+    elif error == 'network':
+      self.Tell([title, '',
+                 'There was a problem communicating with %s.' % subject, '',
+                 'Please verify that you have a working'
+                 ' Internet connection and try again!'
                  ], error=True)
     else:
       self.Tell([title, 'Error code: %s' % error, 'Try again later?'
@@ -3414,11 +3749,17 @@ class PageKite(object):
   def __init__(self, ui=None, http_handler=None, http_server=None):
     self.progname = ((sys.argv[0] or 'pagekite.py').split('/')[-1]
                                                    .split('\\')[-1])
+    self.ui = ui or NullUi()
+    self.ui_request_handler = http_handler
+    self.ui_http_server = http_server
+    self.ResetConfiguration()
+
+  def ResetConfiguration(self):
     self.isfrontend = False
-    self.motd = None
     self.upgrade_info = []
     self.auth_domain = None
-    self.auth_help_url = None
+    self.motd = None
+    self.motd_message = None
     self.server_host = ''
     self.server_ports = [80]
     self.server_raw_ports = []
@@ -3440,9 +3781,8 @@ class PageKite(object):
     self.logfile = None
     self.setuid = None
     self.setgid = None
-    self.ui_request_handler = http_handler
-    self.ui_http_server = http_server
     self.ui_httpd = None
+    self.ui_sspec_cfg = None
     self.ui_sspec = None
     self.ui_socket = None
     self.ui_password = None
@@ -3452,7 +3792,7 @@ class PageKite(object):
     self.be_config = {}
     self.disable_zchunks = False
     self.enable_sslzlib = False
-    self.buffer_max = 1024
+    self.buffer_max = DEFAULT_BUFFER_MAX
     self.error_url = None
     self.finger_path = '/~%s/.finger'
 
@@ -3476,7 +3816,8 @@ class PageKite(object):
     self.last_updates = []
     self.backends = {}  # These are the backends we want tunnels for.
     self.conns = None
-    self.looping = False
+    self.last_loop = 0
+    self.keep_looping = True
     self.main_loop = True
 
     self.crash_report_url = '%scgi-bin/crashes.pl' % WWWHOME
@@ -3486,7 +3827,11 @@ class PageKite(object):
     self.autosave = 0
     self.reloadfile = None
     self.added_kites = False
-    self.ui = ui or NullUi()
+    self.ui_wfile = sys.stderr
+    self.ui_rfile = sys.stdin
+    self.ui_port = None
+    self.ui_conn = None
+    self.ui_comm = None
 
     self.save = 0
     self.kite_add = False
@@ -3551,59 +3896,67 @@ class PageKite(object):
 
   def GenerateConfig(self, safe=False):
     config = [
-      '####[ Current settings for pagekite.py v%s. ]####' % APPVER,
+      '###[ Current settings for pagekite.py v%s. ]#########' % APPVER,
       '#',
-      '# This file was auto-generated by pagekite.py.  Lines beginning',
-      '# with a # are comments (like this one).  Aside from comments and',
-      '# blank lines, each line in this file corrosponds to a single',
-      '# command-line argument.  Note that order matters - especially',
-      '# when including external configuration files with optfile=.',
+      '## NOTE: This file may be rewritten/reordered by pagekite.py.',
       '#',
       '',
-      '#/ Built-in HTTPD settings',
-      (self.ui_sspec and 'httpd=%s:%d' % self.ui_sspec
-                      or '# httpd=host:port'),
-      (self.ui_password and 'httppass=%s' % self.ui_password
-                         or '# httppass=YOURSECRET'),
-      (self.ui_pemfile and 'pemfile=%s' % self.ui_pemfile
-                        or '# pemfile=/path/to/sslcert.pem'),
     ]
-    for http_host in sorted(self.ui_paths.keys()):
-      for path in sorted(self.ui_paths[http_host].keys()):
-        p = self.ui_paths[http_host][path]
-        config.append('webpath=%s:%s:%s:%s' % (http_host, path, p[0], p[1]))
-    config.append('')
+
+    if not self.kitename:
+      for be in self.backends.values():
+        if not self.kitename or len(self.kitename) < len(be[BE_DOMAIN]):
+          self.kitename = be[BE_DOMAIN]
+          self.kitesecret = be[BE_SECRET]
+
+    new = not (self.kitename or self.kitesecret or self.backends)
+    def p(vfmt, value, dval):
+      return '%s%s' % (value and value != dval
+                             and ('', vfmt % value) or ('# ', vfmt % dval))
+
+    if self.kitename or self.kitesecret or new:
+      config.extend([
+        '##[ Default kite and account details ]##',
+        p('kitename=%s', self.kitename, 'NAME'),
+        p('kitesecret=%s', self.kitesecret, 'SECRET'),
+        ''
+      ])
 
     if self.SetServiceDefaults(check=True):
       config.extend([
-        '#/ Use service default settings',
+        '##[ Front-end settings: use service defaults ]##',
         'defaults',
-        '',
-        '#/ Manual front-ends (optional)'
+        ''
       ])
+      if self.servers_manual:
+        config.append('##[ Manual front-ends ]##')
+        for server in sorted(self.servers_manual):
+          config.append('frontend=%s' % server)
+        config.append('')
+    else:
+      if not self.servers_auto and not self.servers_manual:
+        new = True
+        config.extend([
+          '##[ Use this to just use service defaults ]##',
+          '# defaults',
+          ''
+        ])
+      config.append('##[ Custom front-end and dynamic DNS settings ]##')
+      if self.servers_auto:
+        config.append('frontends=%d:%s:%d' % self.servers_auto)
       if self.servers_manual:
         for server in sorted(self.servers_manual):
           config.append('frontend=%s' % server)
-      else:
+      if not self.servers_auto and not self.servers_manual:
+        new = True
+        config.append('# frontends=N:hostname:port')
         config.append('# frontend=hostname:port')
 
-    else:
-      config.extend([
-        '#/ Front-end and dynamic DNS settings',
-        (self.servers_auto and 'frontends=%d:%s:%d' % self.servers_auto
-                            or '#frontends=1:frontends.b5p.us:443')
-      ])
-      if self.servers_manual:
-        for server in sorted(self.servers_manual):
-          config.append('frontend=%s' % server)
-      else:
-        config.append('# frontend=hostname:port')
       for server in sorted(self.fe_certname):
         config.append('fe_certname=%s' % server)
       if self.ca_certs != self.ca_certs_default:
         config.append('ca_certs=%s' % self.ca_certs)
-      else:
-        config.append('# ca_certs=%s' % self.ca_certs)
+
       if self.dyndns:
         provider, args = self.dyndns
         for prov in sorted(DYNDNS.keys()):
@@ -3618,132 +3971,162 @@ class PageKite(object):
         else:
           config.append('dyndns=%(prov)s' % args)
       else:
+        new = True
         config.extend([
           '# dyndns=pagekite.net OR',
           '# dyndns=user:pass@dyndns.org OR',
           '# dyndns=user:pass@no-ip.com' ,
           '#',
-          (self.error_url and ('errorurl=%s' % self.error_url) or '# errorurl=http://host/page/'),
-          (self.finger_path and ('fingerpath=%s' % self.finger_path) or '# fingerpath=/~%s/.finger'),
+          p('errorurl=%s', self.error_url, 'http://host/page/'),
+          p('fingerpath=%s', self.finger_path, '/~%s/.finger'),
+          '',
         ])
-      config.extend([
-        '#/ Replace with this to just use service defaults:',
-        '# defaults',
-      ])
 
-    config.extend([
-      '',
-      '#/ Your kites and local back-end servers',
-      '#',
-      (self.kitename and ('kitename=%s' % self.kitename) or '#kitename=NAME'),
-      (self.kitesecret and ('kitesecret=%s' % self.kitesecret) or '#kitesecret=SECRET'),
-      '#',
-    ])
+    if self.ui_sspec or self.ui_password or self.ui_pemfile:
+      config.extend([
+        '##[ Built-in HTTPD settings ]##',
+        p('httpd=%s:%s', self.ui_sspec_cfg, ('host', 'port'))
+      ])
+      if self.ui_password: config.append('httppass=%s' % self.ui_password)
+      if self.ui_pemfile: config.append('pemfile=%s' % self.pemfile)
+      for http_host in sorted(self.ui_paths.keys()):
+        for path in sorted(self.ui_paths[http_host].keys()):
+          up = self.ui_paths[http_host][path]
+          config.append('webpath=%s:%s:%s:%s' % (http_host, path, up[0], up[1]))
+      config.append('')
+
+    config.append('##[ Back-ends and local services ]##')
     bprinted = 0
     for bid in sorted(self.backends.keys()):
       be = self.backends[bid]
       proto, domain = bid.split(':')
       if be[BE_BHOST]:
-        config.append(('%s=%s:%s:%s:%s:%s'
+        be_spec = (be[BE_BHOST], be[BE_BPORT])
+        config.append(('%s=%s:%s:%s:%s'
                        ) % ((be[BE_STATUS] == BE_STATUS_DISABLED
                              ) and 'define_backend' or 'backend',
                    proto, ((domain == self.kitename) and '@kitename' or domain),
-              be[BE_BHOST], be[BE_BPORT],
+         (be_spec == self.ui_sspec) and 'localhost:builtin' or ('%s:%s' % be_spec),
          (be[BE_SECRET] == self.kitesecret) and '@kitesecret' or be[BE_SECRET]))
         bprinted += 1
     if bprinted == 0:
-      config.append('# backend=http:YOU.pagekite.me:localhost:80:SECRET')
+      config.append('# No back-ends!  How boring!')
     for http_host in sorted(self.be_config.keys()):
       for key in sorted(self.be_config[http_host].keys()):
         config.append('be_config=%s:%s:%s' % (http_host, key,
                                               self.be_config[http_host][key]))
-    config.extend([
-      '#',
-      '#/ More examples...',
-      '# backend=ssh:YOU.pagekite.me:localhost:22:SECRET',
-      '# backend=http/8080:YOU.pagekite.me:localhost:8080:SECRET',
-      '# backend=https:YOU.pagekite.me:localhost:443:SECRET',
-      '# backend=websocket:YOU.pagekite.me:localhost:8080:SECRET',
-      '#/ This is how to define, but not activate by default...',
-      '# define_backend=http:YOU.pagekite.me:localhost:4545:SECRET',
-      '',
-      '#/ Miscellaneous settings',
-      (self.logfile   and 'logfile=%s' % self.logfile
-                       or '# logfile=/path/to/file'),
-      (self.servers_new_only and 'new' or '# new'),
-      (self.require_all and 'all' or '# all'),
-      (self.no_probes and 'noprobes' or '# noprobes'),
-      (self.crash_report_url and '# nocrashreport' or 'nocrashreport'),
-      'buffers=%s' % self.buffer_max,
-      ''
-    ])
-    config.extend([
-      '',
-      '###[ The following stuff can usually be ignored. ]###',
-      '',
-      '#/ Save-files are never configured automatically for security reasons.',
-      (self.savefile and safe and 'savefile=%s' % self.savefile
-                               or '# savefile=/path/to/savefile'),
-      (self.autosave and 'autosave' or '# autosave'),
-      '',
-      '#/ Front-end Options:',
-      (self.isfrontend and 'isfrontend' or '# isfrontend')
-    ])
-    comment = ((not self.isfrontend) and '# ' or '')
-    config.extend([
-      (self.server_host and '%shost=%s' % (comment, self.server_host)
-                         or '# host=machine.domain.com'),
-      '%sports=%s' % (comment, ','.join(['%s' % x for x in sorted(self.server_ports)] or [])),
-      '%sprotos=%s' % (comment, ','.join(['%s' % x for x in sorted(self.server_protos)] or []))
-    ])
-    for pa in self.server_portalias:
-      config.append('portalias=%s:%s' % (int(pa), int(self.server_portalias[pa])))
-    config.extend([
-      '%srawports=%s' % (comment or (not self.server_raw_ports) and '# ' or '',
-                         ','.join(['%s' % x for x in sorted(self.server_raw_ports)] or [])),
-      (self.auth_domain and '%sauthdomain=%s' % (comment, self.auth_domain)
-                         or '# authdomain=foo.com')
-    ])
-    for bid in sorted(self.backends.keys()):
-      be = self.backends[bid]
-      if not be[BE_BHOST]:
-        config.append('domain=%s:%s' % (bid, be[BE_SECRET]))
-    config.extend([
-      '# domain=http:*.pagekite.me:SECRET1',
-      '# domain=http,https,websocket:THEM.pagekite.me:SECRET2',
-      '',
-    ])
-    eprinted = 0
-    config.append('#/ Domains we terminate SSL/TLS for natively, with key/cert-files')
-    for ep in sorted(self.tls_endpoints.keys()):
-      config.append('tls_endpoint=%s:%s' % (ep, self.tls_endpoints[ep][0]))
-      eprinted += 1
-    if eprinted == 0:
-      config.append('# tls_endpoint=DOMAIN:PEM_FILE')
-    config.extend([
-      (self.tls_default and 'tls_default=%s' % self.tls_default
-                         or '# tls_default=DOMAIN'),
-      '',
-      '#/ Systems administration settings:',
-      (self.daemonize and 'daemonize'
-                       or '# daemonize')
-    ])
-    if self.setuid and self.setgid:
-      config.append('runas=%s:%s' % (self.setuid, self.setgid))
-    elif self.setuid:
-      config.append('runas=%s' % self.setuid)
-    else:
-      config.append('# runas=uid:gid')
-    config.append(self.pidfile and 'pidfile=%s' % self.pidfile
-                                or '# pidfile=/path/to/file')
+    config.append('')
+
+    if bprinted == 0:
+      new = True
+      config.extend([
+        '##[ Back-end examples ... ]##',
+        '#',
+        '# backend=http:YOU.pagekite.me:localhost:80:SECRET',
+        '# backend=ssh:YOU.pagekite.me:localhost:22:SECRET',
+        '# backend=http/8080:YOU.pagekite.me:localhost:8080:SECRET',
+        '# backend=https:YOU.pagekite.me:localhost:443:SECRET',
+        '# backend=websocket:YOU.pagekite.me:localhost:8080:SECRET',
+        '#',
+        '# define_backend=http:YOU.pagekite.me:localhost:4545:SECRET',
+        ''
+      ])
+
+    if self.isfrontend or new:
+      config.extend([
+        '##[ Front-end Options ]##',
+        (self.isfrontend and 'isfrontend' or '# isfrontend')
+      ])
+      comment = ((not self.isfrontend) and '# ' or '')
+      config.extend([
+        p('host=%s', self.isfrontend and self.server_host, 'machine.domain.com'),
+        '%sports=%s' % (comment, ','.join(['%s' % x for x in sorted(self.server_ports)] or [])),
+        '%sprotos=%s' % (comment, ','.join(['%s' % x for x in sorted(self.server_protos)] or []))
+      ])
+      for pa in self.server_portalias:
+        config.append('portalias=%s:%s' % (int(pa), int(self.server_portalias[pa])))
+      config.extend([
+        '%srawports=%s' % (comment or (not self.server_raw_ports) and '# ' or '',
+                           ','.join(['%s' % x for x in sorted(self.server_raw_ports)] or [VIRTUAL_PN])),
+        p('authdomain=%s', self.isfrontend and self.auth_domain, 'foo.com'),
+        p('motd=%s', self.isfrontend and self.motd, '/path/to/motd.txt')
+      ])
+      dprinted = 0
+      for bid in sorted(self.backends.keys()):
+        be = self.backends[bid]
+        if not be[BE_BHOST]:
+          config.append('domain=%s:%s' % (bid, be[BE_SECRET]))
+          dprinted += 1
+      if not dprinted:
+        new = True
+        config.extend([
+          '# domain=http:*.pagekite.me:SECRET1',
+          '# domain=http,https,websocket:THEM.pagekite.me:SECRET2',
+          '',
+        ])
+
+      eprinted = 0
+      config.append('##[ Domains we terminate SSL/TLS for natively, with key/cert-files ]##')
+      for ep in sorted(self.tls_endpoints.keys()):
+        config.append('tls_endpoint=%s:%s' % (ep, self.tls_endpoints[ep][0]))
+        eprinted += 1
+      if eprinted == 0:
+        new = True
+        config.append('# tls_endpoint=DOMAIN:PEM_FILE')
+      config.extend([
+        p('tls_default=%s', self.tls_default, 'DOMAIN'),
+        '',
+      ])
 
     config.extend([
       '',
-      '####[ End of pagekite.py configuration ]####',
+      '###[ Anything below this line can usually be ignored. ]#########',
+      '',
+      '##[ Miscellaneous settings ]##',
+      p('logfile=%s', self.logfile, '/path/to/file'),
+      p('buffers=%s', self.buffer_max, DEFAULT_BUFFER_MAX),
+      (self.servers_new_only is True) and 'new' or '# new',
+      (self.require_all and 'all' or '# all'),
+      (self.no_probes and 'noprobes' or '# noprobes'),
+      (self.crash_report_url and '# nocrashreport' or 'nocrashreport'),
+      p('savefile=%s', safe and self.savefile, '/path/to/savefile'),
+      (self.autosave and 'autosave' or '# autosave'),
+      '',
+    ])
+
+    if self.daemonize or self.setuid or self.setgid or self.pidfile or new:
+      config.extend([
+        '##[ Systems administration settings ]##',
+        (self.daemonize and 'daemonize' or '# daemonize')
+      ])
+      if self.setuid and self.setgid:
+        config.append('runas=%s:%s' % (self.setuid, self.setgid))
+      elif self.setuid:
+        config.append('runas=%s' % self.setuid)
+      else:
+        new = True
+        config.append('# runas=uid:gid')
+      config.append(p('pidfile=%s', self.pidfile, '/path/to/file'))
+
+    config.extend([
+      '',
+      '###[ End of pagekite.py configuration ]#########',
       'END',
       ''
     ])
-    return config
+    if not new:
+      config = [l for l in config if not l.startswith('# ')]
+      clean_config = []
+      for i in range(0, len(config)-1):
+        if i > 0 and (config[i].startswith('#') or config[i] == ''):
+          if config[i+1] != '' or clean_config[-1].startswith('#'):
+            clean_config.append(config[i])
+        else:
+          clean_config.append(config[i])
+      clean_config.append(config[-1])
+      return clean_config
+    else:
+      return config
 
   def ConfigSecret(self, new=False):
     # This method returns a stable secret for the lifetime of this process.
@@ -3791,25 +4174,28 @@ class PageKite(object):
   def PrintSettings(self, safe=False):
     print '\n'.join(self.GenerateConfig(safe=safe))
 
-  def SaveUserConfig(self):
+  def SaveUserConfig(self, quiet=False):
     self.savefile = self.savefile or self.rcfile
     try:
       fd = open(self.savefile, 'w')
       fd.write('\n'.join(self.GenerateConfig(safe=True)))
       fd.close()
-      self.ui.Tell(['Settings saved to: %s' % self.savefile])
-      self.ui.Spacer()
+      if not quiet:
+        self.ui.Tell(['Settings saved to: %s' % self.savefile])
+        self.ui.Spacer()
       Log([('saved', 'Settings saved to: %s' % self.savefile)])
     except Exception, e:
-      self.ui.Tell(['ERROR: Could not save to %s: %s' % (self.savefile, e)])
+      self.ui.Tell(['Could not save to %s: %s' % (self.savefile, e)],
+                   error=True)
       self.ui.Spacer()
-      LogError('Could not save to %s: %s' % (self.savefile, e))
 
   def FallDown(self, message, help=True, longhelp=False, noexit=False):
     if self.conns and self.conns.auth: self.conns.auth.quit()
     if self.ui_httpd: self.ui_httpd.quit()
+    if self.ui_comm: self.ui_comm.quit()
     if self.tunnel_manager: self.tunnel_manager.quit()
-    self.conns = self.ui_httpd = self.tunnel_manager = None
+    self.keep_looping = False
+    self.conns = self.ui_httpd = self.ui_comm = self.tunnel_manager = None
     if help or longhelp:
       print longhelp and DOC or MINIDOC
       print '***'
@@ -3817,7 +4203,9 @@ class PageKite(object):
       self.ui.Status('exiting', message=(message or 'Good-bye!'))
     if message: print 'Error: %s' % message
     if DEBUG_IO: traceback.print_exc(file=sys.stderr)
-    if not noexit: sys.exit(1)
+    if not noexit:
+      self.main_loop = False
+      sys.exit(1)
 
   def GetTlsEndpointCtx(self, domain):
     if domain in self.tls_endpoints: return self.tls_endpoints[domain][1]
@@ -3829,6 +4217,16 @@ class PageKite(object):
       if domain in self.tls_endpoints: return self.tls_endpoints[domain][1]
       parts.pop(0)
     return None
+
+  def SetBackendStatus(self, domain, proto='', add=None, sub=None):
+    match = '%s:%s' % (proto, domain)
+    for bid in self.backends:
+      if bid == match or (proto == '' and bid.endswith(match)):
+        status = self.backends[bid][BE_STATUS]
+        if add: self.backends[bid][BE_STATUS] |= add
+        if sub and (status & sub): self.backends[bid][BE_STATUS] -= sub
+        Log([('bid', bid),
+             ('status', '0x%x' % self.backends[bid][BE_STATUS])])
 
   def GetBackendData(self, proto, domain, recurse=True):
     backend = '%s:%s' % (proto.lower(), domain.lower())
@@ -3859,6 +4257,7 @@ class PageKite(object):
     if not lookup.endswith('.'): lookup += '.'
     if DEBUG_IO: print '=== AUTH LOOKUP\n%s\n===' % lookup
     (hn, al, ips) = socket.gethostbyname_ex(lookup)
+    if DEBUG_IO: print 'hn=%s\nal=%s\nips=%s\n' % (hn, al, ips)
 
     # Extract auth error hints from domain name, if we got a CNAME reply.
     if al:
@@ -3906,7 +4305,9 @@ class PageKite(object):
 
     data = '%s:%s:%s' % (protoport, domain, srand)
     auth_error_type = None
-    if (not token) or (not check_token) or checkSignature(sign=token, payload=data):
+    if ((not token) or
+        (not check_token) or
+        checkSignature(sign=token, payload=data)):
 
       secret = (self.GetBackendData(protoport, domain) or BE_NONE)[BE_SECRET]
       if not secret:
@@ -3923,23 +4324,24 @@ class PageKite(object):
         try:
           lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
           (rv, auth_error_type) = self.LookupDomainQuota(lookup)
-          if rv is None or rv >= 0: return (rv, auth_error_type)
+          if rv is None or rv >= 0:
+            return (rv, auth_error_type)
         except Exception, e:
           # Lookup failed, fail open.
           LogError('Quota lookup failed: %s' % e)
           return (-2, None)
 
     LogInfo('No authentication found for: %s (%s)' % (domain, protoport))
-    return (None, auth_error_type or 'auth')
+    return (None, auth_error_type or 'unauthorized')
 
-  def ConfigureFromFile(self, filename=None):
+  def ConfigureFromFile(self, filename=None, data=None):
     if not filename: filename = self.rcfile
 
     if self.rcfile_recursion > 25:
       raise ConfigError('Nested too deep: %s' % filename)
 
     self.rcfiles_loaded.append(filename)
-    optfile = open(filename)
+    optfile = data or open(filename)
     args = []
     for line in optfile:
       line = line.strip()
@@ -3974,8 +4376,8 @@ class PageKite(object):
     elif len(parts) == 3:
       protos, fe_domain, be_port = parts
     elif len(parts) == 2:
-      if parts[1].startswith('built') or ('.' in parts[0] and
-                                          os.path.exists(parts[1])):
+      if (parts[1] == 'builtin') or ('.' in parts[0] and
+                                            os.path.exists(parts[1])):
         fe_domain, be_port = parts[0], parts[1]
         protos = 'http'
       else:
@@ -3994,7 +4396,7 @@ class PageKite(object):
     fe_domain = fe_domain.replace('/', '').lower()
 
     # Allow easy referencing of built-in HTTPD
-    if be_port.startswith('built'):
+    if be_port == 'builtin':
       self.BindUiSspec()
       be_host, be_port = self.ui_sspec
 
@@ -4056,16 +4458,27 @@ class PageKite(object):
 
     return backends
 
-  def BindUiSspec(self):
+  def BindUiSspec(self, force=False):
     # Create the UI thread
-    if self.ui_httpd:
+    if self.ui_httpd and self.ui_httpd.httpd:
+      if not force: return self.ui_sspec
       self.ui_httpd.httpd.socket.close()
+
     self.ui_sspec = self.ui_sspec or ('localhost', 0)
     self.ui_httpd = HttpUiThread(self, self.conns,
                                  handler=self.ui_request_handler,
                                  server=self.ui_http_server,
                                  ssl_pem_filename = self.ui_pemfile)
     return self.ui_sspec
+
+  def LoadMOTD(self):
+    if self.motd:
+      try:
+        f = open(self.motd, 'r')
+        self.motd_message = ''.join(f.readlines()).strip()[:8192]
+        f.close()
+      except (OSError, IOError):
+        pass
 
   def Configure(self, argv):
     self.conns = self.conns or Connections(self)
@@ -4110,7 +4523,7 @@ class PageKite(object):
       elif opt in ('-L', '--logfile'): self.logfile = arg
       elif opt in ('-Z', '--daemonize'):
         self.daemonize = True
-        self.ui = NullUi()
+        if not self.ui.DAEMON_FRIENDLY: self.ui = NullUi()
       elif opt in ('-U', '--runas'):
         import pwd
         import grp
@@ -4128,10 +4541,14 @@ class PageKite(object):
         parts = arg.split(':')
         host = parts[0] or 'localhost'
         if len(parts) > 1:
-          self.ui_sspec = (host, int(parts[1]))
+          self.ui_sspec = self.ui_sspec_cfg = (host, int(parts[1]))
         else:
-          self.ui_sspec = (host, 0)
+          self.ui_sspec = self.ui_sspec_cfg = (host, 0)
 
+      elif opt == '--nowebpath':
+        host, path = arg.split(':', 1)
+        if host in self.ui_paths and path in self.ui_paths[host]:
+          del self.ui_paths[host][path]
       elif opt == '--webpath':
         host, path, policy, fpath = arg.split(':', 3)
 
@@ -4170,9 +4587,11 @@ class PageKite(object):
             self.dyndns = (provider, {'user': usr, 'pass': pwd})
           else:
             self.dyndns = (provider, {'user': usrpwd, 'pass': ''})
-        else:
+        elif arg:
           if arg in DYNDNS: arg = DYNDNS[arg]
           self.dyndns = (arg, {'user': '', 'pass': ''})
+        else:
+          self.dyndns = None
 
       elif opt in ('-p', '--ports'): self.server_ports = [int(x) for x in arg.split(',')]
       elif opt == '--portalias':
@@ -4184,8 +4603,9 @@ class PageKite(object):
         self.server_raw_ports = [(x == VIRTUAL_PN and x or int(x)) for x in arg.split(',')]
       elif opt in ('-h', '--host'): self.server_host = arg
       elif opt in ('-A', '--authdomain'): self.auth_domain = arg
-      elif opt == '--authhelpurl': self.auth_help_url = arg
-      elif opt == '--motd': self.motd = arg
+      elif opt == '--motd':
+        self.motd = arg
+        self.LoadMOTD()
       elif opt == '--noupgradeinfo': self.upgrade_info = []
       elif opt == '--upgradeinfo':
         version, tag, md5, human_url, file_url = arg.split(';')
@@ -4226,9 +4646,12 @@ class PageKite(object):
       elif opt == '--ca_certs': self.ca_certs = arg
       elif opt == '--jakenoia': self.fe_anon_tls_wrap = True
       elif opt == '--fe_certname':
-        cert = arg.lower()
-        if cert not in self.fe_certname: self.fe_certname.append(cert)
-        self.fe_certname.sort()
+        if arg == '':
+          self.fe_certname = []
+        else:
+          cert = arg.lower()
+          if cert not in self.fe_certname: self.fe_certname.append(cert)
+          self.fe_certname.sort()
       elif opt == '--service_xmlrpc': self.service_xmlrpc = arg
       elif opt == '--frontend': self.servers_manual.append(arg)
       elif opt == '--frontends':
@@ -4239,18 +4662,19 @@ class PageKite(object):
       elif opt == '--fingerpath': self.finger_path = arg
       elif opt == '--kitename': self.kitename = arg
       elif opt == '--kitesecret': self.kitesecret = arg
+
       elif opt in ('--backend', '--define_backend'):
         bes = self.ArgToBackendSpecs(arg.replace('@kitesecret', self.kitesecret)
                                         .replace('@kitename', self.kitename),
-                                     status=((opt == '--backend')
-                                             and BE_STATUS_UNKNOWN
-                                             or BE_STATUS_DISABLED))
+                                     status=((opt != '--backend')
+                                             and BE_STATUS_DISABLED
+                                             or BE_STATUS_UNKNOWN))
         for bid in bes:
+          if bid in self.backends:
+            raise ConfigError("Same backend/domain defined twice: %s" % bid)
           if not self.kitename:
             self.kitename = bes[bid][BE_DOMAIN]
             self.kitesecret = bes[bid][BE_SECRET]
-          if bid in self.backends:
-            raise ConfigError("Same backend/domain defined twice: %s" % bid)
         self.backends.update(bes)
       elif opt == '--be_config':
         host, key, val = arg.split(':', 2)
@@ -4258,6 +4682,11 @@ class PageKite(object):
         hostc = self.be_config.get(host, {})
         hostc[key] = {'True': True, 'False': False, 'None': None}.get(val, val)
         self.be_config[host] = hostc
+      elif opt == '--delete_backend':
+        bes = self.ArgToBackendSpecs(arg)
+        for bid in bes:
+          if bid in self.backends:
+            del self.backends[bid]
 
       elif opt == '--domain':
         protos, domain, secret = arg.split(':')
@@ -4281,6 +4710,7 @@ class PageKite(object):
       elif opt == '--remoteui':
         import pagekite.remoteui
         self.ui = pagekite.remoteui.RemoteUi()
+      elif opt == '--uiport': self.ui_port = int(arg)
       elif opt == '--sslzlib': self.enable_sslzlib = True
       elif opt == '--debugio':
         global DEBUG_IO
@@ -4294,7 +4724,7 @@ class PageKite(object):
       elif opt == '--defaults': self.SetServiceDefaults()
       elif opt in ('--clean', '--nopyopenssl', '--nossl', '--settings',
                    '--webaccess', '--webindexes',
-                   '--webroot', '--signup'): pass
+                   '--webroot', '--signup', '--friendly'): pass
       elif opt == '--help':
         self.HelpAndExit(longhelp=True)
 
@@ -4315,7 +4745,9 @@ class PageKite(object):
     if self.ca_certs: socks.setdefaultcertfile(self.ca_certs)
 
     # Handle the user-friendly argument stuff and simple registration.
+    return self.ParseFriendlyBackendSpecs(args)
 
+  def ParseFriendlyBackendSpecs(self, args):
     just_these_backends = {}
     just_these_webpaths = {}
     just_these_be_configs = {}
@@ -4521,11 +4953,19 @@ class PageKite(object):
 
   def GetServiceXmlRpc(self):
     service = self.service_xmlrpc
-    return xmlrpclib.ServerProxy(self.service_xmlrpc, None, None, False)
+    if service == 'mock':
+      return MockPageKiteXmlRpc(self)
+    else:
+      return xmlrpclib.ServerProxy(self.service_xmlrpc, None, None, False)
 
   def _KiteInfo(self, kitename):
     is_service_domain = kitename and SERVICE_DOMAIN_RE.search(kitename)
     is_subdomain_of = is_cname_for = is_cname_ready = False
+    secret = None
+
+    for be in self.backends.values():
+      if be[BE_SECRET] and (be[BE_DOMAIN] == kitename):
+        secret = be[BE_SECRET]
 
     if is_service_domain:
       parts = kitename.split('.')
@@ -4543,20 +4983,35 @@ class PageKite(object):
       except:
         pass
 
-    return is_subdomain_of, is_service_domain, is_cname_for, is_cname_ready
+    return (secret, is_subdomain_of, is_service_domain,
+            is_cname_for, is_cname_ready)
 
-  def RegisterNewKite(self, kitename=None, autoconfigure=False):
+  def RegisterNewKite(self, kitename=None, first=False,
+                            ask_be=False, autoconfigure=False):
+    registered = False
     if kitename:
-      self.ui.StartWizard('Creating kite: %s' % kitename)
-      (is_subdomain_of, is_service_domain,
+      (secret, is_subdomain_of, is_service_domain,
        is_cname_for, is_cname_ready) = self._KiteInfo(kitename)
+      if secret:
+        self.ui.StartWizard('Updating kite: %s' % kitename)
+        registered = True
+      else:
+        self.ui.StartWizard('Creating kite: %s' % kitename)
     else:
-      self.ui.StartWizard('Create your first kite!')
+      if first:
+        self.ui.StartWizard('Create your first kite')
+      else:
+        self.ui.StartWizard('Creating a new kite')
       is_subdomain_of = is_service_domain = False
       is_cname_for = is_cname_ready = False
 
+    # This is the default...
+    be_specs = ['http:%s:localhost:80']
+
     service = self.GetServiceXmlRpc()
     service_accounts = {}
+    if self.kitename and self.kitesecret:
+      service_accounts[self.kitename] = self.kitesecret
 
     for be in self.backends.values():
       if SERVICE_DOMAIN_RE.search(be[BE_DOMAIN]):
@@ -4566,28 +5021,38 @@ class PageKite(object):
           service_accounts[be[BE_DOMAIN]] = be[BE_SECRET]
     service_account_list = service_accounts.keys()
 
+    if registered:
+      state = ['choose_backends']
     if service_account_list:
-      if kitename:
-        state = ['choose_kite_account']
-      else:
-        state = ['manual_abort']
+      state = ['choose_kite_account']
     else:
       state = ['use_service_question']
     history = []
 
-    def Back():
-      state[0] = history.pop(-1)
     def Goto(goto, back_skips_current=False):
       if not back_skips_current: history.append(state[0])
       state[0] = goto
+    def Back():
+      if history:
+        state[0] = history.pop(-1)
+      else:
+        Goto('abort')
 
     register = is_cname_for or kitename
-    email = None
+    account = email = None
     while 'end' not in state:
       try:
         if 'use_service_question' in state:
-          ch = self.ui.AskYesNo('Use the %s service?' % self.service_provider,
-                                default=True, back=-1)
+          ch = self.ui.AskYesNo('Use the service?',
+                                pre=['<b>Welcome to PageKite!</b>',
+                                     '',
+                                     'Please answer a few quick questions to',
+                                     'create your first kite.',
+                                     '',
+                                     'By continuing, you agree to play nice',
+                                     'and abide by the Terms of Service at:',
+                                     '- <a href="%s">%s</a>' % (SERVICE_TOS_URL, SERVICE_TOS_URL)],
+                                default=True, back=-1, no='Abort')
           if ch is True:
             self.SetServiceDefaults(clobber=False)
             if not kitename:
@@ -4598,6 +5063,7 @@ class PageKite(object):
             elif is_service_domain:
               register = is_cname_for or kitename
               if is_subdomain_of:
+                # FIXME: Shut up if parent is already in local config!
                 Goto('service_signup_is_subdomain')
               else:
                 Goto('service_signup_email')
@@ -4609,11 +5075,14 @@ class PageKite(object):
         elif 'service_login_email' in state:
           p = None
           while not email or not p:
-            (email, p) = self.ui.AskLogin('Please type in your %s account '
-                                          'details.' % self.service_provider,
-                                          email=email, back=(False, -1))
+            (email, p) = self.ui.AskLogin('Please log on ...', pre=[
+                                            'By logging on to %s,' % self.service_provider,
+                                            'you will be able to use this kite',
+                                            'with your pre-existing account.'
+                                          ], email=email, back=(email, False))
             if email and p:
               try:
+                self.ui.Working('Logging on to your account')
                 service_accounts[email] = service.getSharedSecret(email, p)
                 # FIXME: Should get the list of preconfigured kites via. RPC
                 #        so we don't try to create something that already
@@ -4623,18 +5092,21 @@ class PageKite(object):
               except:
                 email = p = None
                 self.ui.Tell(['Login failed! Try again?'], error=True)
-            if email is False:
+            if p is False:
               Back()
+              break
 
         elif ('service_signup_is_subdomain' in state):
           ch = self.ui.AskYesNo('Use this name?',
-                                pre=[('WARNING: %s is a sub-domain!'
-                                      ) % kitename, '',
-         'This process will FAIL if you have not already registered the parent',
-                                     'domain: %s' % is_subdomain_of],
+                                pre=['%s is a sub-domain.' % kitename, '',
+                                     '<b>NOTE:</b> This process will fail if you',
+                                     'have not already registered the parent',
+                                     'domain, %s.' % is_subdomain_of],
                                 default=True, back=-1)
           if ch is True:
-            if email:
+            if account:
+              Goto('create_kite')
+            elif email:
               Goto('service_signup')
             else:
               Goto('service_signup_email')
@@ -4665,7 +5137,13 @@ class PageKite(object):
             Back()
 
         elif 'service_signup_email' in state:
-          email = self.ui.AskEmail('What is your e-mail address?', back=False)
+          email = self.ui.AskEmail('<b>What is your e-mail address?</b>',
+                                   pre=['We need to be able to contact you',
+                                        'now and then with news about the',
+                                        'service and your account.',
+                                        '',
+                                        'Your details will be kept private.'],
+                                   back=False)
           if email and register:
             Goto('service_signup')
           elif email:
@@ -4673,96 +5151,130 @@ class PageKite(object):
           else:
             Back()
 
-        elif 'service_signup_kitename' in state:
+        elif ('service_signup_kitename' in state or
+              'service_ask_kitename' in state):
           try:
+            self.ui.Working('Fetching list of available domains')
             domains = service.getAvailableDomains(None, None)
           except:
             domains = ['.%s' % x for x in SERVICE_DOMAINS]
 
-          ch = self.ui.AskKiteName(domains, 'Name your kite:', back=False)
+          ch = self.ui.AskKiteName(domains, 'Name this kite:',
+                                 pre=['Your kite name becomes the public name',
+                                      'of your personal server or web-site.',
+                                      '',
+                                      'Names are provided on a first-come,',
+                                      'first-serve basis. You can create more',
+                                      'kites with different names later on.'],
+                                 back=False)
           if ch:
             kitename = register = ch
-            (is_subdomain_of, is_service_domain,
+            (secret, is_subdomain_of, is_service_domain,
              is_cname_for, is_cname_ready) = self._KiteInfo(ch)
-            self.ui.StartWizard('Creating kite: %s' % kitename)
-            if is_subdomain_of:
-              Goto('service_signup_is_subdomain')
-            elif email:
-              Goto('service_signup')
+            if secret:
+              self.ui.StartWizard('Updating kite: %s' % kitename)
+              registered = True
             else:
-              Goto('service_signup_email')
+              self.ui.StartWizard('Creating kite: %s' % kitename)
+            Goto('choose_backends')
+          else:
+            Back()
+
+        elif 'choose_backends' in state:
+          if ask_be and autoconfigure:
+            skip = False
+            ch = self.ui.AskBackends(kitename, ['http'], ['80'], [],
+                                     'Enable which service?', back=False, pre=[
+                                  'You control which of your files or servers',
+                                  'PageKite exposes to the Internet. ',
+                                     ], default=','.join(be_specs))
+            if ch:
+              be_specs = ch.split(',')
+          else:
+            skip = ch = True
+
+          if ch:
+            if registered:
+              Goto('create_kite', back_skips_current=skip)
+            elif is_subdomain_of:
+              Goto('service_signup_is_subdomain', back_skips_current=skip)
+            elif account:
+              Goto('create_kite', back_skips_current=skip)
+            elif email:
+              Goto('service_signup', back_skips_current=skip)
+            else:
+              Goto('service_signup_email', back_skips_current=skip)
           else:
             Back()
 
         elif 'service_signup' in state:
-          ch = self.ui.AskMultipleChoice(['Yes, I agree!',
-                                          'View Software License (AGPLv3).',
-                                          'View PageKite.net Terms of Service.',
-                                          'No, I do not accept these terms.'],
-                                         'Your choice:',
-                        pre=['Do you accept the license and terms of service?'],
-                                         default=1, back=False)
-          if ch is False:
-            Back()
-          elif ch == 2:
-            self.ui.Browse(LICENSE_URL)
-          elif ch == 3:
-            self.ui.Browse(SERVICE_TOS_URL)
-          elif ch == 4:
-            Goto('manual_abort')
-          else:
-            try:
-              details = service.signUp(email, register)
-              if details.get('secret', False):
-                service_accounts[email] = details['secret']
-                self.ui.Tell([
-                  'Your kite, %s, is live!' % register,
-                  '',
-                  'IMPORTANT NOTE:',
-                  'An activation link has been mailed to: %s' % email,
-                  'Unverified accounts are deactivated after '
-                  '%s minutes.' % details['timeout'],
-                ])
-                # FIXME: Handle CNAMEs somehow?
-                time.sleep(2) # Give the service side a moment to replicate...
-                self.ui.EndWizard()
-                if autoconfigure:
-                  self.backends.update(self.ArgToBackendSpecs(register,
-                                                      secret=details['secret']))
-                self.added_kites = True
-                return (register, details['secret'])
-              else:
-                error = details.get('error', 'unknown')
-            except Exception, e:
-              error = '%s' % e
-
-            if error == 'pleaselogin':
-              self.ui.ExplainError(error,
-                                   '%s log-in required.' % self.service_provider,
-                                   subject=register)
-              Goto('service_login_email', back_skips_current=True)
-            elif error == 'email':
-              self.ui.ExplainError(error, 'Signup failed!', subject=register)
-              Goto('service_login_email', back_skips_current=True)
-            elif error == 'domain':
-              self.ui.ExplainError(error, 'Invalid domain!', subject=register)
-              Goto('service_signup_kitename', back_skips_current=True)
+          try:
+            self.ui.Working('Signing up')
+            details = service.signUp(email, register)
+            if details.get('secret', False):
+              service_accounts[email] = details['secret']
+              self.ui.AskYesNo('Continue?', pre=[
+                '<b>Your kite is ready to fly!</b>',
+                '',
+                '<b>Note:</b> To complete the signup process,',
+                'check your e-mail (and spam folders) for',
+                'activation instructions. You can give',
+                'PageKite a try first, but un-activated',
+                'accounts are disabled after %d minutes.' % details['timeout'],
+              ], yes='Finish', no=False, default=True)
+              self.ui.EndWizard()
+              if autoconfigure:
+                print 'Backends: %s (register=%s)' % (be_specs, register)
+                for be_spec in be_specs:
+                  self.backends.update(self.ArgToBackendSpecs(
+                                                    be_spec % register,
+                                                    secret=details['secret']))
+              self.added_kites = True
+              return (register, details['secret'])
             else:
-              print 'FIXME!  Error is %s' % error
-              Goto('abort')
+              error = details.get('error', 'unknown')
+          except IOError:
+            error = 'network'
+          except:
+            error = '%s' % (sys.exc_info(), )
+
+          if error == 'pleaselogin':
+            #self.ui.ExplainError(error,
+            #                     '%s log-in required.' % self.service_provider,
+            #                     subject=register)
+            Goto('service_login_email', back_skips_current=True)
+          elif error == 'email':
+            self.ui.ExplainError(error, 'Signup failed!', subject=register)
+            Goto('service_login_email', back_skips_current=True)
+          elif error in ('domain', 'domaintaken', 'subdomain'):
+            register, kitename = None, None
+            self.ui.ExplainError(error, 'Invalid domain!', subject=register)
+            Goto('service_signup_kitename', back_skips_current=True)
+          elif error == 'network':
+            self.ui.ExplainError(error, 'Network error!', subject=self.service_provider)
+            Goto('service_signup', back_skips_current=True)
+          else:
+            self.ui.ExplainError(error, 'Unknown problem!')
+            print 'FIXME!  Error is %s' % error
+            Goto('abort')
 
         elif 'choose_kite_account' in state:
-          # FIXME: Make this a yes-no, just use the first account.
           choices = service_account_list[:]
           choices.append('Use another service provider')
-          ch = self.ui.AskMultipleChoice(choices, 'Register with',
-                                         pre=['Choose an account for this kite:'],
-                                         default=1)
+          justdoit = (len(service_account_list) == 1)
+          if justdoit:
+            ch = 1
+          else:
+            ch = self.ui.AskMultipleChoice(choices, 'Register with',
+                                       pre=['Choose an account for this kite:'],
+                                           default=1)
+          account = choices[ch-1]
           if ch == len(choices):
             Goto('manual_abort')
+          elif kitename:
+            Goto('choose_backends', back_skips_current=justdoit)
           else:
-            account = choices[ch-1]
-            Goto('create_kite')
+            Goto('service_ask_kitename', back_skips_current=justdoit)
 
         elif 'create_kite' in state:
           secret = service_accounts[account]
@@ -4771,19 +5283,30 @@ class PageKite(object):
           result = {}
           error = None
           try:
-            if is_cname_for and is_cname_ready:
+            if registered and kitename and secret:
+              pass
+            elif is_cname_for and is_cname_ready:
+              self.ui.Working('Creating your kite')
               subject = kitename
               result = service.addCnameKite(account, secret, kitename)
-              cfgs.update(self.ArgToBackendSpecs(kitename, secret=secret))
+              time.sleep(2) # Give the service side a moment to replicate...
             else:
+              self.ui.Working('Creating your kite')
               subject = register
               result = service.addKite(account, secret, register)
-              cfgs.update(self.ArgToBackendSpecs(register, secret=secret))
+              time.sleep(2) # Give the service side a moment to replicate...
+              for be_spec in be_specs:
+                cfgs.update(self.ArgToBackendSpecs(be_spec % register,
+                                                   secret=secret))
               if is_cname_for == register and 'error' not in result:
                 subject = kitename
                 result.update(service.addCnameKite(account, secret, kitename))
-                cfgs.update(self.ArgToBackendSpecs(kitename, secret=secret))
+
             error = result.get('error', None)
+            if not error:
+              for be_spec in be_specs:
+                cfgs.update(self.ArgToBackendSpecs(be_spec % kitename,
+                                                   secret=secret))
           except Exception, e:
             error = '%s' % e
 
@@ -4794,24 +5317,25 @@ class PageKite(object):
           else:
             self.ui.Tell(['Success!'])
             self.ui.EndWizard()
-            time.sleep(2) # Give the service side a moment to replicate...
             if autoconfigure: self.backends.update(cfgs)
             self.added_kites = True
             return (register or kitename, secret)
 
-
         elif 'manual_abort' in state:
           if self.ui.Tell(['Aborted!', '',
-            'Please manually add information about your kites and front-ends',
-            'to the configuration file: %s' % self.rcfile],
+            'Please manually add information about your',
+            'kites and front-ends to the configuration file:',
+            '', ' %s' % self.rcfile],
                           error=True, back=False) is False:
             Back()
           else:
             self.ui.EndWizard()
+            if self.ui.ALLOWS_INPUT: return None
             sys.exit(0)
 
         elif 'abort' in state:
           self.ui.EndWizard()
+          if self.ui.ALLOWS_INPUT: return None
           sys.exit(0)
 
         else:
@@ -4825,11 +5349,12 @@ class PageKite(object):
           raise KeyboardInterrupt()
 
     self.ui.EndWizard()
+    return None
 
   def CheckConfig(self):
     if self.ui_sspec: self.BindUiSspec()
     if not self.servers_manual and not self.servers_auto and not self.isfrontend:
-      if not self.servers:
+      if not self.servers and not self.ui.ALLOWS_INPUT:
         raise ConfigError('Nothing to do!  List some servers, or run me as one.')
     return self
 
@@ -4872,6 +5397,16 @@ class PageKite(object):
   def GetHostDetails(self, host):
     return socket.gethostbyname_ex(host)
 
+  def GetActiveBackends(self):
+    active = []
+    for bid in self.backends:
+      (proto, bdom) = bid.split(':')
+      if (self.backends[bid][BE_STATUS] not in BE_INACTIVE and
+          self.backends[bid][BE_SECRET] and
+          not bdom.startswith('*')):
+        active.append(bid)
+    return active
+
   def ChooseFrontEnds(self):
     self.servers = []
     self.servers_preferred = []
@@ -4903,18 +5438,16 @@ class PageKite(object):
 
       # First, check for old addresses and always connect to those.
       if not self.servers_new_only:
-        for bid in self.backends:
+        for bid in self.GetActiveBackends():
           (proto, bdom) = bid.split(':')
-          if (self.backends[bid][BE_STATUS] not in BE_INACTIVE and
-              self.backends[bid][BE_SECRET] and
-              not bdom.startswith('*')):
-            try:
-              (hn, al, ips) = self.GetHostDetails(bdom)
-              for ip in ips:
+          try:
+            (hn, al, ips) = self.GetHostDetails(bdom)
+            for ip in ips:
+              if not ip.startswith('127.'):
                 server = '%s:%s' % (ip, port)
                 if server not in self.servers: self.servers.append(server)
-            except Exception, e:
-              LogDebug('DNS lookup failed for %s' % bdom)
+          except Exception, e:
+            LogDebug('DNS lookup failed for %s' % bdom)
 
       try:
         (hn, al, ips) = socket.gethostbyname_ex(domain)
@@ -4939,9 +5472,12 @@ class PageKite(object):
     failures = 0
     connections = 0
 
-    if self.backends:
+    if len(self.GetActiveBackends()) > 0:
       if not self.servers or len(self.servers) > len(live_servers):
         self.ChooseFrontEnds()
+    else:
+      self.servers_preferred = []
+      self.servers = []
 
     for server in self.servers:
       if server not in live_servers:
@@ -5007,19 +5543,21 @@ class PageKite(object):
             self.last_updates.append(update)
             if result.startswith('good') or result.startswith('nochg'):
               Log([('dyndns', result), ('data', update)])
+              self.SetBackendStatus(update.split(':')[0],
+                                    sub=BE_STATUS_ERR_DNS)
             else:
               LogInfo('DynDNS update failed: %s' % result, [('data', update)])
+              self.SetBackendStatus(update.split(':')[0],
+                                    add=BE_STATUS_ERR_DNS)
               failures += 1
           except Exception, e:
             LogInfo('DynDNS update failed: %s' % e, [('data', update)])
-            traceback.print_exc(file=sys.stderr)
+            if DEBUG_IO: traceback.print_exc(file=sys.stderr)
+            self.SetBackendStatus(update.split(':')[0],
+                                  add=BE_STATUS_ERR_DNS)
             failures += 1
       if not self.last_updates:
         self.last_updates = last_updates
-
-    if not failures:
-      self.ui.Status('active', color=self.ui.GREEN,
-                               message='Kites are flying and all is well.')
 
     return failures
 
@@ -5040,9 +5578,10 @@ class PageKite(object):
 
     global LogFile
     if filename in ('stdio', 'stdout'):
-      sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
-      sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', 0)
-      LogFile = sys.stdout
+      try:
+        LogFile = os.fdopen(sys.stdout.fileno(), 'w', 0)
+      except:
+        LogFile = sys.stdout
     else:
       try:
         LogFile = fd = open(filename, "a", 0)
@@ -5064,11 +5603,10 @@ class PageKite(object):
     global buffered_bytes
 
     conns = self.conns
-    last_loop = time.time()
+    self.last_loop = time.time()
 
-    self.looping = True
     iready, oready, eready = None, None, None
-    while self.looping:
+    while self.keep_looping:
       isocks, osocks = conns.Readable(), conns.Blocked()
       try:
         if isocks or osocks:
@@ -5081,11 +5619,11 @@ class PageKite(object):
       except Exception, e:
         LogError('Error in select: %s (%s/%s)' % (e, isocks, osocks))
         conns.CleanFds()
-        last_loop -= 1
+        self.last_loop -= 1
 
       now = time.time()
       if not iready and not oready:
-        if (isocks or osocks) and (now < last_loop + 1):
+        if (isocks or osocks) and (now < self.last_loop + 1):
           LogError('Spinning, pausing ...')
           time.sleep(0.1)
 
@@ -5116,12 +5654,13 @@ class PageKite(object):
         conns.Remove(conn)
         conn.Cleanup()
 
-      last_loop = now
+      self.last_loop = now
 
   def Loop(self):
     self.conns.start()
     if self.ui_httpd: self.ui_httpd.start()
     if self.tunnel_manager: self.tunnel_manager.start()
+    if self.ui_comm: self.ui_comm.start()
 
     try:
       epoll = select.epoll()
@@ -5138,7 +5677,8 @@ class PageKite(object):
     # If we are going to spam stdout with ugly crap, then there is no point
     # attempting the fancy stuff. This also makes us backwards compatible
     # for the most part.
-    if self.logfile == 'stdio': self.ui = NullUi()
+    if self.logfile == 'stdio':
+      if not self.ui.DAEMON_FRIENDLY: self.ui = NullUi()
 
     # Announce that we've started up!
     self.ui.Status('startup', message='Starting up...')
@@ -5166,6 +5706,9 @@ class PageKite(object):
     globalSecret()
     self.ui.Status('startup', message='Starting up...')
 
+    # Create the UI Communicator
+    self.ui_comm = UiCommunicator(self, conns)
+
     try:
 
       # Set up our listeners if we are a server.
@@ -5176,6 +5719,9 @@ class PageKite(object):
         for port in self.server_raw_ports:
           if port != VIRTUAL_PN and port > 0:
             Listener(self.server_host, port, conns, connclass=RawConn)
+
+      if self.ui_port:
+        Listener('127.0.0.1', self.ui_port, conns, connclass=UiConn)
 
       # Create the Tunnel Manager
       self.tunnel_manager = TunnelManager(self, conns)
@@ -5244,8 +5790,10 @@ class PageKite(object):
     # Finally, run our select/epoll loop.
     self.Loop()
 
+    self.ui.Status('exiting', message='Stopping...')
     Log([('stopping', 'pagekite.py')])
     if self.ui_httpd: self.ui_httpd.quit()
+    if self.ui_comm: self.ui_comm.quit()
     if self.tunnel_manager: self.tunnel_manager.quit()
     if self.conns:
       if self.conns.auth: self.conns.auth.quit()
@@ -5311,6 +5859,9 @@ def Main(pagekite, configure, uiclass=NullUi,
       crashes += 1
       if crashes > 9: crashes = 9
 
+    # No exception, do we keep looping?
+    if not pk.main_loop: return
+
 def Configure(pk):
   if '--appver' in sys.argv:
     print '%s' % APPVER
@@ -5326,10 +5877,11 @@ def Configure(pk):
     sys.exit(0)
 
   if not pk.backends.keys() and (not pk.kitesecret or not pk.kitename):
-    friendly_mode = sys.platform in ('win32', 'os2', 'os2emx',
-                                     'darwin', 'darwin1', 'darwin2')
+    friendly_mode = (('--friendly' in sys.argv) or
+                     (sys.platform in ('win32', 'os2', 'os2emx',
+                                       'darwin', 'darwin1', 'darwin2')))
     if '--signup' in sys.argv or friendly_mode:
-      pk.RegisterNewKite(autoconfigure=True)
+      pk.RegisterNewKite(autoconfigure=True, first=True)
     if friendly_mode: pk.save = True
 
   pk.CheckConfig()
@@ -5339,9 +5891,9 @@ def Configure(pk):
         pk.ui.AskYesNo('Save settings to %s?' % pk.rcfile,
                        default=(len(pk.backends.keys()) > 0))):
       pk.SaveUserConfig()
-    pk.servers_new_only = True
+    pk.servers_new_only = 'Once'
   elif pk.save:
-    pk.SaveUserConfig()
+    pk.SaveUserConfig(quiet=True)
 
   if ('--list' in sys.argv or
       pk.kite_add or pk.kite_remove or pk.kite_only or pk.kite_disable):

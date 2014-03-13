@@ -1,0 +1,115 @@
+## UI 2.0 ##
+
+UNFINISHED IN GUI:
+
+   * Paste to Web
+   * Share file/folder behavior on Windows (.lnk instead of symlinks)
+   * Sharing dialog:
+      * Cropper
+      * Title
+      * Password
+      * Description
+   * Kite list:
+      * Toggling should disable kite
+   * Add / edit kites: need UI
+   * PageKite Log display
+   * Verbose log toggle
+
+NEEDS POLISH:
+
+   * Config File editor
+
+BUILT IN WEBSERVER WORK:
+
+   * Javier's everything!
+
+
+## Add / Edit UI / Main window ##
+
+Use cases:
+  - Want to create a new kite
+  - Want to add services to a kite
+  - Want to edit a kite service
+  - Want to remove a kite service
+  - Want to stop sharing something
+
+Kite view:
+
+  KITE             SERVICE             SERVERS
+  b.pagekite.me    www (port 80)       localhost:80   [up]   [edit] [del]
+                   www (default)       built-in       [down] [edit] [del]
+                   ssh (HTTP proxied   localhost:22   [down] [edit] [del]
+                   [new service]
+
+  [new kite]
+
+Sharing view:
+
+  KITE           URL PATH     LOCAL PATH          EXPIRES
+  b.pagekite.me  /            /home/bre/PageKite  never    [open] [del]
+
+
+## UI! ##
+
+Indicator icon:  down / connecting / flying / traffic
+
+Main menu:
+
+   15 day trial
+   Buy buy buy
+   --------------------
+   Pagekites:
+   - bre.pagekite.me  > [x] WWW (PageKite)
+   - www.fnord.com          Open in Browser
+   - b.pagekite.me      ---------------------------
+                        [ ] Secure Shell (SSH)
+                        [ ] Share Desktop (VNC/RDP)
+                        ---------------------------
+   New Kite                 Settings
+                            Delete Kite
+   --------------------
+   Connections ...    > Portals:
+                        - SSH: bre.pagekite.me
+                        - VNC: bre.pagekite.me  > Open
+                        - RDP: askja.ok.is        Remove
+                        - 3349: magicserv:2341
+                        Add Portal
+                        --------------------
+                        Hosts:
+                        - bjarni
+                        - fooxbar
+                        Add Host
+                        --------------------
+                        [ ] Lapcat HTTP Proxy (localhost:7669)
+   --------------------
+   Shared items:
+   - /foo/bar/baz     > Open in Browser
+   - Pasted Text        Copy Link
+   - Pasted Image       Stop Sharing
+   Paste to Web
+   Share Folder or File
+   --------------------
+   Advanced           > View Log
+                        Config File
+                        Connect ... 
+   Help               > About PageKite
+                        On-line support
+   Quit
+
+
+## When Sharing ##
+
+1. One of:
+    - Create screenshot
+    - File/Directory chooser
+    - Grab data from clipboard
+
+2. DISPLAY A PREVIEW
+   If screenshot, allow cropping
+   If multiple kites, choose from a dropdown
+   Choose expiration from a dropdown
+   ADVANCED:
+     x Make URL private
+     x Require password: [ ... ]
+
+
