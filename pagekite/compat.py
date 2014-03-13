@@ -109,15 +109,18 @@ if socks.HAVE_PYOPENSSL:
   SSL = socks.SSL
   SEND_ALWAYS_BUFFERS = False
   SEND_MAX_BYTES = 16 * 1024
+  TUNNEL_SOCKET_BLOCKS = False
 
 elif socks.HAVE_SSL:
   SEND_ALWAYS_BUFFERS = True
   SEND_MAX_BYTES = 4 * 1024
   SSL = socks.SSL
+  TUNNEL_SOCKET_BLOCKS = True # Workaround for http://bugs.python.org/issue8240
 
 else:
   SEND_ALWAYS_BUFFERS = False
   SEND_MAX_BYTES = 16 * 1024
+  TUNNEL_SOCKET_BLOCKS = False
   class SSL(object):
     SSLv23_METHOD = 0
     TLSv1_METHOD = 0

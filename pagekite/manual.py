@@ -311,6 +311,11 @@ MAN_LICENSE = ("""\
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """)
+MAN_BUGS = ("""\
+    Using <b>pagekite.py</b> as a front-end relay with the native Python SSL
+    module may result in poor performance.  Please use the pyOpenSSL wrappers
+    instead.
+""")
 MAN_SEE_ALSO = ("""\
     lapcat(1), <http://pagekite.org/>, <https://pagekite.net/>
 """)
@@ -337,6 +342,7 @@ MANUAL_TOC = (
   ('SS', 'System options', MAN_OPT_SYSTEM),
   ('SH', 'Configuration files', MAN_CONFIG_FILES),
   ('SH', 'Security', MAN_SECURITY),
+  ('SH', 'Bugs', MAN_BUGS),
   ('SH', 'See Also', MAN_SEE_ALSO),
   ('SH', 'Authors', MAN_AUTHORS),
   ('SH', 'Copyright and license', MAN_LICENSE),
