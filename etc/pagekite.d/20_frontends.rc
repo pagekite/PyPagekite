@@ -1,0 +1,10 @@
+#################################[ This file is placed in the Public Domain. ]#
+# Front-end selection
+
+# Use the pagekite.net service defaults.
+defaults
+
+# If you want to use your own, use something like:
+#     frontend=hostname:port
+# or:
+#     frontends=COUNT:dnsname:port

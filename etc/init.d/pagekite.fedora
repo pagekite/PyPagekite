@@ -1,0 +1,92 @@
+#!/bin/bash
+#
+# pagekite     Startup script for the PageKite background service
+#
+# chkconfig: - 85 15
+# description: PageKite makes localhost servers publicly visible.
+# processname: pagekite
+# config: /etc/pagekite.d/50_daemonize.rc
+# config: /etc/pagekite.d/10_account.rc
+# pidfile: /var/run/pagekite.pid
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+if [ -f /etc/sysconfig/pagekite ]; then
+        . /etc/sysconfig/pagekite
+fi
+
+# Start PageKite in the C locale by default.
+PK_LANG=${PK_LANG-"C"}
+
+# Path to the server binary, and short-form for messages.
+pk=/usr/bin/pagekite
+prog=pagekite
+pidfile=${PIDFILE-/var/run/pagekite.pid}
+lockfile=${LOCKFILE-/var/lock/subsys/pagekite}
+RETVAL=0
+
+# Exit if package is unconfigured
+grep -c ^abort_not_configured /etc/pagekite.d/10_account.rc \
+  2>/dev/null >/dev/null && exit 0
+
+# Check for 0.3-style configuration
+check03x () {
+	CONFFILE=/etc/pagekite/local.rc
+        # FIXME
+        true
+}
+
+start() {
+        echo -n $"Starting $prog: "
+        check03x || exit 1
+        touch $PK_LOGFILE
+        chown -R $PK_UID:$PK_GID $(dirname $PK_LOGFILE)
+        LANG=$PK_LANG daemon --pidfile=${pidfile} \
+                             $pk --clean \
+                                 --runas=$PK_UID:$PK_GID \
+                                 --logfile=$PK_LOGFILE \
+                                 --pidfile=${pidfile} $OPTIONS \
+                                 --daemonize
+        RETVAL=$?
+        echo
+        [ $RETVAL = 0 ] && touch ${lockfile}
+        return $RETVAL
+}
+
+stop() {
+	echo -n $"Stopping $prog: "
+	killproc -p ${pidfile} $pk
+	RETVAL=$?
+	echo
+	[ $RETVAL = 0 ] && rm -f ${lockfile} ${pidfile}
+}
+
+# See how we were called.
+case "$1" in
+  start)
+	start
+	;;
+  stop)
+	stop
+	;;
+  status)
+        status -p ${pidfile} $pk
+	RETVAL=$?
+	;;
+  restart|reload)
+	stop
+	start
+	;;
+  condrestart)
+	if [ -f ${pidfile} ] ; then
+		stop
+		start
+	fi
+	;;
+  *)
+	echo $"Usage: $prog {start|stop|restart|condrestart|reload|status}"
+	exit 1
+esac
+
+exit $RETVAL

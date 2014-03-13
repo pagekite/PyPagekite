@@ -1,0 +1,22 @@
+Package: pagekite
+Source: pagekite-0.4.4d
+Version: 0.4.4d-0pagekite
+Architecture: all
+Maintainer: PageKite Packaging Team <packages@pagekite.net>
+Installed-Size: 484
+Depends: python (>= 2.3), python-support (>= 0.90.0), python (<< 3.0), python-socksipychain (>= 2.0), python-openssl
+Section: net
+Priority: optional
+Homepage: https://pagekite.net/
+Description: Make localhost servers publicly visible.
+ PageKite is a system for running publicly visible servers (generally
+ web servers) on machines without a direct connection to the Internet,
+ such as mobile devices or computers behind restrictive firewalls.
+ PageKite works around NAT, firewalls and IP-address limitations by
+ using a combination of  tunnels and reverse proxies.
+ .
+ Natively supported protocols: HTTP, HTTPS
+ Partially supported protocols: IRC, Finger
+ .
+ Any other TCP-based service, including SSH and VNC, may be exposed
+ as well to clients supporting HTTP Proxies.

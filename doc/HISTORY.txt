@@ -1,0 +1,203 @@
+Version history - highlights
+============================
+
+v0.4.5    ??
+------
+   - Finalize and document finger and IRC support.
+   - Support wild-card backends (*.domain.com).
+
+
+v0.4.4   2011.08.02
+------
+   - Major code reorganization, split giant pagekite.py into multiple
+     parts, and spawned two spin-off projects:
+      - http://pagekite.net/wiki/Floss/PyBreeder/
+      - http://pagekite.net/wiki/Floss/PySocksipyChain/
+   - Made the built-in HTTPD reply to http://localhost:port/ requests.
+   - Added back-end flags:
+      - Added +rewritehost
+      - Renamed +user/ to +password/
+      - Allow +options after the domain name
+   - Experimental support for the finger and IRC protocols.
+   - Experimental setuptools, .deb and .rpm packaging rules.
+   - Experimental --remoteui to facilitate development of GUIs.
+
+
+v0.4.3   2011.05.26
+------
+   - UI is more colorful!
+   - UI is more friendly on Windows and in OS X transient windows.
+   - UI now gives useful feedback in front-end mode as well.
+   - UI now reports https:// URLs when they are available.
+   - Added --add, --only, --remove and --disable for manipulating your
+     kite configuration from the command-line.
+   - HTTP Basic Auth can now be required for any HTTP back-end.
+   - Back-ported from 0.3.20:
+      - Fixed more file-descriptor leaks.
+      - Fixed a bug in initial handshake when front-end was using python's SSL.
+      - Fixed infinite recursion bug in loopback tunnels.
+      - Made auxillary threads handle exceptions more gracefully.
+      - Made connection hand-shake more verbose (prep. better error reporting).
+      - Added --debugio flag for low-level debugging.
+
+
+v0.4.2   2011.05.13
+------
+   - Fixed some file descriptor leaks
+   - Added name-based virtual server and virtual file tree to built in HTTPD.
+   - Revamped the command-line short-cuts to follow the common Unix
+     'action source source ... destination' pattern.
+
+
+v0.4.1   2011.05.05
+------
+   - Branched major revision 0.4.x from stable 0.3.x.
+   - Much improved interactive console user interface and shortcut feature.
+     To disable the interface, use --nullui.
+   - Added built-in static HTTP daemon.
+
+
+v0.3.17  2011.04.20
+-------
+   - Crypto cleanup: better random numbers, clarified code, added timestamps
+     to front-end challenges (limits replay attack window), allowed hardcoding
+     of front-end SSL cert hash in config file.
+   - Fixed hanging SSL connections on front-ends with native termination.
+   - Rapid network switching should work (session-id based disconnects).
+   - Minor flow-control tweaks and fixes.
+   - Fixed a bug where large file transfers could disconnect tunnels.
+   - Fixed some logging issues on Windows.
+
+
+v0.3.16  2011.03.11
+-------
+   - Worked around bug in native Python ssl module which kills busy tunnels.
+   - Fixed lame bug in --all code.
+
+
+v0.3.15  2011.03.03
+-------
+   - Revamped stream EOF handling, fixing many corner case bugs in the process.
+   - Fixed GitHub issue #12
+
+
+v0.3.14  2011.02.11
+-------
+   - Moved fancy error messages to a frame, instead of a redirect.
+   - Added support for catch-all backends (hostname = unknown).
+   - Added timeouts to tunnel and backend connection code to reduce stalling.
+   - Moved tunnel management to separate thread.
+   - Added --rawports=virtual for virtual (HTTP CONNECT only) raw ports.
+
+
+v0.3.13  2011.01.25
+-------
+   - Fixed yet another flow-control problem (bad error handling)
+
+
+v0.3.12  2011.01.21
+-------
+   - Report a config error when the same backend is defined twice.
+   - Don't submit crash reports when misconfigured. *sigh*
+
+
+v0.3.11  2011.01.20
+-------
+   - Removed debugging code to improve privacy.
+   - Reduced memory footprint slightly, especially on the front-end.
+   - Fixed bugs in 3rd party dynamic DNS support, improved docs.
+
+
+v0.3.10  2011.01.15
+-------
+   - BUGFIX: More improvements to IO error handling.
+
+
+v0.3.9   2011.01.05
+------
+   - BUGFIX: 0.3.8 broke Windows connections, this should fix them again.
+   - Re-opens logs on SIGHUP, for compatibility with logrotate.
+   - Tweaked internal CONNECT to work with HTTP/1.1 clients: putty can ssh!
+   - Look for CA Certificates in the rc-file if not found in the host OS.
+   - Added --errorurl for fancier "back-end unavailable" messages.
+   - Better detection of dead tunnels and connection re-establishment.
+
+
+v0.3.8   2011.01.02
+------
+   - Many TLS/SSL fixes:
+      - Works with pyOpenSSL or the default Python 2.6 ssl module.
+      - Can now terminate/unwrap TLS/SSL at the front-end.
+      - Routing support for the old lame SSLv2.
+      - Built-in TLS/SSL works with pyOpenSSL or python 2.6+ ssl. 
+      - TLS tunnels: encryption and FE auth. See --ca_certs and --fe_certname.
+   - Protocol fixes: switching from "magic" request paths to HTTP CONNECT.
+   - Added --noprobes and probe logging at the back-end.
+   - Misc. minor bugfixes.
+
+
+v0.3.7   2010.12.26
+v0.3.6
+------
+   - Added support for the websocket protocols (Upgrade: WebSocket header)
+   - Added support for binding to, and routing by ports as well as protocols
+   - Added time-based routing of non-SNI SSL connections.
+   - Added time-based routing of raw ports (for ssh-after-HTTP).
+   - Added X-Forwarded-For header to for HTTP and WEBSOCKET
+   - The IP address of visiters now gets reported to back-end and logged.
+   - Built-in httpd now based on SimpleXMLRPCServer
+   - Enbled --pemfile, for SSL encrypted admin consoles
+   - Front-ends can now have local (non-tunneled) back-ends
+
+
+v0.3.5   2010.12.15
+------
+   - Misc. minor bugfixes.
+   - Added support for WebDAV and other missing HTTP request methods.
+   - Added some real Yamon variables for monitoring
+   - Log-format normalized a bit, created pagekite_logparse.py.
+   - Bugfix: minor memory leak when target servers are down (BE unavailable).
+   - Bugfix: bad flow-control bug could freeze the select-loop.
+
+
+v0.3.4   2010.11.09
+------
+   - Added basic flow-control to avoid excessive memory use on large file
+     transfers with fast backends and slow upstream pipes.
+
+
+v0.3.3   2010.11.03
+------
+   - Fixed crash report misbehavior on some Python versions.
+
+
+v0.3.2   2010.10.25
+------
+   - HTTP UI now has logs & connection details, and --httppass works.
+   - Anonymized IP addresses in HTTP UI and all logs.
+   - Protocol tweaks: front-end is backwards compatible, back-end is not.
+   - Added support for probe requests, showing status in the UI.
+
+
+v0.3.1   2010.10.14
+v0.3.0
+------
+   * BUG: ValueErrors in invalid configs generated crash report spam.
+   * BUG: Fixed chunking alignment problem. 
+   * BUG: Fixed HTTP header parsing problem
+   - Added support for tunneling through tor, or other socks5 proxies.
+   - Added support for zlib compressed tunnels
+   - Added basic unit-tests!
+   - Added crash report feature and auto-restart on crash.
+ 
+
+v0.2.1   2010.10.12
+------
+   - Added support for --defaults and --settings
+   - Renamed from beanstalks_net.py to pagekite.py
+
+
+v0.2.0   2010.09.22 
+------
+   - First alpha-testing release.
+

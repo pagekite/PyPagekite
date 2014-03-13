@@ -1,0 +1,15 @@
+pyversions=2.3-
+
+/usr/share/pyshared/pagekite-0.4.4d.egg-info/PKG-INFO
+/usr/share/pyshared/pagekite-0.4.4d.egg-info/SOURCES.txt
+/usr/share/pyshared/pagekite-0.4.4d.egg-info/dependency_links.txt
+/usr/share/pyshared/pagekite-0.4.4d.egg-info/requires.txt
+/usr/share/pyshared/pagekite-0.4.4d.egg-info/top_level.txt
+/usr/share/pyshared/pagekite/__android__.py
+/usr/share/pyshared/pagekite/__dropper__.py
+/usr/share/pyshared/pagekite/__init__.py
+/usr/share/pyshared/pagekite/__main__.py
+/usr/share/pyshared/pagekite/basicui.py
+/usr/share/pyshared/pagekite/httpd.py
+/usr/share/pyshared/pagekite/logparse.py
+/usr/share/pyshared/pagekite/remoteui.py

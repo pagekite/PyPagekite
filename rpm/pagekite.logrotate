@@ -1,0 +1,10 @@
+/var/log/pagekite/pagekite.log {
+    missingok
+    notifempty
+    size 100k
+    create 0644 root root
+    postrotate
+        /sbin/service pagekite condrestart > /dev/null 2>&1 || :
+    endscript
+
+}

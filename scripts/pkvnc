@@ -1,0 +1,59 @@
+#!/bin/bash
+################################[ This file is placed in the Public Domain. ]##
+#
+# This highly self-referencial script will open up VNC via. PageKite.
+#
+# It is assumed that the VNC server has a raw PageKite service registered
+# on whatever port is given to the vnc viewer.
+#
+# It requires GNU netcat and (OpenBSD netcat OR socat), and a vnc viewer that
+# understands the -via argument and uses the VNC_VIA_CMD environment variable.  If you
+# don't have them, this might help:
+#
+#   sudo apt-get install xvnc4viewer netcat-traditional socat
+#
+# (socat is preferred, as it uses SSL to connect to the front-end)
+#
+NC_TRAD=nc.traditional
+NC_OPEN=nc.openbsd
+VNC_CMD=xvnc4viewer
+
+SC_OPEN=socat
+SC_SSL_AUTH="capath=/etc/ssl/certs/"
+# If self-signed, use: SC_SSL_AUTH="verify=0"
+
+SELF="$0"
+if [ "$PKVNC_LPORT" = "" ]; then
+  if [ "$1" != "--nc" ]; then
+    # Invoked by the user!
+    export VNC_VIA_CMD="$SELF --nc "'"$L" "$H" "$R"'
+    exec "$VNC_CMD" -via 127.0.0.1 "$@"
+  else
+    # Invoked by the vncviewer!
+    export PKVNC_LPORT="$2"
+    export PKVNC_RHOST="$3"
+    export PKVNC_RPORT="$4"
+    "$NC_TRAD" -l -p "$PKVNC_LPORT" -e "$SELF" &
+  fi
+else
+  # Invoked by netcat!
+  if [ "$(which $SC_OPEN)" == "" ]; then
+    # No socat available, try netcat.
+    echo 1>&2
+    echo 'WARNING: Connection to $PKVNC_RHOST:443 is not encrypted.' 1>&2
+    echo '         Please install socat if you care.' 1>&2
+    echo 1>&2
+    exec "$NC_OPEN" -X connect -x "$PKVNC_RHOST:443" "$PKVNC_RHOST" "$PKVNC_RPORT"
+  else
+    # We have socat!  Use the more secure SSL connection, manual HTTP CONNECT
+    (
+       echo CONNECT $PKVNC_RHOST:$PKVNC_RPORT HTTP/1.0
+       echo
+       exec cat
+    ) | exec "$SC_OPEN" - "openssl:$PKVNC_RHOST:443,$SC_SSL_AUTH" | (
+       read REPLY
+       read NOTHING
+       exec cat
+    )
+  fi
+fi

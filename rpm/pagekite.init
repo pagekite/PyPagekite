@@ -1,0 +1,95 @@
+#!/bin/bash
+#
+# pagekite     This shell script enables pagekite
+#
+# Author:       Edvin Dunaway <edvin@eddinn.net>
+#
+# chkconfig:	- 50 01
+#
+# description:  Enable execution of pagekite
+# config:	/etc/pagekite/pagekite.rc
+#
+
+# source function library
+. /etc/rc.d/init.d/functions
+
+# Make sure HOSTNAME is in the environment
+HOSTNAME=$(hostname)
+export HOSTNAME
+
+CONTROL=/usr/bin/pagekite
+CRONLOCK=/var/lock/subsys/pagekite.init
+LOCKFILE=/var/lock/subsys/pagekite
+RETVAL=0
+
+[ -f /etc/sysconfig/pagekite ] && . /etc/sysconfig/pagekite
+
+c_start() {
+	echo -n $"Enabling pagekite: "
+	touch "$CRONLOCK" && success || failure
+	RETVAL=$?
+	echo
+}
+
+c_stop() {
+	echo -n $"Disabling pagekite: "
+	rm -f "$CRONLOCK" && success || failure
+	RETVAL=$?
+	echo
+}
+
+c_restart() {
+	c_stop
+	c_start
+}
+
+c_condrestart() {
+	[ -f "$CRONLOCK" ] && c_restart
+}
+
+c_status() {
+	if [ -f $CRONLOCK ]; then
+		echo $"Pagekite is enabled."
+		RETVAL=0
+	else
+		echo $"Pagekite is disabled."
+		RETVAL=3
+	fi
+}
+
+d_condrestart() { $CONTROL condrestart; RETVAL=$?; }
+d_restart()     { $CONTROL restart;     RETVAL=$?; }
+d_start()       { $CONTROL start;       RETVAL=$?; }
+d_status()      { $CONTROL status;      RETVAL=$?; }
+d_stop()        { $CONTROL stop;        RETVAL=$?; }
+
+condrestart() { if [ $DAEMON = "yes" ]; then d_condrestart; else c_restart; fi }
+restart()     { if [ $DAEMON = "yes" ]; then d_restart;     else c_restart; fi }
+start()       { if [ $DAEMON = "yes" ]; then d_start;       else c_start;   fi }
+status()      { if [ $DAEMON = "yes" ]; then d_status;      else c_status;  fi }
+stop()        { if [ $DAEMON = "yes" ]; then d_stop;        else c_stop;    fi }
+
+case "$1" in
+  start)
+	start
+	;;
+  stop) 
+	stop
+	;;
+  restart|force-reload)
+	restart
+	;;
+  reload)
+	;;
+  condrestart)
+	condrestart
+	;;
+  status)
+	status
+	;;
+  *)
+	echo $"Usage: $0 {start|stop|status|restart|reload|force-reload|condrestart}"
+	exit 1
+esac
+
+exit $RETVAL

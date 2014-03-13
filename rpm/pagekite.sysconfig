@@ -1,0 +1,2 @@
+# Should pagekite run in daemon mode?
+DAEMON=yes

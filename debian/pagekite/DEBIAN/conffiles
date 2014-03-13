@@ -1,0 +1,6 @@
+/etc/init.d/pagekite
+/etc/logrotate.d/pagekite
+/etc/pagekite.d/10_account.rc
+/etc/pagekite.d/20_frontends.rc
+/etc/pagekite.d/80_sshd.rc.sample
+/etc/pagekite.d/80_httpd.rc.sample

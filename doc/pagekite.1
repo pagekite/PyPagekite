@@ -1,0 +1,266 @@
+.\"                                      Hey, EMACS: -*- nroff -*-
+.\" First parameter, NAME, should be all caps
+.\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
+.\" other parameters are allowed: see man(7), man(1)
+.TH PAGEKITE 1 "2011-07-31"
+.\" Please adjust this date whenever revising the manpage.
+.\"
+.\" Some roff macros, for reference:
+.\" .nh        disable hyphenation
+.\" .hy        enable hyphenation
+.\" .ad l      left justify
+.\" .ad b      justify to both left and right margins
+.\" .nf        disable filling
+.\" .fi        enable filling
+.\" .br        insert line break
+.\" .sp <n>    insert n+1 empty lines
+.\" for manpage-specific macros, see man(7)
+.SH NAME
+pagekite \- Make localhost servers publicly visible.
+
+
+.SH SYNOPSIS
+.B pagekite
+.RI [ options ]
+[[<port>] [<proto>:]<hostname>[:<port>]
+.RI [ flags ]]
+
+.B pagekite
+.RI [ options ]
+[<paths> [http:]<hostname>[:<port>]
+.RI [ flags ]]
+
+
+.SH DESCRIPTION
+.PP
+\fBpagekite\fP lets you run servers and services on computers or other
+mobile devices that do not have a direct connection to the Internet or are
+'protected' by a firewall that filters incoming connections, such as mobile
+devices or computers behind NAT.
+
+The program gives servers running on localhost or the local LAN a publicly
+visible DNS name and act as a tunneled reverse proxy, routing connections
+from the outside world to otherwise inaccessible servers whenever possible.
+
+For convenience, \fBpagekite\fP also includes a basic HTTP server for quickly
+exposing files and directories to the World Wide Web for casual sharing and
+collaboration.
+
+
+.SH EXAMPLES
+.P
+Basic usage, makes http://localhost:80/ publicly visible:
+.RS
+pagekite ANYTHING.pagekite.me
+.RE
+
+To expose specific folders, files or use alternate local ports:
+.RS
+pagekite /a/path NAME.pagekite.me +indexes
+.RE
+.RS
+pagekite *.html *.css *.js NAME.pagekite.me
+.RE
+.RS
+pagekite 3000 NAME.pagekite.me
+.RE
+
+To expose multiple servers (SSH and HTTP):
+.RS
+pagekite ssh:NAME.pagekite.me AND 3000 NAME.pagekite.me
+.RE
+
+To watch the data flow back and forth:
+.RS
+pagekite --nozchunks --debugio --logfile=stdio \\
+.RE
+.RS
+            ANYTHING.pagekite.me
+.RE
+
+
+.SH FLAGS
+
+Flags are used to tune the behavior of a given back-end, for example by
+enabling access controls or enabling specific features of the built-in HTTP
+server.
+
+.SS Common flags
+.P
+  +ip/A.B.C.D      Enable connections only from this IP address
+
+.P
+  +ip/A.B.C        Enable connections only from this /24 netblock
+
+.SS HTTP protocol flags
+.P
+  +password/name=pass  Require a username and password (Basic Auth)
+
+.P
+  +rewritehost     Rewrite the incoming Host: header
+
+.SS Built-in HTTPD flags
+.P
+  +indexes         Enable directory indexes
+
+.P
+  +indexes=all     Directory indexes include hidden (dot-) files
+
+.P
+  +hide            Obfuscate URLs of shared files
+
+.P
+  +cgi=e1,e2,...   Handle files ending in .e1 or .e2 as CGI scripts
+
+
+.SH OPTIONS
+
+All \fBpagekite\fP options can be specified on the command-line, or in a
+configuration file (see below).
+
+\fBNote:\fP  Some options, specifically back-end and front-end definitions, are
+additive and if given multiple times the program will attempt to obey them
+all. For most others, the order matters and a latter definition will override
+a previous one. This can at times produce unexpected results if some options
+are read from a configuration file, while others are specified on the
+command-line.
+
+.SS Common options
+.P
+  --optfile=X    -o X     Read options from file X.
+                          Default is ~/.pagekiterc.
+.P
+  --httpd=X:P    -H X:P   Enable the HTTP user interface on
+                          hostname X, port P.
+.P
+  --pemfile=X    -P X     Use X as a PEM key for the HTTPS UI.
+.P
+  --httppass=X   -X X     Require password X to access the UI.
+.P
+   --nozchunks            Disable zlib tunnel compression.
+.P
+   --buffers       N      Buffer at most N kB of back-end data
+                          before blocking.
+.P
+   --logfile=F    -L F    Log to file F.
+.P
+   --daemonize    -Z      Run as a daemon.
+.P
+   --runas        -U U:G  Set UID:GID after opening our
+                          listening sockets.
+.P
+   --pidfile=P    -I P    Write PID to the named file.
+.P
+   --clean                Skip loading the default
+                          configuration file.
+.P
+   --nocrashreport        Don't send anonymous crash reports
+                          to PageKite.net.
+.P
+   --tls_default=N        Default name to use for SSL, if SNI
+                          and tracking fail.
+.P
+   --tls_endpoint=N:F     Terminate SSL/TLS for name N, using
+                          key/cert from F.
+.P
+   --defaults             Set some reasonable default setings.
+.P
+   --errorurl=U  -E U     URL to redirect to when back-ends are
+                          not found.
+.P
+   --settings             Dump the current settings to STDOUT,
+                          formatted as an options file would be.
+
+
+.SS Front-end options
+.P
+   --isfrontend   -f      Enable front-end mode.
+.P
+   --authdomain=X -A X    Use X as a remote authentication domain.
+.P
+   --host=H       -h H    Listen on H (hostname).
+.P
+   --ports=A,B,C  -p A,B  Listen on ports A, B, C, ...
+.P
+   --portalias=A:B        Report port A as port B to backends.
+.P
+   --protos=A,B,C         Accept the listed protocols for tunneling.
+.P
+   --rawports=A,B,C       Listen on ports A, B, C, ...
+                          (raw/timed connections)
+.P
+   --domain=proto,proto2,pN:domain:secret
+                          Accept tunneling requests for the named
+                          protocols and specified domain, using
+                          the given secret.  A * may be used as a
+                          wildcard for subdomains. (FIXME)
+
+.SS Back-end options
+.P
+   --all          -a      Terminate early if any tunnels fail to
+                          register.
+.P
+   --dyndns=X     -D X    Register changes with DynDNS provider X.
+                          X can either be simply the name of one of
+                          the 'built-in' providers, or a URL format
+                          string for ad-hoc updating.
+
+.P
+   --frontends=N:X:P      Choose N front-ends from X (a DNS domain
+                          name), port P.
+.P
+   --frontend=host:port   Connect to the named front-end server.
+.P
+   --new          -N      Don't attempt to connect to the domain's
+                          old front-end.
+.P
+   --socksify=S:P         Connect via SOCKS server S, port P
+                          (requires socks.py)
+.P
+   --torify=S:P           Same as socksify, but more paranoid.
+.P
+   --noprobes             Reject all probes for back-end liveness.
+.P
+   --fe_certname=N        Connect using SSL, accepting valid certs for
+                          domain N.
+.P
+   --ca_certs=PATH        Path to your trusted root SSL
+                          certificates file.
+.P
+   --backend=proto:domain:host:port:secret
+                          Configure a back-end service on host:port,
+                          using protocol proto and the given domain.
+                          As a special case, if host and port are left
+                          blank and the proto is HTTP or HTTPS, the
+                          built-in server will be used.
+
+.SS About the options file
+.P
+The options file contains the same options as are available to the command
+line, with the restriction that there be exactly one "argument" per line.
+.P
+The leading '--' may also be omitted for readability, and for the same reason
+it is recommended to use the long form of the options in the configuration
+file (also, as the short form may not always parse correctly).
+.P
+Blank lines and lines beginning with # (comments) are stripped from the
+options file before it is parsed.  It is perfectly acceptable to have multiple
+options files, and options files can include other options files.
+
+.SH SEE ALSO
+.P
+lapcat(1), <http://pagekite.org/>, <http://pagekite.net/>
+
+.SH AUTHOR
+.P
+Written by Bjarni R. Einarsson <http://bre.klaki.net/>.
+
+.SH COPYRIGHT
+.P
+Copyright © 2011 Bjarni R. Einarsson and The Beanstalks Project ehf.
+.P
+License: AGPLv3+, GNU Affero GPL version 3 or later
+<http://gnu.org/licenses/agpl.html>.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
