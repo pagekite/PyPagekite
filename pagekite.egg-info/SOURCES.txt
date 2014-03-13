@@ -62,11 +62,11 @@ debian/pagekite/usr/share/pyshared/pagekite/basicui.py
 debian/pagekite/usr/share/pyshared/pagekite/httpd.py
 debian/pagekite/usr/share/pyshared/pagekite/logparse.py
 debian/pagekite/usr/share/pyshared/pagekite/remoteui.py
-debian/pagekite/usr/share/pyshared/pagekite-0.4.4e.egg-info/PKG-INFO
-debian/pagekite/usr/share/pyshared/pagekite-0.4.4e.egg-info/SOURCES.txt
-debian/pagekite/usr/share/pyshared/pagekite-0.4.4e.egg-info/dependency_links.txt
-debian/pagekite/usr/share/pyshared/pagekite-0.4.4e.egg-info/requires.txt
-debian/pagekite/usr/share/pyshared/pagekite-0.4.4e.egg-info/top_level.txt
+debian/pagekite/usr/share/pyshared/pagekite-0.4.4f.egg-info/PKG-INFO
+debian/pagekite/usr/share/pyshared/pagekite-0.4.4f.egg-info/SOURCES.txt
+debian/pagekite/usr/share/pyshared/pagekite-0.4.4f.egg-info/dependency_links.txt
+debian/pagekite/usr/share/pyshared/pagekite-0.4.4f.egg-info/requires.txt
+debian/pagekite/usr/share/pyshared/pagekite-0.4.4f.egg-info/top_level.txt
 debian/pagekite/usr/share/python-support/pagekite.public
 debian/python-module-stampdir/pagekite
 doc/CREDITS.txt

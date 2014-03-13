@@ -1,6 +1,6 @@
 Format: http://dep.debian.net/deps/dep5
-Upstream-Name: pagekite-0.4.4e
-Source: http://pagekite.net/pk/src/pagekite-0.4.4e.tar.gz
+Upstream-Name: pagekite-0.4.4f
+Source: http://pagekite.net/pk/src/pagekite-0.4.4f.tar.gz
 
 Files: *
 Copyright: 

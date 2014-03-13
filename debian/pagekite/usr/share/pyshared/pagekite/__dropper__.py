@@ -16,7 +16,8 @@ if __name__ == "__main__":
     '--noloop',
     '--nocrashreport',
     '--defaults',
-    '--backend=raw/22:%s:localhost:22:%s' % (kn, ss),
+    '--kitename=%s' % kn,
+    '--kitesecret=%s' % ss,
     '--all'
   ]
   sys.argv.extend('@ARGS@'.split())

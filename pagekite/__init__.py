@@ -94,7 +94,7 @@
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.4.4e'
+APPVER = '0.4.4f'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -4046,7 +4046,7 @@ class PageKite(object):
         backends[bid][BE_DOMAIN] = fdom
         backends[bid][BE_BHOST] = bhost.lower()
         backends[bid][BE_BPORT] = int(bport)
-        backends[bid][BE_SECRET] = sec
+        backends[bid][BE_SECRET] = sec or self.kitesecret
         backends[bid][BE_STATUS] = status
 
     return backends
@@ -4326,7 +4326,8 @@ class PageKite(object):
       be_config = [p for p in args if p.startswith('+')]
       args = [p for p in args if not p.startswith('+')]
 
-      fe_spec = args.pop()
+      fe_spec = (args.pop().replace('@kitesecret', self.kitesecret)
+                           .replace('@kitename', self.kitename))
       if os.path.exists(fe_spec):
         raise ConfigError('Is a local file: %s' % fe_spec)
 
@@ -5312,7 +5313,7 @@ def Configure(pk):
     pk.PrintSettings(safe=True)
     sys.exit(0)
 
-  if not pk.backends.keys():
+  if not pk.backends.keys() and (not pk.kitesecret or not pk.kitename):
     friendly_mode = sys.platform in ('win32', 'os2', 'os2emx',
                                      'darwin', 'darwin1', 'darwin2')
     if '--signup' in sys.argv or friendly_mode:
