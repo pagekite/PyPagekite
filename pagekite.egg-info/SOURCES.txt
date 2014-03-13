@@ -7,6 +7,7 @@ TODO.md
 UI.txt
 __main__.py
 droiddemo.py
+pagekite.py
 pagekite_gtk.py
 pk
 setup.cfg
@@ -79,7 +80,12 @@ scripts/breeder.py
 scripts/installer.sh
 scripts/lapcat
 scripts/mk-dropper.sh
+scripts/mk-self-signed.sh
 scripts/pagekite
 scripts/pagekite_gtk
 scripts/pagekite_test.py.old
 scripts/pkvnc
+scripts/self-signed.pem
+scripts/tests/auth.rc
+scripts/tests/crypto.rc
+scripts/tests/proxy.rc

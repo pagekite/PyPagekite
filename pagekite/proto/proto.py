@@ -154,8 +154,8 @@ def HTTP_StartBody():
 def HTTP_ConnectOK():
   return 'HTTP/1.0 200 Connection Established\r\n\r\n'
 
-def HTTP_ConnectBad():
-  return 'HTTP/1.0 503 Sorry\r\n\r\n'
+def HTTP_ConnectBad(code=503, status='Unavailable'):
+  return 'HTTP/1.0 %s %s\r\n\r\n' % (code, status)
 
 def HTTP_Response(code, title, body, mimetype='text/html', headers=None):
   data = [HTTP_ResponseHeader(code, title, mimetype)]

@@ -1,0 +1,78 @@
+###[ Current settings for pagekite.py v0.5.3+github. ]#########
+#
+## NOTE: This file may be rewritten/reordered by pagekite.py.
+#
+
+##[ Default kite and account details ]##
+kitename   = test.pagekite.me
+kitesecret = bax4aee5g4a3w0
+
+##[ Use this to just use pagekite.net defaults ]##
+# defaults
+
+##[ Custom front-end and dynamic DNS settings ]##
+# frontends = N:hostname:port
+# frontend = hostname:port
+# nofrontend = hostname:port  # never connect
+# dyndns = pagekite.net OR
+# dyndns = user:pass@dyndns.org OR
+# dyndns = user:pass@no-ip.com
+#
+# errorurl  = http://host/page/
+# fingerpath = /~%s/.finger
+
+
+##[ Built-in HTTPD settings ]##
+# httpd = host:port
+webpath = test.pagekite.me/80:/:default:/data/Home/bre/Projects/Beanstalks/PyBeanstalks/scripts/tests
+
+##[ Back-ends and local services ]##
+service_on  = http:@kitename                   : localhost:builtin : @kitesecret
+
+
+##[ Allow risky known-to-be-risky incoming HTTP requests? ]##
+# insecure
+
+##[ Front-end Options ]##
+# isfrontend
+# host = machine.domain.com
+# ports = 80
+# protos = finger,http,http2,http3,httpfinger,https,irc,raw,websocket
+# rawports = virtual
+# authdomain = foo.com
+# motd = /path/to/motd.txt
+# domain = http:*.pagekite.me:SECRET1
+# domain = http,https,websocket:THEM.pagekite.me:SECRET2
+
+##[ Domains we terminate SSL/TLS for natively, with key/cert-files ]##
+# tls_endpoint = DOMAIN:PEM_FILE
+# tls_default = DOMAIN
+
+##[ Proxy-chain settings ]##
+# noproxy
+proxy = http:localhost:3128
+
+##[ Front-end access controls (default=deny, if configured) ]##
+# client_acl=[allow|deny]:IP-regexp
+# tunnel_acl=[allow|deny]:IP-regexp
+
+
+###[ Anything below this line can usually be ignored. ]#########
+
+##[ Miscellaneous settings ]##
+# logfile = /path/to/file
+# buffers = 1024
+# new
+# all
+# noprobes
+# nocrashreport
+# savefile = /path/to/savefile
+
+##[ Systems administration settings ]##
+# daemonize
+# runas = uid:gid
+# pidfile = /path/to/file
+
+###[ End of pagekite.py configuration ]#########
+END
+

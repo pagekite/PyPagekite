@@ -23,7 +23,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 ##############################################################################
 
 PROTOVER = '0.8'
-APPVER = '0.5.3a'
+APPVER = '0.5.4a'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -54,6 +54,12 @@ LOOPBACK_HN = 'loopback'
 LOOPBACK_FE = LOOPBACK_HN + ':1'
 LOOPBACK_BE = LOOPBACK_HN + ':2'
 LOOPBACK = {'FE': LOOPBACK_FE, 'BE': LOOPBACK_BE}
+
+PING_INTERVAL        = 30
+PING_INTERVAL_MOBILE = 1800
+PING_INTERVAL_MAX    = 1800
+PING_GRACE_DEFAULT   = 40
+PING_GRACE_MIN       = 5
 
 WEB_POLICY_DEFAULT = 'default'
 WEB_POLICY_PUBLIC = 'public'
@@ -122,5 +128,5 @@ class BugFoundError(Exception):
 gYamon = None
 
 # Status of our buffers...
-buffered_bytes = 0
+buffered_bytes = [0]
 

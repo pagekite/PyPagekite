@@ -577,6 +577,10 @@ class Tunnel(ChunkParser):
     return self.SendChunked('NOOP: 1\r\nZRST: 1\r\n\r\n!',
                             compress=False, just_buffer=True)
 
+  def TriggerPing(self):
+    when = time.time() - PING_GRACE_MIN - PING_INTERVAL_MAX
+    self.last_ping = self.last_activity = when
+
   def SendPing(self):
     self.last_ping = int(time.time())
     self.LogDebug("Ping", [('host', self.server_info[self.S_NAME])])
@@ -933,15 +937,18 @@ class LoopbackTunnel(Tunnel):
   def Send(self, data, try_flush=False, activity=False, just_buffer=True):
     if self.write_blocked:
       data = [self.write_blocked] + data
+      common.buffered_bytes[0] -= len(self.write_blocked)
       self.write_blocked = ''
-    if try_flush or (len(data) > 10240) or (self.buffer_count >= 100):
+    joined_data = ''.join(data)
+    if try_flush or (len(joined_data) > 10240) or (self.buffer_count >= 100):
       if logging.DEBUG_IO:
         print '|%s| %s \n|%s| %s' % (self.which, self, self.which, data)
       self.buffer_count = 0
-      return self.other_end.ProcessData(''.join(data))
+      return self.other_end.ProcessData(joined_data)
     else:
       self.buffer_count += 1
-      self.write_blocked = ''.join(data)
+      self.write_blocked = joined_data
+      common.buffered_bytes[0] += len(self.write_blocked)
       return True
 
 
@@ -1337,12 +1344,13 @@ class UnknownConn(MagicProtocolParser):
       return self.ProcessParsedMagic(self.parser.PROTOS, line, lines)
 
   def ProcessParsedMagic(self, protos, line, lines):
-    for proto in protos:
-      if UserConn.FrontEnd(self, self.address,
-                           proto, self.parser.domain, self.on_port,
-                           self.parser.lines + lines, self.conns) is not None:
-        self.Cleanup(close=False)
-        return True
+    if self.conns.config.CheckTunnelAcls(self.address, conn=self):
+      for proto in protos:
+        if UserConn.FrontEnd(self, self.address,
+                             proto, self.parser.domain, self.on_port,
+                             self.parser.lines + lines, self.conns) is not None:
+          self.Cleanup(close=False)
+          return True
 
     self.Send([self.parser.ErrorReply(port=self.on_port)], try_flush=True)
     self.Cleanup()
@@ -1357,7 +1365,12 @@ class UnknownConn(MagicProtocolParser):
 
     elif self.parser.method == 'CONNECT':
       if self.parser.path.lower().startswith('pagekite:'):
+        if not self.conns.config.CheckTunnelAcls(self.address, conn=self):
+          self.Send(HTTP_ConnectBad(code=403, status='Forbidden'),
+                    try_flush=True)
+          return False
         if Tunnel.FrontEnd(self, lines, self.conns) is None:
+          self.Send(HTTP_ConnectBad(), try_flush=True)
           return False
         done = True
 
@@ -1372,8 +1385,15 @@ class UnknownConn(MagicProtocolParser):
           sid2 = '-%s:%s' % (cport, chost)
           tunnels = self.conns.tunnels
 
+          if not self.conns.config.CheckClientAcls(self.address, conn=self):
+            self.Send(HTTP_Unavailable('fe', 'raw', chost,
+                                       code=403, status='Forbidden',
+                                       frame_url=self.conns.config.error_url),
+                      try_flush=True)
+            return False
+
           # These allow explicit CONNECTs to direct http(s) or raw backends.
-          # If no match is found, we fall through to default HTTP processing.
+          # If no match is found, we throw an error.
 
           if cport in (80, 8080):
             if (('http'+sid1) in tunnels) or (
@@ -1410,13 +1430,21 @@ class UnknownConn(MagicProtocolParser):
                 self.Send(HTTP_ConnectOK(), try_flush=True)
                 return self.ProcessRaw(''.join(lines), self.host)
 
+          self.Send(HTTP_ConnectBad(), try_flush=True)
+          return False
+
         except ValueError:
           pass
 
     if (not done and self.parser.method == 'POST'
                  and self.parser.path in MAGIC_PATHS):
       # FIXME: DEPRECATE: Make this go away!
+      if not self.conns.config.CheckTunnelAcls(self.address, conn=self):
+        self.Send(HTTP_ConnectBad(code=403, status='Forbidden'),
+                  try_flush=True)
+        return False
       if Tunnel.FrontEnd(self, lines, self.conns) is None:
+        self.Send(HTTP_ConnectBad(), try_flush=True)
         return False
       done = True
 
@@ -1449,6 +1477,13 @@ class UnknownConn(MagicProtocolParser):
           if upgrade and upgrade[0].lower() == 'websocket':
             self.proto = 'websocket'
 
+      if not self.conns.config.CheckClientAcls(self.address, conn=self):
+        self.Send(HTTP_Unavailable('fe', self.proto, self.host,
+                                   code=403, status='Forbidden',
+                                   frame_url=self.conns.config.error_url),
+                  try_flush=True)
+        return False
+
       address = self.address
       if int(self.on_port) in self.conns.config.server_portalias:
         xfwdf = self.parser.Header('X-Forwarded-For')
@@ -1473,15 +1508,19 @@ class UnknownConn(MagicProtocolParser):
     return True
 
   def ProcessTls(self, data, domain=None):
+    if not self.conns.config.CheckClientAcls(self.address, conn=self):
+      return False
+
     if domain:
       domains = [domain]
     else:
       try:
         domains = self.GetSni(data)
         if not domains:
-          domains = [self.conns.LastIpDomain(self.address[0]) or self.conns.config.tls_default]
-          self.LogDebug('No SNI - trying: %s' % domains[0])
-          if not domains[0]:
+          domains = [self.conns.config.tls_default]
+          if domains[0]:
+            self.LogDebug('No SNI - trying: %s' % domains[0])
+          else:
             domains = None
       except:
         # Probably insufficient data, just True and assume we'll have
@@ -1524,6 +1563,8 @@ class UnknownConn(MagicProtocolParser):
     return False
 
   def ProcessRaw(self, data, domain):
+    if not self.conns.config.CheckClientAcls(self.address, conn=self):
+      return False
     if UserConn.FrontEnd(self, self.address,
                          'raw', domain, self.on_port,
                          [data], self.conns) is None:
