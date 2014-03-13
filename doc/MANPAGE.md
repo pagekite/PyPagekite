@@ -1,6 +1,6 @@
 ## Name ##
 
-pagekite v0.5.2d - Make localhost servers publicly visible
+pagekite v0.5.3a - Make localhost servers publicly visible
 
 ## Synopsis ##
 
@@ -336,6 +336,12 @@ other sensitive systems.  If it gets in your way, the <b>+insecure</b>
 flag or <b>--insecure</b> option can be used to turn it off.
 
 For more, please visit: <https://pagekite.net/support/security/>
+
+## Bugs ##
+
+Using <b>pagekite</b> as a front-end relay with the native Python SSL
+module may result in poor performance.  Please use the pyOpenSSL wrappers
+instead.
 
 ## See Also ##
 
