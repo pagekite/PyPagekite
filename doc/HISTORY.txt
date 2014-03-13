@@ -1,6 +1,27 @@
 Version history - highlights
 ============================
 
+v0.5.0   2012.07.20
+------
+   - Prefer and use epoll() if it is available.
+   - Added better probe diagnostics, using json returns and CORS headers.
+   - Correctly handle and report the new pagekite.net quota dimensions.
+   - Corrected error messages when using an invalid shared secret.
+   - Added support for multiple auth domains at the front-end.
+   - Brought README.md up-to-date
+   - Renamed --backend/--disable_backend to --service_on/--service_off
+   - Allow white-space in the config file and make it more readable
+   - Added: --watch=<LEVEL> for watching tunneled traffic (back-end only)
+   - Deprecated: --reloadfile, --delete_backend
+   - Refactored and rewrote built-in manual and man page.
+   - Added support for Flash socket-policy responses (open policy)
+   - Support kites over IPv6.
+   - Improved HTTP header filtering, now always inserts X-Forwarded-For,
+     added X-Forwarded-Proto and +rawheaders flag for disabling.
+   - Fixed bugs in Loopback tunnels with bad backends
+   - Added URL firewall, +insecure and --insecure to disable it.
+
+
 v0.4.6   2012.01.15
 ------
    - Improved new kite wizard a bit

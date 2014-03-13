@@ -9,7 +9,7 @@ PK=$1
 shift
 LOG="/tmp/pk-test.log"
 PKARGS="$*"
-PKA="$PKARGS --clean --nullui --ca_certs=$0"
+PKA="$PKARGS --clean --debugio --ca_certs=$0"
 PORT=12000
 let PORT="$PORT+($$%10000)"
 
@@ -17,8 +17,7 @@ let PORT="$PORT+($$%10000)"
   echo "Usage: $0 /path/to/pagekite.py [global pagekite options]"
   exit 1
 }
-echo -n "Testing version: "
-echo -n "$($PK --clean --appver) ($PKARGS)"
+echo -n "Testing version: $($PK --clean --appver) ($PKARGS)"
 
 HAVE_TLS=" (SSL Enabled)"
 $PK --clean $PKARGS "--tls_endpoint=a:$0" --settings >/dev/null 2>&1 \
@@ -53,7 +52,7 @@ __TEST__ "Basic FE/BE/HTTPD setup" "$LOG-1" "$LOG-2" "$LOG-3" "$LOG-4"
   [ "$HAVE_TLS" = "" ] || FE_ARGS="$FE_ARGS --tls_endpoint=testing:$0 \
                                             --tls_default=testing"
  ($PK $FE_ARGS --settings
-  $PK $FE_ARGS --logfile=stdio) >$LOG-1 2>&1 &
+  $PK $FE_ARGS --logfile=stdio 2>&1) >$LOG-1 2>&1 &
   KID_FE=$!
 __logwait $LOG-1 listen=:$PORT || __TEST_FAIL__ 'setup:FE' $KID_FE
 
@@ -62,9 +61,9 @@ __logwait $LOG-1 listen=:$PORT || __TEST_FAIL__ 'setup:FE' $KID_FE
   [ "$HAVE_TLS" = "" ] || BE_ARGS1="$BE_ARGS1 --fe_certname=testing"
   BE_ARGS2="/etc/passwd $LOG-4 http://testing/"
  ($PK $BE_ARGS1 --settings $BE_ARGS2
-  $PK $BE_ARGS1 --logfile=stdio $BE_ARGS2) >$LOG-2 2>&1 &
+  $PK $BE_ARGS1 --logfile=stdio $BE_ARGS2 2>&1) >$LOG-2 2>&1 &
   KID_BE=$!
-__logwait $LOG-2 connect= || __TEST_FAIL__ 'setup:BE' $KID_FE $KID_BE
+__logwait $LOG-2 domain=testing || __TEST_FAIL__ 'setup:BE' $KID_FE $KID_BE
 
   # First, make sure we get a Sorry response for invalid requests.
   curl -v --silent -H "Host: invalid" http://localhost:$PORT/ 2>&1 \
@@ -88,7 +87,7 @@ __logwait $LOG-2 connect= || __TEST_FAIL__ 'setup:BE' $KID_FE $KID_BE
     |tail -1|tee -a $LOG-3 |grep 'EOF' >/dev/null \
     && __PART_OK__ 'bigfile' || __TEST_FAIL__ 'bigfile' $KID_FE $KID_BE
 
-  #rm -f "$LOG-1" "$LOG-2" "$LOG-3" "$LOG-4"
+  rm -f "$LOG-1" "$LOG-2" "$LOG-3" "$LOG-4"
 __TEST_END__ $KID_FE $KID_BE
 
 

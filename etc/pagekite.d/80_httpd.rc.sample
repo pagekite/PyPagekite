@@ -1,4 +1,4 @@
 #################################[ This file is placed in the Public Domain. ]#
 # Expose the local HTTPD
 
-backend=http:@kitename:localhost:80:@kitesecret
+service_on = http:@kitename : localhost:80 : @kitesecret

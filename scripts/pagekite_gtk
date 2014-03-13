@@ -12,9 +12,9 @@ import traceback
 import time
 import webbrowser
 
-import pagekite
-from pagekite import sha1hex, globalSecret, remoteui, httpd
-from pagekite.basicui import clean_html
+from pagekite.compat import *
+from pagekite import common, httpd, pk
+from pagekite.ui import basic, remote
 
 
 SHARE_DIR = "~/PageKite"
@@ -113,18 +113,18 @@ def DescribeKite(domain, protoport, info):
 
   status = ['Unknown']
   code = int(info['status'], 16)
-  if code in pagekite.BE_INACTIVE:
+  if code in BE_INACTIVE:
     status = ['Disabled']
   else:
-    if code & pagekite.BE_STATUS_OK:
+    if code & BE_STATUS_OK:
       status = ['Flying']
-    elif code & pagekite.BE_STATUS_ERR_ANY:
+    elif code & BE_STATUS_ERR_ANY:
       status = ['Error']
-      if code & pagekite.BE_STATUS_ERR_DNS:
+      if code & BE_STATUS_ERR_DNS:
         status.append('DNS')
-      if code & pagekite.BE_STATUS_ERR_BE:
+      if code & BE_STATUS_ERR_BE:
         status.append('Server down')
-      if code & pagekite.BE_STATUS_ERR_TUNNEL:
+      if code & BE_STATUS_ERR_TUNNEL:
         status.append('Rejected')
 
   return (url and 'WWW, %s/' % url or fdesc), bdesc, ', '.join(status), url
@@ -360,7 +360,7 @@ class PageKiteThread(threading.Thread):
     self.send('')
     self.write('')
 
-  def Configure(self, pk):
+  def Configure(self, pkobj):
     # Remove invalid arguments that break us.
     if '--nullui' in sys.argv: sys.argv.remove('--nullui')
     if '--basicui' in sys.argv: sys.argv.remove('--basicui')
@@ -371,10 +371,10 @@ class PageKiteThread(threading.Thread):
       sys.argv[1:1] = self.pk_startup_args[:]
       self.pk_startup_args = None
     try:
-      self.pk = pk
-      pk.ui_wfile = pk.ui.wfile = self
-      pk.ui_rfile = pk.ui.rfile = self
-      return pagekite.Configure(pk)
+      self.pk = pkobj
+      pkobj.ui_wfile = pkobj.ui.wfile = self
+      pkobj.ui_rfile = pkobj.ui.rfile = self
+      return pk.Configure(pkobj)
     except:
       self.pk = None
       raise
@@ -387,10 +387,10 @@ class PageKiteThread(threading.Thread):
       last_loop = int(time.time())
       if not self.stopped:
         self.reset()
-        pagekite.Main(pagekite.PageKite, self.Configure,
-                      uiclass=remoteui.RemoteUi,
-                      http_handler=httpd.UiRequestHandler,
-                      http_server=httpd.UiHttpServer)
+        pk.Main(pk.PageKite, self.Configure,
+                uiclass=remote.RemoteUi,
+                http_handler=httpd.UiRequestHandler,
+                http_server=httpd.UiHttpServer)
         self.close()
         self.write('status_msg: Disabled\nstatus_tag: idle\n')
         self.pk = None
@@ -536,7 +536,7 @@ class PageKiteWizard:
     self.window.vbox.pack_start(self.hbox, expand=True, fill=True, padding=0)
 
     # Draw a fancy background!
-    self.window.vbox.connect('expose-event', ExposeFancyBackground)
+    #self.window.vbox.connect('expose-event', ExposeFancyBackground)
 
     if title: self.set_title(title)
 
@@ -791,8 +791,8 @@ class PageKiteConfigEditor(PageKiteManagerPage):
     ln = None
     lines = self.get_text().split('\n')
     try:
-      new_pk = pagekite.PageKite(http_handler=httpd.UiRequestHandler,
-                                 http_server=httpd.UiHttpServer)
+      new_pk = pk.PageKite(http_handler=httpd.UiRequestHandler,
+                           http_server=httpd.UiHttpServer)
       for ln in range(1, len(lines)+1):
         new_pk.ConfigureFromFile(data=[lines[ln-1]])
       ln = None
@@ -804,7 +804,7 @@ class PageKiteConfigEditor(PageKiteManagerPage):
       # We are definitely not clean anymore!
       if '--clean' in sys.argv: sys.argv.remove('--clean')
       self.config = ''
-    except (IndexError, ValueError, getopt.GetoptError, pagekite.ConfigError), e:
+    except (IndexError, ValueError, getopt.GetoptError, common.ConfigError), e:
       ShowInfoDialog(('Oops! Invalid configuration, not saved.\n'
                       '%s') % (ln and 'Bad line %s: %s\n' % (ln, lines[ln-1])
                                    or str(e)))
@@ -978,7 +978,7 @@ class PageKiteHome(PageKiteManagerPage):
 
   def update_motd(self, motd):
     if motd:
-      self.status.set_markup(clean_html(motd))
+      self.status.set_markup(basic.clean_html(motd))
     else:
       self.status.set_markup('Welcome to PageKite!')
 
@@ -1233,7 +1233,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
                   cb=make_cb(self.kite_toggle, info, live),
                   toggle=live)
 
-#         if pagekite.BE_STATUS_OK & int(info['status'], 16):
+#         if BE_STATUS_OK & int(info['status'], 16):
 #           mc += a('menuitem', 'Open in Browser',
 #                   cb=make_cb(self.open_url, url), tooltip=url)
 
@@ -1245,7 +1245,7 @@ class PageKiteStatusIcon(gtk.StatusIcon):
             elif len(info['paths'].keys()):
               for path in sorted(info['paths'].keys()):
                 mc += a('menu', '  ' + sn(info['paths'][path]['src']))
-                if pagekite.BE_STATUS_OK & int(info['status'], 16):
+                if BE_STATUS_OK & int(info['status'], 16):
                   mc += a('menuitem', 'Open in Browser',
                           cb=make_cb(self.open_url, url+path), tooltip=url+path)
                 mc += a('menuitem', ('Copy Link to: %s'
@@ -1792,11 +1792,11 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     dialog = gtk.AboutDialog()
     dialog.set_position(gtk.WIN_POS_CENTER)
     dialog.set_name('PageKite')
-    dialog.set_version(pagekite.APPVER)
+    dialog.set_version(common.APPVER)
     dialog.set_comments('PageKite is a tool for running personal servers, '
                         'sharing work and communicating over the WWW.')
-    dialog.set_website(pagekite.WWWHOME)
-    dialog.set_license(pagekite.LICENSE)
+    dialog.set_website(common.WWWHOME)
+    dialog.set_license(common.LICENSE)
     dialog.connect('expose-event', ExposeFancyBackground)
     dialog.run()
     dialog.destroy()

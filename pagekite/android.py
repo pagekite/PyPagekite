@@ -1,8 +1,8 @@
 #!/usr/bin/python
 """
-This is the pagekite.py Main() function.
+This is the main function for the Android version of PageKite.
 """
-##############################################################################
+#############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
 Copyright 2010-2012, the Beanstalks Project ehf. and Bjarni Runar Einarsson
@@ -20,24 +20,28 @@ details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
-##############################################################################
+#############################################################################
 import sys
-from pagekite import pk
-from pagekite import httpd
+import pagekite.pk as pk
+import pagekite.httpd as httpd
+
+
+def Configure(pkobj):
+  pkobj.rcfile = "/sdcard/pagekite.cfg"
+  pkobj.enable_sslzlib = True
+  pk.Configure(pkobj)
 
 if __name__ == "__main__":
   if sys.stdout.isatty():
     import pagekite.ui.basic
     uiclass = pagekite.ui.basic.BasicUi
   else:
-    import pagekite.ui.nullui
-    uiclass = pagekite.ui.nullui.NullUi
+    uiclass = pk.NullUi
 
-  pk.Main(pk.PageKite, pk.Configure,
+  pk.Main(pk.PageKite, Configure,
           uiclass=uiclass,
           http_handler=httpd.UiRequestHandler,
           http_server=httpd.UiHttpServer)
-
 
 ##############################################################################
 CERTS="""\

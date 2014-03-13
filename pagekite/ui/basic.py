@@ -1,6 +1,33 @@
-import re, sys, time
-import pagekite
-from pagekite import NullUi
+#!/usr/bin/python
+"""
+This is the "basic" text-mode user interface class.
+"""
+#############################################################################
+LICENSE = """\
+This file is part of pagekite.py.
+Copyright 2010-2012, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the  GNU  Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful,  but  WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more
+details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see: <http://www.gnu.org/licenses/>
+"""
+#############################################################################
+import re
+import sys
+import time
+
+from nullui import NullUi
+from pagekite.common import *
+
 
 HTML_BR_RE = re.compile(r'<(br|/p|/li|/tr|/h\d)>\s*')
 HTML_LI_RE = re.compile(r'<li>\s*')
@@ -51,7 +78,8 @@ class BasicUi(NullUi):
         except:
           pass # Fails on Python 2.2
 
-      self.notify_history[message] = now
+      if not now or now > 0:
+        self.notify_history[message] = now
       msg = '\r%s %s%s%s%s%s\n' % ((prefix * 3)[0:3], color, message, self.NORM,
                                    ' ' * (75-len(message)-len(alignright)),
                                    alignright)
@@ -174,13 +202,13 @@ class BasicUi(NullUi):
         return back
       elif len(domains) == 1:
         answer = answer.replace(domains[0], '')
-        if answer and pagekite.SERVICE_SUBDOMAIN_RE.match(answer):
+        if answer and SERVICE_SUBDOMAIN_RE.match(answer):
           return answer+domains[0]
       else:
         for domain in domains:
           if answer.endswith(domain):
             answer = answer.replace(domain, '')
-            if answer and pagekite.SERVICE_SUBDOMAIN_RE.match(answer):
+            if answer and SERVICE_SUBDOMAIN_RE.match(answer):
               return answer+domain
       self.wfile.write('    (Please only use characters A-Z, 0-9, - and _.)')
     raise Exception('Too many tries')
@@ -211,7 +239,14 @@ class BasicUi(NullUi):
       self.Welcome()
       for line in lines: self.wfile.write('    %s\n' % line)
       if error: self.wfile.write('\n')
-      return True
+    return True
 
   def Working(self, message):
-    self.Tell([message])
+    if self.in_wizard:
+      pending_messages = self.wizard_tell or []
+      self.wizard_tell = pending_messages + [message+' ...']
+      self.Welcome()
+      self.wizard_tell = pending_messages + [message+' ... done.']
+    else:
+      self.Tell([message])
+    return True
