@@ -48,7 +48,7 @@ __DOC__ = """\
 #     ProxyCommand /path/to/lapcat homeserver 22
 #
 """
-import os, socket, subprocess, sys
+import getopt, os, select, socket, subprocess, sys
 import sockschain as socks
 
 def DebugPrint(text): sys.stderr.write(text+'\n')
@@ -337,33 +337,119 @@ def HttpProxy(input_fd, output_fd):
   #  if words[0].upper() == 'CONNECT':
 
 
+class FileWrapper(object):
+  def __init__(self, sock):
+    self.sock = sock
+  def flush(self): pass
+  def close(self): return self.sock.close()
+  def write(self, data): return self.sock.send(data)
+  def fileno(self): return self.sock.fileno()
+
+
+def ForkAndListen(outfmt, baseport=0, tries=1, relative=False):
+  for t in range(0, tries):
+    try:
+      try:
+        srv = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+      except:
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+      srv.bind(('', baseport+t))
+      break
+    except:
+      pass
+
+  srv.listen(3)
+  srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+  if relative:
+    sys.stdout.write((outfmt+'\n') % (srv.getsockname()[1]-baseport))
+  else:
+    sys.stdout.write((outfmt+'\n') % srv.getsockname()[1])
+
+  sys.stdout.flush()
+  os.close(sys.stdout.fileno())
+  os.close(sys.stdin.fileno())
+  if os.fork() != 0: os._exit(0)
+
+  # Wait for a connection OR DIE.
+  i, o, e = select.select([srv], [], [], 15)
+  if srv not in i: os._exit(0)
+
+  client, address = srv.accept()
+  if DEBUG: DEBUG('Accepted: %s' % (address, ))
+  fw = FileWrapper(client)
+  return fw, fw
+
+
 if __name__ == '__main__':
-  args = sys.argv[1:]
-  if '-v' in args:
-    DEBUG = DebugPrint
-    args.remove('-v')
-  while '-v' in args:
-    socks.DEBUG = DebugPrint
-    args.remove('-v')
+  opts, args = getopt.getopt(sys.argv[1:],
+                             'hNPtv', ['tc', 'tp', 'tf=', 'vnc', 'rdp'])
 
-  if len(args) == 2:
-    NetCat(args[0], args[1], sys.stdin, sys.stdout)
+  if len(args) == 1 and ':' in args[0]:
+    args = args[0].split(':')
 
-  elif len(args) == 1 and args[0] == '-N':
+  mode, portadd, inlinefmt, inlineargs = 'netcat', 0, '', {}
+  for opt, arg in opts:
+    if '-v' == opt:
+      if DEBUG: socks.DEBUG = DebugPrint
+      DEBUG = DebugPrint
+
+    if '-N' == opt: mode = 'networkid'
+    elif '-P' == opt: mode = 'httpproxy'
+    else:
+      if mode != 'netcat':
+        mode = 'invalid'
+        break
+      elif '-t' == opt:   mode, inlinefmt = 'inline', '127.0.0.1 %d'
+      elif '--tc' == opt: mode, inlinefmt = 'inline', '127.0.0.1:%d'
+      elif '--tp' == opt: mode, inlinefmt = 'inline', '%d'
+      elif '--tf' == opt: mode, inlinefmt = 'inline', arg
+      elif '--rdp' == opt:
+        mode, inlinefmt = 'inline', '127.0.0.1:%d'
+        if len(args) == 1: args.append('3389')
+      elif '--vnc' == opt:
+        mode, inlinefmt, portadd = 'inline', '127.0.0.1:%d', 5900
+        inlineargs = {'baseport': 5900, 'tries': 20, 'relative': True}
+        if len(args) == 1: args.append('0')
+
+  if mode == 'netcat' and len(args) == 2:
+    NetCat(args[0], int(args[1].replace(':', '')), sys.stdin, sys.stdout)
+
+  elif mode == 'inline' and len(args) == 2:
+    fin, fout = ForkAndListen(inlinefmt, **inlineargs)
+    NetCat(args[0], portadd + int(args[1].replace(':', '')), fin, fout)
+
+  elif mode == 'networkid' and len(args) == 0:
     print('%s' % GetNetworkId())
 
-  elif len(args) == 1 and args[0] == '-P':
+  elif mode == 'httpproxy' and len(args) == 0:
     HttpProxy(sys.stdin, sys.stdout)
 
   elif len(args) == 1 and args[0] in ('-h', '--help'):
     DebugPrint(__DOC__)
 
   else:
-    progname = os.path.basename(sys.argv[0])
-    print(('Usage: %s [-v [-v]] host port  # Connect to host:port\n'
-           '       %s -N                   # Show current network ID\n'
-           '       %s -P                   # Behave like an HTTP Proxy\n'
-           '       %s -h                   # Print instructions'
-           ) % (progname, progname, progname, progname))
+    print((
+      '%(p)s: Location Aware Proxy Chooser And Tunneler / NetCat for Laptops\n'
+      '\n'
+      'Usage: %(p)s [-v [-v]]      host port     # Connect to host:port\n'
+      '       %(p)s <-t|--tc|--tp> host port     # Inline proxy mode\n'
+      '       %(p)s --tf=<fmt>     host port     # Inline proxy mode\n'
+      '       %(p)s --rdp          host [port]   # Inline RDP proxy mode\n'
+      '       %(p)s --vnc          host [screen] # Inline VNC proxy mode\n'
+      '       %(p)s -N                           # Show current network ID\n'
+#     '       %(p)s -P                           # Behave like an HTTP Proxy\n'
+      '       %(p)s -h                           # Print instructions\n'
+      '\n'
+      'To use with ssh, add to ~/.ssh/config:\n'
+      '    ProxyCommand %(fp)s %%h %%p\n'
+      '    CheckHostIP no\n'
+      '\n'
+      'Inline use examples:\n'
+      '    $ vncviewer `%(p)s --vnc hostname`\n'
+      '    $ rdesktop `%(p)s --rdp homebox.pagekite.me`\n'
+      '    $ irssi -c localhost -p `%(p)s --tp irc.freenode.net 6667`\n'
+    ) % {'fp': os.path.abspath(sys.argv[0]),
+         'p': os.path.basename(sys.argv[0])})
     sys.exit(100)
 

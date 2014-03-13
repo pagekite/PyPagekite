@@ -6,6 +6,7 @@ combined: pagekite tools dev
 	             pagekite/__init__.py \
 	             pagekite/basicui.py \
 	             pagekite/remoteui.py \
+	             pagekite/yamond.py \
 	             pagekite/httpd.py \
 	             pagekite/__main__.py \
 	             >pagekite-tmp.py
@@ -22,6 +23,7 @@ android: pagekite tools
 	             pagekite/__init__.py \
 	             pagekite/basicui.py \
 	             pagekite/remoteui.py \
+	             pagekite/yamond.py \
 	             pagekite/httpd.py \
 	             pagekite/__main__.py \
 	             pagekite/__android__.py \
@@ -30,7 +32,7 @@ android: pagekite tools
 	@mv pagekite-tmp.py dist/pk-android-`./pagekite-tmp.py --appver`.py
 	@ls -l dist/pk-android-*.py
 
-dist: combined alldeb allrpm android
+dist: combined allrpm android
 
 allrpm: rpm_el4 rpm_el5 rpm_el6-fc13 rpm_fc14-15
 
@@ -94,6 +96,8 @@ dev: sockschain
 	@rm -f .SELF
 	@ln -fs . .SELF
 	@echo export PYTHONPATH=`pwd`
+	@echo export HTTP_PROXY=
+	@echo export http_proxy=
 
 sockschain:
 	@ln -fs ../PySocksipyChain/sockschain .

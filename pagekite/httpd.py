@@ -200,6 +200,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   def log_message(self, format, *args):
     pagekite.Log([('uireq', format % args)])
 
+  def send_header(self, header, value):
+    self.wfile.write('%s: %s\r\n' % (header, value))
+
+  def end_headers(self):
+    self.wfile.write('\r\n')
+
   def sendStdHdrs(self, header_list=[], cachectrl='private',
                                         mimetype='text/html'):
     if mimetype.startswith('text/') and ';' not in mimetype:
@@ -226,7 +232,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   def sendResponse(self, message, code=200, msg='OK', mimetype='text/html',
                          header_list=[], chunked=False, length=None):
     self.log_request(code, message and len(message) or '-')
-    self.wfile.write('HTTP/1.1 %s %s\n' % (code, msg))
+    self.wfile.write('HTTP/1.1 %s %s\r\n' % (code, msg))
     if code == 401:
       self.send_header('WWW-Authenticate',
                        'Basic realm=PK%d' % (time.time()/3600))
@@ -310,7 +316,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def getHostInfo(self):
     http_host = self.headers.get('HOST', self.headers.get('host', 'unknown'))
-    if http_host == 'unknown' or http_host.startswith('localhost:'):
+    if http_host == 'unknown' or (http_host.startswith('localhost:') and
+                http_host.replace(':', '/') not in self.server.pkite.be_config):
       http_host = None
       for bid in sorted(self.server.pkite.backends.keys()):
         be = self.server.pkite.backends[bid]
@@ -941,6 +948,12 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
       self.enable_ssl = True
     else:
       self.enable_ssl = False
+
+    try:
+      from pagekite import yamond
+      pagekite.YamonD = yamond.YamonD
+    except:
+      pass
 
     gYamon = pagekite.gYamon = pagekite.YamonD(sspec)
     gYamon.vset('started', int(time.time()))

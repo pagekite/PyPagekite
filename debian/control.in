@@ -2,10 +2,10 @@ Source: pagekite-@VERSION@
 Section: net
 Priority: optional
 Maintainer: PageKite Packaging Team <packages@pagekite.net>
-Build-Depends:  cdbs (>= 0.4.90),
-                debhelper (>= 7.0.50~),
-                python-support (>= 1.0.10),
-                python (>= 2.7)
+Build-Depends:  cdbs (>= 0.4.52),
+                debhelper (>= 7.0.15~),
+                python-support (>= 0.8.4),
+                python (>= 2.4)
 XS-Python-Version: >= 2.3
 Standards-Version: 3.9.1
 Homepage: https://pagekite.net/
@@ -15,6 +15,7 @@ Section: net
 Architecture: all
 Depends: ${misc:Depends},
          ${python:Depends},
+         daemon (>= 0.6),
          python (>= 2.3),
          python (<< 3.0),
          python-socksipychain (>= 2.0),

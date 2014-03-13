@@ -17,6 +17,7 @@ make dev
 	             pagekite/__init__.py \
 	             pagekite/basicui.py \
 	             pagekite/remoteui.py \
+	             pagekite/yamond.py \
 	             pagekite/httpd.py \
 	             pagekite/__main__.py \
 	             pagekite/__dropper__.py \
