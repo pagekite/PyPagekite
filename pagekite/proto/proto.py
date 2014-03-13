@@ -1,4 +1,3 @@
-#!/usr/bin/python -u
 """
 PageKite protocol and HTTP protocol related code and constants.
 """

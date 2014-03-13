@@ -1,4 +1,3 @@
-#!/usr/bin/python -u
 """
 These are the PageKite protocol handling classes.
 """

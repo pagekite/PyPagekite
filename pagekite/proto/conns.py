@@ -1,4 +1,3 @@
-#!/usr/bin/python -u
 """
 These are the Connection classes, relatively high level classes that handle
 incoming or outgoing network connections.
@@ -65,6 +64,7 @@ class Tunnel(ChunkParser):
     self.zhistory = {}
     self.backends = {}
     self.last_ping = 0
+    self.weighted_rtt = -1
     self.using_tls = False
     self.filters = []
 
@@ -152,7 +152,7 @@ class Tunnel(ChunkParser):
         (self.quota[2] < when-900)):
       self.quota[2] = when
       self.LogDebug('Rechecking: %s' % (self.quota, ))
-      conns.auth.check([self.quota[1]], self,
+      conns.auth.check(self.quota[1], self,
                        lambda r, l: self.QuotaCallback(conns, r, l))
 
   def ProcessAuthResults(self, results, duplicates_ok=False, add_tunnels=True):
@@ -216,6 +216,7 @@ class Tunnel(ChunkParser):
       if r[0] in ('X-PageKite-OK', 'X-PageKite-Duplicate'):
         return self
 
+    # Nothing is OK anymore, give up and shut down the tunnel.
     self.Log(log_info)
     self.LogInfo('Ran out of quota or account deleted, closing tunnel.')
     self.Die()
@@ -599,10 +600,18 @@ class Tunnel(ChunkParser):
   def ProcessPong(self, pong):
     try:
       rtt = int(1000*(time.time()-float(pong)))
+      if self.weighted_rtt < 0:
+        self.weighted_rtt = rtt
+      else:
+        self.weighted_rtt = (self.weighted_rtt + rtt)/2
+
       self.Log([('host', self.server_info[self.S_NAME]),
-                ('rtt', '%d' % rtt)])
+                ('rtt', '%d' % rtt),
+                ('wrtt', '%d' % self.weighted_rtt)])
+
       if common.gYamon:
         common.gYamon.ladd('tunnel_rtt', rtt)
+        common.gYamon.ladd('tunnel_wrtt', self.weighted_rtt)
     except ValueError:
       pass
 
@@ -1372,7 +1381,8 @@ class UnknownConn(MagicProtocolParser):
       return self.ProcessParsedMagic(self.parser.PROTOS, line, lines)
 
   def ProcessParsedMagic(self, protos, line, lines):
-    if self.conns.config.CheckTunnelAcls(self.address, conn=self):
+    if (self.conns and
+        self.conns.config.CheckTunnelAcls(self.address, conn=self)):
       for proto in protos:
         if UserConn.FrontEnd(self, self.address,
                              proto, self.parser.domain, self.on_port,
@@ -1536,7 +1546,8 @@ class UnknownConn(MagicProtocolParser):
     return True
 
   def ProcessTls(self, data, domain=None):
-    if not self.conns.config.CheckClientAcls(self.address, conn=self):
+    if (not self.conns or
+        not self.conns.config.CheckClientAcls(self.address, conn=self)):
       return False
 
     if domain:
@@ -1591,7 +1602,8 @@ class UnknownConn(MagicProtocolParser):
     return False
 
   def ProcessProto(self, data, proto, domain):
-    if not self.conns.config.CheckClientAcls(self.address, conn=self):
+    if (not self.conns or
+        not self.conns.config.CheckClientAcls(self.address, conn=self)):
       return False
 
     if UserConn.FrontEnd(self, self.address,

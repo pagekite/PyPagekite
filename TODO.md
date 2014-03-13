@@ -2,6 +2,10 @@
 
 ## Known bugs ##
 
+   * PageKite frontends will disconnect tunnels when kites run out of quota.
+     This will hurt Kazz.am, should recheck all kites and only disable out of
+     quota ones, disconnecting only when all run out.  Also, UI issues.
+
    * XML-RPC CNAME creation fail
    * Signup message weirdness
    * Poor handling of reconfiguration

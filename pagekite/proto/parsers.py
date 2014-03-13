@@ -1,4 +1,3 @@
-#!/usr/bin/python -u
 """
 Protocol parsers for classifying incoming network connections.
 """

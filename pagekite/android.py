@@ -1,4 +1,3 @@
-#!/usr/bin/python
 """
 This is the main function for the Android version of PageKite.
 """
