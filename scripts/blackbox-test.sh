@@ -84,7 +84,7 @@ __logwait $LOG-2 domain=testing || __TEST_FAIL__ 'setup:BE' $KID_FE $KID_BE
   dd if=/dev/urandom of=$LOG-4 bs=1M count=1 2>/dev/null
   (echo; echo EOF;) >>$LOG-4
   curl -v --silent -H "Host: testing" http://localhost:$PORT$LOG-4 2>&1 \
-    |tail -1|tee -a $LOG-3 |grep 'EOF' >/dev/null \
+    |tail -3|tee -a $LOG-3 |grep 'EOF' >/dev/null \
     && __PART_OK__ 'bigfile' || __TEST_FAIL__ 'bigfile' $KID_FE $KID_BE
 
   rm -f "$LOG-1" "$LOG-2" "$LOG-3" "$LOG-4"

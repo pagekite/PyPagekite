@@ -21,9 +21,10 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
 import random
+import time
 
 PROTOVER = '0.8'
-APPVER = '0.5.6a'
+APPVER = '0.5.6b'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -31,6 +32,7 @@ LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
 MAGIC_PREFIX = '/~:PageKite:~/'
 MAGIC_PATH = '%sv%s' % (MAGIC_PREFIX, PROTOVER)
 MAGIC_PATHS = (MAGIC_PATH, '/Beanstalk~Magic~Beans/0.2')
+MAGIC_UUID = '%x-%x-%s' % (random.randint(0, 0x7fffffff), time.time(), APPVER)
 
 SERVICE_PROVIDER = 'PageKite.net'
 SERVICE_DOMAINS = ('pagekite.me', '302.is', 'testing.is', 'kazz.am')
