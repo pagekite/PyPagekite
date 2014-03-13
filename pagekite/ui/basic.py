@@ -103,7 +103,8 @@ class BasicUi(NullUi):
       message = self.status_msg
       msg = ('\r << pagekite.py [%s]%s %s%s%s\r%s'
              ) % (tag, ' ' * (8-len(tag)),
-                  self.status_col, message, ' ' * (52-len(message)), self.NORM)
+                  self.status_col, message[:52],
+                  ' ' * (52-len(message)), self.NORM)
       self.wfile.write(msg)
     if tag == 'exiting':
       self.wfile.write('\n')

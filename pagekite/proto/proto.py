@@ -156,9 +156,11 @@ def HTTP_ConnectOK():
 def HTTP_ConnectBad(code=503, status='Unavailable'):
   return 'HTTP/1.0 %s %s\r\n\r\n' % (code, status)
 
-def HTTP_Response(code, title, body, mimetype='text/html', headers=None):
+def HTTP_Response(code, title, body,
+                  mimetype='text/html', headers=None, trackable=False):
   data = [HTTP_ResponseHeader(code, title, mimetype)]
   if headers: data.extend(headers)
+  if trackable: data.extend('X-PageKite-UUID: %s\r\n' % MAGIC_UUID)
   data.extend([HTTP_StartBody(), ''.join(body)])
   return ''.join(data)
 
