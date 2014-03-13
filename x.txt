@@ -1,0 +1,16 @@
+
+You control which of your files or servers
+PageKite makes visible on the Internet.
+
+Fly:
+
+  [PageKite Sharing]  
+  [HTTP server] on port [80]
+  [HTTPS server] on port [443]
+  [SSH server] on port [22]
+  [TCP server] on port [xx]
+
+As:
+
+  http://foo.pagekite.me:[8080]/
+

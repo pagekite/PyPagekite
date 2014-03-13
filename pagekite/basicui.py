@@ -1,15 +1,30 @@
 import re, sys, time
+import pagekite
 from pagekite import NullUi
+
+HTML_BR_RE = re.compile(r'<(br|/p|/li|/tr|/h\d)>\s*')
+HTML_LI_RE = re.compile(r'<li>\s*')
+HTML_NBSP_RE = re.compile(r'&nbsp;')
+HTML_TAGS_RE = re.compile(r'<[^>\s][^>]*>')
+
+def clean_html(text):
+  return HTML_LI_RE.sub(' * ',
+          HTML_NBSP_RE.sub('_',
+           HTML_BR_RE.sub('\n', text)))
+
+def Q(text):
+  return HTML_TAGS_RE.sub('', clean_html(text))
+
 
 class BasicUi(NullUi):
   """Stdio based user interface."""
 
+  DAEMON_FRIENDLY = False
   WANTS_STDERR = True
   EMAIL_RE = re.compile(r'^[a-z0-9!#$%&\'\*\+\/=?^_`{|}~-]+'
                          '(?:\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'
                          '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
                          '(?:[a-zA-Z]{2,4}|museum)$')
-
   def Notify(self, message, prefix=' ',
              popup=False, color=None, now=None, alignright=''):
     now = int(now or time.time())
@@ -40,8 +55,16 @@ class BasicUi(NullUi):
       msg = '\r%s %s%s%s%s%s\n' % ((prefix * 3)[0:3], color, message, self.NORM,
                                    ' ' * (75-len(message)-len(alignright)),
                                    alignright)
-      sys.stderr.write(msg)
+      self.wfile.write(msg)
       self.Status(self.status_tag, self.status_msg)
+
+  def NotifyMOTD(self, frontend, motd_message):
+    self.Notify('Message of the day:', prefix=' ++', color=self.WHITE)
+    lc = 1
+    for line in Q(motd_message).splitlines():
+      self.Notify((line.strip() or ' ' * (lc+2)))
+      lc += 1
+    self.Notify(' ' * (lc+2), alignright='[from %s]' % frontend)
 
   def Status(self, tag, message=None, color=None):
     self.status_tag = tag
@@ -52,24 +75,24 @@ class BasicUi(NullUi):
       msg = ('\r << pagekite.py [%s]%s %s%s%s\r%s'
              ) % (tag, ' ' * (8-len(tag)),
                   self.status_col, message, ' ' * (52-len(message)), self.NORM)
-      sys.stderr.write(msg)
+      self.wfile.write(msg)
     if tag == 'exiting':
-      sys.stderr.write('\n')
+      self.wfile.write('\n')
 
   def Welcome(self, pre=None):
     if self.in_wizard:
-      sys.stderr.write('%s%s%s' % (self.CLEAR, self.WHITE, self.in_wizard))
+      self.wfile.write('%s%s%s' % (self.CLEAR, self.WHITE, self.in_wizard))
     if self.welcome:
-      sys.stderr.write('%s\r%s\n' % (self.NORM, self.welcome))
+      self.wfile.write('%s\r%s\n' % (self.NORM, Q(self.welcome)))
       self.welcome = None
     if self.in_wizard and self.wizard_tell:
-      sys.stderr.write('\n%s\r' % self.NORM)
-      for line in self.wizard_tell: sys.stderr.write('*** %s\n' % line)
+      self.wfile.write('\n%s\r' % self.NORM)
+      for line in self.wizard_tell: self.wfile.write('*** %s\n' % Q(line))
       self.wizard_tell = None
     if pre:
-      sys.stderr.write('\n%s\r' % self.NORM)
-      for line in pre: sys.stderr.write('    %s\n' % line)
-    sys.stderr.write('\n%s\r' % self.NORM)
+      self.wfile.write('\n%s\r' % self.NORM)
+      for line in pre: self.wfile.write('    %s\n' % Q(line))
+    self.wfile.write('\n%s\r' % self.NORM)
 
   def StartWizard(self, title):
     self.Welcome()
@@ -86,18 +109,18 @@ class BasicUi(NullUi):
     if self.wizard_tell: self.Welcome()
     self.in_wizard = None
     if sys.platform in ('win32', 'os2', 'os2emx'):
-      sys.stderr.write('\n<<< press ENTER to continue >>>\n')
-      sys.stdin.readline()
+      self.wfile.write('\n<<< press ENTER to continue >>>\n')
+      self.rfile.readline()
 
   def Spacer(self):
-    sys.stderr.write('\n')
+    self.wfile.write('\n')
 
   def AskEmail(self, question, default=None, pre=[],
                wizard_hint=False, image=None, back=None, welcome=True):
     if welcome: self.Welcome(pre)
     while self.Retry():
-      sys.stderr.write(' => %s ' % (question, ))
-      answer = sys.stdin.readline().strip()
+      self.wfile.write(' => %s ' % (Q(question), ))
+      answer = self.rfile.readline().strip()
       if default and answer == '': return default
       if self.EMAIL_RE.match(answer): return answer
       if back is not None and answer == 'back': return back
@@ -108,7 +131,7 @@ class BasicUi(NullUi):
     self.Welcome(pre)
 
     def_email, def_pass = default or (email, None)
-    sys.stderr.write('    %s\n' % (question, ))
+    self.wfile.write('    %s\n' % (Q(question), ))
 
     if not email:
       email = self.AskEmail('Your e-mail:',
@@ -116,18 +139,18 @@ class BasicUi(NullUi):
       if email == back: return back
 
     import getpass
-    sys.stderr.write(' => ')
+    self.wfile.write(' => ')
     return (email, getpass.getpass() or def_pass)
 
-  def AskYesNo(self, question, default=None, pre=[],
+  def AskYesNo(self, question, default=None, pre=[], yes='yes', no='no',
                wizard_hint=False, image=None, back=None):
     self.Welcome(pre)
     yn = ((default is True) and '[Y/n]'
           ) or ((default is False) and '[y/N]'
                 ) or ('[y/n]')
     while self.Retry():
-      sys.stderr.write(' => %s %s ' % (question, yn))
-      answer = sys.stdin.readline().strip().lower()
+      self.wfile.write(' => %s %s ' % (Q(question), yn))
+      answer = self.rfile.readline().strip().lower()
       if default is not None and answer == '': answer = default and 'y' or 'n'
       if back is not None and answer.startswith('b'): return back
       if answer in ('y', 'n'): return (answer == 'y')
@@ -137,43 +160,43 @@ class BasicUi(NullUi):
                   wizard_hint=False, image=None, back=None):
     self.Welcome(pre)
     if len(domains) == 1:
-      sys.stderr.write(('\n    (Note: the ending %s will be added for you.)'
+      self.wfile.write(('\n    (Note: the ending %s will be added for you.)'
                         ) % domains[0])
     else:
-      sys.stderr.write('\n    Please use one of the following domains:\n')
+      self.wfile.write('\n    Please use one of the following domains:\n')
       for domain in domains:
-        sys.stderr.write('\n     *%s' % domain)
-      sys.stderr.write('\n')
+        self.wfile.write('\n     *%s' % domain)
+      self.wfile.write('\n')
     while self.Retry():
-      sys.stderr.write('\n => %s ' % question)
-      answer = sys.stdin.readline().strip().lower()
+      self.wfile.write('\n => %s ' % Q(question))
+      answer = self.rfile.readline().strip().lower()
       if back is not None and answer == 'back':
         return back
       elif len(domains) == 1:
         answer = answer.replace(domains[0], '')
-        if answer and SERVICE_SUBDOMAIN_RE.match(answer):
+        if answer and pagekite.SERVICE_SUBDOMAIN_RE.match(answer):
           return answer+domains[0]
       else:
         for domain in domains:
           if answer.endswith(domain):
             answer = answer.replace(domain, '')
-            if answer and SERVICE_SUBDOMAIN_RE.match(answer):
+            if answer and pagekite.SERVICE_SUBDOMAIN_RE.match(answer):
               return answer+domain
-      sys.stderr.write('    (Please only use characters A-Z, 0-9, - and _.)')
+      self.wfile.write('    (Please only use characters A-Z, 0-9, - and _.)')
     raise Exception('Too many tries')
 
   def AskMultipleChoice(self, choices, question, pre=[], default=None,
                         wizard_hint=False, image=None, back=None):
     self.Welcome(pre)
     for i in range(0, len(choices)):
-      sys.stderr.write(('  %s %d) %s\n'
+      self.wfile.write(('  %s %d) %s\n'
                         ) % ((default==i+1) and '*' or ' ', i+1, choices[i]))
-    sys.stderr.write('\n')
+    self.wfile.write('\n')
     while self.Retry():
       d = default and (', default=%d' % default) or ''
-      sys.stderr.write(' => %s [1-%d%s] ' % (question, len(choices), d))
+      self.wfile.write(' => %s [1-%d%s] ' % (Q(question), len(choices), d))
       try:
-        answer = sys.stdin.readline().strip()
+        answer = self.rfile.readline().strip()
         if back is not None and answer.startswith('b'): return back
         choice = int(answer or default)
         if choice > 0 and choice <= len(choices): return choice
@@ -186,7 +209,9 @@ class BasicUi(NullUi):
       self.wizard_tell = lines
     else:
       self.Welcome()
-      for line in lines: sys.stderr.write('    %s\n' % line)
-      if error: sys.stderr.write('\n')
+      for line in lines: self.wfile.write('    %s\n' % line)
+      if error: self.wfile.write('\n')
       return True
 
+  def Working(self, message):
+    self.Tell([message])

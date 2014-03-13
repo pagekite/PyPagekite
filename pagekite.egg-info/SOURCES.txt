@@ -3,11 +3,14 @@ HTTPD-PLAN.txt
 MANIFEST.in
 Makefile
 TODO.md
+UI.txt
 __main__.py
 droiddemo.py
+pagekite_gtk.py
 pk
 setup.cfg
 setup.py
+x.txt
 debian/changelog.in
 debian/compat
 debian/control.in
@@ -22,6 +25,7 @@ debian/rules
 doc/CREDITS.txt
 doc/HISTORY.txt
 doc/README.md
+doc/REMOTEUI.md
 doc/lapcat.1
 doc/pagekite.1
 etc/init.d/pagekite.debian
@@ -56,8 +60,10 @@ rpm/rpm-preun.sh
 rpm/rpm-setup.sh
 scripts/blackbox-test.sh
 scripts/breeder.py
+scripts/installer.sh
 scripts/lapcat
 scripts/mk-dropper.sh
 scripts/pagekite
+scripts/pagekite_gtk
 scripts/pagekite_test.py.old
 scripts/pkvnc
