@@ -68,13 +68,14 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'authdomain=', 'motd=', 'register=', 'host=',
             'noupgradeinfo', 'upgradeinfo=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
-            'tls_default=', 'tls_endpoint=',
+            'tls_default=', 'tls_endpoint=', 'selfsign',
             'fe_certname=', 'jakenoia', 'ca_certs=',
             'kitename=', 'kitesecret=', 'fingerpath=',
             'backend=', 'define_backend=', 'be_config=', 'insecure',
             'service_on=', 'service_off=', 'service_cfg=',
+            'tunnel_acl=', 'client_acl=',
             'frontend=', 'nofrontend=', 'frontends=',
-            'torify=', 'socksify=', 'proxy=',
+            'torify=', 'socksify=', 'proxy=', 'noproxy',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes', 'debugio', 'watch=',
             # DEPRECATED:
@@ -190,6 +191,7 @@ class AuthThread(threading.Thread):
             (quota, days, conns, reason
              ) = self.conns.config.GetDomainQuota(proto, domain, srand, token,
                                          sign, check_token=(conn.quota is None))
+            duplicates = self.conns.Tunnel(proto, domain)
             if not quota:
               if not reason: reason = 'quota'
               results.append(('%s-Invalid' % prefix, what))
@@ -198,8 +200,10 @@ class AuthThread(threading.Thread):
               log_info.extend([('rejected', domain),
                                ('quota', quota),
                                ('reason', reason)])
-            elif self.conns.Tunnel(proto, domain):
-              # FIXME: Allow multiple backends?
+            elif duplicates:
+              # Duplicates... is the old one dead?  Trigger a ping.
+              for conn in duplicates:
+                conn.TriggerPing()
               results.append(('%s-Duplicate' % prefix, what))
               log_info.extend([('rejected', domain),
                                ('duplicate', 'yes')])
@@ -590,16 +594,18 @@ class TunnelManager(threading.Thread):
     dead = {}
     for tid in self.conns.tunnels:
       for tunnel in self.conns.tunnels[tid]:
-        pings = 30
+        pings = PING_INTERVAL
         if tunnel.server_info[tunnel.S_IS_MOBILE]:
-          pings = 1800
-        grace = max(40, len(tunnel.write_blocked)/(tunnel.write_speed or 0.001))
+          pings = PING_INTERVAL_MOBILE
+        grace = max(PING_GRACE_DEFAULT,
+                    len(tunnel.write_blocked)/(tunnel.write_speed or 0.001))
         if tunnel.last_activity == 0:
           pass
-        elif tunnel.last_activity < tunnel.last_ping-(5+grace):
-          dead['%s' % tunnel] = tunnel
-        elif tunnel.last_activity < now-pings and tunnel.last_ping < now-2:
-          tunnel.SendPing()
+        elif tunnel.last_ping < now - PING_GRACE_MIN:
+          if tunnel.last_activity < tunnel.last_ping-(PING_GRACE_MIN+grace):
+            dead['%s' % tunnel] = tunnel
+          elif tunnel.last_activity < now-pings:
+            tunnel.SendPing()
 
     for tunnel in dead.values():
       logging.Log([('dead', tunnel.server_info[tunnel.S_NAME])])
@@ -686,7 +692,9 @@ class TunnelManager(threading.Thread):
           builtin = False
           dpaths = {}
 
-        self.pkite.ui.NotifyBE(bid, be, has_ssl, dpaths, is_builtin=builtin)
+        self.pkite.ui.NotifyBE(bid, be, has_ssl, dpaths,
+                               is_builtin=builtin,
+                        fingerprint=(builtin and self.pkite.ui_pemfingerprint))
       self.pkite.ui.EndListingBackEnds()
 
       if self.pkite.isfrontend:
@@ -699,8 +707,10 @@ class TunnelManager(threading.Thread):
         if self.pkite.isfrontend:
           self.pkite.ui.Status('idle', message='Waiting for back-ends.')
         elif tunnel_total == 0:
+          self.pkite.ui.Notify('It looks like your Internet connection might be '
+                               'down! Will retry soon.')
           self.pkite.ui.Status('down', color=self.pkite.ui.GREY,
-                       message='No kites ready to fly.  Boring...')
+                       message='No kites ready to fly.  Waiting...')
         elif connecting == 0:
           self.pkite.ui.Status('down', color=self.pkite.ui.RED,
                        message='Not connected to any front-ends, will retry...')
@@ -725,6 +735,43 @@ class TunnelManager(threading.Thread):
 
   def HurryUp(self):
     self.check_interval = 0
+
+
+def SecureCreate(path):
+  fd = open(path, 'w')
+  try:
+    os.chmod(path, 0600)
+  except OSError:
+    pass
+  return fd
+
+def CreateSelfSignedCert(pem_path, ui):
+  ui.Notify('Creating a 2048-bit self-signed TLS certificate ...',
+            prefix='-', color=ui.YELLOW)
+
+  workdir = tempfile.mkdtemp()
+  def w(fn):
+    return os.path.join(workdir, fn)
+
+  os.system(('openssl genrsa -out %s 2048') % w('key'))
+  os.system(('openssl req -batch -new -key %s -out %s'
+                        ' -subj "/CN=PageKite/O=Self-Hosted/OU=Website"'
+             ) % (w('key'), w('csr')))
+  os.system(('openssl x509 -req -days 3650 -in %s -signkey %s -out %s'
+             ) % (w('csr'), w('key'), w('crt')))
+
+  pem = SecureCreate(pem_path)
+  pem.write(open(w('key')).read())
+  pem.write('\n')
+  pem.write(open(w('crt')).read())
+  pem.close()
+
+  for fn in ['key', 'csr', 'crt']:
+    os.remove(w(fn))
+  os.rmdir(workdir)
+
+  ui.Notify('Saved certificate to: %s' % pem_path,
+            prefix='-', color=ui.YELLOW)
 
 
 class PageKite(object):
@@ -753,6 +800,9 @@ class PageKite(object):
     self.server_protos = ['http', 'http2', 'http3', 'https', 'websocket',
                           'irc', 'finger', 'httpfinger', 'raw']
 
+    self.tunnel_acls = []
+    self.client_acls = []
+
     self.tls_default = None
     self.tls_endpoints = {}
     self.fe_certname = []
@@ -772,6 +822,7 @@ class PageKite(object):
     self.ui_socket = None
     self.ui_password = None
     self.ui_pemfile = None
+    self.ui_pemfingerprint = None
     self.ui_magic_file = '.pagekite.magic'
     self.ui_paths = {}
     self.insecure = False
@@ -785,7 +836,8 @@ class PageKite(object):
     self.tunnel_manager = None
     self.client_mode = 0
 
-    self.proxy_server = None
+    self.proxy_servers = []
+    self.no_proxy = False
     self.require_all = False
     self.no_probes = False
     self.servers = []
@@ -849,6 +901,32 @@ class PageKite(object):
     if not os.path.exists(self.ca_certs_default):
       self.ca_certs_default = sys.argv[0]
     self.ca_certs = self.ca_certs_default
+
+  ACL_SHORTHAND = {
+    'localhost': '((::ffff:)?127\..*|::1)',
+    'any': '.*'
+  }
+  def CheckAcls(self, acls, address, which, conn=None):
+    if not acls:
+      return True
+    for policy, pattern in acls:
+      if re.match(self.ACL_SHORTHAND.get(pattern, pattern)+'$', address[0]):
+        if (policy.lower() == 'allow'):
+          return True
+        else:
+          if conn:
+            conn.LogError(('%s rejected by %s ACL: %s:%s'
+                           ) % (address[0], which, policy, pattern))
+          return False
+    if conn:
+      conn.LogError('%s rejected by default %s ACL' % (address[0], which))
+    return False
+
+  def CheckClientAcls(self, address, conn=None):
+    return self.CheckAcls(self.client_acls, address, 'client', conn)
+
+  def CheckTunnelAcls(self, address, conn=None):
+    return self.CheckAcls(self.tunnel_acls, address, 'tunnel', conn)
 
   def SetLocalSettings(self, ports):
     self.isfrontend = True
@@ -983,7 +1061,7 @@ class PageKite(object):
         p('httpd = %s:%s', self.ui_sspec_cfg, ('host', 'port'))
       ])
       if self.ui_password: config.append('httppass=%s' % self.ui_password)
-      if self.ui_pemfile: config.append('pemfile=%s' % self.pemfile)
+      if self.ui_pemfile: config.append('pemfile=%s' % self.ui_pemfile)
       for http_host in sorted(self.ui_paths.keys()):
         for path in sorted(self.ui_paths[http_host].keys()):
           up = self.ui_paths[http_host][path]
@@ -1070,11 +1148,13 @@ class PageKite(object):
         config.extend([
           '# domain = http:*.pagekite.me:SECRET1',
           '# domain = http,https,websocket:THEM.pagekite.me:SECRET2',
-          '',
         ])
 
       eprinted = 0
-      config.append('##[ Domains we terminate SSL/TLS for natively, with key/cert-files ]##')
+      config.extend([
+        '',
+        '##[ Domains we terminate SSL/TLS for natively, with key/cert-files ]##'
+      ])
       for ep in sorted(self.tls_endpoints.keys()):
         config.append('tls_endpoint = %s:%s' % (ep, self.tls_endpoints[ep][0]))
         eprinted += 1
@@ -1087,6 +1167,34 @@ class PageKite(object):
       ])
 
     config.extend([
+      '##[ Proxy-chain settings ]##',
+      (self.no_proxy and 'noproxy' or '# noproxy'),
+    ])
+    for proxy in self.proxy_servers:
+      config.append('proxy = %s' % proxy)
+    if not self.proxy_servers:
+      config.extend([
+        '# socksify = host:port',
+        '# torify   = host:port',
+        '# proxy    = ssl:/path/to/client-cert.pem@host,CommonName:port',
+        '# proxy    = http://user:password@host:port/',
+        '# proxy    = socks://user:password@host:port/'
+      ])
+
+    config.extend([
+      '',
+      '##[ Front-end access controls (default=deny, if configured) ]##',
+    ])
+    for policy, pattern in self.client_acls:
+      config.append('client_acl=%s:%s' % (policy, pattern))
+    if not self.client_acls:
+      config.append('# client_acl=[allow|deny]:IP-regexp')
+    for policy, pattern in self.tunnel_acls:
+      config.append('tunnel_acl=%s:%s' % (policy, pattern))
+    if not self.tunnel_acls:
+      config.append('# tunnel_acl=[allow|deny]:IP-regexp')
+    config.extend([
+      '',
       '',
       '###[ Anything below this line can usually be ignored. ]#########',
       '',
@@ -1184,7 +1292,7 @@ class PageKite(object):
   def SaveUserConfig(self, quiet=False):
     self.savefile = self.savefile or self.rcfile
     try:
-      fd = open(self.savefile, 'w')
+      fd = SecureCreate(self.savefile)
       fd.write('\n'.join(self.GenerateConfig(safe=True)))
       fd.close()
       if not quiet:
@@ -1535,6 +1643,16 @@ class PageKite(object):
       except (OSError, IOError):
         pass
 
+  def SetPem(self, filename):
+    self.ui_pemfile = filename
+    try:
+      p = os.popen('openssl x509 -noout -fingerprint -in %s' % filename, 'r')
+      data = p.read().strip()
+      p.close()
+      self.ui_pemfingerprint = data.split('=')[1]
+    except (OSError, ValueError):
+      pass
+
   def Configure(self, argv):
     self.conns = self.conns or Connections(self)
     opts, args = getopt.getopt(argv, OPT_FLAGS, OPT_ARGS)
@@ -1586,7 +1704,12 @@ class PageKite(object):
         self.main_loop = False
 
       elif opt in ('-X', '--httppass'): self.ui_password = arg
-      elif opt in ('-P', '--pemfile'): self.ui_pemfile = arg
+      elif opt in ('-P', '--pemfile'): self.SetPem(arg)
+      elif opt in ('--selfsign', ):
+        pf = self.rcfile.replace('.rc', '.pem').replace('.cfg', '.pem')
+        if not os.path.exists(pf):
+          CreateSelfSignedCert(pf, self.ui)
+        self.SetPem(pf)
       elif opt in ('-H', '--httpd'):
         parts = arg.split(':')
         host = parts[0] or 'localhost'
@@ -1673,21 +1796,29 @@ class PageKite(object):
 
       elif opt in ('-a', '--all'): self.require_all = True
       elif opt in ('-N', '--new'): self.servers_new_only = True
+      elif opt == '--client_acl':
+        policy, pattern = arg.split(':', 1)
+        self.client_acls.append((policy, pattern))
+      elif opt == '--tunnel_acl':
+        policy, pattern = arg.split(':', 1)
+        self.tunnel_acls.append((policy, pattern))
+      elif opt in ('--noproxy', ):
+        self.no_proxy = True
+        self.proxy_servers = []
+        socks.setdefaultproxy()
       elif opt in ('--proxy', '--socksify', '--torify'):
         if opt == '--proxy':
-          socks.setdefaultproxy()
-          for proxy in arg.split(','):
-            socks.adddefaultproxy(*socks.parseproxy(proxy))
+          socks.adddefaultproxy(*socks.parseproxy(arg))
         else:
           (host, port) = arg.split(':')
-          socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, host, int(port))
+          socks.adddefaultproxy(socks.PROXY_TYPE_SOCKS5, host, int(port))
 
-        if not self.proxy_server:
+        if not self.proxy_servers:
           # Make DynDNS updates go via the proxy.
           socks.wrapmodule(urllib)
-          self.proxy_server = arg
+          self.proxy_servers = [arg]
         else:
-          self.proxy_server += ',' + arg
+          self.proxy_servers.append(arg)
 
         if opt == '--torify':
           self.servers_new_only = True  # Disable initial DNS lookups (leaks)
@@ -1934,7 +2065,7 @@ class PageKite(object):
         paranoid = host_config.get('hide', False)
         set_root = host_config.get('root', True)
         if len(be_paths) == 1:
-          skip = 0
+          skip = len(os.path.dirname(be_paths[0]))
         else:
           skip = len(os.path.dirname(os.path.commonprefix(be_paths)+'X'))
 
@@ -1967,7 +2098,7 @@ class PageKite(object):
       if not be[BE_SECRET]:
         if self.kitesecret and be[BE_DOMAIN] == self.kitename:
           be[BE_SECRET] = self.kitesecret
-        else:
+        elif not self.kite_remove and not self.kite_disable:
           need_registration[be[BE_DOMAIN]] = True
 
     for domain in need_registration:
@@ -1997,16 +2128,22 @@ class PageKite(object):
       if self.kite_add:
         self.backends.update(just_these_backends)
       elif self.kite_remove:
-        for bid in just_these_backends:
-          be = self.backends[bid]
-          if be[BE_PROTO] in ('http', 'http2', 'http3'):
-            http_host = '%s/%s' % (be[BE_DOMAIN], be[BE_PORT] or '80')
-            if http_host in self.ui_paths: del self.ui_paths[http_host]
-            if http_host in self.be_config: del self.be_config[http_host]
-          del self.backends[bid]
+        try:
+          for bid in just_these_backends:
+            be = self.backends[bid]
+            if be[BE_PROTO] in ('http', 'http2', 'http3'):
+              http_host = '%s/%s' % (be[BE_DOMAIN], be[BE_PORT] or '80')
+              if http_host in self.ui_paths: del self.ui_paths[http_host]
+              if http_host in self.be_config: del self.be_config[http_host]
+            del self.backends[bid]
+        except KeyError:
+          raise ConfigError('No such kite: %s' % bid)
       elif self.kite_disable:
-        for bid in just_these_backends:
-          self.backends[bid][BE_STATUS] = BE_STATUS_DISABLED
+        try:
+          for bid in just_these_backends:
+            self.backends[bid][BE_STATUS] = BE_STATUS_DISABLED
+        except KeyError:
+          raise ConfigError('No such kite: %s' % bid)
       elif self.kite_only:
         for be in self.backends.values(): be[BE_STATUS] = BE_STATUS_DISABLED
         self.backends.update(just_these_backends)
@@ -2808,7 +2945,7 @@ class PageKite(object):
       if oready:
         self.ProcessWritable(oready)
 
-      if common.buffered_bytes < 1024 * self.buffer_max:
+      if common.buffered_bytes[0] < 1024 * self.buffer_max:
         throttle = None
       else:
         logging.LogDebug("FIXME: Nasty pause to let buffers clear!")

@@ -54,7 +54,8 @@ class RemoteUi(NullUi):
   def EndListingBackEnds(self):
     self.wfile.write('end_be_list\n')
 
-  def NotifyBE(self, bid, be, has_ssl, dpaths, is_builtin=False, now=None):
+  def NotifyBE(self, bid, be, has_ssl, dpaths,
+               is_builtin=False, fingerprint=None, now=None):
     domain = be[BE_DOMAIN]
     port = be[BE_PORT]
     proto = be[BE_PROTO]
@@ -64,11 +65,12 @@ class RemoteUi(NullUi):
 
     message = (' be_status:'
                ' status=%x; bid=%s; domain=%s; port=%s; proto=%s;'
-               ' bhost=%s; bport=%s%s%s'
+               ' bhost=%s; bport=%s%s%s%s'
                '\n') % (be[BE_STATUS], bid, domain, port, proto,
                         be[BE_BHOST], be[BE_BPORT],
                         has_ssl and '; ssl=1' or '',
-                        is_builtin and '; builtin=1' or '')
+                        is_builtin and '; builtin=1' or '',
+                        fingerprint and ('; fingerprint=%s' % fingerprint) or '')
     self.wfile.write(message)
 
     for path in dpaths:
@@ -355,11 +357,12 @@ class PageKiteRestarter(PageKiteThread):
       sys.argv[1:1] = self.pk_startup_args[:]
       self.pk_startup_args = None
     try:
-      self.setup_comms(pkobj)
-      return self.configure(pkobj)
-    except:
-      self.pk = None
-      raise
+      try:
+        self.setup_comms(pkobj)
+        return self.configure(pkobj)
+      except:
+        self.pk = None
+        raise
     finally:
       sys.argv = old_argv[:]
 

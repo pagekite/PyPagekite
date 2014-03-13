@@ -959,7 +959,7 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     self.server_port = sspec[1]
 
     if ssl_pem_filename:
-      ctx = socks.SSL.Context(socks.SSL.SSLv3_METHOD)
+      ctx = socks.SSL.Context(socks.SSL.TLSv1_METHOD)
       ctx.use_privatekey_file (ssl_pem_filename)
       ctx.use_certificate_chain_file(ssl_pem_filename)
       self.socket = socks.SSL_Connect(ctx, socket.socket(self.address_family,
@@ -979,6 +979,7 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
       gYamon.vset('httpd_ssl_enabled', self.enable_ssl)
       gYamon.vset('errors', 0)
       gYamon.vset("bytes_all", 0)
+      gYamon.lists['buffered_bytes'] = [1, 0, common.buffered_bytes]
       gYamon.views['selectables'] = (selectables.SELECTABLES, {
         'idle': [0, 0, self.conns.idle],
         'conns': [0, 0, self.conns.conns]
@@ -993,7 +994,7 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
   def finish_request(self, request, client_address):
     try:
       SimpleXMLRPCServer.finish_request(self, request, client_address)
-    except socket.error:
+    except (socket.error, socks.SSL.ZeroReturnError, socks.SSL.Error):
       pass
 
 

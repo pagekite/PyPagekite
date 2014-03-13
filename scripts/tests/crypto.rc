@@ -1,0 +1,17 @@
+##[ Default kite and account details ]##
+optfile = auth.rc
+
+##[ Front-end settings: use pagekite.net defaults ]##
+defaults
+
+##[ Built-in HTTPD settings ]##
+pemfile=/home/bre/.pagekite.pem
+webpath = test.pagekite.me/80:/:default:/data/Home/bre/Projects/Beanstalks/PyBeanstalks/scripts/tests
+
+##[ Back-ends and local services ]##
+service_on  = https:test.pagekite.me : localhost:builtin : wiggle
+
+
+###[ End of pagekite.py configuration ]#########
+END
+

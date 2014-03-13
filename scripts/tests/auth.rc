@@ -1,0 +1,6 @@
+##[ Default kite and account details ]##
+kitename   = test.pagekite.me
+kitesecret = bax4aee5g4a3w0
+
+###[ End of pagekite.py configuration ]#########
+END

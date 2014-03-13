@@ -179,7 +179,8 @@ class NullUi(object):
   def StartListingBackEnds(self): pass
   def EndListingBackEnds(self): pass
 
-  def NotifyBE(self, bid, be, has_ssl, dpaths, is_builtin=False):
+  def NotifyBE(self, bid, be, has_ssl, dpaths,
+                     is_builtin=False, fingerprint=None):
     domain, port, proto = be[BE_DOMAIN], be[BE_PORT], be[BE_PROTO]
     prox = (proto == 'raw') and ' (HTTP proxied)' or ''
     if proto == 'raw' and port in ('22', 22): proto = 'ssh'
@@ -200,13 +201,26 @@ class NullUi(object):
     else:
       return
 
-    self.Notify(('%s %s:%s as %s/%s'
-                 ) % (status, be[BE_BHOST], be[BE_BPORT], url, prox),
+    if is_builtin:
+      backend = 'builtin HTTPD'
+    else:
+      backend = '%s:%s' % (be[BE_BHOST], be[BE_BPORT])
+
+    self.Notify(('%s %s as %s/%s'
+                 ) % (status, backend, url, prox),
                 prefix=prefix, color=color)
 
     if status == 'Flying':
       for dp in sorted(dpaths.keys()):
         self.Notify(' - %s%s' % (url, dp), color=self.BLUE)
+      if fingerprint and proto.startswith('https'):
+        self.Notify(' - Fingerprint=%s' % fingerprint,
+                    color=self.WHITE)
+        self.Notify(('   IMPORTANT: For maximum security, use a secure channel'
+                     ' to inform your'),
+                    color=self.YELLOW)
+        self.Notify('   guests what fingerprint to expect.',
+                    color=self.YELLOW)
 
   def Status(self, tag, message=None, color=None): pass
 
