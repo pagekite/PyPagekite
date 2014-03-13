@@ -94,7 +94,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 ###############################################################################
 #
 PROTOVER = '0.8'
-APPVER = '0.4.6a'
+APPVER = '0.4.6'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'http://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -887,18 +887,12 @@ class AuthThread(threading.Thread):
                                                     domain, srand, token, sign,
                                                check_token=(conn.quota is None))
             if not quota:
-              if not reason: reason = 'quota'
               results.append(('%s-Invalid' % prefix, what))
               results.append(('%s-Invalid-Why' % prefix,
                               '%s;%s' % (what, reason)))
-              Log([('rejected', domain),
-                   ('quota', quota),
-                   ('reason', reason)])
             elif self.conns.Tunnel(proto, domain):
               # FIXME: Allow multiple backends?
               results.append(('%s-Duplicate' % prefix, what))
-              Log([('rejected', domain),
-                   ('duplicate', 'yes')])
             else:
               results.append(('%s-OK' % prefix, what))
               quotas.append(quota)
@@ -3554,13 +3548,6 @@ class NullUi(object):
   DAEMON_FRIENDLY = True
   ALLOWS_INPUT = False
   WANTS_STDERR = False
-  REJECTED_REASONS = {
-    'quota': 'You are out of quota',
-    'nodays': 'Your subscription has expired',
-    'noquota': 'You are out of quota',
-    'noconns': 'You are flying too many kites',
-    'unauthorized': 'Invalid account or shared secret'
-  }
 
   def __init__(self, welcome=None, wfile=sys.stderr, rfile=sys.stdin):
     if sys.platform in ('win32', 'os2', 'os2emx'):
@@ -3654,8 +3641,6 @@ class NullUi(object):
     pass
 
   def NotifyKiteRejected(self, proto, domain, reason, crit=False):
-    if reason in self.REJECTED_REASONS:
-      reason = self.REJECTED_REASONS[reason]
     self.Notify('REJECTED: %s:%s (%s)' % (proto, domain, reason),
                 prefix='!', color=(crit and self.RED or self.YELLOW))
 
@@ -4257,7 +4242,6 @@ class PageKite(object):
     if not lookup.endswith('.'): lookup += '.'
     if DEBUG_IO: print '=== AUTH LOOKUP\n%s\n===' % lookup
     (hn, al, ips) = socket.gethostbyname_ex(lookup)
-    if DEBUG_IO: print 'hn=%s\nal=%s\nips=%s\n' % (hn, al, ips)
 
     # Extract auth error hints from domain name, if we got a CNAME reply.
     if al:
@@ -4325,7 +4309,7 @@ class PageKite(object):
           lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
           (rv, auth_error_type) = self.LookupDomainQuota(lookup)
           if rv is None or rv >= 0:
-            return (rv, auth_error_type)
+            return (rv, auth_error_type or 'unauthorized')
         except Exception, e:
           # Lookup failed, fail open.
           LogError('Quota lookup failed: %s' % e)
@@ -5213,7 +5197,7 @@ class PageKite(object):
             details = service.signUp(email, register)
             if details.get('secret', False):
               service_accounts[email] = details['secret']
-              self.ui.AskYesNo('Continue?', pre=[
+              self.ui.AskYesNo('Click Finish to get started ...', pre=[
                 '<b>Your kite is ready to fly!</b>',
                 '',
                 '<b>Note:</b> To complete the signup process,',
@@ -5221,7 +5205,7 @@ class PageKite(object):
                 'activation instructions. You can give',
                 'PageKite a try first, but un-activated',
                 'accounts are disabled after %d minutes.' % details['timeout'],
-              ], yes='Finish', no=False, default=True)
+              ], yes='Finish', no=False)
               self.ui.EndWizard()
               if autoconfigure:
                 print 'Backends: %s (register=%s)' % (be_specs, register)

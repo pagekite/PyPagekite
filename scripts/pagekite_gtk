@@ -536,7 +536,7 @@ class PageKiteWizard:
     self.window.vbox.pack_start(self.hbox, expand=True, fill=True, padding=0)
 
     # Draw a fancy background!
-    #self.window.vbox.connect('expose-event', ExposeFancyBackground)
+    self.window.vbox.connect('expose-event', ExposeFancyBackground)
 
     if title: self.set_title(title)
 
