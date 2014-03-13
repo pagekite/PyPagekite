@@ -26,7 +26,7 @@ import pagekite.logging as logging
 
 HTTP_METHODS = ['OPTIONS', 'CONNECT', 'GET', 'HEAD', 'POST', 'PUT', 'TRACE',
                 'PROPFIND', 'PROPPATCH', 'MKCOL', 'DELETE', 'COPY', 'MOVE',
-                'LOCK', 'UNLOCK', 'PING']
+                'LOCK', 'UNLOCK', 'PING', 'PATCH']
 HTTP_VERSIONS = ['HTTP/1.0', 'HTTP/1.1']
 
 
