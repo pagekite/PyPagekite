@@ -143,7 +143,7 @@ class Tunnel(ChunkParser):
         self.quota[1] and
         (self.quota[2] < when-900)):
       self.quota[2] = when
-      logging.LogDebug('Rechecking: %s' % (self.quota, ))
+      self.LogDebug('Rechecking: %s' % (self.quota, ))
       conns.auth.check([self.quota[1]], self,
                        lambda r, l: self.QuotaCallback(conns, r, l))
 
@@ -276,7 +276,7 @@ class Tunnel(ChunkParser):
         # instead, so laziness here should be fine.
         buf = None
       if buf is None or buf == '':
-        logging.LogDebug('Remote end closed connection.')
+        self.LogDebug('Remote end closed connection.')
         return None
       data += buf
       self.read_bytes += len(buf)
@@ -680,7 +680,7 @@ class Tunnel(ChunkParser):
       what, reply = 'good', HTTP_GoodBeConnection(proto)
     else:
       what, reply = 'back-end down', HTTP_NoBeConnection(proto)
-    logging.LogDebug('Responding to probe for %s: %s' % (host, what))
+    self.LogDebug('Responding to probe for %s: %s' % (host, what))
     return self.SendChunked('SID: %s\r\n\r\n%s' % (sid, reply))
 
   def ConnectBE(self, sid, proto, port, host, rIp, rPort, rTLS, data):
@@ -936,12 +936,14 @@ class UserConn(Selectable):
     Selectable.Cleanup(self, close=close)
     self.Reset()
 
-  def __str__(self):
+  def ConnType(self):
     if self.backend[BE_BHOST]:
-      ctype = 'BE=%s:%s' % (self.backend[BE_BHOST], self.backend[BE_BPORT])
+      return 'BE=%s:%s' % (self.backend[BE_BHOST], self.backend[BE_BPORT])
     else:
-      ctype = 'FE'
-    return '%s %s' % (Selectable.__str__(self), ctype)
+      return 'FE'
+
+  def __str__(self):
+    return '%s %s' % (Selectable.__str__(self), self.ConnType())
 
   def __html__(self):
     return ('<b>Tunnel</b>: <a href="/conn/%s">%s</a><br>'
@@ -1181,10 +1183,10 @@ class UserConn(Selectable):
 
   def ProcessTunnelEof(self, read_eof=False, write_eof=False):
     rv = True
-    if read_eof and not self.write_eof:
-      rv = self.ProcessEofWrite(tell_tunnel=False) and rv
     if write_eof and not self.read_eof:
       rv = self.ProcessEofRead(tell_tunnel=False) and rv
+    if read_eof and not self.write_eof:
+      rv = self.ProcessEofWrite(tell_tunnel=False) and rv
     return rv
 
   def ProcessEofRead(self, tell_tunnel=True):
@@ -1203,6 +1205,15 @@ class UserConn(Selectable):
 
     if tell_tunnel and self.tunnel:
       self.tunnel.SendStreamEof(self.sid, write_eof=True)
+
+    if (self.conns and
+        self.ConnType() == 'FE' and
+        (not self.read_eof) and
+        self not in self.conns.idle):
+      self.LogDebug('Done writing, will time out reads in 120 seconds.')
+      self.created = time.time() + 120
+      self.last_activity = 0
+      self.conns.idle.append(self)
 
     return self.ProcessEof()
 
@@ -1277,12 +1288,13 @@ class UnknownConn(MagicProtocolParser):
                               (self.on_port or '?'),
                               (self.host or '?'))
 
+  # Any sort of EOF just means give up: if we haven't figured out what
+  # kind of connnection this is yet, we won't without more data.
   def ProcessEofRead(self):
-    self.read_eof = True
+    self.Die(discard_buffer=True)
     return self.ProcessEof()
-
   def ProcessEofWrite(self):
-    self.read_eof = True
+    self.Die(discard_buffer=True)
     return self.ProcessEof()
 
   def ProcessLine(self, line, lines):
@@ -1376,7 +1388,8 @@ class UnknownConn(MagicProtocolParser):
     if (not done and self.parser.method == 'POST'
                  and self.parser.path in MAGIC_PATHS):
       # FIXME: DEPRECATE: Make this go away!
-      if Tunnel.FrontEnd(self, lines, self.conns) is None: return False
+      if Tunnel.FrontEnd(self, lines, self.conns) is None:
+        return False
       done = True
 
     if not done:
@@ -1388,7 +1401,7 @@ class UnknownConn(MagicProtocolParser):
           self.Send(HTTP_Response(400, 'Bad request',
                     ['<html><body><h1>400 Bad request</h1>',
                      '<p>Invalid request, no Host: found.</p>',
-                     '</body></html>']))
+                     '</body></html>\n']))
           return False
 
       if self.parser.path.startswith(MAGIC_PREFIX):
@@ -1425,7 +1438,6 @@ class UnknownConn(MagicProtocolParser):
           self.Send(HTTP_Unavailable('fe', self.proto, self.host,
                                      frame_url=self.conns.config.error_url),
                     try_flush=True)
-
         return False
 
     # We are done!
@@ -1440,13 +1452,14 @@ class UnknownConn(MagicProtocolParser):
         domains = self.GetSni(data)
         if not domains:
           domains = [self.conns.LastIpDomain(self.address[0]) or self.conns.config.tls_default]
-          logging.LogDebug('No SNI - trying: %s' % domains[0])
-          if not domains[0]: domains = None
+          self.LogDebug('No SNI - trying: %s' % domains[0])
+          if not domains[0]:
+            domains = None
       except:
         # Probably insufficient data, just return True and assume we'll have
         # better luck on the next round.
         if logging.DEBUG_IO:
-          logging.LogError('Error in ProcessTls: %s' % format_exc())
+          self.LogError('Error in ProcessTls: %s' % format_exc())
         return True
 
     if domains and domains[0] is not None:
@@ -1474,11 +1487,11 @@ class UnknownConn(MagicProtocolParser):
 
   def ProcessFlashPolicyRequest(self, data):
     # FIXME: Should this be configurable?
-    logging.LogDebug('Sending friendly response to Flash Policy Request')
-    self.Send("""\
-<cross-domain-policy>
-     <allow-access-from domain="*" to-ports="*" />
-</cross-domain-policy>""", try_flush=True)
+    self.LogDebug('Sending friendly response to Flash Policy Request')
+    self.Send('<cross-domain-policy>\n'
+              ' <allow-access-from domain="*" to-ports="*" />\n'
+              '</cross-domain-policy>\n',
+              try_flush=True)
     return False
 
   def ProcessRaw(self, data, domain):
@@ -1512,7 +1525,7 @@ class UiConn(LineParser):
                             secret=self.conns.config.ConfigSecret(),
                             payload=self.challenge,
                             length=1000)
-    logging.LogDebug('Expecting: %s' % self.expect)
+    self.LogDebug('Expecting: %s' % self.expect)
     self.Send('PageKite? %s\r\n' % self.challenge)
 
   def readline(self):
@@ -1621,7 +1634,7 @@ class Listener(Selectable):
         raise
 
     except Exception, e:
-      logging.LogDebug('Listener::ReadData: %s' % e)
+      self.LogDebug('Listener::ReadData: %s' % e)
       raise
 
     return False

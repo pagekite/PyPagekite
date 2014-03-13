@@ -58,7 +58,7 @@ OPT_FLAGS = 'o:O:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'nullui', 'remoteui', 'uiport=', 'help', 'settings',
             'optfile=', 'optdir=', 'savefile=',
-            'friendly',
+            'friendly', 'shell',
             'signup', 'list', 'add', 'only', 'disable', 'remove', 'save',
             'service_xmlrpc=', 'controlpanel', 'controlpass',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webpath=',
@@ -318,6 +318,9 @@ class Connections(object):
       logging.LogError('Failed to remove %s: %s' % (conn, format_exc()))
       if retry:
         return self.Remove(conn, retry=False)
+
+  def Sockets(self):
+    return [s.fd for s in self.conns]
 
   def Readable(self):
     # FIXME: This is O(n)
@@ -603,6 +606,10 @@ class TunnelManager(threading.Thread):
 
   def quit(self):
     self.keep_running = False
+    try:
+      self.join()
+    except RuntimeError:
+      pass
 
   def run(self):
     self.keep_running = True
@@ -802,6 +809,7 @@ class PageKite(object):
     self.ui_comm = None
 
     self.save = 0
+    self.shell = False
     self.kite_add = False
     self.kite_only = False
     self.kite_disable = False
@@ -811,7 +819,7 @@ class PageKite(object):
     # 'standard' locations, but if nothing is found there and something local
     # exists, use that instead.
     try:
-      if sys.platform in ('win32', 'os2', 'os2emx'):
+      if sys.platform[:3] in ('win', 'os2'):
         self.rcfile = os.path.join(os.path.expanduser('~'), 'pagekite.cfg')
         self.devnull = 'nul'
       else:
@@ -1179,23 +1187,38 @@ class PageKite(object):
       self.ui.Spacer()
 
   def FallDown(self, message, help=True, longhelp=False, noexit=False):
-    if self.conns and self.conns.auth: self.conns.auth.quit()
-    if self.ui_httpd: self.ui_httpd.quit()
-    if self.ui_comm: self.ui_comm.quit()
-    if self.tunnel_manager: self.tunnel_manager.quit()
+    if self.conns and self.conns.auth:
+      self.conns.auth.quit()
+    if self.ui_httpd:
+      self.ui_httpd.quit()
+    if self.ui_comm:
+      self.ui_comm.quit()
+    if self.tunnel_manager:
+      self.tunnel_manager.quit()
     self.keep_looping = False
+    for fd in (self.conns and self.conns.Sockets() or []):
+      try:
+        fd.close()
+      except (IOError, OSError, TypeError):
+        pass
     self.conns = self.ui_httpd = self.ui_comm = self.tunnel_manager = None
     if help or longhelp:
       import manual
-      print longhelp and manual.DOC() or manual.MINIDOC
+      print longhelp and manual.DOC() or manual.MINIDOC()
       print '***'
-    else:
+    elif not noexit:
       self.ui.Status('exiting', message=(message or 'Good-bye!'))
-    if message: print 'Error: %s' % message
-    if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
+    if message:
+      print 'Error: %s' % message
+    if logging.DEBUG_IO:
+      traceback.print_exc(file=sys.stderr)
     if not noexit:
       self.main_loop = False
       sys.exit(1)
+    try:
+      os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+    except:
+      pass
 
   def GetTlsEndpointCtx(self, domain):
     if domain in self.tls_endpoints:
@@ -1364,7 +1387,7 @@ class PageKite(object):
 
   def HelpAndExit(self, longhelp=False):
     import manual
-    print longhelp and manual.DOC() or manual.MINIDOC
+    print longhelp and manual.DOC() or manual.MINIDOC()
     sys.exit(0)
 
   def AddNewKite(self, kitespec, status=BE_STATUS_UNKNOWN, secret=None):
@@ -1509,6 +1532,8 @@ class PageKite(object):
       elif opt in ('-S', '--savefile'):
         if self.savefile: raise ConfigError('Multiple save-files!')
         self.savefile = arg
+      elif opt == '--shell':
+        self.shell = True
       elif opt == '--save':
         self.save = True
       elif opt == '--only':
@@ -1796,7 +1821,7 @@ class PageKite(object):
         be_spec = ''
       elif len(args) == 1:
         if '*' in args[0] or '?' in args[0]:
-          if sys.platform in ('win32', 'os2', 'os2emx'):
+          if sys.platform[:3] in ('win', 'os2'):
             be_paths = [args[0]]
             be_spec = 'builtin'
         elif os.path.exists(args[0]):
@@ -1844,7 +1869,7 @@ class PageKite(object):
         fe = [be_proto, fe[0]]
 
       # Do our own globbing on Windows
-      if sys.platform in ('win32', 'os2', 'os2emx'):
+      if sys.platform[:3] in ('win', 'os2'):
         import glob
         new_paths = []
         for p in be_paths:
@@ -2257,17 +2282,21 @@ class PageKite(object):
             error = '%s' % (sys.exc_info(), )
 
           if error == 'pleaselogin':
-            self.ui.ExplainError(error, 'Signup failed!', subject=email)
+            self.ui.ExplainError(error, 'Signup failed!',
+                                 subject=email)
             Goto('service_login_email', back_skips_current=True)
           elif error == 'email':
-            self.ui.ExplainError(error, 'Signup failed!', subject=register)
+            self.ui.ExplainError(error, 'Signup failed!',
+                                 subject=register)
             Goto('service_login_email', back_skips_current=True)
           elif error in ('domain', 'domaintaken', 'subdomain'):
-            self.ui.ExplainError(error, 'Invalid domain!', subject=register)
+            self.ui.ExplainError(error, 'Invalid domain!',
+                                 subject=register)
             register, kitename = None, None
             Goto('service_signup_kitename', back_skips_current=True)
           elif error == 'network':
-            self.ui.ExplainError(error, 'Network error!', subject=self.service_provider)
+            self.ui.ExplainError(error, 'Network error!',
+                                 subject=self.service_provider)
             Goto('service_signup', back_skips_current=True)
           else:
             self.ui.ExplainError(error, 'Unknown problem!')
@@ -2615,9 +2644,10 @@ class PageKite(object):
     else:
       try:
         logging.LogFile = fd = open(filename, "a", 0)
-        os.dup2(fd.fileno(), sys.stdin.fileno())
         os.dup2(fd.fileno(), sys.stdout.fileno())
-        if not self.ui.WANTS_STDERR: os.dup2(fd.fileno(), sys.stderr.fileno())
+        if not self.ui.WANTS_STDERR:
+          os.dup2(fd.fileno(), sys.stdin.fileno())
+          os.dup2(fd.fileno(), sys.stderr.fileno())
       except Exception, e:
         raise ConfigError('%s' % e)
 
@@ -2671,7 +2701,8 @@ class PageKite(object):
     except KeyboardInterrupt:
       raise
     except:
-      logging.LogError('Error in select: %s (%s/%s)' % (e, isocks, osocks))
+      logging.LogError('Error in select(%s/%s): %s' % (isocks, osocks,
+                                                       format_exc()))
       self.conns.CleanFds()
       self.last_loop -= 1
 
@@ -2776,7 +2807,7 @@ class PageKite(object):
     if epoll:
       epoll.close()
 
-  def Start(self, howtoquit='CTRL+C = Quit'):
+  def Start(self, howtoquit='CTRL+C = Stop'):
     conns = self.conns = self.conns or Connections(self)
 
     # If we are going to spam stdout with ugly crap, then there is no point
@@ -2878,11 +2909,14 @@ class PageKite(object):
       pf.close()
 
     # Do this after creating the PID and log-files.
-    if self.daemonize: os.chdir('/')
+    if self.daemonize:
+      os.chdir('/')
 
     # Drop privileges, if we have any.
-    if self.setgid: os.setgid(self.setgid)
-    if self.setuid: os.setuid(self.setuid)
+    if self.setgid:
+      os.setgid(self.setgid)
+    if self.setuid:
+      os.setuid(self.setuid)
     if self.setuid or self.setgid:
       logging.Log([('uid', os.getuid()), ('gid', os.getgid())])
 
@@ -2896,9 +2930,12 @@ class PageKite(object):
 
     self.ui.Status('exiting', message='Stopping...')
     logging.Log([('stopping', 'pagekite.py')])
-    if self.ui_httpd: self.ui_httpd.quit()
-    if self.ui_comm: self.ui_comm.quit()
-    if self.tunnel_manager: self.tunnel_manager.quit()
+    if self.ui_httpd:
+      self.ui_httpd.quit()
+    if self.ui_comm:
+      self.ui_comm.quit()
+    if self.tunnel_manager:
+      self.tunnel_manager.quit()
     if self.conns:
       if self.conns.auth: self.conns.auth.quit()
       for conn in self.conns.conns:
@@ -2910,11 +2947,11 @@ class PageKite(object):
 def Main(pagekite, configure, uiclass=NullUi,
                               progname=None, appver=APPVER,
                               http_handler=None, http_server=None):
-  logging.ResetLog()
-  crashes = 1
-  ui = uiclass()
-
+  crashes = 0
+  shell_mode = None
   while True:
+    ui = uiclass()
+    logging.ResetLog()
     pk = pagekite(ui=ui, http_handler=http_handler, http_server=http_server)
     try:
       try:
@@ -2925,21 +2962,30 @@ def Main(pagekite, configure, uiclass=NullUi,
         except Exception, e:
           raise ConfigError(e)
 
-        pk.Start()
+        shell_mode = shell_mode or pk.shell
+        if shell_mode is not True:
+          pk.Start()
 
       except (ConfigError, getopt.GetoptError), msg:
-        pk.FallDown(msg)
+        pk.FallDown(msg, help=(not shell_mode), noexit=shell_mode)
+        if shell_mode:
+          shell_mode = 'more'
 
       except KeyboardInterrupt, msg:
         pk.FallDown(None, help=False, noexit=True)
-        return
+        if shell_mode:
+          shell_mode = 'auto'
+        else:
+          return
 
     except SystemExit, status:
-      sys.exit(status)
+      if shell_mode:
+        shell_mode = 'more'
+      else:
+        sys.exit(status)
 
     except Exception, msg:
       traceback.print_exc(file=sys.stderr)
-
       if pk.crash_report_url:
         try:
           print 'Submitting crash report to %s' % pk.crash_report_url
@@ -2953,19 +2999,50 @@ def Main(pagekite, configure, uiclass=NullUi,
           print 'FAILED: %s' % e
 
       pk.FallDown(msg, help=False, noexit=pk.main_loop)
+      crashes = min(9, crashes+1)
 
-      # If we get this far, then we're looping. Clean up.
-      sockets = pk.conns and pk.conns.Sockets() or []
-      for fd in sockets: fd.close()
+    if shell_mode:
+      crashes = 0
+      try:
+        sys.argv[1:] = Shell(pk, ui, shell_mode)
+        shell_mode = 'more'
+      except (KeyboardInterrupt, IOError, OSError):
+        ui.Status('quitting')
+        return
+    elif not pk.main_loop:
+      return
 
-      # Exponential fall-back.
-      logging.LogDebug('Restarting in %d seconds...' % (2 ** crashes))
-      time.sleep(2 ** crashes)
-      crashes += 1
-      if crashes > 9: crashes = 9
+    # Exponential fall-back.
+    logging.LogDebug('Restarting in %d seconds...' % (2 ** crashes))
+    time.sleep(2 ** crashes)
 
-    # No exception, do we keep looping?
-    if not pk.main_loop: return
+
+def Shell(pk, ui, shell_mode):
+  import manual
+  try:
+    ui.Reset()
+    if shell_mode != 'more':
+      ui.StartWizard('The PageKite Shell')
+      pre = [
+        'Press CTRL+C to quit, ENTER to fly your kites or type some',
+        'arguments to try other things.  Type `help` for help.'
+      ]
+    else:
+      pre = ''
+
+    prompt = os.path.basename(sys.argv[0])
+    while True:
+      rv = ui.AskQuestion(prompt, back=False, pre=pre).strip().split()
+      ui.EndWizard(quietly=True)
+      if rv and rv[0] == 'help':
+        ui.welcome = '>>> ' + ui.WHITE + ' '.join(rv) + ui.NORM
+        ui.Tell(manual.HELP(rv[1:]).splitlines())
+        pre = []
+      else:
+        return rv
+  finally:
+    ui.EndWizard(quietly=True)
+
 
 def Configure(pk):
   if '--appver' in sys.argv:
@@ -2976,6 +3053,11 @@ def Configure(pk):
     if os.path.exists(pk.rcfile):
       pk.ConfigureFromFile()
 
+  friendly_mode = (('--friendly' in sys.argv) or
+                   (sys.platform[:3] in ('win', 'os2', 'dar')))
+  if friendly_mode and sys.stdout.isatty():
+    pk.shell = (len(sys.argv) < 2) and 'auto' or True
+
   pk.Configure(sys.argv[1:])
 
   if '--settings' in sys.argv:
@@ -2983,9 +3065,6 @@ def Configure(pk):
     sys.exit(0)
 
   if not pk.backends.keys() and (not pk.kitesecret or not pk.kitename):
-    friendly_mode = (('--friendly' in sys.argv) or
-                     (sys.platform in ('win32', 'os2', 'os2emx',
-                                       'darwin', 'darwin1', 'darwin2')))
     if '--signup' in sys.argv or friendly_mode:
       pk.RegisterNewKite(autoconfigure=True, first=True)
     if friendly_mode:

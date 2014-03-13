@@ -113,6 +113,9 @@ MAN_OPT_COMMON = ("""\
     --nocrashreport __Don't send anonymous crash reports to pagekite.net.
 """)
 MAN_OPT_BACKEND = ("""\
+    --shell         __Run PageKite in an interactive shell.
+    --nullui        __Silent UI for scripting. Assumes Yes on all questions.
+
     --list          __List all configured kites.
     --add           __Add (or enable) the following kites, save config.
     --remove        __Remove the following kites, save config.
@@ -120,8 +123,6 @@ MAN_OPT_BACKEND = ("""\
     --only          __Disable all but the following kites, save config.
 
     --insecure      __Allow access to phpMyAdmin, /admin, etc. (global).
-
-    --nullui        __Silent UI for scripting. Assumes Yes on all questions.
 
     --local</b>=<a>ports</a>   __Configure for local serving only (no remote front-end).
     --watch</b>=<a>N</a>       __Display proxied data (higher N = more verbosity).
@@ -309,12 +310,17 @@ MANUAL = (
   ('SH', 'Copyright and license', MAN_LICENSE),
 )
 
+
 def clean_text(text):
   return re.sub('</?(tt|i)>', '`',
                 re.sub('</?(a|b|pre)>', '', text.replace(' __', '   ')))
 
+def unindent(text):
+  return re.sub('(?m)^    ', '', text)
 
-MINIDOC = ("""\
+
+def MINIDOC():
+  return ("""\
 >>> Welcome to pagekite.py v%s!
 
 %s
@@ -327,12 +333,18 @@ MINIDOC = ("""\
     and create it.  Pick a name, any name!\
 """) % (APPVER, clean_text(MAN_EXAMPLES))
 
+
 def DOC():
   doc = ''
   for h, section, text in MANUAL:
     doc += '%s\n\n%s\n' % (h == 'SH' and section.upper() or '  '+section,
                            clean_text(text))
   return doc
+
+
+def HELP(args):
+  return unindent(clean_text(MAN_EXAMPLES))
+
 
 def MAN(pname=None):
   man = ("""\
@@ -359,6 +371,7 @@ def MAN(pname=None):
     man = man.replace('pagekite.py', pname)
   return man
 
+
 def MARKDOWN(pname=None):
   mkd = ''
   for h, section, text in MANUAL:
@@ -381,6 +394,7 @@ def MARKDOWN(pname=None):
     mkd = mkd.replace('pagekite.py', pname)
   return mkd
 
+
 if __name__ == '__main__':
   import sys
   if '--nopy' in sys.argv:
@@ -393,6 +407,6 @@ if __name__ == '__main__':
   elif '--markdown' in sys.argv:
     print MARKDOWN(pname)
   elif '--minidoc' in sys.argv:
-    print MINIDOC
+    print MINIDOC()
   else:
     print DOC()
