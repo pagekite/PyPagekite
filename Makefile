@@ -91,10 +91,10 @@ VERSION=`python setup.py --version`
 	@rm -f setup.cfg
 	@ls -1 doc/*.? >debian/pagekite.manpages
 
-.targz: .debprep
+.targz:
 	@python setup.py sdist
 
-.deb:
+.deb: .debprep
 	@debuild -i -us -uc
 	@mv ../pagekite_*.deb dist/
 
