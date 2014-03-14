@@ -92,8 +92,6 @@ VERSION=`python setup.py --version`
 	@sed -e "s/@VERSION@/$(VERSION)/g" \
 		< debian/control.in >debian/control
 	@sed -e "s/@VERSION@/$(VERSION)/g" \
-		< debian/copyright.in >debian/copyright
-	@sed -e "s/@VERSION@/$(VERSION)/g" \
 	     -e "s/@DATE@/`date -R`/g" \
 		< debian/changelog.in >debian/changelog
 	@ls -1 doc/*.? >debian/pagekite.manpages

@@ -1,9 +1,9 @@
 Format: http://dep.debian.net/deps/dep5
-Upstream-Name: pagekite-@VERSION@
-Source: http://pagekite.net/pk/src/pagekite-@VERSION@.tar.gz
+Upstream-Name: pagekite
+Source: https://github.com/pagekite/PyPagekite/
 
 Files: *
-Copyright: 
+Copyright:
            2013 Bjarni Runar Einarsson
            2013 The Beanstalks Project ehf.
 License: AGPL-3+
