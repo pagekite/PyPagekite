@@ -3,7 +3,7 @@ Section: net
 Priority: optional
 Maintainer: PageKite Packaging Team <packages@pagekite.net>
 Build-Depends:  cdbs (>= 0.4.52),
-                debhelper (>= 7.0.15~),
+                debhelper (>= 9),
                 python-support (>= 0.8.4),
                 python (>= 2.4)
 XS-Python-Version: >= 2.3
