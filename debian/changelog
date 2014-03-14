@@ -1,10 +1,10 @@
-pagekite-@VERSION@ (@VERSION@-0pagekite) unstable; urgency=low
+pagekite (0.5.6d) unstable; urgency=low
 
   * Automatic package build note.
 
- -- PageKite Packaging Team <packages@pagekite.net>  @DATE@
+ -- PageKite Packaging Team <packages@pagekite.net>  Fri, 14 Mar 2014 07:57:38 +0530
 
-pagekite-0.4.0 (0.4.0-0) unstable; urgency=low
+pagekite (0.4.0-0) unstable; urgency=low
 
   * Initial release
 
