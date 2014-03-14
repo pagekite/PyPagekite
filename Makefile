@@ -93,7 +93,6 @@ VERSION=`python setup.py --version`
 	     -e "s/@DATE@/`date -R`/g" \
 		< debian/changelog.in >debian/changelog
 	@ls -1 doc/*.? >debian/pagekite.manpages
-	@ln -fs ../etc/logrotate.d/pagekite.debian debian/pagekite.logrotate
 	@ln -fs ../etc/init.d/pagekite.debian debian/init.d
 
 .targz: .debprep
