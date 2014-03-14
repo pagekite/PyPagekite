@@ -89,11 +89,7 @@ rpm_el6-fc13:
 VERSION=`python setup.py --version`
 .debprep: doc/pagekite.1
 	@rm -f setup.cfg
-	@sed -e "s/@VERSION@/$(VERSION)/g" \
-	     -e "s/@DATE@/`date -R`/g" \
-		< debian/changelog.in >debian/changelog
 	@ls -1 doc/*.? >debian/pagekite.manpages
-	@ln -fs ../etc/init.d/pagekite.debian debian/init.d
 
 .targz: .debprep
 	@python setup.py sdist
@@ -139,6 +135,6 @@ clean:
 	@rm -vf sockschain *.pyc */*.pyc */*/*.pyc scripts/breeder.py .SELF
 	@rm -vf .appver pagekite-tmp.py MANIFEST setup.cfg pagekite_gtk.py
 	@rm -vrf *.egg-info .header doc/pagekite.1 build/
-	@rm -vf debian/files debian/control debian/copyright debian/changelog
+	@rm -vf debian/files
 	@rm -vrf debian/pagekite* debian/python* debian/init.d
 
