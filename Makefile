@@ -94,12 +94,9 @@ VERSION=`python setup.py --version`
 .targz: .debprep
 	@python setup.py sdist
 
-.deb: .targz
-	@cp -v dist/pagekite*.tar.gz \
-		../pagekite-$(VERSION)_$(VERSION).orig.tar.gz
-	@debuild -i -us -uc -b
+.deb:
+	@debuild -i -us -uc
 	@mv ../pagekite_*.deb dist/
-	@rm ../pagekite-*.orig.tar.gz
 
 .header: pagekite doc/header.txt
 	@sed -e "s/@VERSION@/$(VERSION)/g" \
