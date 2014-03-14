@@ -90,8 +90,6 @@ VERSION=`python setup.py --version`
 .debprep: doc/pagekite.1
 	@rm -f setup.cfg
 	@sed -e "s/@VERSION@/$(VERSION)/g" \
-		< debian/control.in >debian/control
-	@sed -e "s/@VERSION@/$(VERSION)/g" \
 	     -e "s/@DATE@/`date -R`/g" \
 		< debian/changelog.in >debian/changelog
 	@ls -1 doc/*.? >debian/pagekite.manpages

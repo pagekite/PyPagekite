@@ -1,4 +1,4 @@
-Source: pagekite-@VERSION@
+Source: pagekite
 Section: net
 Priority: optional
 Maintainer: PageKite Packaging Team <packages@pagekite.net>
