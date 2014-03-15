@@ -1,6 +1,7 @@
 *.pyc
 build/
 dist/
+pagekite.egg-info
 doc/pagekite.1
 debian/*.log
 debian/*.debhelper
