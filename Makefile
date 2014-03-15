@@ -87,7 +87,13 @@ rpm_el6-fc13:
 	                           --requires=python-SocksipyChain
 
 VERSION=`python setup.py --version`
+DEB_VERSION=`head -n1 debian/changelog | sed -e "s+.*(\(.*\)).*+\1+"`
 .debprep:
+	if [ "x$(VERSION)" != "x$(DEB_VERSION)" ] ; \
+	then \
+	  dch --maintmaint --newversion $(VERSION) --urgency=low \
+              --distribution=unstable "New release." ; \
+	fi
 
 .targz:
 	@python setup.py sdist
