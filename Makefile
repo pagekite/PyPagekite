@@ -88,7 +88,6 @@ rpm_el6-fc13:
 
 VERSION=`python setup.py --version`
 .debprep:
-	@rm -f setup.cfg
 
 .targz:
 	@python setup.py sdist

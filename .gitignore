@@ -3,6 +3,7 @@ build/
 dist/
 pagekite.egg-info
 doc/pagekite.1
+.pybuild
 debian/*.log
 debian/*.debhelper
 debian/*.substvars
