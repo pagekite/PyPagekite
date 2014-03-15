@@ -1,0 +1,8 @@
+*.pyc
+build/
+dist/
+debian/*.log
+debian/*.debhelper
+debian/*.substvars
+debian/files
+debian/pagekite/
