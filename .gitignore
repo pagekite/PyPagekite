@@ -1,6 +1,7 @@
 *.pyc
 build/
 dist/
+doc/pagekite.1
 debian/*.log
 debian/*.debhelper
 debian/*.substvars
