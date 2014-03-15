@@ -4,8 +4,8 @@
 	dh $@ --with python2 --buildsystem=python_distutils
 
 override_dh_installman:
-	make doc/pagekite.1 doc/lapcat.1
-	dh_installman
+	make doc/pagekite.1
+	dh_installman doc/*.?
 
 # After the basic Python installation, add files for /etc/
 common-binary-post-install-indep::
