@@ -8,7 +8,8 @@ override_dh_installman:
 	dh_installman doc/*.?
 
 # After the basic Python installation, add files for /etc/
-common-binary-post-install-indep::
+override_dh_auto_install:
+	dh_auto_install --buildsystem=python_distutils
 	mkdir -m 755 -p $(CURDIR)/debian/pagekite/etc/pagekite.d/
 	install -m 644 $(CURDIR)/etc/pagekite.d/[23456789]* \
                         $(CURDIR)/debian/pagekite/etc/pagekite.d/
