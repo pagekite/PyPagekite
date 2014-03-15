@@ -89,6 +89,7 @@ rpm_el6-fc13:
 VERSION=`python setup.py --version`
 DEB_VERSION=`head -n1 debian/changelog | sed -e "s+.*(\(.*\)).*+\1+"`
 .debprep:
+	@ln -sf deb debian
 	if [ "x$(VERSION)" != "x$(DEB_VERSION)" ] ; \
 	then \
 	  dch --maintmaint --newversion $(VERSION) --urgency=low \
@@ -137,4 +138,5 @@ clean:
 	@rm -vf .appver pagekite-tmp.py MANIFEST setup.cfg pagekite_gtk.py
 	@rm -vrf *.egg-info .header doc/pagekite.1 build/
 	-debuild clean
+	@-rm debian
 
