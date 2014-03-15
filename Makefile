@@ -87,9 +87,8 @@ rpm_el6-fc13:
 	                           --requires=python-SocksipyChain
 
 VERSION=`python setup.py --version`
-.debprep: doc/pagekite.1
+.debprep:
 	@rm -f setup.cfg
-	@ls -1 doc/*.? >debian/pagekite.manpages
 
 .targz:
 	@python setup.py sdist
