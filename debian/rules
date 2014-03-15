@@ -1,9 +1,11 @@
 #!/usr/bin/make -f
 
-DEB_PYTHON_SYSTEM=pysupport
+%:
+	dh $@ --with python2 --buildsystem=python_distutils
 
-include /usr/share/cdbs/1/rules/debhelper.mk
-include /usr/share/cdbs/1/class/python-distutils.mk
+override_dh_installman:
+	make doc/pagekite.1 doc/lapcat.1
+	dh_installman
 
 # After the basic Python installation, add files for /etc/
 common-binary-post-install-indep::
