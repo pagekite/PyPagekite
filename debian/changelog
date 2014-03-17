@@ -1,6 +1,7 @@
 pagekite (0.5.6d-1) unstable; urgency=low
 
+  [ Sunil Mohan Adapa ]
   * Initial non-native Debian package. RFP/ITP fulfilled (Closes: #610358).
   * Cleanup makefile and rename native debian package to deb directory
 
- -- Sunil Mohan Adapa <sunil@medhas.org>  Mon, 17 Mar 2014 13:02:38 +0530
+ -- Petter Reinholdtsen <pere@debian.org>  Mon, 17 Mar 2014 12:30:09 +0100
