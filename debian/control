@@ -3,9 +3,13 @@ Section: net
 Priority: optional
 Maintainer: Sunil Mohan Adapa <sunil@medhas.org>
 Uploaders: Petter Reinholdtsen <pere@debian.org>
-Build-Depends: debhelper (>= 9),
-               python-support (>= 0.8.4),
-               python (>= 2.4)
+Build-Depends:
+ debhelper (>= 9)
+ , python (>= 2.4)
+ , python-support (>= 0.8.4)
+ , python-setuptools
+ , dh-python
+ , python-socksipychain
 X-Python-Version: >= 2.3, << 3.0
 Standards-Version: 3.9.5
 Homepage: https://pagekite.net/
@@ -15,11 +19,10 @@ Vcs-Git: git://anonscm.debian.org/collab-maint/pagekite.git
 Package: pagekite
 Section: net
 Architecture: all
-Depends: ${misc:Depends},
-         ${python:Depends},
-         daemon (>= 0.6),
-         python-socksipychain (>= 2.0.12),
-         python-openssl
+Depends: ${misc:Depends}, ${python:Depends}
+ , daemon (>= 0.6)
+ , python-socksipychain (>= 2.0.12)
+ , python-openssl
 Description: Make localhost servers publicly visible.
  PageKite is a system for running publicly visible servers (generally
  web servers) on machines without a direct connection to the Internet,
