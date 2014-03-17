@@ -10,7 +10,7 @@ License: AGPL-3+
 
 Files: debian/*
 Copyright: 2013 PageKite Packaging Team <packages@pagekite.net>
-           2013 Sunil Mohan Adapa <sunil@medhas.org>
+           2014 Sunil Mohan Adapa <sunil@medhas.org>
 License: GPL-2+
  This package is free software; you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
