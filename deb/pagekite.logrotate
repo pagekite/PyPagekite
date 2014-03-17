@@ -1,0 +1,12 @@
+/var/log/pagekite/pagekite.log {
+	daily
+	missingok
+	rotate 7
+	postrotate
+		[ ! -f /var/run/pagekite.pid ] || kill -HUP `cat /var/run/pagekite.pid`
+	endscript
+	compress
+	notifempty
+	nocreate
+}
+

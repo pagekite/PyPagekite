@@ -1,0 +1,11 @@
+pagekite (0.5.6d) unstable; urgency=low
+
+  * Automatic package build note.
+
+ -- PageKite Packaging Team <packages@pagekite.net>  Fri, 14 Mar 2014 07:57:38 +0530
+
+pagekite (0.4.0-0) unstable; urgency=low
+
+  * Initial release
+
+ -- PageKite Packaging Team <packages@pagekite.net>  Fri, 29 Jul 2011 22:39:51 +0000
