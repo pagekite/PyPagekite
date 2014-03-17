@@ -2,7 +2,7 @@ Source: pagekite
 Section: net
 Priority: optional
 Maintainer: Sunil Mohan Adapa <sunil@medhas.org>
-Uploaders: Petter Reinholdtsen <pere@hungry.com>
+Uploaders: Petter Reinholdtsen <pere@debian.org>
 Build-Depends: debhelper (>= 9),
                python-support (>= 0.8.4),
                python (>= 2.4)
