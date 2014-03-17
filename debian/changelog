@@ -1,10 +1,10 @@
-pagekite (0.5.6d-2) UNRELEASED; urgency=low
+pagekite (0.5.6d-2) unstable; urgency=low
 
   * Reformat package dependencies in debian/control.
   * Add python-setuptools, dh-python and python-socksipychain as build
     dependencies.
 
- -- Petter Reinholdtsen <pere@debian.org>  Mon, 17 Mar 2014 12:45:58 +0100
+ -- Petter Reinholdtsen <pere@debian.org>  Mon, 17 Mar 2014 12:46:37 +0100
 
 pagekite (0.5.6d-1) unstable; urgency=low
 
