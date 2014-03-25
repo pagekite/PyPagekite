@@ -1,8 +1,8 @@
-pagekite (0.5.6d-3) UNRELEASED; urgency=low
+pagekite (0.5.6d-3) unstable; urgency=low
 
   * Add debian/watch file to track new upstream versions.
 
- -- Petter Reinholdtsen <pere@debian.org>  Mon, 24 Mar 2014 09:39:34 +0100
+ -- Petter Reinholdtsen <pere@debian.org>  Tue, 25 Mar 2014 18:44:16 +0100
 
 pagekite (0.5.6d-2) unstable; urgency=low
 
