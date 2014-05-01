@@ -5,9 +5,9 @@
  * License: GNU General Public License, Free Software Foundation
  *          <http://creativecommons.org/licenses/GPL/2.0/>
  *
- * Original inspiration for the design of this implementation is from jsolait, from which 
+ * Original inspiration for the design of this implementation is from jsolait, from which
  * are taken the "ServiceProxy" name and the interface for synchronous method calls.
- * 
+ *
  * See the following specifications:
  *   - XML-RPC: <http://www.xmlrpc.com/spec>
  *   - JSON-RPC 1.0: <http://json-rpc.org/wiki/specification>
@@ -19,7 +19,7 @@
  *                         sanitize: true,       //default: true
  *                         methods: ['greet'],   //default: null (synchronous introspection populates)
  *                         protocol: 'JSON-RPC', //default: JSON-RPC
- * }); 
+ * });
  * service.greet({
  *    params:{name:"World"},
  *    onSuccess:function(message){
@@ -58,7 +58,7 @@
  *                         sanitize: false,     //explicit false required, otherwise error raised
  *                         methods: ['full']    //explicit list required, otherwise error raised
  *                         callbackParamName: 'callback'
- *                         }); 
+ *                         });
  * gcalService.full({
  *      params:{
  *          alt:'json-in-script' //required for this to work
@@ -74,7 +74,7 @@
  */
 
 var rpc = {
-	version:"0.8.0.2",	
+	version:"0.8.0.2",
 	requestCount: 0
 };
 
@@ -82,7 +82,7 @@ rpc.ServiceProxy = function(serviceURL, options){
 	//if(typeof Prototype == 'undefined')
 	//	throw Error("The RPC client currently requires the use of Prototype.");
 	this.__serviceURL = serviceURL;
-	
+
 	//Determine if accessing the server would violate the same origin policy
 	this.__isCrossSite = false;
 	var urlParts = this.__serviceURL.match(/^(\w+:)\/\/([^\/]+?)(?::(\d+))?(?:$|\/)/);
@@ -93,7 +93,7 @@ rpc.ServiceProxy = function(serviceURL, options){
 			location.port     != (urlParts[3] || "")
 		);
 	}
-	
+
 	//Set other default options
 	var providedMethodList;
 	this.__isAsynchronous = true;
@@ -104,7 +104,7 @@ rpc.ServiceProxy = function(serviceURL, options){
 	this.__protocol = 'JSON-RPC';
 	this.__dateEncoding = 'ISO8601'; // ("@timestamp@" || "@ticks@") || "classHinting" || "ASP.NET"
 	this.__decodeISO8601 = true; //JSON only
-	
+
 	//Get the provided options
 	if(options instanceof Object){
 		if(options.asynchronous !== undefined){
@@ -138,7 +138,7 @@ rpc.ServiceProxy = function(serviceURL, options){
 		else if(this.__protocol == 'XML-RPC')
 			throw Error("Unable to use the XML-RPC protocol to access services on other domains.");
 	}
-	
+
 	//Obtain the list of methods made available by the server
 	if(this.__isCrossSite && !providedMethodList)
 		throw Error("You must manually supply the service's method names since auto-introspection is not permitted for cross-site services.");
@@ -153,7 +153,7 @@ rpc.ServiceProxy = function(serviceURL, options){
 	}
 	this.__methodList.push('system.listMethods');
 	this.__methodList.push('system.describe');
-	
+
 	//Create local "wrapper" functions which reference the methods obtained above
 	for(var methodName, i = 0; methodName = this.__methodList[i]; i++){
 		//Make available the received methods in the form of chained property lists (eg. "parent.child.methodName")
@@ -183,13 +183,13 @@ rpc.ServiceProxy = function(serviceURL, options){
 												 arguments[1],
 												 arguments[2],
 												 arguments[3]);
-					}	
+					}
 					return undefined;
 				}
 				else return call.instance.__callMethod(call.methodName, rpc.toArray(arguments));
 			};
 		})(this, methodName);
-		
+
 		methodObject[propChain[propChain.length-1]] = wrapper;
 	}
 };
@@ -202,7 +202,7 @@ rpc.setAsynchronous = function(serviceProxy, isAsynchronous){
 
 rpc.ServiceProxy.prototype.__callMethod = function(methodName, params, successHandler, exceptionHandler, completeHandler){
 	rpc.requestCount++;
-	
+
 	//Verify that successHandler, exceptionHandler, and completeHandler are functions
 	if(this.__isAsynchronous){
 		if(successHandler && typeof successHandler != 'function')
@@ -211,7 +211,7 @@ rpc.ServiceProxy.prototype.__callMethod = function(methodName, params, successHa
 			throw Error('The asynchronous onException handler callback function you provided is invalid; the value you provided (' + exceptionHandler.toString() + ') is of type "' + typeof(exceptionHandler) + '".');
 		if(completeHandler && typeof completeHandler != 'function')
 			throw Error('The asynchronous onComplete handler callback function you provided is invalid; the value you provided (' + completeHandler.toString() + ') is of type "' + typeof(completeHandler) + '".');
-	}	
+	}
 
 	try {
 		//Assign the provided callback function to the response lookup table
@@ -223,11 +223,11 @@ rpc.ServiceProxy.prototype.__callMethod = function(methodName, params, successHa
 				onComplete:completeHandler
 			};
 		}
-			
+
 		//Asynchronous cross-domain call (JSON-in-Script) -----------------------------------------------------
 		if(this.__isCrossSite){ //then this.__isAsynchronous is implied
-			
-			//Create an ad hoc function specifically for this cross-site request; this is necessary because it is 
+
+			//Create an ad hoc function specifically for this cross-site request; this is necessary because it is
 			//  not possible pass an JSON-RPC request object with an id over HTTP Get requests.
 			rpc.callbacks['r' + String(rpc.requestCount)] = (function(instance, id){
 				var call = {instance: instance, id: id}; //Pass parameter into closure
@@ -242,7 +242,7 @@ rpc.ServiceProxy.prototype.__callMethod = function(methodName, params, successHa
 				}
 			})(this, rpc.requestCount);
 			//rpc.callbacks['r' + String(rpc.requestCount)] = new Function("response", 'response.id = ' + rpc.requestCount + '; this.__doCallback(response);');
-			
+
 			//Make the request by adding a SCRIPT element to the page
 			var script = document.createElement('script');
 			script.setAttribute('type', 'text/javascript');
@@ -256,7 +256,7 @@ rpc.ServiceProxy.prototype.__callMethod = function(methodName, params, successHa
 			var head = document.getElementsByTagName('head')[0];
 			rpc.pendingRequests[rpc.requestCount].scriptElement = script;
 			head.appendChild(script);
-			
+
 			return undefined;
 		}
 		//Calls made with XMLHttpRequest ------------------------------------------------------------
@@ -267,13 +267,13 @@ rpc.ServiceProxy.prototype.__callMethod = function(methodName, params, successHa
 					throw Error('When making asynchronous calls, the parameters for the method must be passed as an array (or a hash); the value you supplied (' + String(params) + ') is of type "' + typeof(params) + '".');
 				//request.params = params;
 			}
-			
+
 			//Prepare the XML-RPC request
 			var request,postData;
 			if(this.__protocol == 'XML-RPC'){
 				if(!(params instanceof Array))
 					throw Error("Unable to pass associative arrays to XML-RPC services.");
-				
+
 				var xml = ['<?xml version="1.0"?><methodCall><methodName>' + methodName + '</methodName>'];
 				if(params){
 					xml.push('<params>');
@@ -283,7 +283,7 @@ rpc.ServiceProxy.prototype.__callMethod = function(methodName, params, successHa
 				}
 				xml.push('</methodCall>');
 				postData = xml.join('');
-				
+
 				//request = new Document();
 				//var methodCallEl = document.createElement('methodCall');
 				//var methodNameEl = document.createElement('methodName');
@@ -312,7 +312,7 @@ rpc.ServiceProxy.prototype.__callMethod = function(methodName, params, successHa
 					request.params = params;
 				postData = this.__toJSON(request);
 			}
-			
+
 			//XMLHttpRequest chosen (over Ajax.Request) because it propogates uncaught exceptions
 			var xhr;
 			if(window.XMLHttpRequest)
@@ -333,12 +333,12 @@ rpc.ServiceProxy.prototype.__callMethod = function(methodName, params, successHa
 				xhr.setRequestHeader('Content-Type', 'application/json');
 				xhr.setRequestHeader('Accept', 'application/json');
 			}
-			
+
 			//Asynchronous same-domain call -----------------------------------------------------
 			if(this.__isAsynchronous){
 				//Send the request
 				xhr.send(postData);
-				
+
 				//Handle the response
 				var instance = this;
 				var requestInfo = {id:rpc.requestCount}; //for XML-RPC since the 'request' object cannot contain request ID
@@ -359,7 +359,7 @@ rpc.ServiceProxy.prototype.__callMethod = function(methodName, params, successHa
 						}
 					}
 				};
-				
+
 				return undefined;
 			}
 			//Synchronous same-domain call -----------------------------------------------------
@@ -371,11 +371,11 @@ rpc.ServiceProxy.prototype.__callMethod = function(methodName, params, successHa
 					response = this.__getXMLRPCResponse(xhr, rpc.requestCount);
 				else
 					response = this.__evalJSON(xhr.responseText, this.__isResponseSanitized);
-				
+
 				//Note that this error must be caught with a try/catch block instead of by passing a onException callback
 				if(response.error)
 					throw Error('Unable to call "' + methodName + '". Server responsed with error (code ' + response.error.code + '): ' + response.error.message);
-				
+
 				this.__upgradeValuesFromJSON(response);
 				return response.result;
 			}
@@ -388,7 +388,7 @@ rpc.ServiceProxy.prototype.__callMethod = function(methodName, params, successHa
 			isCaught = exceptionHandler(err); //add error location
 		if(completeHandler)
 			completeHandler();
-			
+
 		if(!isCaught)
 			throw err;
 	}
@@ -399,7 +399,7 @@ rpc.ServiceProxy.prototype.__callMethod = function(methodName, params, successHa
 rpc.pendingRequests = {};
 
 //Ad hoc cross-site callback functions keyed by request ID; when a cross-site request
-//   is made, a function is created 
+//   is made, a function is created
 rpc.callbacks = {};
 
 //Called by asychronous calls when their responses have loaded
@@ -411,7 +411,7 @@ rpc.ServiceProxy.prototype.__doCallback = function(response){
 
 	if(!rpc.pendingRequests[response.id])
 		throw Error('Fatal error with RPC code: no ID "' + response.id + '" found in pendingRequests.');
-	
+
 	//Remove the SCRIPT element from the DOM tree for cross-site (JSON-in-Script) requests
 	if(rpc.pendingRequests[response.id].scriptElement){
 		var script = rpc.pendingRequests[response.id].scriptElement;
@@ -420,9 +420,9 @@ rpc.ServiceProxy.prototype.__doCallback = function(response){
 	//Remove the ad hoc cross-site callback function
 	if(rpc.callbacks[response.id])
 		delete rpc.callbacks['r' + response.id];
-	
+
 	var uncaughtExceptions = [];
-	
+
 	//Handle errors returned by the server
 	if(response.error !== undefined){
 		var err = new Error(response.error.message);
@@ -440,7 +440,7 @@ rpc.ServiceProxy.prototype.__doCallback = function(response){
 		}
 		else uncaughtExceptions.push(err);
 	}
-	
+
 	//Process the valid result
 	else if(response.result !== undefined){
 		//iterate over all values and substitute date strings with Date objects
@@ -449,7 +449,7 @@ rpc.ServiceProxy.prototype.__doCallback = function(response){
 		//  but accessing an object's properties. Thus an extra level of
 		//  abstraction allows for accessing all of the results members by reference.
 		this.__upgradeValuesFromJSON(response);
-		
+
 		if(rpc.pendingRequests[response.id].onSuccess){
 			try {
 				rpc.pendingRequests[response.id].onSuccess(response.result);
@@ -471,7 +471,7 @@ rpc.ServiceProxy.prototype.__doCallback = function(response){
 			}
 		}
 	}
-	
+
 	//Call the onComplete handler
 	try {
 		if(rpc.pendingRequests[response.id].onComplete)
@@ -491,9 +491,9 @@ rpc.ServiceProxy.prototype.__doCallback = function(response){
 		}
 		else uncaughtExceptions.push(err);
 	}
-	
+
 	delete rpc.pendingRequests[response.id];
-	
+
 	//Merge any exception raised by onComplete into the previous one(s) and throw it
 	if(uncaughtExceptions.length){
 		var code;
@@ -508,7 +508,7 @@ rpc.ServiceProxy.prototype.__doCallback = function(response){
 				code = uncaughtExceptions[i].code;
 		}
 		var err = new Error(message);
-		err.code = code;	
+		err.code = code;
 		throw err;
 	}
 };
@@ -589,7 +589,7 @@ rpc.ServiceProxy.prototype.__toJSON = function(value){
 		//case 'unknown':
 		//default:
 	}
-	throw new TypeError('Unable to convert the value of type "' + typeof(value) + '" to JSON.'); //(' + String(value) + ') 
+	throw new TypeError('Unable to convert the value of type "' + typeof(value) + '" to JSON.'); //(' + String(value) + ')
 };
 
 rpc.isJSON = function(string){ //from Prototype String.isJSON()
@@ -609,7 +609,7 @@ rpc.ServiceProxy.prototype.__evalJSON = function(json, sanitize){ //from Prototy
     throw new SyntaxError('Badly formed JSON string: ' + json + " ... " + (err ? err.message : ''));
 };
 
-//This function iterates over the properties of the passed object and converts them 
+//This function iterates over the properties of the passed object and converts them
 //   into more appropriate data types, i.e. ISO8601 strings are converted to Date objects.
 rpc.ServiceProxy.prototype.__upgradeValuesFromJSON = function(obj){
 	var matches, useHasOwn = {}.hasOwnProperty ? true : false;
@@ -685,7 +685,7 @@ rpc.ServiceProxy.prototype.__toXMLRPC = function(value){
 		case 'string':
 			xml.push('<string>');
 			xml.push(value.replace(/[<>&]/, function(ch){
-				
+
 			})); //escape for XML!
 			xml.push('</string>');
 			break;
@@ -894,10 +894,10 @@ rpc.ServiceProxy.prototype.__parseXMLRPC = function(valueEl){
 					var dataEl = typeEL.firstChild;
 					while(dataEl && (dataEl.nodeType != 1 || dataEl.nodeName != 'data'))
 						dataEl = dataEl.nextSibling;
-					
+
 					if(!dataEl)
 						new Error("XML-RPC Parse Error: Expected 'data' element as sole child element of 'array'.");
-					
+
 					valueEl = dataEl.firstChild;
 					while(valueEl){
 						if(valueEl.nodeType == 1){
@@ -926,7 +926,7 @@ rpc.ServiceProxy.prototype.__getXMLRPCResponse = function(xhr, id){
 	var doc = xhr.responseXML.documentElement;
 	if(doc.nodeName != 'methodResponse')
 		throw Error("Invalid XML-RPC document.");
-	
+
 	var valueEl = doc.getElementsByTagName('value')[0];
 	if(valueEl.parentNode.nodeName == 'param' &&
 	   valueEl.parentNode.parentNode.nodeName == 'params')
@@ -941,10 +941,10 @@ rpc.ServiceProxy.prototype.__getXMLRPCResponse = function(xhr, id){
 		};
 	}
 	else throw Error("Invalid XML-RPC document.");
-	
+
 	if(!response.result && !response.error)
 		throw Error("Malformed XML-RPC methodResponse document.");
-	
+
 	response.id = id; //XML-RPC cannot pass and return request IDs
 	return response;
 };
@@ -961,7 +961,7 @@ rpc.toQueryString = function(params){
 
 	var str = '';
 	var useHasOwn = {}.hasOwnProperty ? true : false;
-	
+
 	for(var key in params){
 		if(useHasOwn && params.hasOwnProperty(key)){
 			//Process an array
@@ -1009,7 +1009,7 @@ rpc.toArray = function(value){
 rpc.dateToISO8601 = function(date){
 	//var jsonDate = date.toJSON();
 	//return jsonDate.substring(1, jsonDate.length-1); //strip double quotes
-	
+
 	return date.getUTCFullYear()             + '-' +
 	       rpc.zeroPad(date.getUTCMonth()+1) + '-' +
 		   rpc.zeroPad(date.getUTCDate())    + 'T' +

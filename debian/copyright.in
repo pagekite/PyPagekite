@@ -3,7 +3,7 @@ Upstream-Name: pagekite-@VERSION@
 Source: http://pagekite.net/pk/src/pagekite-@VERSION@.tar.gz
 
 Files: *
-Copyright: 
+Copyright:
            2013 Bjarni Runar Einarsson
            2013 The Beanstalks Project ehf.
 License: AGPL-3+

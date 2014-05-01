@@ -26,7 +26,7 @@
 #  TestInternals:
 #    Basic unittests for key parts of the code: protocol parsers, signatures,
 #    things that need to stay strictly compatible.
-# 
+#
 #  TestNetwork:
 #    Tests network communication by creating multiple threads and making
 #    them talk to each-other:
@@ -71,7 +71,7 @@ class MockSocketFD(object):
         self.recv_values[0] = self.recv_values[0][maxread:]
       return data
     else:
-      return None 
+      return None
 
   def send(self, data):
     if len(data) > self.maxsend:
@@ -80,7 +80,7 @@ class MockSocketFD(object):
     else:
       self.sent_values.append(data)
       return len(data)
- 
+
   def setblocking(self, val): pass
   def setsockopt(self, a, b, c): pass
   def flush(self): pass
@@ -104,12 +104,12 @@ class MockPageKite(pagekite.PageKite):
 
   def FallDown(self, message, help=True):
     raise Exception(message)
-  
+
   def HelpAndExit(self):
     raise Exception('Should print help')
-  
+
   def LookupDomainQuota(lookup):
-    return -1 
+    return -1
 
   def Ping(self, host, port):
     return len(host)+port
@@ -127,7 +127,7 @@ class TestInternals(unittest.TestCase):
   def setUp(self):
     pagekite.Log = pagekite.LogValues
     self.gSecret = pagekite.globalSecret()
-  
+
   def test_signToken(self):
     # Basic signature
     self.assertEqual(pagekite.signToken(token='1234567812',
@@ -157,7 +157,7 @@ class TestInternals(unittest.TestCase):
                      '1234567843b16458418175599012be884a18963f10be4670')
 
   def test_PageKiteRequest(self):
-    request = ['CONNECT PageKite:1 HTTP/1.0\r\n'] 
+    request = ['CONNECT PageKite:1 HTTP/1.0\r\n']
     zlibreq = 'X-PageKite-Features: ZChunks\r\n'
     reqbody = '\r\n'
 
@@ -172,7 +172,7 @@ class TestInternals(unittest.TestCase):
     req.append(reqbody)
     self.assertEqual(pagekite.HTTP_PageKiteRequest('x', {}, nozchunks=True),
                      ''.join(req))
-    
+
     # Full request, single server.
     bid = 'http:a'
     token = '0123456789'
@@ -180,7 +180,7 @@ class TestInternals(unittest.TestCase):
     backends[bid][pagekite.BE_SECRET] = 'Secret'
     data = '%s:%s:%s' % (bid, pagekite.signToken(token=self.gSecret,
                                                  payload=self.gSecret,
-                                                 secret='x'), token) 
+                                                 secret='x'), token)
     sign = pagekite.signToken(secret='Secret', payload=data, token=token)
     req = request[:]
     req.extend([zlibreq, 'X-PageKite: %s:%s\r\n' % (data, sign), reqbody])
@@ -188,7 +188,7 @@ class TestInternals(unittest.TestCase):
                                                         tokens={bid: token},
                                                         testtoken=token),
                      ''.join(req))
-    
+
   def test_LogValues(self):
     # Make sure the LogValues dumbs down our messages so they are easy
     # to parse and survive a trip through syslog etc.
@@ -282,7 +282,7 @@ class TestInternals(unittest.TestCase):
   def test_LineParser(self):
     packets = ['This is a line\n', 'This ', 'is', ' a line\nThis',
                ' is a line\n']
-     
+
     class EchoLineParser(pagekite.LineParser):
       def __init__(self, data=None):
         pagekite.LineParser.__init__(self, fd=MockSocketFD(data))
@@ -314,13 +314,13 @@ class TestInternals(unittest.TestCase):
     chunked = chunker.fd.sent_values
 
     # First, let's just test the basic chunk generation
-    for chunk in unchunked: chunker.SendChunked(chunk) 
+    for chunk in unchunked: chunker.SendChunked(chunk)
     for i in [0, 1, 2]:
-      self.assertEquals(chunked[i], '%x\r\n%s' % (len(unchunked[i]), 
+      self.assertEquals(chunked[i], '%x\r\n%s' % (len(unchunked[i]),
                                                   unchunked[i]))
     # Second, test compressed chunk generation
     chunker.EnableZChunks(9)
-    for chunk in unchunked: chunker.SendChunked(chunk) 
+    for chunk in unchunked: chunker.SendChunked(chunk)
     for i in [0, 1, 2]:
       self.assertTrue(chunked[i+3].startswith('%xZ' % len(unchunked[i])))
       self.assertTrue(len(chunked[i+3]) < len(unchunked[i]))
@@ -331,8 +331,8 @@ class TestInternals(unittest.TestCase):
         pagekite.ChunkParser.__init__(self, fd=MockSocketFD(data, maxread=1))
       def ProcessChunk(self, chunk):
         return self.Send(chunk)
-   
-    # Finally, let's let the ChunkParser unchunk it all again.   
+
+    # Finally, let's let the ChunkParser unchunk it all again.
     pagekite.LOG = []
     ss = EchoChunkParser(chunked[:])
     while ss.ReadData() is not False: pass
@@ -363,7 +363,7 @@ class TestInternals(unittest.TestCase):
 #   C2('-P', '/dev/zero') and EQ('/dev/zero', bn.ui_pemfile)
 
     C1('--nozchunks') and EQ(True, bn.disable_zchunks)
-    
+
     C1('--logfile=/dev/null') and EQ('/dev/null', bn.logfile)
     C2('-L', '/dev/zero') and EQ('/dev/zero', bn.logfile)
 
@@ -392,12 +392,12 @@ class TestInternals(unittest.TestCase):
 
     C1('--host=a.com') and EQ('a.com', bn.server_host)
     C2('-h', 'b.com') and EQ('b.com', bn.server_host)
-   
-    C1('--ports=1,2,3') and EQ([1,2,3], bn.server_ports) 
-    C2('-p', '4,5') and EQ([4,5], bn.server_ports) 
-    
+
+    C1('--ports=1,2,3') and EQ([1,2,3], bn.server_ports)
+    C2('-p', '4,5') and EQ([4,5], bn.server_ports)
+
     C1('--protos=HTTP,https') and EQ(['http', 'https'], bn.server_protos)
-    
+
 #   C1('--domain=http,https:a.com:secret')
 
     ##[ Back-end options ]###################################################
@@ -409,7 +409,7 @@ class TestInternals(unittest.TestCase):
     C1('--dyndns=beanstalks.net') and EQ(bn.dyndns[0], pagekite.DYNDNS['beanstalks.net'])
     C2('-D', 'a@no-ip.com') and EQ(bn.dyndns, (pagekite.DYNDNS['no-ip.com'], {'user': 'a', 'pass': ''}))
     C1('--dyndns=a:b@c') and EQ(bn.dyndns, ('c', {'user': 'a', 'pass': 'b'}))
-   
+
     C1('--frontends=2:a.com:80') and EQ((2, 'a.com', 80), bn.servers_auto)
     C1('--frontend=b.com:80') and EQ(['b.com:80'], bn.servers_manual)
 
@@ -480,7 +480,7 @@ class TestInternals(unittest.TestCase):
 class KiteRunner(threading.Thread):
   def __init__(self, pagekite_object):
     threading.Thread.__init__(self)
-    self.pagekite_object = pagekite_object 
+    self.pagekite_object = pagekite_object
   def run(self):
     self.pagekite_object.Start()
 
@@ -503,8 +503,8 @@ class RequestRunner(threading.Thread):
         self.loops = 0
         self.errors.append('Error: %s' % e)
       finally:
-        self.loops -= 1 
-  
+        self.loops -= 1
+
 
 class ForkRequestRunner(RequestRunner):
   def start(self):
@@ -524,7 +524,7 @@ class TestNetwork(unittest.TestCase):
     n = 0
     while n < count:
       fe = MockPageKite().Configure([
-        '--isfrontend', 
+        '--isfrontend',
         '--host=localhost',
         '--ports=99%d0' % n,
         '--httpd=:99%d1' % n,
@@ -554,18 +554,18 @@ class TestNetwork(unittest.TestCase):
   #  - End-to-end test of web-server behind multiple FE=BE tunnel,
   #    multiple clients, large number of requests in parallel.
   #  - Test reconnection logic.
-  # 
+  #
 
   def test_OneBackEnd(self):
     be = MockPageKite().Configure([
-      '--isfrontend', 
+      '--isfrontend',
       '--host=localhost',
       '--ports=9800',
       '--httpd=:9801',
       '--frontend=localhost:9900',
       '--frontend=localhost:9910',
       '--backend=http,https:localhost:localhost:9801:1234'
-    ]) 
+    ])
     be.ui_request_handler = MockUiRequestHandler
 
     pagekite.LOG = []
@@ -573,7 +573,7 @@ class TestNetwork(unittest.TestCase):
     self.be.append(be)
 
     # Parse the log until we see connections are up and running...
-    waiting = len(self.fe) 
+    waiting = len(self.fe)
     loops = 5
     parsed = []
     while waiting > 0 and loops > 0:
@@ -590,7 +590,7 @@ class TestNetwork(unittest.TestCase):
     urls = ['http://LOCALhost:%d/' % pk.server_ports[0] for pk in self.fe]
     ForkRequestRunner(10, urls, 'MockPageKite').start()
     ForkRequestRunner(10, urls, 'MockPageKite').start()
-    rr = RequestRunner(15, urls, 'MockPageKite') 
+    rr = RequestRunner(15, urls, 'MockPageKite')
     rr.start()
     while rr.loops > 0: time.sleep(1)
     if rr.errors: raise Exception('Ick: %s, %s%s' % (

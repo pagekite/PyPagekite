@@ -73,7 +73,7 @@ case "$1" in
   start)
 	start
 	;;
-  stop) 
+  stop)
 	stop
 	;;
   restart|force-reload)

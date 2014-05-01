@@ -221,7 +221,7 @@ v0.3.8   2011.01.02
       - Works with pyOpenSSL or the default Python 2.6 ssl module.
       - Can now terminate/unwrap TLS/SSL at the front-end.
       - Routing support for the old lame SSLv2.
-      - Built-in TLS/SSL works with pyOpenSSL or python 2.6+ ssl. 
+      - Built-in TLS/SSL works with pyOpenSSL or python 2.6+ ssl.
       - TLS tunnels: encryption and FE auth. See --ca_certs and --fe_certname.
    - Protocol fixes: switching from "magic" request paths to HTTP CONNECT.
    - Added --noprobes and probe logging at the back-end.
@@ -275,13 +275,13 @@ v0.3.1   2010.10.14
 v0.3.0
 ------
    * BUG: ValueErrors in invalid configs generated crash report spam.
-   * BUG: Fixed chunking alignment problem. 
+   * BUG: Fixed chunking alignment problem.
    * BUG: Fixed HTTP header parsing problem
    - Added support for tunneling through tor, or other socks5 proxies.
    - Added support for zlib compressed tunnels
    - Added basic unit-tests!
    - Added crash report feature and auto-restart on crash.
- 
+
 
 v0.2.1   2010.10.12
 ------
@@ -289,7 +289,7 @@ v0.2.1   2010.10.12
    - Renamed from beanstalks_net.py to pagekite.py
 
 
-v0.2.0   2010.09.22 
+v0.2.0   2010.09.22
 ------
    - First alpha-testing release.
 

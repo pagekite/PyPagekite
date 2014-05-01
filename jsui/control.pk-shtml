@@ -150,17 +150,17 @@
 
       // Start watching for updates
       pkUI.log_tail();
-  
+
       // Show the current auth token
       $('#auth_token').html(pkUI.auth_token)
                       .attr('href', '/_pagekite/login/'+pkUI.auth_token+'/');
-      
+
       // Generate a proper (authenticated) link for adding kites.
       //$('#add_kite').attr('href', 'https://pagekite.net/signup/'+
       //                            '?more=kites&do_login=1'+
       //                             '&r=%(method)s://%(http_host)s' +
       //                             '/_pagekite/add_kite/' + pkUI.auth_token);
-    }; 
+    };
 
   })();
  </script>
@@ -198,7 +198,7 @@
 
  <noscript><p class='error'>
   Sorry to be so lame, but this status page requires Javascript in
-  order to interact with pagekite.py's XML-RPC API. :-( 
+  order to interact with pagekite.py's XML-RPC API. :-(
  </p></noscript>
 
  <p></p>
@@ -238,7 +238,7 @@
 
 
  </div><!-- /.pgmain --><div class="pgaside">
-    
+
   <div id=about class=box>
    <h2>About <a class=close onClick='pkUI.hide("about")'>X</a></h2>
    <p>This is your PageKite Status on <b>%(hostname)s</b>.</p>

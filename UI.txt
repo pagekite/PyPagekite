@@ -91,7 +91,7 @@ Main menu:
    --------------------
    Advanced           > View Log
                         Config File
-                        Connect ... 
+                        Connect ...
    Help               > About PageKite
                         On-line support
    Quit

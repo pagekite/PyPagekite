@@ -91,7 +91,7 @@ class UiRequestHandler(pagekite.UiRequestHandler):
         self.send_header('Expires', 'Sat, 1 Jan 2011 12:00:00 GMT')
         self.send_header('Last-Modified', 'Wed, 1 Sep 2011 12:00:00 GMT')
         self.end_headers()
-        data = jpgfile.read() 
+        data = jpgfile.read()
         while data:
           try:
             sent = self.wfile.write(data[0:15000])
@@ -99,10 +99,10 @@ class UiRequestHandler(pagekite.UiRequestHandler):
           except Exception:
             pass
         return
- 
+
       except Exception, e:
         print '%s' % e
-        pass 
+        pass
 
     if path == '/latest-image.txt':
       flist = self.listFiles()
