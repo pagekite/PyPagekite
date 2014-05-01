@@ -81,9 +81,9 @@ server.
 
 ### Common flags ###
 
-   * <b>+ip</b>/`1.2.3.4`  
+   * <b>+ip</b>/`1.2.3.4`
      Enable connections only from this IP address.
-   * <b>+ip</b>/`1.2.3`  
+   * <b>+ip</b>/`1.2.3`
      Enable connections only from this /24 netblock.
 
 ### HTTP protocol flags ###
@@ -91,22 +91,22 @@ server.
    * <b>+password</b>/`name`=`pass`
      Require a username and password (HTTP Basic Authentication)
 
-   * <b>+rewritehost</b>  
+   * <b>+rewritehost</b>
      Rewrite the incoming Host: header.
-   * <b>+rewritehost</b>=`N`  
+   * <b>+rewritehost</b>=`N`
      Replace Host: header value with N.
-   * <b>+rawheaders</b>  
+   * <b>+rawheaders</b>
      Do not rewrite (or add) any HTTP headers at all.
-   * <b>+insecure</b>  
+   * <b>+insecure</b>
      Allow access to phpMyAdmin, /admin, etc. (per kite).
 
 ### Built-in HTTPD flags ###
 
-   * <b>+indexes</b>  
+   * <b>+indexes</b>
      Enable directory indexes.
-   * <b>+indexes</b>=`all`  
+   * <b>+indexes</b>=`all`
      Enable directory indexes including hidden (dot-) files.
-   * <b>+hide</b>  
+   * <b>+hide</b>
      Obfuscate URLs of shared files.
 
    * <b>+cgi</b>=`list`
@@ -128,42 +128,42 @@ time the program defaults will Just Work.
 
 ### Common options ###
 
-   * <b>--clean</b>  
+   * <b>--clean</b>
      Skip loading the default configuration file.
-   * <b>--signup</b>  
+   * <b>--signup</b>
      Interactively sign up for pagekite.net service.
-   * <b>--defaults</b>  
+   * <b>--defaults</b>
      Set defaults for use with pagekite.net service.
-   * <b>--nocrashreport</b>  
+   * <b>--nocrashreport</b>
      Don't send anonymous crash reports to pagekite.net.
 
 ### Back-end options ###
 
-   * <b>--shell</b>  
+   * <b>--shell</b>
      Run PageKite in an interactive shell.
-   * <b>--nullui</b>  
+   * <b>--nullui</b>
      Silent UI for scripting. Assumes Yes on all questions.
 
-   * <b>--list</b>  
+   * <b>--list</b>
      List all configured kites.
-   * <b>--add</b>  
+   * <b>--add</b>
      Add (or enable) the following kites, save config.
-   * <b>--remove</b>  
+   * <b>--remove</b>
      Remove the following kites, save config.
-   * <b>--disable</b>  
+   * <b>--disable</b>
      Disable the following kites, save config.
-   * <b>--only</b>  
+   * <b>--only</b>
      Disable all but the following kites, save config.
 
-   * <b>--insecure</b>  
+   * <b>--insecure</b>
      Allow access to phpMyAdmin, /admin, etc. (global).
 
-   * <b>--local</b>=`ports`  
+   * <b>--local</b>=`ports`
      Configure for local serving only (no remote front-end).
-   * <b>--watch</b>=`N`  
+   * <b>--watch</b>=`N`
      Display proxied data (higher N = more verbosity).
 
-   * <b>--noproxy</b>  
+   * <b>--noproxy</b>
      Ignore system (or config file) proxy settings.
 
    * <b>--proxy</b>=`type`:`server`:`port`, <b>--socksify</b>=`server`:`port`, <b>--torify</b>=`server`:`port` <br />
@@ -213,18 +213,18 @@ time the program defaults will Just Work.
      the name of one of the 'built-in' providers, or a URL format
      string for ad-hoc updating.
 
-   * <b>--all</b>  
+   * <b>--all</b>
      Terminate early if any tunnels fail to register.
-   * <b>--new</b>  
+   * <b>--new</b>
      Don't attempt to connect to any kites' old front-ends.
-   * <b>--fingerpath</b>=`P`  
+   * <b>--fingerpath</b>=`P`
      Path recipe for the httpfinger back-end proxy.
-   * <b>--noprobes</b>  
+   * <b>--noprobes</b>
      Reject all probes for service state.
 
 ### Front-end options ###
 
-   * <b>--isfrontend</b>  
+   * <b>--isfrontend</b>
      Enable front-end operation.
 
    * <b>--domain</b>=`proto,proto2,pN`:`domain`:`secret` <br />
@@ -241,13 +241,13 @@ time the program defaults will Just Work.
      Send the contents of this file to new back-ends as a
      "message of the day".
 
-   * <b>--host</b>=`hostname`  
+   * <b>--host</b>=`hostname`
      Listen on the given hostname only.
-   * <b>--ports</b>=`list`  
+   * <b>--ports</b>=`list`
      Listen on a comma-separated list of ports.
-   * <b>--portalias</b>=`A:B`  
+   * <b>--portalias</b>=`A:B`
      Report port A as port B to backends.
-   * <b>--protos</b>=`list`  
+   * <b>--protos</b>=`list`
      Accept the listed protocols for tunneling.
 
    * <b>--rawports</b>=`list` <br />
@@ -286,28 +286,28 @@ time the program defaults will Just Work.
    * <b>--savefile</b>=`/path/to/file` <br />
      Saved settings will be written to this file.
 
-   * <b>--save</b>  
+   * <b>--save</b>
      Save the current configuration to the savefile.
 
    * <b>--settings</b> <br />
      Dump the current settings to STDOUT, formatted as a configuration
      file would be.
 
-   * <b>--nozchunks</b>  
+   * <b>--nozchunks</b>
      Disable zlib tunnel compression.
-   * <b>--sslzlib</b>  
+   * <b>--sslzlib</b>
      Enable zlib compression in OpenSSL.
-   * <b>--buffers</b>=`N`  
+   * <b>--buffers</b>=`N`
      Buffer at most N kB of data before blocking.
-   * <b>--logfile</b>=`F`  
+   * <b>--logfile</b>=`F`
      Log to file F.
-   * <b>--daemonize</b>  
+   * <b>--daemonize</b>
      Run as a daemon.
-   * <b>--runas</b>=`U`:`G`  
+   * <b>--runas</b>=`U`:`G`
      Set UID:GID after opening our listening sockets.
-   * <b>--pidfile</b>=`P`  
+   * <b>--pidfile</b>=`P`
      Write PID to the named file.
-   * <b>--errorurl</b>=`U`  
+   * <b>--errorurl</b>=`U`
      URL to redirect to when back-ends are not found.
 
    * <b>--selfsign <br />
