@@ -6,7 +6,7 @@
 -- v0.3
 --
 
--- 
+--
 -- Changelog:
 --
 -- 0.3
@@ -66,7 +66,7 @@ function ConnectToServer (my_server, my_port)
     -- Set a socket timeout value. This will allow us to skip blobking for ever on socket:receive()
     conn:settimeout (30)
   end
-  
+
   -- Return the socket object
   return conn, status
 end
@@ -406,10 +406,10 @@ repeat
 
   -- Try to reconnect to server after sleeping for 10 seconds
   if debug then print (os.date("%c"), "Reconnecting to server...") end
-  
+
   -- Make a small pause before reconnecting to the server
   sleep (10)
-  
+
 -- Loop over
 until server_reconnect == 0
 

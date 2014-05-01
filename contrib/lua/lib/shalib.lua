@@ -7,7 +7,7 @@
 -- Copyright 2009 Jeffrey Friedl
 -- jfriedl@yahoo.com
 -- http://regex.info/blog/
--- 
+--
 --
 -- Version 1 [May 28, 2009]
 --
@@ -42,7 +42,7 @@
 -- puts the 40-character string
 --
 --   "7f103bf600de51dfe91062300c14738b32725db5"
--- 
+--
 -- into the variable 'hash'
 --
 -- Pass sha1_hmac() a key and a message, and it returns the signature as a
@@ -62,10 +62,10 @@
 --
 local function ZERO()
    return {
-      false, false, false, false,     false, false, false, false, 
-      false, false, false, false,     false, false, false, false, 
-      false, false, false, false,     false, false, false, false, 
-      false, false, false, false,     false, false, false, false, 
+      false, false, false, false,     false, false, false, false,
+      false, false, false, false,     false, false, false, false,
+      false, false, false, false,     false, false, false, false,
+      false, false, false, false,     false, false, false, false,
    }
 end
 
@@ -337,7 +337,7 @@ function sha1(msg)
 
 
 
-   msg = msg .. first_append .. second_append .. L64         
+   msg = msg .. first_append .. second_append .. L64
 
    assert(#msg % 64 == 0)
 
@@ -367,7 +367,7 @@ function sha1(msg)
       -- build W[16] through W[79]
       --
       for t = 16, 79 do
-         -- For t = 16 to 79 let Wt = S1(Wt-3 XOR Wt-8 XOR Wt-14 XOR Wt-16). 
+         -- For t = 16 to 79 let Wt = S1(Wt-3 XOR Wt-8 XOR Wt-14 XOR Wt-16).
          W[t] = ROTATE(1, XOR(W[t-3], W[t-8], W[t-14], W[t-16]))
       end
 
@@ -396,7 +396,7 @@ function sha1(msg)
             K = xCA62C1D6
          end
 
-         -- TEMP = S5(A) + ft(B,C,D) + E + Wt + Kt; 
+         -- TEMP = S5(A) + ft(B,C,D) + E + Wt + Kt;
          TEMP = ADD(ROTATE(5, A), f, E, W[t], K)
 
          --E = D; ã€€ã€€D = C; ã€€ã€€ã€€C = S30(B);ã€€ã€€ B = A; ã€€ã€€A = TEMP;
@@ -409,7 +409,7 @@ function sha1(msg)
          --printf("t = %2d: %s  %s  %s  %s  %s", t, A:HEX(), B:HEX(), C:HEX(), D:HEX(), E:HEX())
       end
 
-      -- Let H0 = H0 + A, H1 = H1 + B, H2 = H2 + C, H3 = H3 + D, H4 = H4 + E. 
+      -- Let H0 = H0 + A, H1 = H1 + B, H2 = H2 + C, H3 = H3 + D, H4 = H4 + E.
       H0 = ADD(H0, A)
       H1 = ADD(H1, B)
       H2 = ADD(H2, C)
