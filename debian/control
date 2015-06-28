@@ -4,14 +4,13 @@ Priority: optional
 Maintainer: Sunil Mohan Adapa <sunil@medhas.org>
 Uploaders: Petter Reinholdtsen <pere@debian.org>
 Build-Depends:
- debhelper (>= 9)
- , python (>= 2.4)
- , python-support (>= 0.8.4)
- , python-setuptools
+ , debhelper (>= 9)
  , dh-python
+ , python (>= 2.6.6-3~)
+ , python-setuptools
  , python-socksipychain
-X-Python-Version: >= 2.3, << 3.0
-Standards-Version: 3.9.5
+X-Python-Version: >= 2.6, << 3.0
+Standards-Version: 3.9.6
 Homepage: https://pagekite.net/
 Vcs-Browser: http://anonscm.debian.org/gitweb/?p=collab-maint/pagekite.git
 Vcs-Git: git://anonscm.debian.org/collab-maint/pagekite.git

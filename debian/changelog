@@ -1,3 +1,10 @@
+pagekite (0.5.6d-4) UNRELEASED; urgency=low
+
+  * Migrate to dh-python2.
+  * Update standards version to 3.9.6.
+
+ -- Sunil Mohan Adapa <sunil@medhas.org>  Sun, 28 Jun 2015 23:26:10 +0530
+
 pagekite (0.5.6d-3) unstable; urgency=low
 
   * Add debian/watch file to track new upstream versions.
