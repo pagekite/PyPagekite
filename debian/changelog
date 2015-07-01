@@ -1,6 +1,6 @@
 pagekite (0.5.6d-4) UNRELEASED; urgency=low
 
-  * Migrate to dh-python2.
+  * Migrate to dh-python2 (Closes: #786175).
   * Update standards version to 3.9.6.
 
  -- Sunil Mohan Adapa <sunil@medhas.org>  Sun, 28 Jun 2015 23:26:10 +0530
