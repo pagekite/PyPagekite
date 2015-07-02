@@ -2,6 +2,9 @@ pagekite (0.5.6d-4) UNRELEASED; urgency=low
 
   * Migrate to dh-python2 (Closes: #786175).
   * Update standards version to 3.9.6.
+  * Add python-openssl as build dependency (Closes: #790271).  Without
+    this, code executed during build follows a different path from binary
+    execution leading to build-time-only problems.
 
  -- Sunil Mohan Adapa <sunil@medhas.org>  Sun, 28 Jun 2015 23:26:10 +0530
 
