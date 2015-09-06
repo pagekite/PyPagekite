@@ -27,7 +27,6 @@ PageKite works around NAT, firewalls and IP-address limitations by
 using a combination of  tunnels and reverse proxies.
 
 Natively supported protocols: HTTP, HTTPS
-Partially supported protocols: IRC, Finger
 
 Any other TCP-based service, including SSH and VNC, may be exposed
 as well to clients supporting HTTP Proxies.
