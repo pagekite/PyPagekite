@@ -156,7 +156,7 @@ MAN_OPT_BACKEND = ("""\
             described above, but this syntax is used in the config file.
 
     --service_off</b>=<a>proto</a>:<a>kitename</a>:<a>host</a>:<a>port</a>:<a>secret</a> __
-            Same as --service, except disabled by default.
+            Same as --service_on, except disabled by default.
 
     --service_cfg</b>=<a>...</a>, <b>--webpath</b>=<a>...</a> __
             These options are used in the configuration file to store service
@@ -214,7 +214,7 @@ MAN_OPT_FRONTEND = ("""\
 
     --host</b>=<a>hostname</a> __Listen on the given hostname only.
     --ports</b>=<a>list</a>    __Listen on a comma-separated list of ports.
-    --portalias</b>=<a>A:B</a> __Report port A as port B to backends.
+    --portalias</b>=<a>A:B</a> __Report port A as port B to backends (because firewalls).
     --protos</b>=<a>list</a>   __Accept the listed protocols for tunneling.
 
     --rawports</b>=<a>list</a> __
@@ -262,7 +262,7 @@ MAN_OPT_SYSTEM = ("""\
     --nozchunks    __Disable zlib tunnel compression.
     --sslzlib      __Enable zlib compression in OpenSSL.
     --buffers</b>=<a>N</a>    __Buffer at most N kB of data before blocking.
-    --logfile</b>=<a>F</a>    __Log to file F.
+    --logfile</b>=<a>F</a>    __Log to file F, <tt>stdio</tt> means standard output.
     --daemonize    __Run as a daemon.
     --runas</b>=<a>U</a>:<a>G</a>    __Set UID:GID after opening our listening sockets.
     --pidfile</b>=<a>P</a>    __Write PID to the named file.

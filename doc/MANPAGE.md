@@ -180,7 +180,7 @@ time the program defaults will Just Work.
      described above, but this syntax is used in the config file.
 
    * <b>--service_off</b>=`proto`:`kitename`:`host`:`port`:`secret` <br />
-     Same as --service, except disabled by default.
+     Same as --service_on, except disabled by default.
 
    * <b>--service_cfg</b>=`...`, <b>--webpath</b>=`...` <br />
      These options are used in the configuration file to store service
@@ -246,7 +246,7 @@ time the program defaults will Just Work.
    * <b>--ports</b>=`list`  
      Listen on a comma-separated list of ports.
    * <b>--portalias</b>=`A:B`  
-     Report port A as port B to backends.
+     Report port A as port B to backends (because firewalls).
    * <b>--protos</b>=`list`  
      Accept the listed protocols for tunneling.
 
@@ -300,7 +300,7 @@ time the program defaults will Just Work.
    * <b>--buffers</b>=`N`  
      Buffer at most N kB of data before blocking.
    * <b>--logfile</b>=`F`  
-     Log to file F.
+     Log to file F, `stdio` means standard output.
    * <b>--daemonize</b>  
      Run as a daemon.
    * <b>--runas</b>=`U`:`G`  
