@@ -1,5 +1,6 @@
 /var/log/pagekite/pagekite.log {
 	daily
+	su daemon daemon
 	missingok
 	rotate 7
 	postrotate
