@@ -140,8 +140,8 @@ class Tunnel(ChunkParser):
     self.CountAs('backends_live')
     self.SetConn(conn)
     if requests:
-      conns.auth.check(requests[:], conn,
-                       lambda r, l: self.AuthCallback(conn, r, l))
+      conns.auth().check(requests[:], conn,
+                         lambda r, l: self.AuthCallback(conn, r, l))
     return self
 
   def RecheckQuota(self, conns, when=None):
@@ -152,8 +152,8 @@ class Tunnel(ChunkParser):
         (self.quota[2] < when-900)):
       self.quota[2] = when
       self.LogDebug('Rechecking: %s' % (self.quota, ))
-      conns.auth.check(self.quota[1], self,
-                       lambda r, l: self.QuotaCallback(conns, r, l))
+      conns.auth().check(self.quota[1], self,
+                         lambda r, l: self.QuotaCallback(conns, r, l))
 
   def ProcessAuthResults(self, results, duplicates_ok=False, add_tunnels=True):
     ok = []
@@ -841,8 +841,8 @@ class Tunnel(ChunkParser):
     if self.conns.config.isfrontend:
       requests = self.GetKiteRequests(parse)
       if requests:
-        self.conns.auth.check(requests[:], self,
-                              lambda r, l: self.ChunkAuthCallback(r, l))
+        self.conns.auth().check(requests[:], self,
+                                lambda r, l: self.ChunkAuthCallback(r, l))
 
     # Look for responses to requests for new tunnels
     tryagain, tokens = self.CheckForTokens(parse)
