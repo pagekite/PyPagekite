@@ -27,9 +27,10 @@ combined: pagekite tools doc/MANPAGE.md dev .header
 	             pagekite/__main__.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
-	@./scripts/blackbox-test.sh ./pagekite-tmp.py \
-	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py --nopyopenssl \
-	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py --nossl
+	@./scripts/blackbox-test.sh ./pagekite-tmp.py - \
+	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py - --nopyopenssl \
+	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py - --nossl \
+	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py - --tls_legacy
 	@killall pagekite-tmp.py
 	@mv pagekite-tmp.py dist/pagekite-`python setup.py --version`.py
 	@ls -l dist/pagekite-*.py
@@ -115,9 +116,15 @@ VERSION=`python setup.py --version`
 		< doc/header.txt >.header
 
 test: dev
-	@./scripts/blackbox-test.sh ./pk
-	@./scripts/blackbox-test.sh ./pk --nopyopenssl
-	@./scripts/blackbox-test.sh ./pk --nossl
+	@./scripts/blackbox-test.sh ./pk -
+	@./scripts/blackbox-test.sh ./pk - --nopyopenssl
+	@./scripts/blackbox-test.sh ./pk - --nossl
+	@./scripts/blackbox-test.sh ./pk - --tls_legacy
+	@(for pkb in scripts/legacy-testing/*py; do \
+             ./scripts/blackbox-test.sh $$pkb ./pk --nossl && \
+             ./scripts/blackbox-test.sh $$pkb ./pk || \
+             ./scripts/blackbox-test.sh $$pkb ./pk --tls_legacy \
+          ;done)
 
 pagekite: pagekite/__init__.py pagekite/httpd.py pagekite/__main__.py
 
