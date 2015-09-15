@@ -1,6 +1,6 @@
 ## Name ##
 
-pagekite v0.5.7a - Make localhost servers publicly visible
+pagekite v0.5.7b - Make localhost servers publicly visible
 
 ## Synopsis ##
 
@@ -376,6 +376,7 @@ lapcat(1), <http://pagekite.org/>, <https://pagekite.net/>
 - The Beanstalks Project ehf. <https://pagekite.net/company/>
 - The Rannis Technology Development Fund <http://www.rannis.is/>
 - Joar Wandborg <http://wandborg.se/></pre>
+- Luc-Pierre Terral
 
 ## Copyright and license ##
 

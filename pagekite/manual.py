@@ -347,6 +347,7 @@ MAN_CREDITS = ("""\
     - The Beanstalks Project ehf. <https://pagekite.net/company/>
     - The Rannis Technology Development Fund <http://www.rannis.is/>
     - Joar Wandborg <http://wandborg.se/></pre>
+    - Luc-Pierre Terral
 """)
 
 MANUAL_TOC = (
