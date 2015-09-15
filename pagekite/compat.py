@@ -134,6 +134,7 @@ else:
   TUNNEL_SOCKET_BLOCKS = False
   class SSL(object):
     TLSv1_METHOD = 0
+    SSLv23_METHOD = 0
     class Error(Exception): pass
     class SysCallError(Exception): pass
     class WantReadError(Exception): pass
