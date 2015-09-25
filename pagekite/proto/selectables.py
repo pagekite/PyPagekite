@@ -219,7 +219,8 @@ class Selectable(object):
     if self.fd:
       self.fd.close()
     self.fd = fd
-    self.fd.setblocking(0)
+    if fd:
+      self.fd.setblocking(0)
     try:
       if six:
         self.fd.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
