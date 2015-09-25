@@ -554,7 +554,7 @@ class Tunnel(ChunkParser):
     if host: sending.append('Host: %s\r\n' % host)
     if port:
       porti = int(port)
-      if porti in self.conns.config.server_portalias:
+      if self.conns and (porti in self.conns.config.server_portalias):
         sending.append('Port: %s\r\n' % self.conns.config.server_portalias[porti])
       else:
         sending.append('Port: %s\r\n' % port)

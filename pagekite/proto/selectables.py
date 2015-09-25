@@ -487,6 +487,12 @@ class Selectable(object):
         self.LogInfo('Error sending (SSL): %s' % err)
         self.ProcessEofWrite()
         return False
+      except AttributeError:
+        # This has been seen in the wild, is most likely some sort of
+        # race during shutdown. :-(
+        self.LogInfo('AttributeError, self.fd=%s' % self.fd)
+        self.ProcessEofWrite()
+        return False
 
     if activity:
       self.last_activity = time.time()
