@@ -3188,7 +3188,7 @@ class PageKite(object):
       if self.ui_httpd: keep_open.append(self.ui_httpd.httpd.socket.fileno())
       self.LogTo(self.logfile, dont_close=keep_open)
 
-    elif not sys.stdout.isatty():
+    elif not (hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()):
       # Preserve sane behavior when not run at the console.
       self.LogTo('stdio')
 
@@ -3381,7 +3381,7 @@ def Configure(pk):
 
   friendly_mode = (('--friendly' in sys.argv) or
                    (sys.platform[:3] in ('win', 'os2', 'dar')))
-  if friendly_mode and sys.stdout.isatty():
+  if friendly_mode and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
     pk.shell = (len(sys.argv) < 2) and 'auto'
 
   pk.Configure(sys.argv[1:])
