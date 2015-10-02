@@ -2732,7 +2732,7 @@ class PageKite(object):
         servers_all['loopback'] = servers_pref['loopback'] = LOOPBACK_FE
 
     # Convert the hostnames into IP addresses...
-    for server in self.servers_manual:
+    def sping(server):
       (host, port) = server.split(':')
       ipaddrs = self.CachedGetHostIpAddrs(host)
       if ipaddrs:
@@ -2740,6 +2740,12 @@ class PageKite(object):
         server = '%s:%s' % (ipaddrs[0], port)
         if server not in self.servers_never:
           servers_all[uuid] = servers_pref[uuid] = server
+    threads = []
+    for server in self.servers_manual:
+      threads.append(threading.Thread(target=sping, args=(server,)))
+      threads[-1].start()
+    for t in threads:
+      t.join()
 
     # Lookup and choose from the auto-list (and our old domain).
     if self.servers_auto:
@@ -2748,7 +2754,7 @@ class PageKite(object):
       # First, check for old addresses and always connect to those.
       selected = {}
       if not self.servers_new_only:
-        for bid in self.GetActiveBackends():
+        def bping(bid):
           (proto, bdom) = bid.split(':')
           for ip in self.CachedGetHostIpAddrs(bdom):
             # FIXME: What about IPv6 localhost?
@@ -2756,11 +2762,25 @@ class PageKite(object):
               server = '%s:%s' % (ip, port)
               if server not in self.servers_never:
                 servers_all[self.Ping(ip, int(port))[1]] = server
+        threads = []
+        for bid in self.GetActiveBackends():
+          threads.append(threading.Thread(target=bping, args=(bid,)))
+          threads[-1].start()
+        for t in threads:
+          t.join()
 
       try:
+        pings = []
         ips = [ip for ip in self.CachedGetHostIpAddrs(domain)
                if ('%s:%s' % (ip, port)) not in self.servers_never]
-        pings = [self.Ping(ip, port) for ip in ips]
+        def iping(ip):
+          pings.append(self.Ping(ip, port))
+        threads = []
+        for ip in ips:
+          threads.append(threading.Thread(target=iping, args=(ip,)))
+          threads[-1].start()
+        for t in threads:
+          t.join()
       except Exception, e:
         logging.LogDebug('Unreachable: %s, %s' % (domain, e))
         ips = pings = []
