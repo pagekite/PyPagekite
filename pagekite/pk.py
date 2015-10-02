@@ -3018,46 +3018,55 @@ class PageKite(object):
         logging.LogError('Spinning, pausing ...')
         time.sleep(0.1)
 
-    return iready, oready, eready
+    return None, iready, oready, eready
 
   def Epoll(self, epoll, waittime):
     fdc = {}
     now = time.time()
     evs = []
+    broken = False
     try:
       bbc = 0
       for c in self.conns.conns:
-        try:
-          if c.IsDead():
-            epoll.unregister(c.fd)
-          else:
-            fdc[c.fd.fileno()] = c.fd
-            mask = 0
-            if c.IsBlocked():
-              bbc += len(c.write_blocked)
-              mask |= select.EPOLLOUT
-            if c.IsReadable(now):
-              mask |= select.EPOLLIN
-            if mask:
-              try:
-                try:
-                  epoll.modify(c.fd, mask)
-                except IOError:
-                  epoll.register(c.fd, mask)
-              except (IOError, TypeError):
-                evs.append((c.fd, select.EPOLLHUP))
-                logging.LogError('Epoll mod/reg: %s(%s), mask=0x%x'
-                                 '' % (c, c.fd, mask))
-            else:
-              epoll.unregister(c.fd)
-        except (IOError, TypeError):
-          # Failing to unregister is FINE, we don't complain about that.
-          pass
+        fd, mask = c.fd, 0
+        if not c.IsDead():
+          if c.IsBlocked():
+            bbc += len(c.write_blocked)
+            mask |= select.EPOLLOUT
+          if c.IsReadable(now):
+            mask |= select.EPOLLIN
+
+        if mask:
+          try:
+            fdc[fd.fileno()] = fd
+          except socket.error:
+            # If this fails, then the socket has HUPed, however we need to
+            # bypass epoll to make sure that's reflected in iready below.
+            bid = 'dead-%d' % len(evs)
+            fdc[bid] = fd
+            evs.append((bid, select.EPOLLHUP))
+            # Trigger removal of c.fd, if it was still in the epoll.
+            fd, mask = None, 0
+
+        if mask:
+          try:
+            epoll.modify(fd, mask)
+          except IOError:
+            try:
+              epoll.register(fd, mask)
+            except (IOError, TypeError):
+              evs.append((fd, select.EPOLLHUP))  # Error == HUP
+        else:
+          try:
+            epoll.unregister(c.fd)  # Important: Use c.fd, not fd!
+          except (IOError, TypeError):
+            # Failing to unregister is OK, ignore
+            pass
 
       common.buffered_bytes[0] = bbc
       evs.extend(epoll.poll(waittime))
-    except IOError:
-      pass
+    except (IOError, OSError):
+      broken = 'in poll'
     except KeyboardInterrupt:
       epoll.close()
       raise
@@ -3066,7 +3075,17 @@ class PageKite(object):
     iready = [fdc.get(e[0]) for e in evs if e[1] & rmask]
     oready = [fdc.get(e[0]) for e in evs if e[1] & select.EPOLLOUT]
 
-    return iready, oready, []
+    if not broken and ((None in iready) or (None in oready)):
+      broken = 'unknown FDs'
+    if broken:
+      logging.LogError('Epoll appears to be broken (%s), recreating' % broken)
+      try:
+        epoll.close()
+      except (IOError, OSError, TypeError, AttributeError):
+        pass
+      epoll = select.epoll()
+
+    return epoll, iready, oready, []
 
   def CreatePollObject(self):
     try:
@@ -3088,7 +3107,7 @@ class PageKite(object):
 
     logging.LogDebug('Entering main %s loop' % (epoll and 'epoll' or 'select'))
     while self.keep_looping:
-      iready, oready, eready = mypoll(epoll, 1.1)
+      epoll, iready, oready, eready = mypoll(epoll, 1.1)
       now = time.time()
 
       if oready:
