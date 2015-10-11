@@ -2785,7 +2785,7 @@ class PageKite(object):
         logging.LogDebug('Unreachable: %s, %s' % (domain, e))
         ips = pings = []
 
-      while count > 0 and ips:
+      while count > 0 and ips and pings:
         mIdx = pings.index(min(pings))
         if pings[mIdx][0] > 60:
           # This is worthless data, abort.
