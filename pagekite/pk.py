@@ -723,13 +723,19 @@ class TunnelManager(threading.Thread):
 
   def _run(self):
     self.check_interval = 5
+    loop_count = 0
     while self.keep_running:
+      loop_count += 1
+      if (loop_count % 360) == 1:
+        # Report roughly once every half hour when all is well
+        logging.LogDebug('TunnelManager, loop #%d, interval=%s'
+                         % (loop_count, self.check_interval))
 
       # Reconnect if necessary, randomized exponential fallback.
       problem, connecting = self.pkite.CreateTunnels(self.conns)
       if problem or connecting:
-        self.check_interval = min(60, self.check_interval +
-                                     int(1+random.random()*self.check_interval))
+        incr = int(1+random.random()*self.check_interval)
+        self.check_interval = min(60, self.check_interval + incr)
         time.sleep(1)
       else:
         self.check_interval = 5
@@ -3126,6 +3132,7 @@ class PageKite(object):
     self.last_barf = self.last_loop = time.time()
 
     logging.LogDebug('Entering main %s loop' % (epoll and 'epoll' or 'select'))
+    loop_count = 0
     while self.keep_looping:
       epoll, iready, oready, eready = mypoll(epoll, 1.1)
       now = time.time()
@@ -3145,14 +3152,14 @@ class PageKite(object):
 
       self.ProcessDead(epoll)
       self.last_loop = now
+      loop_count += 1
 
       if now - self.last_barf > (logging.DEBUG_IO and 15 or 600):
         self.last_barf = now
         if epoll:
           epoll.close()
         epoll, mypoll = self.CreatePollObject()
-        if logging.DEBUG_IO:
-          logging.LogDebug('Selectable map: %s' % SELECTABLES)
+        logging.LogDebug('Loop #%d, selectable map: %s' % (loop_count, SELECTABLES))
 
     if epoll:
       epoll.close()
