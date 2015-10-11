@@ -2746,12 +2746,12 @@ class PageKite(object):
         server = '%s:%s' % (ipaddrs[0], port)
         if server not in self.servers_never:
           servers_all[uuid] = servers_pref[uuid] = server
-    threads = []
+    threads, deadline = [], time.time() + 5
     for server in self.servers_manual:
       threads.append(threading.Thread(target=sping, args=(server,)))
       threads[-1].start()
     for t in threads:
-      t.join()
+      t.join(max(0.1, deadline - time.time()))
 
     # Lookup and choose from the auto-list (and our old domain).
     if self.servers_auto:
@@ -2768,12 +2768,12 @@ class PageKite(object):
               server = '%s:%s' % (ip, port)
               if server not in self.servers_never:
                 servers_all[self.Ping(ip, int(port))[1]] = server
-        threads = []
+        threads, deadline = [], time.time() + 5
         for bid in self.GetActiveBackends():
           threads.append(threading.Thread(target=bping, args=(bid,)))
           threads[-1].start()
         for t in threads:
-          t.join()
+          t.join(max(0.1, deadline - time.time()))
 
       try:
         pings = []
@@ -2781,12 +2781,12 @@ class PageKite(object):
                if ('%s:%s' % (ip, port)) not in self.servers_never]
         def iping(ip):
           pings.append(self.Ping(ip, port))
-        threads = []
+        threads, deadline = [], time.time() + 5
         for ip in ips:
           threads.append(threading.Thread(target=iping, args=(ip,)))
           threads[-1].start()
         for t in threads:
-          t.join()
+          t.join(max(0.1, deadline - time.time()))
       except Exception, e:
         logging.LogDebug('Unreachable: %s, %s' % (domain, e))
         ips = pings = []
