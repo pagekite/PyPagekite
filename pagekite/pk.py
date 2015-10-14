@@ -724,16 +724,21 @@ class TunnelManager(threading.Thread):
   def _run(self):
     self.check_interval = 5
     loop_count = 0
+    last_log = 0
     while self.keep_running:
       loop_count += 1
-      if (loop_count % 360) == 1:
-        # Report roughly once every half hour when all is well
-        logging.LogDebug('TunnelManager, loop #%d, interval=%s'
+      now = time.time()
+      if (now - last_log) >= (60 * 15):
+        # Report liveness/state roughly once every 15 minutes
+        logging.LogDebug('TunnelManager: loop #%d, interval=%s'
                          % (loop_count, self.check_interval))
+        last_log = now
 
       # Reconnect if necessary, randomized exponential fallback.
       problem, connecting = self.pkite.CreateTunnels(self.conns)
       if problem or connecting:
+        logging.LogDebug('TunnelManager: problem=%s, connecting=%s'
+                         % (problem, connecting))
         incr = int(1+random.random()*self.check_interval)
         self.check_interval = min(60, self.check_interval + incr)
         time.sleep(1)
@@ -2749,6 +2754,7 @@ class PageKite(object):
     threads, deadline = [], time.time() + 5
     for server in self.servers_manual:
       threads.append(threading.Thread(target=sping, args=(server,)))
+      threads[-1].daemon = True
       threads[-1].start()
     for t in threads:
       t.join(max(0.1, deadline - time.time()))
@@ -2771,6 +2777,7 @@ class PageKite(object):
         threads, deadline = [], time.time() + 5
         for bid in self.GetActiveBackends():
           threads.append(threading.Thread(target=bping, args=(bid,)))
+          threads[-1].daemon = True
           threads[-1].start()
         for t in threads:
           t.join(max(0.1, deadline - time.time()))
@@ -2784,6 +2791,7 @@ class PageKite(object):
         threads, deadline = [], time.time() + 5
         for ip in ips:
           threads.append(threading.Thread(target=iping, args=(ip,)))
+          threads[-1].daemon = True
           threads[-1].start()
         for t in threads:
           t.join(max(0.1, deadline - time.time()))
@@ -2860,6 +2868,12 @@ class PageKite(object):
       logging.LogDebug('Not sure which servers to contact, making no changes.')
       return 0, 0
 
+    threads, deadline = [], time.time() + 120
+    def connect_in_thread(conns, server, state):
+      try:
+        state[1] = self.ConnectFrontend(conns, server)
+      except (IOError, OSError):
+        state[1] = False
     for server in self.servers:
       if server not in live_servers:
         if server == LOOPBACK_FE:
@@ -2868,10 +2882,22 @@ class PageKite(object):
           if not self.insecure:
             loop.filters.append(HttpSecurityFilter(self.ui))
         else:
-          if self.ConnectFrontend(conns, server):
-            connections += 1
-          else:
-            failures += 1
+          state = [None, None]
+          state[0] = threading.Thread(target=connect_in_thread,
+                                      args=(conns, server, state))
+          state[0].daemon = True
+          state[0].start()
+          threads.append(state)
+
+    for thread, result in threads:
+      thread.join(max(0.1, deadline - time.time()))
+
+    for thread, result in threads:
+      # This will treat timeouts both as connections AND failures
+      if result is not False:
+        connections += 1
+      if result is not True:
+        failures += 1
 
     for server in live_servers:
       if server not in self.servers and server not in self.servers_preferred:
@@ -2929,6 +2955,7 @@ class PageKite(object):
           try:
             self.ui.Status('dyndns', color=self.ui.YELLOW,
                                      message='Updating DNS for %s...' % domain)
+            # FIXME: If the network misbehaves, can this stall forever?
             result = ''.join(urllib.urlopen(updates[update]).readlines())
             if result.startswith('good') or result.startswith('nochg'):
               logging.Log([('dyndns', result), ('data', update)])

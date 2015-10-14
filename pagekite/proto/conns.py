@@ -326,6 +326,7 @@ class Tunnel(ChunkParser):
     except:
       self.fd.setblocking(1)
 
+    self.LogDebug('Connecting to %s:%s' % (sspec[0], sspec[1]))
     self.fd.connect((sspec[0], int(sspec[1])))
     replace_sessionid = self.conns.config.servers_sessionids.get(server, None)
     if (not self.Send(HTTP_PageKiteRequest(server,
