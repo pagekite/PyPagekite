@@ -1,6 +1,14 @@
 Version history - highlights
 ============================
 
+v0.5.8a     2015.10.16
+------
+   - Speed up startup by pinging relays in parallel
+   - Attempt to fix infinite loop when using epoll
+   - Misc. crashers avoided, including in log code on disk full
+   - Fix multiple TunnelManager crashes which would prevent reconnection
+
+
 v0.5.7b     2015.09.15
 ------
    - Allow legacy SSL support with --tls_legacy
