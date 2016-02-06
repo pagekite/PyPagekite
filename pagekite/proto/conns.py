@@ -326,6 +326,7 @@ class Tunnel(ChunkParser):
     except:
       self.fd.setblocking(1)
 
+    self.LogDebug('Connecting to %s:%s' % (sspec[0], sspec[1]))
     self.fd.connect((sspec[0], int(sspec[1])))
     replace_sessionid = self.conns.config.servers_sessionids.get(server, None)
     if (not self.Send(HTTP_PageKiteRequest(server,
@@ -524,14 +525,16 @@ class Tunnel(ChunkParser):
                        allow_blocking=True):
     try:
       if TUNNEL_SOCKET_BLOCKS and allow_blocking and not just_buffer:
-        self.fd.setblocking(1)
+        if self.fd is not None:
+          self.fd.setblocking(1)
       return ChunkParser.Send(self, data, try_flush=try_flush,
                                           activity=activity,
                                           just_buffer=just_buffer,
                                           allow_blocking=allow_blocking)
     finally:
       if TUNNEL_SOCKET_BLOCKS and allow_blocking and not just_buffer:
-        self.fd.setblocking(0)
+        if self.fd is not None:
+          self.fd.setblocking(0)
 
   def SendData(self, conn, data, sid=None, host=None, proto=None, port=None,
                                  chunk_headers=None):
@@ -552,7 +555,7 @@ class Tunnel(ChunkParser):
     if host: sending.append('Host: %s\r\n' % host)
     if port:
       porti = int(port)
-      if porti in self.conns.config.server_portalias:
+      if self.conns and (porti in self.conns.config.server_portalias):
         sending.append('Port: %s\r\n' % self.conns.config.server_portalias[porti])
       else:
         sending.append('Port: %s\r\n' % port)

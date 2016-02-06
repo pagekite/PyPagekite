@@ -26,7 +26,7 @@ from pagekite import pk
 from pagekite import httpd
 
 if __name__ == "__main__":
-  if sys.stdout.isatty():
+  if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
     import pagekite.ui.basic
     uiclass = pagekite.ui.basic.BasicUi
   else:
