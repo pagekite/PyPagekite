@@ -69,9 +69,13 @@ def LogSyslog(values, wdict=None, words=None):
 def LogToFile(values, wdict=None, words=None):
   if values:
     words, wdict = LogValues(values)
-  global LogFile
-  LogFile.write('; '.join(['='.join(x) for x in words]))
-  LogFile.write('\n')
+  try:
+    global LogFile
+    LogFile.write('; '.join(['='.join(x) for x in words]))
+    LogFile.write('\n')
+  except (OSError, IOError):
+    # Avoid crashing if the disk fills up or something lame like that
+    pass
 
 def LogToMemory(values, wdict=None, words=None):
   if values:

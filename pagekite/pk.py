@@ -723,13 +723,24 @@ class TunnelManager(threading.Thread):
 
   def _run(self):
     self.check_interval = 5
+    loop_count = 0
+    last_log = 0
     while self.keep_running:
+      loop_count += 1
+      now = time.time()
+      if (now - last_log) >= (60 * 15):
+        # Report liveness/state roughly once every 15 minutes
+        logging.LogDebug('TunnelManager: loop #%d, interval=%s'
+                         % (loop_count, self.check_interval))
+        last_log = now
 
       # Reconnect if necessary, randomized exponential fallback.
       problem, connecting = self.pkite.CreateTunnels(self.conns)
       if problem or connecting:
-        self.check_interval = min(60, self.check_interval +
-                                     int(1+random.random()*self.check_interval))
+        logging.LogDebug('TunnelManager: problem=%s, connecting=%s'
+                         % (problem, connecting))
+        incr = int(1+random.random()*self.check_interval)
+        self.check_interval = min(60, self.check_interval + incr)
         time.sleep(1)
       else:
         self.check_interval = 5
@@ -2732,7 +2743,7 @@ class PageKite(object):
         servers_all['loopback'] = servers_pref['loopback'] = LOOPBACK_FE
 
     # Convert the hostnames into IP addresses...
-    for server in self.servers_manual:
+    def sping(server):
       (host, port) = server.split(':')
       ipaddrs = self.CachedGetHostIpAddrs(host)
       if ipaddrs:
@@ -2740,6 +2751,13 @@ class PageKite(object):
         server = '%s:%s' % (ipaddrs[0], port)
         if server not in self.servers_never:
           servers_all[uuid] = servers_pref[uuid] = server
+    threads, deadline = [], time.time() + 5
+    for server in self.servers_manual:
+      threads.append(threading.Thread(target=sping, args=(server,)))
+      threads[-1].daemon = True
+      threads[-1].start()
+    for t in threads:
+      t.join(max(0.1, deadline - time.time()))
 
     # Lookup and choose from the auto-list (and our old domain).
     if self.servers_auto:
@@ -2748,7 +2766,7 @@ class PageKite(object):
       # First, check for old addresses and always connect to those.
       selected = {}
       if not self.servers_new_only:
-        for bid in self.GetActiveBackends():
+        def bping(bid):
           (proto, bdom) = bid.split(':')
           for ip in self.CachedGetHostIpAddrs(bdom):
             # FIXME: What about IPv6 localhost?
@@ -2756,16 +2774,32 @@ class PageKite(object):
               server = '%s:%s' % (ip, port)
               if server not in self.servers_never:
                 servers_all[self.Ping(ip, int(port))[1]] = server
+        threads, deadline = [], time.time() + 5
+        for bid in self.GetActiveBackends():
+          threads.append(threading.Thread(target=bping, args=(bid,)))
+          threads[-1].daemon = True
+          threads[-1].start()
+        for t in threads:
+          t.join(max(0.1, deadline - time.time()))
 
       try:
+        pings = []
         ips = [ip for ip in self.CachedGetHostIpAddrs(domain)
                if ('%s:%s' % (ip, port)) not in self.servers_never]
-        pings = [self.Ping(ip, port) for ip in ips]
+        def iping(ip):
+          pings.append(self.Ping(ip, port))
+        threads, deadline = [], time.time() + 5
+        for ip in ips:
+          threads.append(threading.Thread(target=iping, args=(ip,)))
+          threads[-1].daemon = True
+          threads[-1].start()
+        for t in threads:
+          t.join(max(0.1, deadline - time.time()))
       except Exception, e:
         logging.LogDebug('Unreachable: %s, %s' % (domain, e))
         ips = pings = []
 
-      while count > 0 and ips:
+      while count > 0 and ips and pings:
         mIdx = pings.index(min(pings))
         if pings[mIdx][0] > 60:
           # This is worthless data, abort.
@@ -2834,6 +2868,12 @@ class PageKite(object):
       logging.LogDebug('Not sure which servers to contact, making no changes.')
       return 0, 0
 
+    threads, deadline = [], time.time() + 120
+    def connect_in_thread(conns, server, state):
+      try:
+        state[1] = self.ConnectFrontend(conns, server)
+      except (IOError, OSError):
+        state[1] = False
     for server in self.servers:
       if server not in live_servers:
         if server == LOOPBACK_FE:
@@ -2842,10 +2882,22 @@ class PageKite(object):
           if not self.insecure:
             loop.filters.append(HttpSecurityFilter(self.ui))
         else:
-          if self.ConnectFrontend(conns, server):
-            connections += 1
-          else:
-            failures += 1
+          state = [None, None]
+          state[0] = threading.Thread(target=connect_in_thread,
+                                      args=(conns, server, state))
+          state[0].daemon = True
+          state[0].start()
+          threads.append(state)
+
+    for thread, result in threads:
+      thread.join(max(0.1, deadline - time.time()))
+
+    for thread, result in threads:
+      # This will treat timeouts both as connections AND failures
+      if result is not False:
+        connections += 1
+      if result is not True:
+        failures += 1
 
     for server in live_servers:
       if server not in self.servers and server not in self.servers_preferred:
@@ -2903,6 +2955,7 @@ class PageKite(object):
           try:
             self.ui.Status('dyndns', color=self.ui.YELLOW,
                                      message='Updating DNS for %s...' % domain)
+            # FIXME: If the network misbehaves, can this stall forever?
             result = ''.join(urllib.urlopen(updates[update]).readlines())
             if result.startswith('good') or result.startswith('nochg'):
               logging.Log([('dyndns', result), ('data', update)])
@@ -3018,46 +3071,55 @@ class PageKite(object):
         logging.LogError('Spinning, pausing ...')
         time.sleep(0.1)
 
-    return iready, oready, eready
+    return None, iready, oready, eready
 
   def Epoll(self, epoll, waittime):
     fdc = {}
     now = time.time()
     evs = []
+    broken = False
     try:
       bbc = 0
       for c in self.conns.conns:
-        try:
-          if c.IsDead():
-            epoll.unregister(c.fd)
-          else:
-            fdc[c.fd.fileno()] = c.fd
-            mask = 0
-            if c.IsBlocked():
-              bbc += len(c.write_blocked)
-              mask |= select.EPOLLOUT
-            if c.IsReadable(now):
-              mask |= select.EPOLLIN
-            if mask:
-              try:
-                try:
-                  epoll.modify(c.fd, mask)
-                except IOError:
-                  epoll.register(c.fd, mask)
-              except (IOError, TypeError):
-                evs.append((c.fd, select.EPOLLHUP))
-                logging.LogError('Epoll mod/reg: %s(%s), mask=0x%x'
-                                 '' % (c, c.fd, mask))
-            else:
-              epoll.unregister(c.fd)
-        except (IOError, TypeError):
-          # Failing to unregister is FINE, we don't complain about that.
-          pass
+        fd, mask = c.fd, 0
+        if not c.IsDead():
+          if c.IsBlocked():
+            bbc += len(c.write_blocked)
+            mask |= select.EPOLLOUT
+          if c.IsReadable(now):
+            mask |= select.EPOLLIN
+
+        if mask:
+          try:
+            fdc[fd.fileno()] = fd
+          except socket.error:
+            # If this fails, then the socket has HUPed, however we need to
+            # bypass epoll to make sure that's reflected in iready below.
+            bid = 'dead-%d' % len(evs)
+            fdc[bid] = fd
+            evs.append((bid, select.EPOLLHUP))
+            # Trigger removal of c.fd, if it was still in the epoll.
+            fd, mask = None, 0
+
+        if mask:
+          try:
+            epoll.modify(fd, mask)
+          except IOError:
+            try:
+              epoll.register(fd, mask)
+            except (IOError, TypeError):
+              evs.append((fd, select.EPOLLHUP))  # Error == HUP
+        else:
+          try:
+            epoll.unregister(c.fd)  # Important: Use c.fd, not fd!
+          except (IOError, TypeError):
+            # Failing to unregister is OK, ignore
+            pass
 
       common.buffered_bytes[0] = bbc
       evs.extend(epoll.poll(waittime))
-    except IOError:
-      pass
+    except (IOError, OSError):
+      broken = 'in poll'
     except KeyboardInterrupt:
       epoll.close()
       raise
@@ -3066,7 +3128,17 @@ class PageKite(object):
     iready = [fdc.get(e[0]) for e in evs if e[1] & rmask]
     oready = [fdc.get(e[0]) for e in evs if e[1] & select.EPOLLOUT]
 
-    return iready, oready, []
+    if not broken and ((None in iready) or (None in oready)):
+      broken = 'unknown FDs'
+    if broken:
+      logging.LogError('Epoll appears to be broken (%s), recreating' % broken)
+      try:
+        epoll.close()
+      except (IOError, OSError, TypeError, AttributeError):
+        pass
+      epoll = select.epoll()
+
+    return epoll, iready, oready, []
 
   def CreatePollObject(self):
     try:
@@ -3087,8 +3159,9 @@ class PageKite(object):
     self.last_barf = self.last_loop = time.time()
 
     logging.LogDebug('Entering main %s loop' % (epoll and 'epoll' or 'select'))
+    loop_count = 0
     while self.keep_looping:
-      iready, oready, eready = mypoll(epoll, 1.1)
+      epoll, iready, oready, eready = mypoll(epoll, 1.1)
       now = time.time()
 
       if oready:
@@ -3106,14 +3179,14 @@ class PageKite(object):
 
       self.ProcessDead(epoll)
       self.last_loop = now
+      loop_count += 1
 
       if now - self.last_barf > (logging.DEBUG_IO and 15 or 600):
         self.last_barf = now
         if epoll:
           epoll.close()
         epoll, mypoll = self.CreatePollObject()
-        if logging.DEBUG_IO:
-          logging.LogDebug('Selectable map: %s' % SELECTABLES)
+        logging.LogDebug('Loop #%d, selectable map: %s' % (loop_count, SELECTABLES))
 
     if epoll:
       epoll.close()
@@ -3188,7 +3261,7 @@ class PageKite(object):
       if self.ui_httpd: keep_open.append(self.ui_httpd.httpd.socket.fileno())
       self.LogTo(self.logfile, dont_close=keep_open)
 
-    elif not sys.stdout.isatty():
+    elif not (hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()):
       # Preserve sane behavior when not run at the console.
       self.LogTo('stdio')
 
@@ -3381,7 +3454,7 @@ def Configure(pk):
 
   friendly_mode = (('--friendly' in sys.argv) or
                    (sys.platform[:3] in ('win', 'os2', 'dar')))
-  if friendly_mode and sys.stdout.isatty():
+  if friendly_mode and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
     pk.shell = (len(sys.argv) < 2) and 'auto'
 
   pk.Configure(sys.argv[1:])
