@@ -17,3 +17,7 @@ override_dh_auto_install:
                         $(CURDIR)/debian/pagekite/etc/pagekite.d/
 	install -m 600 $(CURDIR)/etc/pagekite.d/10* \
                         $(CURDIR)/debian/pagekite/etc/pagekite.d/
+
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -rf pagekite.egg-info
