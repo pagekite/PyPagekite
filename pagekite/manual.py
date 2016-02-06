@@ -9,8 +9,8 @@ from common import *
 from compat import ts_to_iso
 
 MAN_NAME = ("""\
-    pagekite.py v%s - Make localhost servers publicly visible
-""" % APPVER)
+    pagekite.py - Make localhost servers publicly visible
+""")
 MAN_SYNOPSIS = ("""\
     <b>pagekite.py</b> [<a>--options</a>] [<a>service</a>] <a>kite-name</a> [<a>+flags</a>]
 """)
