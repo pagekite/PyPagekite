@@ -3,9 +3,9 @@ Section: net
 Priority: optional
 Maintainer: Sunil Mohan Adapa <sunil@medhas.org>
 Uploaders: Petter Reinholdtsen <pere@debian.org>, Federico Ceratto <federico@debian.org>
-Build-Depends:
- , debhelper (>= 9)
- , dh-python (>= 2.20151103)
+Build-Depends: debhelper (>= 9~)
+Build-Depends-Indep:
+ dh-python (>= 2.20151103)
  , python (>= 2.6.6-3~)
  , python-openssl
  , python-setuptools
