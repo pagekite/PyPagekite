@@ -1,3 +1,18 @@
+pagekite (0.5.8a-1) UNRELEASED; urgency=medium
+
+  [ Petter Reinholdtsen ]
+  * New upstream 0.5.8a.
+  * Add gbp.conf file to enforce the use of pristine-tar and
+    filter out the upstream debian/ directory when importing.
+  * Drop version number from generated whatis manual page entry to keep
+    lintian happy.
+  * Depend on newer python-socksipychain (>= 2.0.15), needed by
+    the new upstream.
+  * Build-depend on dh-python >= 2.20151103 to get a working
+    version.  The version in Debian Jessie is not new enough.
+
+ -- Petter Reinholdtsen <pere@debian.org>  Sat, 06 Feb 2016 20:21:19 +0100
+
 pagekite (0.5.6d-4) unstable; urgency=low
 
   [ Sunil Mohan Adapa ]
