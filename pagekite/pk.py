@@ -5,7 +5,7 @@ This is slowly being refactored into smaller sub-modules.
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
-Copyright 2010-2013, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+Copyright 2010-2015, the Beanstalks Project ehf. and Bjarni Runar Einarsson
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the  GNU  Affero General Public License as published by the Free
@@ -64,10 +64,10 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings',
             'defaults', 'local=', 'domain=',
-            'authdomain=', 'motd=', 'register=', 'host=',
+            'auththreads=', 'authdomain=', 'motd=', 'register=', 'host=',
             'noupgradeinfo', 'upgradeinfo=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
-            'tls_default=', 'tls_endpoint=', 'selfsign',
+            'tls_legacy', 'tls_default=', 'tls_endpoint=', 'selfsign',
             'fe_certname=', 'jakenoia', 'ca_certs=',
             'kitename=', 'kitesecret=', 'fingerpath=',
             'backend=', 'define_backend=', 'be_config=', 'insecure',
@@ -263,14 +263,20 @@ class Connections(object):
     self.conns = []
     self.conns_by_id = {}
     self.tunnels = {}
-    self.auth = None
+    self.auth_pool = []
 
-  def start(self, auth_thread=None):
-    self.auth = auth_thread or AuthThread(self)
-    self.auth.start()
+  def start(self, auth_threads=None, auth_thread_count=1):
+    self.auth_pool = auth_threads or []
+    while len(self.auth_pool) < auth_thread_count:
+      self.auth_pool.append(AuthThread(self))
+    for th in self.auth_pool:
+      th.start()
 
   def Add(self, conn):
     self.conns.append(conn)
+
+  def auth(self):
+    return self.auth_pool[random.randint(0, len(self.auth_pool)-1)]
 
   def SetAltId(self, conn, new_id):
     if conn.alt_id and conn.alt_id in self.conns_by_id:
@@ -801,6 +807,7 @@ class PageKite(object):
   def ResetConfiguration(self):
     self.isfrontend = False
     self.upgrade_info = []
+    self.auth_threads = 1
     self.auth_domain = None
     self.auth_domains = {}
     self.motd = None
@@ -817,6 +824,7 @@ class PageKite(object):
     self.tunnel_acls = []
     self.client_acls = []
 
+    self.tls_legacy = False
     self.tls_default = None
     self.tls_endpoints = {}
     self.fe_certname = []
@@ -1150,6 +1158,7 @@ class PageKite(object):
       config.extend([
         '%srawports = %s' % (comment or (not self.server_raw_ports) and '# ' or '',
                            ','.join(['%s' % x for x in sorted(self.server_raw_ports)] or [VIRTUAL_PN])),
+        p('auththreads = %s', self.isfrontend and self.auth_threads, 1),
         p('authdomain = %s', self.isfrontend and self.auth_domain, 'foo.com'),
         p('motd = %s', self.isfrontend and self.motd, '/path/to/motd.txt')
       ])
@@ -1181,6 +1190,7 @@ class PageKite(object):
         config.append('# tls_endpoint = DOMAIN:PEM_FILE')
       config.extend([
         p('tls_default = %s', self.tls_default, 'DOMAIN'),
+        p('tls_legacy = %s', self.tls_legacy, False),
         '',
       ])
 
@@ -1325,8 +1335,9 @@ class PageKite(object):
       self.ui.Spacer()
 
   def FallDown(self, message, help=True, longhelp=False, noexit=False):
-    if self.conns and self.conns.auth:
-      self.conns.auth.quit()
+    if self.conns and self.conns.auth_pool:
+      for th in self.conns.auth_pool:
+        th.quit()
     if self.ui_httpd:
       self.ui_httpd.quit()
     if self.ui_comm:
@@ -1760,9 +1771,10 @@ class PageKite(object):
         self.ui_paths[host] = hosti
 
       elif opt == '--tls_default': self.tls_default = arg
+      elif opt == '--tls_legacy': self.tls_legacy = True
       elif opt == '--tls_endpoint':
         name, pemfile = arg.split(':', 1)
-        ctx = SSL.Context(SSL.TLSv1_METHOD)
+        ctx = socks.MakeBestEffortSSLContext(legacy=self.tls_legacy)
         ctx.use_privatekey_file(pemfile)
         ctx.use_certificate_chain_file(pemfile)
         self.tls_endpoints[name] = (pemfile, ctx)
@@ -1786,7 +1798,8 @@ class PageKite(object):
         else:
           self.dyndns = None
 
-      elif opt in ('-p', '--ports'): self.server_ports = [int(x) for x in arg.split(',')]
+      elif opt in ('-p', '--ports'):
+        self.server_ports = [int(x) for x in arg.split(',')]
       elif opt == '--portalias':
         port, alias = arg.split(':')
         self.server_portalias[int(port)] = int(alias)
@@ -1795,6 +1808,8 @@ class PageKite(object):
       elif opt == '--rawports':
         self.server_raw_ports = [(x == VIRTUAL_PN and x or int(x)) for x in arg.split(',')]
       elif opt in ('-h', '--host'): self.server_host = arg
+      elif opt == '--auththreads':
+        self.auth_threads = int(arg)
       elif opt in ('-A', '--authdomain'):
         if ':' in arg:
           d, a = arg.split(':')
@@ -3063,7 +3078,7 @@ class PageKite(object):
     return epoll, mypoll
 
   def Loop(self):
-    self.conns.start()
+    self.conns.start(auth_thread_count=self.auth_threads)
     if self.ui_httpd: self.ui_httpd.start()
     if self.tunnel_manager: self.tunnel_manager.start()
     if self.ui_comm: self.ui_comm.start()
@@ -3235,7 +3250,9 @@ class PageKite(object):
     if self.tunnel_manager:
       self.tunnel_manager.quit()
     if self.conns:
-      if self.conns.auth: self.conns.auth.quit()
+      if self.conns.auth_pool:
+        for th in self.conns.auth_pool:
+          th.quit()
       for conn in self.conns.conns:
         conn.Cleanup()
 
@@ -3258,6 +3275,8 @@ def Main(pagekite, configure, uiclass=NullUi,
         except SystemExit, status:
           sys.exit(status)
         except Exception, e:
+          if logging.DEBUG_IO:
+              raise
           raise ConfigError(e)
 
         shell_mode = shell_mode or pk.shell
