@@ -23,6 +23,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 import base64
 import os
 import random
+import struct
 import time
 
 from pagekite.compat import *
@@ -243,3 +244,11 @@ def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None,
     return HTTP_Response(code, status,
                          ['<html><body>', message, '</body></html>\n'],
                          headers=headers)
+
+def TLS_Unavailable(forbidden=False, unavailable=False):
+  """Generate a TLS alert record aborting this connectin."""
+  # FIXME: Should we really be ignoring forbidden and unavailable?
+  # Unfortunately, Chrome/ium only honors code 49, any other code will
+  # cause it to transparently retry with SSLv3. So although this is a
+  # bit misleading, this is what we send...
+  return struct.pack('>BBBBBBB', 0x15, 3, 3, 0, 2, 2, 49) # 49 = Access denied

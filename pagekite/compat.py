@@ -133,7 +133,6 @@ else:
   SEND_MAX_BYTES = 16 * 1024
   TUNNEL_SOCKET_BLOCKS = False
   class SSL(object):
-    SSLv23_METHOD = 0
     TLSv1_METHOD = 0
     class Error(Exception): pass
     class SysCallError(Exception): pass

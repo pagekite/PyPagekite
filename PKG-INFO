@@ -1,6 +1,6 @@
 Metadata-Version: 1.0
 Name: pagekite
-Version: 0.5.6d
+Version: 0.5.7a
 Summary: PageKite makes localhost servers visible to the world.
 Home-page: http://pagekite.org/
 Author: Bjarni R. Einarsson
@@ -13,7 +13,6 @@ Description: PageKite is a system for running publicly visible servers (generall
         using a combination of  tunnels and reverse proxies.
         
         Natively supported protocols: HTTP, HTTPS
-        Partially supported protocols: IRC, Finger
         
         Any other TCP-based service, including SSH and VNC, may be exposed
         as well to clients supporting HTTP Proxies.

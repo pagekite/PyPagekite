@@ -58,7 +58,7 @@ doc/MANPAGE.md: pagekite pagekite/manual.py
 doc/pagekite.1: pagekite pagekite/manual.py
 	@./pagekite/manual.py --nopy --man >doc/pagekite.1
 
-dist: combined gtk allrpm android
+dist: combined .deb gtk allrpm android
 
 allrpm: rpm_el4 rpm_el5 rpm_el6-fc13 rpm_fc14-15-16
 
