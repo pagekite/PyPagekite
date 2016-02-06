@@ -1,6 +1,13 @@
 Version history - highlights
 ============================
 
+v0.5.7b     2015.09.15
+------
+   - Allow legacy SSL support with --tls_legacy
+   - Added --auththreads=N to tune size of authentication thread pool
+   - Improve automated regression testing to test older versions too
+
+
 v0.5.7a     2015.09.06
 -------
    - Security: Drop SSLv2 and SSLv3 support from the front-end!

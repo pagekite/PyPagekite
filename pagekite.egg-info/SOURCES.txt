@@ -92,6 +92,9 @@ scripts/pagekite_gtk
 scripts/pagekite_test.py.old
 scripts/pkvnc
 scripts/self-signed.pem
+scripts/legacy-testing/pagekite-0.3.21.py
+scripts/legacy-testing/pagekite-0.4.6a.py
+scripts/legacy-testing/pagekite-0.5.6d.py
 scripts/tests/auth.rc
 scripts/tests/crypto.rc
 scripts/tests/proxy.rc

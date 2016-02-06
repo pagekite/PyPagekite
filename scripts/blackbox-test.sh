@@ -5,22 +5,28 @@
 export PATH=.:$PATH
 export http_proxy=
 
-PK=$1
+PKB=$1
+PKF=$2
+[ "$PKF" = "-" ] && PKF="$PKB"
 shift
+shift
+
 LOG="/tmp/pk-test.log"
 PKARGS="$*"
-PKA="$PKARGS --clean --debugio --ca_certs=$0"
+PKA="--clean --debugio --ca_certs=$0"
 PORT=12000
 let PORT="$PORT+($$%10000)"
 
-[ "$PK" = "" ] && {
+[ "$PKF" = "" ] && {
   echo "Usage: $0 /path/to/pagekite.py [global pagekite options]"
   exit 1
 }
-echo -n "Testing version: $($PK --clean --appver) ($PKARGS)"
+echo -n "Testing versions: $($PKB --clean --appver)/$($PKF --clean --appver) ($PKARGS)"
 
 HAVE_TLS=" (SSL Enabled)"
-$PK --clean $PKARGS "--tls_endpoint=a:$0" --settings >/dev/null 2>&1 \
+$PKB --clean $PKARGS "--tls_endpoint=a:$0" --settings >/dev/null 2>&1 \
+  || HAVE_TLS=""
+$PKF --clean $PKARGS "--tls_endpoint=a:$0" --settings >/dev/null 2>&1 \
   || HAVE_TLS=""
 echo "$HAVE_TLS"
 
@@ -48,20 +54,28 @@ __TEST_END__() { echo; kill "$@"; }
 ###############################################################################
 __TEST__ "Basic FE/BE/HTTPD setup" "$LOG-1" "$LOG-2" "$LOG-3" "$LOG-4"
 
-  FE_ARGS="$PKA --isfrontend --ports=$PORT --domain=*:testing:ok"
+  FE_ARGS="$PKARGS $PKA --isfrontend --ports=$PORT --domain=*:testing:ok"
   [ "$HAVE_TLS" = "" ] || FE_ARGS="$FE_ARGS --tls_endpoint=testing:$0 \
                                             --tls_default=testing"
- ($PK $FE_ARGS --settings
-  $PK $FE_ARGS --logfile=stdio 2>&1) >$LOG-1 2>&1 &
+ ($PKF $FE_ARGS --settings
+  $PKF $FE_ARGS --logfile=stdio 2>&1) >$LOG-1 2>&1 &
   KID_FE=$!
 __logwait $LOG-1 listen=:$PORT || __TEST_FAIL__ 'setup:FE' $KID_FE
 
   BE_ARGS1="$PKA --frontend=localhost:$PORT \
                  --backend=http:testing:localhost:80:ok"
+  [ "$PKF" = "$PKB" ] && BE_ARGS1="$PKARGS $BE_ARGS1"
   [ "$HAVE_TLS" = "" ] || BE_ARGS1="$BE_ARGS1 --fe_certname=testing"
-  BE_ARGS2="/etc/passwd $LOG-4 http://testing/"
- ($PK $BE_ARGS1 --settings $BE_ARGS2
-  $PK $BE_ARGS1 --logfile=stdio $BE_ARGS2 2>&1) >$LOG-2 2>&1 &
+  if [ $(echo $PKB |grep -c 0.3.2) = "0" ]; then
+      TESTINGv3="no"
+      BE_ARGS2="/etc/passwd $LOG-4 http://testing/"
+  else
+      TESTINGv3="yes"
+      BE_ARGS2=""
+  fi
+
+ ($PKB $BE_ARGS1 --settings $BE_ARGS2
+  $PKB $BE_ARGS1 --logfile=stdio $BE_ARGS2 2>&1) >$LOG-2 2>&1 &
   KID_BE=$!
 __logwait $LOG-2 domain=testing || __TEST_FAIL__ 'setup:BE' $KID_FE $KID_BE
 
@@ -72,20 +86,22 @@ __logwait $LOG-2 domain=testing || __TEST_FAIL__ 'setup:BE' $KID_FE $KID_BE
 
   # Next, see if our test host responds at all...
   curl -v --silent -H "Host: testing" http://localhost:$PORT/ 2>&1 \
-    |tee -a $LOG-3 |grep -i 'Powered by' >/dev/null \
+    |tee -a $LOG-3 |grep -i '<body' >/dev/null \
     && __PART_OK__ 'backend' || __TEST_FAIL__ 'backend' $KID_FE $KID_BE
 
-  # See if expected content is served.
-  curl -v --silent -H "Host: testing" http://localhost:$PORT/etc/passwd 2>&1 \
-    |tee -a $LOG-3 |grep -i 'root' >/dev/null \
-    && __PART_OK__ 'httpd' || __TEST_FAIL__ 'httpd' $KID_FE $KID_BE
+  if [ "$TESTINGv3" = "no" ]; then
+    # See if expected content is served.
+    curl -v --silent -H "Host: testing" http://localhost:$PORT/etc/passwd 2>&1 \
+      |tee -a $LOG-3 |grep -i 'root' >/dev/null \
+      && __PART_OK__ 'httpd' || __TEST_FAIL__ 'httpd' $KID_FE $KID_BE
 
-  # Check large-file download
-  dd if=/dev/urandom of=$LOG-4 bs=1M count=1 2>/dev/null
-  (echo; echo EOF;) >>$LOG-4
-  curl -v --silent -H "Host: testing" http://localhost:$PORT$LOG-4 2>&1 \
-    |tail -3|tee -a $LOG-3 |grep 'EOF' >/dev/null \
-    && __PART_OK__ 'bigfile' || __TEST_FAIL__ 'bigfile' $KID_FE $KID_BE
+    # Check large-file download
+    dd if=/dev/urandom of=$LOG-4 bs=1M count=1 2>/dev/null
+    (echo; echo EOF;) >>$LOG-4
+    curl -v --silent -H "Host: testing" http://localhost:$PORT$LOG-4 2>&1 \
+      |tail -3|tee -a $LOG-3 |grep 'EOF' >/dev/null \
+      && __PART_OK__ 'bigfile' || __TEST_FAIL__ 'bigfile' $KID_FE $KID_BE
+  fi
 
   rm -f "$LOG-1" "$LOG-2" "$LOG-3" "$LOG-4"
 __TEST_END__ $KID_FE $KID_BE
