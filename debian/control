@@ -20,7 +20,7 @@ Package: pagekite
 Architecture: all
 Depends: ${misc:Depends}, ${python:Depends}
  , daemon (>= 0.6)
- , python-socksipychain (>= 2.0.12)
+ , python-socksipychain (>= 2.0.15)
  , python-openssl
 Description: Make localhost servers publicly visible
  PageKite is a system for running publicly visible servers (generally
