@@ -1,6 +1,6 @@
 ## Name ##
 
-pagekite v0.5.6d - Make localhost servers publicly visible
+pagekite v0.5.7a - Make localhost servers publicly visible
 
 ## Synopsis ##
 
@@ -180,7 +180,7 @@ time the program defaults will Just Work.
      described above, but this syntax is used in the config file.
 
    * <b>--service_off</b>=`proto`:`kitename`:`host`:`port`:`secret` <br />
-     Same as --service, except disabled by default.
+     Same as --service_on, except disabled by default.
 
    * <b>--service_cfg</b>=`...`, <b>--webpath</b>=`...` <br />
      These options are used in the configuration file to store service
@@ -246,13 +246,19 @@ time the program defaults will Just Work.
    * <b>--ports</b>=`list`  
      Listen on a comma-separated list of ports.
    * <b>--portalias</b>=`A:B`  
-     Report port A as port B to backends.
+     Report port A as port B to backends (because firewalls).
    * <b>--protos</b>=`list`  
      Accept the listed protocols for tunneling.
 
    * <b>--rawports</b>=`list` <br />
      Listen for raw connections these ports. The string '%s'
      allows arbitrary ports in HTTP CONNECT.
+
+   * <b>--accept_acl_file</b>=`/path/to/file` <br />
+     Consult an external access control file before accepting an
+     incoming connection. Quick'n'dirty for mitigating abuse. The
+     format is one rule per line: `rule policy comment` where a
+     rule is an IP or regexp and policy is 'allow' or 'deny'.
 
    * <b>--client_acl</b>=`policy`:`regexp`, <b>--tunnel_acl</b>=`policy`:`regexp` <br />
      Add a client connection or tunnel access control rule.
@@ -294,7 +300,7 @@ time the program defaults will Just Work.
    * <b>--buffers</b>=`N`  
      Buffer at most N kB of data before blocking.
    * <b>--logfile</b>=`F`  
-     Log to file F.
+     Log to file F, `stdio` means standard output.
    * <b>--daemonize</b>  
      Run as a daemon.
    * <b>--runas</b>=`U`:`G`  
@@ -373,7 +379,7 @@ lapcat(1), <http://pagekite.org/>, <https://pagekite.net/>
 
 ## Copyright and license ##
 
-Copyright 2010-2012, the Beanstalks Project ehf. and Bjarni R. Einarsson.
+Copyright 2010-2015, the Beanstalks Project ehf. and Bjarni R. Einarsson.
 
 This program is free software: you can redistribute it and/or modify it
 under the terms of the GNU Affero General Public License as published by

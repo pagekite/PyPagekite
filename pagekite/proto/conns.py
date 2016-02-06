@@ -159,6 +159,11 @@ class Tunnel(ChunkParser):
     ok = []
     bad = []
 
+    if not self.conns:
+      # This can be delayed until the connecting client gives up, which
+      # means we may have already called Die().  In that case, just abort.
+      return True
+
     ok_results = ['X-PageKite-OK']
     bad_results = ['X-PageKite-Invalid']
     if duplicates_ok is True:
@@ -471,7 +476,7 @@ class Tunnel(ChunkParser):
         self.ParsePageKiteCapabilities(parse)
 
         for sessionid in parse.Header('X-PageKite-SessionID'):
-          self.conns.SetAltId(self, sessionid)
+          conns.SetAltId(self, sessionid)
           conns.config.servers_sessionids[server] = sessionid
 
         tryagain, tokens = self.CheckForTokens(parse)
@@ -811,6 +816,12 @@ class Tunnel(ChunkParser):
         self.LogError('Error formatting HTTP-Finger: %s' % e)
         conn.Die()
         conn = None
+
+    elif not conn and proto == 'https':
+      if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
+                              TLS_Unavailable(unavailable=True)),
+                              just_buffer=True):
+        return False, False
 
     if conn:
       self.users[sid] = conn
@@ -1341,6 +1352,7 @@ class UnknownConn(MagicProtocolParser):
     self.host = None
     self.proto = None
     self.said_hello = False
+    self.bad_loops = 0
 
   def Cleanup(self, close=True):
     MagicProtocolParser.Cleanup(self, close=close)
@@ -1551,6 +1563,7 @@ class UnknownConn(MagicProtocolParser):
   def ProcessTls(self, data, domain=None):
     if (not self.conns or
         not self.conns.config.CheckClientAcls(self.address, conn=self)):
+      self.Send(TLS_Unavailable(forbidden=True), try_flush=True)
       return False
 
     if domain:
@@ -1567,9 +1580,15 @@ class UnknownConn(MagicProtocolParser):
       except:
         # Probably insufficient data, just True and assume we'll have
         # better luck on the next round... but with a timeout.
-        self.LogDebug('Error in ProcessTLS, will time out in 120 seconds.')
-        self.conns.SetIdle(self, 120)
-        return True
+        self.bad_loops += 1
+        if self.bad_loops < 25:
+          self.LogDebug('Error in ProcessTLS, will time out in 120 seconds.')
+          self.conns.SetIdle(self, 120)
+          return True
+        else:
+          self.LogDebug('Persistent error in ProcessTLS, aborting.')
+          self.Send(TLS_Unavailable(unavailable=True), try_flush=True)
+          return False
 
     if domains and domains[0] is not None:
       if UserConn.FrontEnd(self, self.address,
@@ -1591,8 +1610,10 @@ class UnknownConn(MagicProtocolParser):
           self.conns.SetIdle(self, 120)
           return True
         else:
+          self.Send(TLS_Unavailable(unavailable=True), try_flush=True)
           return False
 
+    self.Send(TLS_Unavailable(unavailable=True), try_flush=True)
     return False
 
   def ProcessFlashPolicyRequest(self, data):
@@ -1707,11 +1728,14 @@ class Listener(Selectable):
   """This class listens for incoming connections and accepts them."""
 
   def __init__(self, host, port, conns, backlog=100,
-                     connclass=UnknownConn, quiet=False):
+                     connclass=UnknownConn, quiet=False, acl=None):
     Selectable.__init__(self, bind=(host, port), backlog=backlog)
     self.Log([('listen', '%s:%s' % (host, port))])
     if not quiet:
       conns.config.ui.Notify(' - Listening on %s:%s' % (host or '*', port))
+
+    self.acl = acl
+    self.acl_match = None
 
     self.connclass = connclass
     self.port = port
@@ -1725,13 +1749,48 @@ class Listener(Selectable):
   def __html__(self):
     return '<p>Listening on port %s for %s</p>' % (self.port, self.connclass)
 
+  def check_acl(self, ipaddr, default=True):
+    if self.acl:
+      try:
+        ipaddr = '%s' % ipaddr
+        lc = 0
+        for line in open(self.acl, 'r'):
+          line = line.lower().strip()
+          lc += 1
+          if line.startswith('#') or not line:
+            continue
+          try:
+            words = line.split()
+            pattern, rule = words[:2]
+            reason = ' '.join(words[2:])
+            if ipaddr == pattern:
+              self.acl_match = (lc, pattern, rule, reason)
+              return bool('allow' in rule)
+            elif re.compile(pattern).match(ipaddr):
+              self.acl_match = (lc, pattern, rule, reason)
+              return bool('allow' in rule)
+          except IndexError:
+            self.LogDebug('Invalid line %d in ACL %s' % (lc, self.acl))
+      except:
+        self.LogDebug('Failed to read/parse %s' % self.acl)
+    self.acl_match = (0, '.*', default and 'allow' or 'reject', 'Default')
+    return default
+
   def ReadData(self, maxread=None):
     try:
       self.last_activity = time.time()
       client, address = self.fd.accept()
       if client:
-        self.Log([('accept', '%s:%s' % (obfuIp(address[0]), address[1]))])
-        uc = self.connclass(client, address, self.port, self.conns)
+        if self.check_acl(address[0]):
+          log_info = [('accept', '%s:%s' % (obfuIp(address[0]), address[1]))]
+          uc = self.connclass(client, address, self.port, self.conns)
+        else:
+          log_info = [('reject', '%s:%s' % (obfuIp(address[0]), address[1]))]
+          client.close()
+        if self.acl:
+          log_info.extend([('acl_line', '%s' % self.acl_match[0]),
+                           ('reason', self.acl_match[3])])
+        self.Log(log_info)
         return True
 
     except IOError, err:

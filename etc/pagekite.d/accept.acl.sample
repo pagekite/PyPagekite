@@ -1,0 +1,21 @@
+# This is a sample ACL file for use with --accept_acl_file.
+#
+# This is a file for use on frontend relays to restrict access. Note
+# that this effects both tunnels and client connections and is really
+# only intended for blacklisting abusive clients on a temporary basis.
+#
+# To enable these rules, rename the file and add the following to one
+# of the `/etc/pagekite.d/*.rc` files:
+#
+#   accept_acl_file = /etc/pagekite.d/accept.acl
+#
+# For more routine access control, use `client_acl` or `tunnel_acl`
+# in the main configuration file (or on the command line).
+#
+# This example rejects incoming connections from localhost and allows
+# all others. Lines are processed in order, terminating on first match.
+
+127.*   deny   Localhost is banned (IPv4)
+::1     deny   Localhost is banned (IPv6)
+
+# The default is to allow connections
