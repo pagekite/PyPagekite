@@ -2,6 +2,7 @@
 """
 The program manual!
 """
+import os
 import re
 import time
 
@@ -454,7 +455,7 @@ def MAN(pname=None):
 .TH PAGEKITE "1" "%s" "https://pagekite.net/" "Awesome Commands"
 .nh
 .ad l
-""") % ts_to_iso(time.time()).split('T')[0]
+""") % ts_to_iso(float(os.environ.get('SOURCE_DATE_EPOCH', time.time()))).split('T')[0]
   for h, section, text in MANUAL_TOC:
     man += ('.%s %s\n\n%s\n\n'
             ) % (h, h == 'SH' and section.upper() or section,

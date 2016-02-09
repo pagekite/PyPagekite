@@ -50,7 +50,7 @@ try:
   import datetime
   ts_to_date = datetime.datetime.fromtimestamp
   def ts_to_iso(ts=None):
-    return datetime.datetime.fromtimestamp(ts).isoformat()
+    return datetime.datetime.utcfromtimestamp(ts).isoformat()
 except ImportError:
   ts_to_date = str
   ts_to_iso = str
