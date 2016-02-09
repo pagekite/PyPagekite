@@ -11,6 +11,15 @@ pagekite (0.5.8a-1) UNRELEASED; urgency=medium
   * Build-depend on dh-python >= 2.20151103 to get a working
     version.  The version in Debian Jessie is not new enough.
 
+  [ Federico Ceratto ]
+  * Switch Vcs fields to HTTPS.
+  * Enable verbose build.
+  * Remove .egg-info.
+  * Add Build-Depends-Indep.
+
+  [ Petter Reinholdtsen ]
+  * Make build reproducible (Closes: #795659).
+
  -- Petter Reinholdtsen <pere@debian.org>  Sat, 06 Feb 2016 20:21:19 +0100
 
 pagekite (0.5.6d-4) unstable; urgency=low
