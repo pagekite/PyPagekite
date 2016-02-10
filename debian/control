@@ -1,8 +1,11 @@
 Source: pagekite
 Section: net
 Priority: optional
-Maintainer: Sunil Mohan Adapa <sunil@medhas.org>
-Uploaders: Petter Reinholdtsen <pere@debian.org>, Federico Ceratto <federico@debian.org>
+Maintainer: FreedomBox packaging team <freedombox-pkg-team@lists.alioth.debian.org>
+Uploaders:
+ Sunil Mohan Adapa <sunil@medhas.org>
+ , Petter Reinholdtsen <pere@debian.org>
+ , Federico Ceratto <federico@debian.org>
 Build-Depends: debhelper (>= 9~)
 Build-Depends-Indep:
  dh-python (>= 2.20151103)
