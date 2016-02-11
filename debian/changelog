@@ -1,4 +1,4 @@
-pagekite (0.5.8a-1) UNRELEASED; urgency=medium
+pagekite (0.5.8a-1) unstable; urgency=medium
 
   [ Petter Reinholdtsen ]
   * New upstream 0.5.8a.
@@ -20,7 +20,7 @@ pagekite (0.5.8a-1) UNRELEASED; urgency=medium
   [ Petter Reinholdtsen ]
   * Make build reproducible (Closes: #795659).
 
- -- Petter Reinholdtsen <pere@debian.org>  Sat, 06 Feb 2016 20:21:19 +0100
+ -- Petter Reinholdtsen <pere@debian.org>  Wed, 10 Feb 2016 21:35:52 +0000
 
 pagekite (0.5.6d-4) unstable; urgency=low
 
