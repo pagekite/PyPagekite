@@ -26,7 +26,7 @@ import time
 PROTOVER = '0.8'
 APPVER = '0.5.8a'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
-WWWHOME = 'http://pagekite.net/'
+WWWHOME = 'https://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
 
 MAGIC_PREFIX = '/~:PageKite:~/'
