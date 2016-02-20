@@ -1,3 +1,10 @@
+pagekite (0.5.6d-3+deb8u1) stable; urgency=low
+
+  * Add missing build dependency python-openssl to fix test
+    failure (Closes: #790271).
+
+ -- Petter Reinholdtsen <pere@debian.org>  Sat, 20 Feb 2016 14:55:10 +0100
+
 pagekite (0.5.6d-3) unstable; urgency=low
 
   * Add debian/watch file to track new upstream versions.
