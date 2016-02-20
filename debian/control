@@ -6,6 +6,7 @@ Uploaders: Petter Reinholdtsen <pere@debian.org>
 Build-Depends:
  debhelper (>= 9)
  , python (>= 2.4)
+ , python-openssl
  , python-support (>= 0.8.4)
  , python-setuptools
  , dh-python
