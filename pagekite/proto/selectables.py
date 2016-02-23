@@ -455,16 +455,18 @@ class Selectable(object):
     if sending:
       try:
         want_send = self.write_retry or min(len(sending), SEND_MAX_BYTES)
-        sent_bytes = self.fd.send(sending[:want_send])
-        if logging.DEBUG_IO:
-          print ('==> OUT =[%s: %d/%d bytes]==(\n%s)=='
-                 ) % (self, sent_bytes, want_send, sending[:min(160, sent_bytes)])
-        self.wrote_bytes += sent_bytes
-        self.write_retry = None
-      except (SSL.WantWriteError, SSL.WantReadError), err:
-        if logging.DEBUG_IO:
-          print '=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, want_send)
-        self.write_retry = want_send
+        while True:
+          try:
+            sent_bytes = self.fd.send(sending[:want_send])
+            if logging.DEBUG_IO:
+              print ('==> OUT =[%s: %d/%d bytes]==(\n%s)=='
+                     ) % (self, sent_bytes, want_send, sending[:min(160, sent_bytes)])
+            self.wrote_bytes += sent_bytes
+            self.write_retry = None
+            break
+          except (SSL.WantWriteError, SSL.WantReadError), err:
+            if logging.DEBUG_IO:
+              print '=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, want_send)
       except IOError, err:
         if err.errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s' % err)
