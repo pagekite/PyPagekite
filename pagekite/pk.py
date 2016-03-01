@@ -2787,7 +2787,7 @@ class PageKite(object):
         ips = [ip for ip in self.CachedGetHostIpAddrs(domain)
                if ('%s:%s' % (ip, port)) not in self.servers_never]
         def iping(ip):
-          pings.append(self.Ping(ip, port))
+          pings.append(list(self.Ping(ip, port)) + [ip])
         threads, deadline = [], time.time() + 5
         for ip in ips:
           threads.append(threading.Thread(target=iping, args=(ip,)))
@@ -2799,21 +2799,20 @@ class PageKite(object):
         logging.LogDebug('Unreachable: %s, %s' % (domain, e))
         ips = pings = []
 
-      while count > 0 and ips and pings:
+      while count > 0 and pings:
         mIdx = pings.index(min(pings))
         if pings[mIdx][0] > 60:
           # This is worthless data, abort.
           break
         else:
           count -= 1
-          uuid = pings[mIdx][1]
-          server = '%s:%s' % (ips[mIdx], port)
+          ptime, uuid, ip = pings[mIdx]
+          server = '%s:%s' % (ip, port)
           if uuid not in servers_all:
             servers_all[uuid] = server
           if uuid not in servers_pref:
-            servers_pref[uuid] = ips[mIdx]
+            servers_pref[uuid] = ip
           del pings[mIdx]
-          del ips[mIdx]
 
     self.servers = servers_all.values()
     self.servers_preferred = servers_pref.values()
