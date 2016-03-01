@@ -1,7 +1,7 @@
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
-Copyright 2010-2015, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+Copyright 2010-2016, the Beanstalks Project ehf. and Bjarni Runar Einarsson
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the  GNU  Affero General Public License as published by the Free
