@@ -974,7 +974,7 @@ class PageKite(object):
 
   def SetServiceDefaults(self, clobber=True, check=False):
     def_dyndns    = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
-    def_frontends = (1, 'frontends.b5p.us', 443)
+    def_frontends = (1, 'fe%s.b5p.us' % re.sub(r'[a-z\.]', '', APPVER), 443)
     def_ca_certs  = sys.argv[0]
     def_fe_certs  = ['b5p.us'] + [c for c in SERVICE_CERTS if c != 'b5p.us']
     def_error_url = 'https://pagekite.net/offline/?'
