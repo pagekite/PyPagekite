@@ -154,7 +154,7 @@ class NullUi(object):
 
   def NotifyServer(self, obj, server_info):
     self.server_info = server_info
-    self.Notify('Connecting to front-end %s ...' % server_info[obj.S_NAME],
+    self.Notify('Connecting to front-end relay %s ...' % server_info[obj.S_NAME],
                 color=self.GREY)
     self.NotifyList('Protocols', server_info[obj.S_PROTOS], self.GREY)
     self.NotifyList('Ports', server_info[obj.S_PORTS], self.GREY)

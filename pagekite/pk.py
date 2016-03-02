@@ -2607,7 +2607,9 @@ class PageKite(object):
 
   def CheckConfig(self):
     if self.ui_sspec: self.BindUiSspec()
-    if not self.servers_manual and not self.servers_auto and not self.isfrontend:
+    if (not self.servers_manual and
+        not self.servers_auto and
+        not self.isfrontend):
       if not self.servers and not self.ui.ALLOWS_INPUT:
         raise ConfigError('Nothing to do!  List some servers, or run me as one.')
     return self
@@ -2740,9 +2742,11 @@ class PageKite(object):
         if be[BE_BHOST]:
           need_loopback = True
       if need_loopback:
+        # Note: Add to servers_pref to keep from getting disconnected
         servers_all['loopback'] = servers_pref['loopback'] = LOOPBACK_FE
 
-    # Convert the hostnames into IP addresses...
+    # Process the manually requested servers first (--frontend= lines); these
+    # are always added (and preferred, so in DNS) no matter what.
     def sping(server):
       (host, port) = server.split(':')
       ipaddrs = self.CachedGetHostIpAddrs(host)
@@ -2762,32 +2766,34 @@ class PageKite(object):
     # Lookup and choose from the auto-list (and our old domain).
     if self.servers_auto:
       (count, domain, port) = self.servers_auto
-
-      # First, check for old addresses and always connect to those.
-      selected = {}
-      if not self.servers_new_only:
-        def bping(bid):
-          (proto, bdom) = bid.split(':')
-          for ip in self.CachedGetHostIpAddrs(bdom):
-            # FIXME: What about IPv6 localhost?
-            if not ip.startswith('127.'):
-              server = '%s:%s' % (ip, port)
-              if server not in self.servers_never:
-                servers_all[self.Ping(ip, int(port))[1]] = server
-        threads, deadline = [], time.time() + 5
-        for bid in self.GetActiveBackends():
-          threads.append(threading.Thread(target=bping, args=(bid,)))
-          threads[-1].daemon = True
-          threads[-1].start()
-        for t in threads:
-          t.join(max(0.1, deadline - time.time()))
+      pinged = {}
 
       try:
-        pings = []
+        # First, check for old addresses and always connect to those.
+        selected = {}
+        if not self.servers_new_only:
+          def bping(bid):
+            (proto, bdom) = bid.split(':')
+            for ip in self.CachedGetHostIpAddrs(bdom):
+              # FIXME: What about IPv6 localhost?
+              if not ip.startswith('127.') and ip not in pinged:
+                server = '%s:%s' % (ip, port)
+                pingtime, uuid = pinged[ip] = self.Ping(ip, int(port))
+                if server not in self.servers_never:
+                  servers_all[uuid] = server
+          threads, deadline = [], time.time() + 5
+          for bid in self.GetActiveBackends():
+            threads.append(threading.Thread(target=bping, args=(bid,)))
+            threads[-1].daemon = True
+            threads[-1].start()
+          for t in threads:
+            t.join(max(0.1, deadline - time.time()))
+
         ips = [ip for ip in self.CachedGetHostIpAddrs(domain)
-               if ('%s:%s' % (ip, port)) not in self.servers_never]
+               if ('%s:%s' % (ip, port)) not in self.servers_never
+               and ip not in pinged]
         def iping(ip):
-          pings.append(list(self.Ping(ip, port)) + [ip])
+          pinged[ip] = self.Ping(ip, int(port))
         threads, deadline = [], time.time() + 5
         for ip in ips:
           threads.append(threading.Thread(target=iping, args=(ip,)))
@@ -2797,8 +2803,9 @@ class PageKite(object):
           t.join(max(0.1, deadline - time.time()))
       except Exception, e:
         logging.LogDebug('Unreachable: %s, %s' % (domain, e))
-        ips = pings = []
 
+      # Evaluate ping results, mark fastest N servers as preferred
+      pings = [list(ping) + [ip] for ip, ping in pinged.iteritems()]
       while count > 0 and pings:
         mIdx = pings.index(min(pings))
         if pings[mIdx][0] > 60:
@@ -2857,7 +2864,7 @@ class PageKite(object):
     if len(self.GetActiveBackends()) > 0:
       if self.last_frontend_choice < time.time()-FE_PING_INTERVAL:
         self.servers = []
-      if not self.servers or len(self.servers) > len(live_servers):
+      if (not self.servers) or len(self.servers) > len(live_servers):
         self.ChooseFrontEnds()
     else:
       self.servers_preferred = []
@@ -2899,7 +2906,8 @@ class PageKite(object):
         failures += 1
 
     for server in live_servers:
-      if server not in self.servers and server not in self.servers_preferred:
+      if (server not in self.servers and
+          server not in self.servers_preferred):
         if self.DisconnectFrontend(conns, server):
           connections += 1
 
@@ -2940,8 +2948,8 @@ class PageKite(object):
             'ips': iplist,
             'sign': signToken(secret=secret, payload=payload, length=100)
           })
-          # FIXME: This may fail if different front-ends support different
-          #        protocols. In practice, this should be rare.
+          # Note: This may be wrong if different front-ends support different
+          #       protocols. Unfortunately, that isn't easily solvable.
           updates[payload] = ddns_fmt % args
 
       last_updates = self.last_updates
