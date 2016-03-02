@@ -1,0 +1,17 @@
+#!/bin/sh
+
+PATH=/usr/sbin:$PATH
+export PATH
+
+# Allow daemon to run without configuration
+sed -i s/^abort_not_configured/#abort_not_configured/ \
+    /etc/pagekite.d/10_account.rc
+
+service pagekite restart 2>&1
+if service pagekite status; then
+    echo "success: service running"
+else
+    echo "error: service is not running"
+fi
+
+service pagekite stop 2>&1
