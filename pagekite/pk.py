@@ -2811,7 +2811,7 @@ class PageKite(object):
           if uuid not in servers_all:
             servers_all[uuid] = server
           if uuid not in servers_pref:
-            servers_pref[uuid] = ip
+            servers_pref[uuid] = server
           del pings[mIdx]
 
     self.servers = servers_all.values()
@@ -2915,9 +2915,10 @@ class PageKite(object):
         if bid in conns.tunnels:
           ips, bips = [], []
           for tunnel in conns.tunnels[bid]:
-            ip = rsplit(':', tunnel.server_info[tunnel.S_NAME])[0]
+            srv = tunnel.server_info[tunnel.S_NAME]
+            ip = rsplit(':', srv)[0]
             if not ip == LOOPBACK_HN and not tunnel.read_eof:
-              if not self.servers_preferred or ip in self.servers_preferred:
+              if (not self.servers_preferred) or srv in self.servers_preferred:
                 ips.append(ip)
               else:
                 bips.append(ip)
