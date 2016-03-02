@@ -1513,7 +1513,9 @@ class UnknownConn(MagicProtocolParser):
           self.Send(HTTP_Response(400, 'Bad request',
                     ['<html><body><h1>400 Bad request</h1>',
                      '<p>Invalid request, no Host: found.</p>',
-                     '</body></html>\n'], trackable=True))
+                     '</body></html>\n'],
+                    trackable=True,
+                    overloaded=self.conns.config.Overloaded()))
           return False
 
       if self.parser.path.startswith(MAGIC_PREFIX):
@@ -1555,7 +1557,8 @@ class UnknownConn(MagicProtocolParser):
                     try_flush=True)
         else:
           self.Send(HTTP_Unavailable('fe', self.proto, self.host,
-                                     frame_url=self.conns.config.error_url),
+                                     frame_url=self.conns.config.error_url,
+                                     overloaded=self.conns.config.Overloaded()),
                     try_flush=True)
         return False
 

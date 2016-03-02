@@ -138,12 +138,12 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
   req.append('\r\n')
   return ''.join(req)
 
-def HTTP_ResponseHeader(code, title, mimetype='text/html'):
+def HTTP_ResponseHeader(code, title, mimetype='text/html', first_headers=None):
   if mimetype.startswith('text/') and ';' not in mimetype:
     mimetype += ('; charset=%s' % DEFAULT_CHARSET)
-  return ('HTTP/1.1 %s %s\r\nContent-Type: %s\r\nPragma: no-cache\r\n'
+  return ('HTTP/1.1 %s %s\r\n%sContent-Type: %s\r\nPragma: no-cache\r\n'
           'Expires: 0\r\nCache-Control: no-store\r\nConnection: close'
-          '\r\n') % (code, title, mimetype)
+          '\r\n') % (code, title, ''.join(first_headers or []), mimetype)
 
 def HTTP_Header(name, value):
   return '%s: %s\r\n' % (name, value)
@@ -158,12 +158,21 @@ def HTTP_ConnectBad(code=503, status='Unavailable'):
   return 'HTTP/1.0 %s %s\r\n\r\n' % (code, status)
 
 def HTTP_Response(code, title, body,
-                  mimetype='text/html', headers=None, trackable=False):
-  data = [HTTP_ResponseHeader(code, title, mimetype)]
-  if headers: data.extend(headers)
-  if trackable: data.extend('X-PageKite-UUID: %s\r\n' % MAGIC_UUID)
-  data.extend([HTTP_StartBody(), ''.join(body)])
-  return ''.join(data)
+                  mimetype='text/html', headers=None,
+                  trackable=False, overloaded=False):
+  if overloaded or trackable:
+    headers = headers or []
+
+  if trackable:  # Put this first...
+    headers = [HTTP_Header('X-PageKite-UUID', MAGIC_UUID)] + headers
+
+  if overloaded:  # No, put this first!
+    headers = [HTTP_Header('X-PageKite-Overloaded', 'Sorry')] + headers
+
+  return ''.join([
+    HTTP_ResponseHeader(code, title, mimetype, first_headers=headers),
+    HTTP_StartBody(),
+    ''.join(body)])
 
 def HTTP_NoFeConnection(proto):
   if proto.endswith('.json'):
@@ -223,7 +232,8 @@ def HTTP_GoodBeConnection(proto):
                HTTP_Header('Access-Control-Allow-Origin', '*')])
 
 def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None,
-                     code=503, status='Unavailable', headers=None):
+                     code=503, status='Unavailable', headers=None,
+                     overloaded=False):
   if code == 401:
     headers = headers or []
     headers.append(HTTP_Header('WWW-Authenticate', 'Basic realm=PageKite'))
@@ -239,11 +249,14 @@ def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None,
                          ['<html><frameset cols="*">',
                           '<frame target="_top" src="', frame_url, '" />',
                           '<noframes>', message, '</noframes>',
-                          '</frameset></html>\n'], headers=headers)
+                          '</frameset></html>\n'],
+                         headers=headers,
+                         trackable=True, overloaded=overloaded)
   else:
     return HTTP_Response(code, status,
                          ['<html><body>', message, '</body></html>\n'],
-                         headers=headers)
+                         headers=headers,
+                         trackable=True, overloaded=overloaded)
 
 def TLS_Unavailable(forbidden=False, unavailable=False):
   """Generate a TLS alert record aborting this connectin."""

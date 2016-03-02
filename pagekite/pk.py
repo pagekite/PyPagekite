@@ -76,7 +76,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'frontend=', 'nofrontend=', 'frontends=',
             'torify=', 'socksify=', 'proxy=', 'noproxy',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
-            'buffers=', 'noprobes', 'debugio', 'watch=',
+            'buffers=', 'noprobes', 'debugio', 'watch=', 'overload=',
             # DEPRECATED:
             'reloadfile=', 'autosave', 'noautosave', 'webroot=',
             'webaccess=', 'webindexes=', 'delete_backend=']
@@ -895,6 +895,7 @@ class PageKite(object):
     self.keep_looping = True
     self.main_loop = True
     self.watch_level = [None]
+    self.overload = None
 
     self.crash_report_url = '%scgi-bin/crashes.pl' % WWWHOME
     self.rcfile_recursion = 0
@@ -1523,6 +1524,11 @@ class PageKite(object):
     logging.LogInfo('No authentication found for: %s (%s)' % (domain, protoport))
     return (None, None, None, auth_error_type or 'unauthorized')
 
+  def Overloaded(self):
+    if not self.overload or not self.conns:
+      return False
+    return (len(self.conns.conns) + len(self.conns.tunnels) > self.overload)
+
   def ConfigureFromFile(self, filename=None, data=None):
     if not filename: filename = self.rcfile
 
@@ -1947,6 +1953,8 @@ class PageKite(object):
       elif opt == '--sslzlib': self.enable_sslzlib = True
       elif opt == '--watch':
         self.watch_level[0] = int(arg)
+      elif opt == '--overload':
+        self.overload = int(arg)
       elif opt == '--debugio':
         logging.DEBUG_IO = True
       elif opt == '--buffers': self.buffer_max = int(arg)
@@ -2656,9 +2664,10 @@ class PageKite(object):
           fd.setblocking(1)
 
         fd.connect((host, port))
-        fd.send('HEAD / HTTP/1.0\r\n\r\n')
+        fd.send('HEAD /ping HTTP/1.1\r\nHost: ping.pagekite\r\n\r\n')
         data = fd.recv(1024)
         fd.close()
+        assert(data.startswith('HTTP/1.1 503 Unavailable'))
 
       except Exception, e:
         logging.LogDebug('Ping %s:%s failed: %s' % (host, port, e))
@@ -2669,6 +2678,9 @@ class PageKite(object):
         uuid = data.split('X-PageKite-UUID: ')[1].split()[0]
       except:
         uuid = self.TMP_UUID_MAP.get(uuid, uuid)
+
+      if 'X-PageKite-Overloaded:' in data:
+        elapsed += 1  # Simulate slowness: add full second to ping time
 
       if cid not in self.ping_cache:
         self.ping_cache[cid] = []
