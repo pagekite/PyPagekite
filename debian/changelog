@@ -1,3 +1,13 @@
+pagekite (0.5.8a-2) unstable; urgency=medium
+
+  * Reintroduce debian/dirs to make sure deb include required
+    directories (Closes: #816471).
+  * Added simple autopkgtest script to check the client can run.
+  * Added nonworking draft autopkgtest script test-tunnel to test
+    a loopback tunnel.
+
+ -- Petter Reinholdtsen <pere@debian.org>  Wed, 02 Mar 2016 14:34:41 +0100
+
 pagekite (0.5.8a-1) unstable; urgency=medium
 
   [ Petter Reinholdtsen ]
