@@ -1,14 +1,14 @@
 #!/bin/sh
 #
-# Set up pagekite on localhost to tunnel from port 80 (http) to port
-# 113 (ident) to allow the ident server to be queried using port 80.
+# Set up pagekite on localhost to tunnel from port 8080 to port 113
+# (ident) to allow the ident server to be queried using port 8080.
 
 set -e
-set -x
 
 SECRET=foo # FIXME replace by something random
 DNSNAME=$(hostname)
 identport=113
+test_error=no
 
 echo "starting frontend"
 pagekite \
@@ -27,13 +27,18 @@ backpid=$!
 sleep 10
 
 echo "trying to connect to ident server via pagekite"
-if echo | nc localhost http; then
+if echo | nc localhost 8080; then
     echo success
 else
     echo error
+    test_error=yes
 fi
 
 echo "stopping pagekite processes"
 kill $frontpid $backpid
 sleep 5
-kill -9 $frontpid $backpid
+kill -9 $frontpid $backpid 2>/dev/null || true
+
+if [ "$test_error" = "yes" ]; then
+    exit 1
+fi

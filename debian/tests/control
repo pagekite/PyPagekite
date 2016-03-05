@@ -1,4 +1,4 @@
-Depend: @
-Tests: test-client-running
+Depends: @
+Tests: test-client-running, test-tunnel
 Restrictions: needs-root
 
