@@ -14,6 +14,7 @@ Build-Depends-Indep:
  , python-setuptools
  , python-socksipychain
 X-Python-Version: >= 2.6
+Testsuite: autopkgtest
 Standards-Version: 3.9.6
 Homepage: https://pagekite.net/
 Vcs-Browser: https://anonscm.debian.org/gitweb/?p=collab-maint/pagekite.git
