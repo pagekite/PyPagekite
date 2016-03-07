@@ -975,7 +975,7 @@ class PageKite(object):
 
   def SetServiceDefaults(self, clobber=True, check=False):
     def_dyndns    = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
-    def_frontends = (1, 'fe%s.b5p.us' % re.sub(r'[a-z\.]', '', APPVER), 443)
+    def_frontends = (1, 'fe4_%s.b5p.us' % re.sub(r'[^\d]', '', APPVER), 443)
     def_ca_certs  = sys.argv[0]
     def_fe_certs  = ['b5p.us'] + [c for c in SERVICE_CERTS if c != 'b5p.us']
     def_error_url = 'https://pagekite.net/offline/?'
@@ -1527,7 +1527,7 @@ class PageKite(object):
   def Overloaded(self):
     if not self.overload or not self.conns:
       return False
-    return (len(self.conns.conns) + len(self.conns.tunnels) > self.overload)
+    return (len(self.conns.conns) > self.overload)
 
   def ConfigureFromFile(self, filename=None, data=None):
     if not filename: filename = self.rcfile
