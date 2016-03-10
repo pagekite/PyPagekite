@@ -1,3 +1,14 @@
+pagekite (0.5.8a-3) unstable; urgency=medium
+
+  [ James Valleroy ]
+  * Fix autopkgtests and enable test-tunnel.
+
+  [ Petter Reinholdtsen ]
+  * Added 'Testsuite: autopkgtest' to debian/control to activate
+    autopkgtest for package.
+
+ -- Petter Reinholdtsen <pere@debian.org>  Thu, 10 Mar 2016 15:13:06 +0100
+
 pagekite (0.5.8a-2) unstable; urgency=medium
 
   * Reintroduce debian/dirs to make sure deb include required
