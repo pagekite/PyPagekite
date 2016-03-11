@@ -1,3 +1,10 @@
+pagekite (0.5.8a-4) unstable; urgency=medium
+
+  * Corrected autopkgtest setup, need netcat installed during
+    test (Closes: #816853).
+
+ -- Petter Reinholdtsen <pere@debian.org>  Fri, 11 Mar 2016 12:53:14 +0100
+
 pagekite (0.5.8a-3) unstable; urgency=medium
 
   [ James Valleroy ]
