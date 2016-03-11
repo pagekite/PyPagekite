@@ -1,4 +1,3 @@
-Depends: @
+Depends: @, netcat-openbsd
 Tests: test-client-running, test-tunnel
 Restrictions: needs-root
-
