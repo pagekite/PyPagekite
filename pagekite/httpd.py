@@ -966,12 +966,12 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
 
     if ssl_pem_filename:
       ctx = socks.SSL.Context(socks.SSL.TLSv1_METHOD)
-      ctx.set_ciphers('HIGH:-aNULL:-eNULL:-PSK:RC4-SHA:RC4-MD5')
+      ctx.set_cipher_list('HIGH:-aNULL:-eNULL:-PSK:RC4-SHA:RC4-MD5')
       ctx.use_privatekey_file (ssl_pem_filename)
       ctx.use_certificate_chain_file(ssl_pem_filename)
       self.socket = socks.SSL_Connect(ctx, socket.socket(self.address_family,
                                                          self.socket_type),
-                                         server_side=True)
+                                      server_side=True)
       self.server_bind()
       self.server_activate()
       self.enable_ssl = True
@@ -1005,4 +1005,8 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     except (socket.error, socks.SSL.ZeroReturnError, socks.SSL.Error):
       pass
 
-
+  def shutdown_request(self, *args):
+    try:
+      return SimpleXMLRPCServer.shutdown_request(self, *args)
+    except TypeError:
+      return SimpleXMLRPCServer.close_request(self, *args)
