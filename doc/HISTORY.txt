@@ -1,8 +1,22 @@
 Version history - highlights
 ============================
 
+v0.5.8e     2016.03.02
+-------
+   - Fix dynamic DNS update bug which would advertise too many IPs
+   - Enable versioned DNS frontend lookups in default settings
+   - Fix server ping logic (broken in 0.5.8a)
+
+
+v0.5.8b     2016.02.16
+-------
+   - Fix SSL3_WRITE_PENDING errors with recent OpenSSL versions
+   - Make signup e-mail regexp less strict (rely on server to check)
+   - Change iframe links to use https:// by default
+
+
 v0.5.8a     2015.10.16
-------
+-------
    - Speed up startup by pinging relays in parallel
    - Attempt to fix infinite loop when using epoll
    - Misc. crashers avoided, including in log code on disk full
@@ -10,7 +24,7 @@ v0.5.8a     2015.10.16
 
 
 v0.5.7b     2015.09.15
-------
+-------
    - Allow legacy SSL support with --tls_legacy
    - Added --auththreads=N to tune size of authentication thread pool
    - Improve automated regression testing to test older versions too
