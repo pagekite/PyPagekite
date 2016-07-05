@@ -1,3 +1,10 @@
+pagekite (0.5.8e-1) unstable; urgency=medium
+
+  * New upstream version 0.5.8e.
+  * Updated Standards-Version from 3.9.6 to 3.9.8.
+
+ -- Petter Reinholdtsen <pere@debian.org>  Tue, 05 Jul 2016 11:36:39 +0000
+
 pagekite (0.5.8a-4) unstable; urgency=medium
 
   * Corrected autopkgtest setup, need netcat installed during
