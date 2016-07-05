@@ -4,7 +4,7 @@ This is the "basic" text-mode user interface class.
 #############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
-Copyright 2010-2015, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+Copyright 2010-2016, the Beanstalks Project ehf. and Bjarni Runar Einarsson
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the  GNU  Affero General Public License as published by the Free
@@ -50,7 +50,7 @@ class BasicUi(NullUi):
   EMAIL_RE = re.compile(r'^[a-z0-9!#$%&\'\*\+\/=?^_`{|}~-]+'
                          '(?:\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'
                          '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
-                         '(?:[a-zA-Z]{2,4}|museum)$')
+                         '(?:[a-zA-Z]{2,16})$')
   def Notify(self, message, prefix=' ',
              popup=False, color=None, now=None, alignright=''):
     now = int(now or time.time())
