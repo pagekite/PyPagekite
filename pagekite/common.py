@@ -4,7 +4,7 @@ Constants and global program state.
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
-Copyright 2010-2015, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+Copyright 2010-2016, the Beanstalks Project ehf. and Bjarni Runar Einarsson
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the  GNU  Affero General Public License as published by the Free
@@ -24,9 +24,9 @@ import random
 import time
 
 PROTOVER = '0.8'
-APPVER = '0.5.8a'
+APPVER = '0.5.8d'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
-WWWHOME = 'http://pagekite.net/'
+WWWHOME = 'https://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
 
 MAGIC_PREFIX = '/~:PageKite:~/'
