@@ -24,7 +24,7 @@ import random
 import time
 
 PROTOVER = '0.8'
-APPVER = '0.5.8d'
+APPVER = '0.5.8e'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'https://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
