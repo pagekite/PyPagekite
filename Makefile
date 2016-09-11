@@ -54,10 +54,10 @@ android: pagekite tools .header
 	@ls -l dist/pk-android-*.py
 
 doc/MANPAGE.md: pagekite pagekite/manual.py
-	@./pagekite/manual.py --nopy --markdown >doc/MANPAGE.md
+	@python -m pagekite.manual --nopy --markdown >doc/MANPAGE.md
 
 doc/pagekite.1: pagekite pagekite/manual.py
-	@./pagekite/manual.py --nopy --man >doc/pagekite.1
+	@python -m pagekite.manual --nopy --man >doc/pagekite.1
 
 dist: combined .deb gtk allrpm android
 
