@@ -1,0 +1,36 @@
+Description: Fix building manual with latest OpenSSL
+ The latest verions of PyOpenSSL package has additional includes that
+ use pyasn1 package. This in turn uses the logging module. However,
+ during import, instead of importing system's logging module as
+ expected, pagekite/logging.py is imported. This causes missing
+ methods and manual page building fails.
+ .
+ When called as ./pagekite/manual.py, Python will automatically add
+ pagekite/ directory to the import path. This will make
+ pagekite/logging.py a top level module that can be imported using
+ 'import logging'. Since pagekite/ directory is given highest priority
+ in the import path, pagekite's logging module will be used instead of
+ system logging module.
+ .
+ Solution is to call the manual generating script as 'python -m
+ pagekite.manual' instead of './pagekite/manual.py'.
+Bug: https://github.com/pagekite/PyPagekite/pull/56
+Bug-Debian: https://bugs.debian.org/830287
+Author: Sunil Mohan Adapa <sunil@medhas.org
+Forwarded: https://github.com/pagekite/PyPagekite/pull/56
+Last-Update: 2016-09-11
+--- a/Makefile
++++ b/Makefile
+@@ -54,10 +54,10 @@
+ 	@ls -l dist/pk-android-*.py
+ 
+ doc/MANPAGE.md: pagekite pagekite/manual.py
+-	@./pagekite/manual.py --nopy --markdown >doc/MANPAGE.md
++	@python -m pagekite.manual --nopy --markdown >doc/MANPAGE.md
+ 
+ doc/pagekite.1: pagekite pagekite/manual.py
+-	@./pagekite/manual.py --nopy --man >doc/pagekite.1
++	@python -m pagekite.manual --nopy --man >doc/pagekite.1
+ 
+ dist: combined .deb gtk allrpm android
+ 
