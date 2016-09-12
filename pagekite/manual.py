@@ -2,7 +2,6 @@
 """
 The program manual!
 """
-import os
 import re
 import time
 
@@ -10,8 +9,8 @@ from common import *
 from compat import ts_to_iso
 
 MAN_NAME = ("""\
-    pagekite.py - Make localhost servers publicly visible
-""")
+    pagekite.py v%s - Make localhost servers publicly visible
+""" % APPVER)
 MAN_SYNOPSIS = ("""\
     <b>pagekite.py</b> [<a>--options</a>] [<a>service</a>] <a>kite-name</a> [<a>+flags</a>]
 """)
@@ -455,7 +454,7 @@ def MAN(pname=None):
 .TH PAGEKITE "1" "%s" "https://pagekite.net/" "Awesome Commands"
 .nh
 .ad l
-""") % ts_to_iso(float(os.environ.get('SOURCE_DATE_EPOCH', time.time()))).split('T')[0]
+""") % ts_to_iso(time.time()).split('T')[0]
   for h, section, text in MANUAL_TOC:
     man += ('.%s %s\n\n%s\n\n'
             ) % (h, h == 'SH' and section.upper() or section,

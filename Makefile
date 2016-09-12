@@ -88,21 +88,28 @@ rpm_el6-fc13:
 	                           --requires=python-SocksipyChain
 
 VERSION=`python setup.py --version`
-DEB_VERSION=`head -n1 debian/changelog | sed -e "s+.*(\(.*\)).*+\1+"`
-.debprep:
-	@ln -sf deb debian
-	if [ "x$(VERSION)" != "x$(DEB_VERSION)" ] ; \
-	then \
-	  dch --maintmaint --newversion $(VERSION) --urgency=low \
-              --distribution=unstable "New release." ; \
-	fi
+.debprep: doc/pagekite.1
+	@rm -f setup.cfg
+	@sed -e "s/@VERSION@/$(VERSION)/g" \
+		< debian/control.in >debian/control
+	@sed -e "s/@VERSION@/$(VERSION)/g" \
+		< debian/copyright.in >debian/copyright
+	@sed -e "s/@VERSION@/$(VERSION)/g" \
+	     -e "s/@DATE@/`date -R`/g" \
+		< debian/changelog.in >debian/changelog
+	@ls -1 doc/*.? >debian/pagekite.manpages
+	@ln -fs ../etc/logrotate.d/pagekite.debian debian/pagekite.logrotate
+	@ln -fs ../etc/init.d/pagekite.debian debian/init.d
 
-.targz:
+.targz: .debprep
 	@python setup.py sdist
 
-.deb: .debprep
-	@debuild -i -us -uc
+.deb: .targz
+	@cp -v dist/pagekite*.tar.gz \
+		../pagekite-$(VERSION)_$(VERSION).orig.tar.gz
+	@debuild -i -us -uc -b
 	@mv ../pagekite_*.deb dist/
+	@rm ../pagekite-*.orig.tar.gz
 
 .header: pagekite doc/header.txt
 	@sed -e "s/@VERSION@/$(VERSION)/g" \
@@ -144,6 +151,6 @@ clean:
 	@rm -vf sockschain *.pyc */*.pyc */*/*.pyc scripts/breeder.py .SELF
 	@rm -vf .appver pagekite-tmp.py MANIFEST setup.cfg pagekite_gtk.py
 	@rm -vrf *.egg-info .header doc/pagekite.1 build/
-	-debuild clean
-	@-rm debian
+	@rm -vf debian/files debian/control debian/copyright debian/changelog
+	@rm -vrf debian/pagekite* debian/python* debian/init.d
 

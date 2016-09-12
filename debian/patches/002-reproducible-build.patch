@@ -1,0 +1,38 @@
+Description: Make build reproducible.
+Author: Chris Lamb <lamby@debian.org>
+Bug-Debian: https://bugs.debian.org/795659
+
+diff --git a/pagekite/compat.py b/pagekite/compat.py
+index 0426f24..c149ad0 100755
+--- a/pagekite/compat.py
++++ b/pagekite/compat.py
+@@ -50,7 +50,7 @@ try:
+   import datetime
+   ts_to_date = datetime.datetime.fromtimestamp
+   def ts_to_iso(ts=None):
+-    return datetime.datetime.fromtimestamp(ts).isoformat()
++    return datetime.datetime.utcfromtimestamp(ts).isoformat()
+ except ImportError:
+   ts_to_date = str
+   ts_to_iso = str
+diff --git a/pagekite/manual.py b/pagekite/manual.py
+index 3b79eb4..7ce7f6a 100755
+--- a/pagekite/manual.py
++++ b/pagekite/manual.py
+@@ -2,6 +2,7 @@
+ """
+ The program manual!
+ """
++import os
+ import re
+ import time
+ 
+@@ -454,7 +455,7 @@ def MAN(pname=None):
+ .TH PAGEKITE "1" "%s" "https://pagekite.net/" "Awesome Commands"
+ .nh
+ .ad l
+-""") % ts_to_iso(time.time()).split('T')[0]
++""") % ts_to_iso(float(os.environ.get('SOURCE_DATE_EPOCH', time.time()))).split('T')[0]
+   for h, section, text in MANUAL_TOC:
+     man += ('.%s %s\n\n%s\n\n'
+             ) % (h, h == 'SH' and section.upper() or section,
