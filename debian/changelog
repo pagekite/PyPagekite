@@ -1,10 +1,15 @@
-pagekite (0.5.8e-2) UNRELEASED; urgency=medium
+pagekite (0.5.8e-2) unstable; urgency=medium
 
+  [ Sunil Mohan Adapa ]
   * Fix issues with local logging module getting included instead
     of system module due to the way manual.py is invoked
     (Closes: #830287).
 
- -- Sunil Mohan Adapa <sunil@medhas.org>  Sun, 11 Sep 2016 11:23:05 +0530
+  [ Petter Reinholdtsen ]
+  * Migrated git repo from single-debian-patch to use individual patches in
+    d/patches/.
+
+ -- Petter Reinholdtsen <pere@debian.org>  Mon, 12 Sep 2016 10:15:02 +0200
 
 pagekite (0.5.8e-1) unstable; urgency=medium
 
