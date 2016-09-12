@@ -1,0 +1,20 @@
+Description: Drop version number from generated whatis manual page entry.
+ The whatis entry should only have the command name, the version number
+ belong elsewhere in the manual page.
+Author: Petter Reinholdtsen <pere@hungry.com>
+
+Index: pagekite-alioth/pagekite/manual.py
+===================================================================
+--- pagekite-alioth.orig/pagekite/manual.py	2016-09-12 10:58:03.423852472 +0000
++++ pagekite-alioth/pagekite/manual.py	2016-09-12 10:58:03.419852426 +0000
+@@ -10,8 +10,8 @@
+ from compat import ts_to_iso
+ 
+ MAN_NAME = ("""\
+-    pagekite.py v%s - Make localhost servers publicly visible
+-""" % APPVER)
++    pagekite.py - Make localhost servers publicly visible
++""")
+ MAN_SYNOPSIS = ("""\
+     <b>pagekite.py</b> [<a>--options</a>] [<a>service</a>] <a>kite-name</a> [<a>+flags</a>]
+ """)

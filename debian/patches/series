@@ -1,3 +1,4 @@
 000-debian-changes.patch
 001-fix-build-manpage.patch
 002-reproducible-build.patch
+003-manpage-no-ver-in-whatis.patch
