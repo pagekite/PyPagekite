@@ -63,7 +63,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webpath=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings',
-            'defaults', 'local=', 'domain=',
+            'defaults', 'whitelabel=', 'local=', 'domain=',
             'auththreads=', 'authdomain=', 'motd=', 'register=', 'host=',
             'noupgradeinfo', 'upgradeinfo=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
@@ -997,6 +997,29 @@ class PageKite(object):
             self.fe_certname.append(cert)
       return True
 
+  def SetWhitelabelDefaults(self, wld, clobber=True, check=False):
+    def_dyndns = (DYNDNS['whitelabel'] % wld, {'user': '', 'pass': ''})
+    def_frontends = (1, 'fe4_%s.%s' % (re.sub(r'[^\d]', '', APPVER), wld), 443)
+    def_ca_certs = sys.argv[0]
+    def_fe_certs = [wld] + [c for c in SERVICE_CERTS if c != wld]
+    def_error_url = 'https://pagekite.net/offline/?'
+    if check:
+      return (self.dyndns == def_dyndns and
+              self.servers_auto == def_frontends and
+              self.error_url == def_error_url and
+              (sorted(self.fe_certname) == sorted(def_fe_certs) or
+               not socks.HAVE_SSL))
+    else:
+      self.dyndns = (not clobber and self.dyndns) or def_dyndns
+      self.servers_auto = (not clobber and self.servers_auto) or def_frontends
+      self.error_url = (not clobber and self.error_url) or def_error_url
+      self.ca_certs = (not clobber and def_ca_certs) or def_ca_certs
+      if socks.HAVE_SSL:
+        for cert in def_fe_certs:
+          if cert not in self.fe_certname:
+            self.fe_certname.append(cert)
+      return True
+
   def GenerateConfig(self, safe=False):
     config = [
       '###[ Current settings for pagekite.py v%s. ]#########' % APPVER,
@@ -1025,10 +1048,27 @@ class PageKite(object):
         ''
       ])
 
+    kite_tld = None
+    if self.kitename:
+      kite_tld = '.'.join(self.kitename.split('.')[-2:])
+
     if self.SetServiceDefaults(check=True):
       config.extend([
         '##[ Front-end settings: use pagekite.net defaults ]##',
         'defaults',
+        ''
+      ])
+      if self.servers_manual or self.servers_never:
+        config.append('##[ Manual front-ends ]##')
+        for server in sorted(self.servers_manual):
+          config.append('frontend=%s' % server)
+        for server in sorted(self.servers_never):
+          config.append('nofrontend=%s' % server)
+        config.append('')
+    elif kite_tld and self.SetWhitelabelDefaults(kite_tld, check=True):
+      config.extend([
+        '##[ Front-end settings: use %s defaults ]##' % kite_tld,
+        'whitelabel = %s' % kite_tld,
         ''
       ])
       if self.servers_manual or self.servers_never:
@@ -1964,6 +2004,7 @@ class PageKite(object):
         self.SetLocalSettings([int(p) for p in arg.split(',')])
         if not 'localhost' in args: args.append('localhost')
       elif opt == '--defaults': self.SetServiceDefaults()
+      elif opt == '--whitelabel': self.SetWhitelabelDefaults(arg)
       elif opt in ('--clean', '--nopyopenssl', '--nossl', '--settings',
                    '--signup', '--friendly'):
         # These are handled outside the main loop, we just ignore them.

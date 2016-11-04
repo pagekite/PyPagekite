@@ -104,6 +104,8 @@ DYNDNS = {
                    '?hostname=%(domain)s&myip=%(ips)s&sign=%(sign)s'),
   'beanstalks.net': ('http://up.b5p.us/'
                      '?hostname=%(domain)s&myip=%(ips)s&sign=%(sign)s'),
+  'whitelabel': ('http://dnsup.%s/'
+                 '?hostname=%%(domain)s&myip=%%(ips)s&sign=%%(sign)s'),
   'dyndns.org': ('https://%(user)s:%(pass)s@members.dyndns.org'
                  '/nic/update?wildcard=NOCHG&backmx=NOCHG'
                  '&hostname=%(domain)s&myip=%(ip)s'),
