@@ -42,6 +42,21 @@ SERVICE_TOS_URL = 'https://pagekite.net/humans.txt'
 SERVICE_CERTS = ['b5p.us', 'frontends.b5p.us', 'pagekite.net', 'pagekite.me',
                  'pagekite.com', 'pagekite.org', 'testing.is', '302.is']
 
+# Places to search for the CA Certificate bundle
+OS_CA_CERTS = (
+  "/etc/ssl/certs/ca-certificates.crt",      # Debian/Ubuntu/Gentoo etc.
+  "/etc/pki/tls/certs/ca-bundle.crt",        # Fedora/RHEL
+  "/etc/ssl/ca-bundle.pem",                  # OpenSUSE
+  "/etc/pki/tls/cacert.pem",                 # OpenELEC
+  "/etc/ssl/cert.pem",                       # OpenBSD
+  "/usr/local/share/certs/ca-root-nss.crt",  # FreeBSD/DragonFly
+  "/usr/local/etc/openssl/cert.pem",         # OS X (Homebrew)
+  "/opt/local/etc/openssl/cert.pem",         # OS X (Ports?)
+  "/system/etc/security/cacerts")            # Android
+
+CURL_CA_CERTS = 'https://curl.haxx.se/ca/cacert.pem'
+
+
 DEFAULT_CHARSET = 'utf-8'
 DEFAULT_BUFFER_MAX = 1024
 

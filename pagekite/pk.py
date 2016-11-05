@@ -911,12 +911,44 @@ class PageKite(object):
       self.rcfile = 'pagekite.cfg'
       self.devnull = '/dev/null'
 
+    self.SetDefaultCACerts()
+
+  def SetDefaultCACerts(self, **kwargs):
     # Look for CA Certificates. If we don't find them in the host OS,
     # we assume there might be something good in the program itself.
-    self.ca_certs_default = '/etc/ssl/certs/ca-certificates.crt'
-    if not os.path.exists(self.ca_certs_default):
-      self.ca_certs_default = sys.argv[0]
+    self.ca_certs_default = self.FindCACerts(**kwargs)
     self.ca_certs = self.ca_certs_default
+
+  def FindCACerts(self, use_curl_bundle=False):
+    # Search a bunch of paths, preferring the biggest/newest bundle found
+    biggest, newest, found = 0, 0, None
+    own_pemfile = "%s.pem" % '.'.join(self.rcfile.split('.')[:-1])
+
+    for path in list(OS_CA_CERTS) + [own_pemfile]:
+      if os.path.exists(path):
+        # We consider all bundles over 200k to be the same size...
+        size = min(200000, os.stat(path).st_size)
+        mtime = os.stat(path).st_mtime
+        if size > biggest:
+          # Choose the biggest bundle!
+          found, biggest, newest = path, size, mtime
+        elif size == biggest and mtime > newest:
+          # Choose the freshest bundle!
+          found, newest = path, mtime
+
+    if use_curl_bundle and ((not found) or
+        ((found == own_pemfile) and (newest < time.time() - 365*24*3600))):
+      # No bundle found or bundle old, download a new one from the cURL site.
+      try:
+        urllib.URLopener().retrieve(CURL_CA_CERTS, filename=own_pemfile)
+        return self.FindCACerts(use_curl_bundle=False)
+      except:
+        pass
+
+    if found:
+      return found
+
+    return sys.argv[0]  # Fall back to distributed CA certs
 
   ACL_SHORTHAND = {
     'localhost': '((::ffff:)?127\..*|::1)',
@@ -955,21 +987,18 @@ class PageKite(object):
   def SetServiceDefaults(self, clobber=True, check=False):
     def_dyndns    = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
     def_frontends = (1, 'frontends.b5p.us', 443)
-    def_ca_certs  = sys.argv[0]
     def_fe_certs  = ['b5p.us'] + [c for c in SERVICE_CERTS if c != 'b5p.us']
     def_error_url = 'https://pagekite.net/offline/?'
     if check:
       return (self.dyndns == def_dyndns and
               self.servers_auto == def_frontends and
               self.error_url == def_error_url and
-              self.ca_certs == def_ca_certs and
               (sorted(self.fe_certname) == sorted(def_fe_certs) or
                not socks.HAVE_SSL))
     else:
       self.dyndns = (not clobber and self.dyndns) or def_dyndns
       self.servers_auto = (not clobber and self.servers_auto) or def_frontends
       self.error_url = (not clobber and self.error_url) or def_error_url
-      self.ca_certs = def_ca_certs
       if socks.HAVE_SSL:
         for cert in def_fe_certs:
           if cert not in self.fe_certname:
@@ -1008,15 +1037,14 @@ class PageKite(object):
       config.extend([
         '##[ Front-end settings: use pagekite.net defaults ]##',
         'defaults',
-        ''
       ])
       if self.servers_manual or self.servers_never:
+        config.append('')
         config.append('##[ Manual front-ends ]##')
         for server in sorted(self.servers_manual):
           config.append('frontend=%s' % server)
         for server in sorted(self.servers_never):
           config.append('nofrontend=%s' % server)
-        config.append('')
     else:
       if not self.servers_auto and not self.servers_manual:
         new = True
@@ -1042,8 +1070,6 @@ class PageKite(object):
 
       for server in self.fe_certname:
         config.append('fe_certname = %s' % server)
-      if self.ca_certs != self.ca_certs_default:
-        config.append('ca_certs = %s' % self.ca_certs)
 
       if self.dyndns:
         provider, args = self.dyndns
@@ -1069,7 +1095,9 @@ class PageKite(object):
           p('fingerpath = %s', self.finger_path, '/~%s/.finger'),
           '',
         ])
-      config.append('')
+    if self.ca_certs != self.ca_certs_default:
+      config.append('ca_certs = %s' % self.ca_certs)
+    config.append('')
 
     if self.ui_sspec or self.ui_password or self.ui_pemfile:
       config.extend([
@@ -1847,7 +1875,11 @@ class PageKite(object):
           # together in the tunnel, which makes traffic analysis harder.
           compat.SEND_ALWAYS_BUFFERS = True
 
-      elif opt == '--ca_certs': self.ca_certs = arg
+      elif opt == '--ca_certs':
+        if arg == 'auto':
+          self.SetDefaultCACerts(use_curl_bundle=True)
+        else:
+          self.ca_certs = arg
       elif opt == '--jakenoia': self.fe_anon_tls_wrap = True
       elif opt == '--fe_certname':
         if arg == '':
@@ -2230,6 +2262,11 @@ class PageKite(object):
 
     # This is the default...
     be_specs = ['http:%s:localhost:80']
+
+    if self.ca_certs == self.ca_certs_default:
+      # We're using the defaults, but the defaults might be lame so we
+      # reset them here, allowing for downloading the cURL bundle.
+      self.SetDefaultCACerts(use_curl_bundle=True)
 
     service = self.GetServiceXmlRpc()
     service_accounts = {}
