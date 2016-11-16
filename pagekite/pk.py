@@ -3014,6 +3014,8 @@ class PageKite(object):
             self.SetBackendStatus(update.split(':')[0],
                                   add=BE_STATUS_ERR_DNS)
             # Hmm, the update may have succeeded - assume the "worst".
+            if domain not in self.dns_cache:
+              self.dns_cache[domain] = {}
             self.dns_cache[domain][int(time.time())] = ips.split(',')
             failures += 1
 
