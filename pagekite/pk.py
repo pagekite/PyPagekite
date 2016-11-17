@@ -2716,6 +2716,8 @@ class PageKite(object):
   def Ping(self, host, port):
     cid = uuid = '%s:%s' % (host, port)
 
+    if cid in self.servers_never:
+      return (9999, uuid)
     if self.servers_no_ping:
       return (0, uuid)
 
@@ -2840,8 +2842,7 @@ class PageKite(object):
       if ipaddrs:
         ptime, uuid = self.Ping(ipaddrs[0], int(port))
         server = '%s:%s' % (ipaddrs[0], port)
-        if server not in self.servers_never:
-          servers_all[uuid] = servers_pref[uuid] = server
+        servers_all[uuid] = servers_pref[uuid] = server
     threads, deadline = [], time.time() + 5
     for server in self.servers_manual:
       threads.append(threading.Thread(target=sping, args=(server,)))
@@ -2866,8 +2867,7 @@ class PageKite(object):
               if not ip.startswith('127.') and ip not in pinged:
                 server = '%s:%s' % (ip, port)
                 pingtime, uuid = pinged[ip] = self.Ping(ip, int(port))
-                if server not in self.servers_never:
-                  servers_all[uuid] = server
+                servers_all[uuid] = server
           threads, deadline = [], time.time() + 5
           for bid in self.GetActiveBackends():
             threads.append(threading.Thread(target=bping, args=(bid,)))
@@ -2876,9 +2876,7 @@ class PageKite(object):
           for t in threads:
             t.join(max(0.1, deadline - time.time()))
 
-        ips = [ip for ip in self.CachedGetHostIpAddrs(domain)
-               if ('%s:%s' % (ip, port)) not in self.servers_never
-               and ip not in pinged]
+        ips = [i for i in self.CachedGetHostIpAddrs(domain) if i not in pinged]
         def iping(ip):
           pinged[ip] = self.Ping(ip, int(port))
         threads, deadline = [], time.time() + 5
@@ -2908,8 +2906,9 @@ class PageKite(object):
             servers_pref[uuid] = server
           del pings[mIdx]
 
-    self.servers = servers_all.values()
-    self.servers_preferred = servers_pref.values()
+    nvr = self.servers_never
+    self.servers = [v for v in servers_all.values() if v not in nvr]
+    self.servers_preferred = [v for v in servers_pref.values() if v not in nvr]
     logging.LogDebug('Preferred: %s' % ', '.join(self.servers_preferred))
 
   def ConnectFrontend(self, conns, server):
@@ -2974,7 +2973,7 @@ class PageKite(object):
           loop.filters.append(HttpHeaderFilter(self.ui))
           if not self.insecure:
             loop.filters.append(HttpSecurityFilter(self.ui))
-        else:
+        elif server not in self.servers_never:
           state = [None, None]
           state[0] = threading.Thread(target=connect_in_thread,
                                       args=(conns, server, state))
