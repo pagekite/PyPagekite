@@ -1,7 +1,7 @@
 Version history - highlights
 ============================
 
-v0.5.9      2016.11.19
+v0.5.9      2016.11.18
 ------
    - CRITICAL: Fix how we load CA Certificates
    - Add --fe_nocertcheck for insecure (obfuscation-only) TLS connections
@@ -11,12 +11,12 @@ v0.5.9      2016.11.19
    - Advertise relay overload, consider during "Ping" evaluation
    - Create vipagekite helper for safely editing configs
 
-v0.5.8f     2016.11.19
+v0.5.8f     2016.11.18
 -------
    - CRITICAL: Fix how we load CA Certificates  (backport from v0.5.9)
    - Minor back-ported bugfixes
 
-v0.5.6f     2016.11.19
+v0.5.6f     2016.11.18
 -------
    - CRITICAL: Fix how we load CA Certificates  (backport from v0.5.9)
 
