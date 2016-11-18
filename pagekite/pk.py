@@ -63,7 +63,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webpath=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings',
-            'defaults', 'whitelabel=', 'local=', 'domain=',
+            'defaults', 'whitelabel=', 'whitelabels=', 'local=', 'domain=',
             'auththreads=', 'authdomain=', 'motd=', 'register=', 'host=',
             'noupgradeinfo', 'upgradeinfo=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
@@ -1026,11 +1026,12 @@ class PageKite(object):
             self.fe_certname.append(cert)
       return True
 
-  def SetWhitelabelDefaults(self, wld, clobber=True, check=False):
-    def_dyndns = (DYNDNS['whitelabel'] % wld, {'user': '', 'pass': ''})
+  def SetWhitelabelDefaults(self, wld, secure=False, clobber=True, check=False):
+    def_dyndns = (DYNDNS['whitelabels' if secure else 'whitelabel'] % wld,
+                  {'user': '', 'pass': ''})
     def_frontends = (1, 'fe4_%s.%s' % (re.sub(r'[^\d]', '', APPVER), wld), 443)
-    def_fe_certs = [wld] + [c for c in SERVICE_CERTS if c != wld]
-    def_error_url = 'https://pagekite.net/offline/?'
+    def_fe_certs = ['fe.%s' % wld, wld] + [c for c in SERVICE_CERTS if c != wld]
+    def_error_url = 'http%s://www.%s/offline/?' % ('s' if secure else '', wld)
     if check:
       return (self.dyndns == def_dyndns and
               self.servers_auto == def_frontends and
@@ -1079,11 +1080,7 @@ class PageKite(object):
     if self.kitename:
       kite_tld = '.'.join(self.kitename.split('.')[-2:])
 
-    if self.SetServiceDefaults(check=True):
-      config.extend([
-        '##[ Front-end settings: use pagekite.net defaults ]##',
-        'defaults',
-      ])
+    def addManualFrontends():
       if self.servers_manual or self.servers_never:
         config.append('')
         config.append('##[ Manual front-ends ]##')
@@ -1091,18 +1088,29 @@ class PageKite(object):
           config.append('frontend=%s' % server)
         for server in sorted(self.servers_never):
           config.append('nofrontend=%s' % server)
-    elif kite_tld and self.SetWhitelabelDefaults(kite_tld, check=True):
+
+    if self.SetServiceDefaults(check=True):
+      config.extend([
+        '##[ Front-end settings: use pagekite.net defaults ]##',
+        'defaults',
+      ])
+      addManualFrontends()
+    elif (kite_tld and
+          self.SetWhitelabelDefaults(kite_tld, secure=False, check=True)):
       config.extend([
         '##[ Front-end settings: use %s defaults ]##' % kite_tld,
         'whitelabel = %s' % kite_tld,
         ''
       ])
-      if self.servers_manual or self.servers_never:
-        config.append('##[ Manual front-ends ]##')
-        for server in sorted(self.servers_manual):
-          config.append('frontend=%s' % server)
-        for server in sorted(self.servers_never):
-          config.append('nofrontend=%s' % server)
+      addManualFrontends()
+    elif (kite_tld and
+          self.SetWhitelabelDefaults(kite_tld, secure=True, check=True)):
+      config.extend([
+        '##[ Front-end settings: use %s defaults ]##' % kite_tld,
+        'whitelabels = %s' % kite_tld,
+        ''
+      ])
+      addManualFrontends()
     else:
       if not self.servers_auto and not self.servers_manual:
         new = True
@@ -2036,7 +2044,8 @@ class PageKite(object):
         self.SetLocalSettings([int(p) for p in arg.split(',')])
         if not 'localhost' in args: args.append('localhost')
       elif opt == '--defaults': self.SetServiceDefaults()
-      elif opt == '--whitelabel': self.SetWhitelabelDefaults(arg)
+      elif opt == '--whitelabel': self.SetWhitelabelDefaults(arg, secure=False)
+      elif opt == '--whitelabels': self.SetWhitelabelDefaults(arg, secure=True)
       elif opt in ('--clean', '--nopyopenssl', '--nossl', '--settings',
                    '--signup', '--friendly'):
         # These are handled outside the main loop, we just ignore them.
