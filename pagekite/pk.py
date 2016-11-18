@@ -68,7 +68,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'noupgradeinfo', 'upgradeinfo=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
             'tls_legacy', 'tls_default=', 'tls_endpoint=', 'selfsign',
-            'fe_certname=', 'jakenoia', 'ca_certs=',
+            'fe_certname=', 'fe_nocertcheck', 'ca_certs=',
             'kitename=', 'kitesecret=', 'fingerpath=',
             'backend=', 'define_backend=', 'be_config=', 'insecure',
             'service_on=', 'service_off=', 'service_cfg=',
@@ -839,7 +839,7 @@ class PageKite(object):
     self.tls_default = None
     self.tls_endpoints = {}
     self.fe_certname = []
-    self.fe_anon_tls_wrap = False
+    self.fe_nocertcheck = False
 
     self.service_provider = SERVICE_PROVIDER
     self.service_xmlrpc = SERVICE_XMLRPC
@@ -1128,6 +1128,8 @@ class PageKite(object):
 
       for server in self.fe_certname:
         config.append('fe_certname = %s' % server)
+      if self.fe_nocertcheck:
+        config.append('fe_nocertcheck')
 
       if self.dyndns:
         provider, args = self.dyndns
@@ -1953,13 +1955,14 @@ class PageKite(object):
           self.SetDefaultCACerts(use_curl_bundle=True)
         else:
           self.ca_certs = arg
-      elif opt == '--jakenoia': self.fe_anon_tls_wrap = True
       elif opt == '--fe_certname':
         if arg == '':
           self.fe_certname = []
         else:
           cert = arg.lower()
           if cert not in self.fe_certname: self.fe_certname.append(cert)
+      elif opt == '--fe_nocertcheck':
+        self.fe_nocertcheck = True
       elif opt == '--service_xmlrpc': self.service_xmlrpc = arg
       elif opt == '--frontend': self.servers_manual.append(arg)
       elif opt == '--nofrontend': self.servers_never.append(arg)

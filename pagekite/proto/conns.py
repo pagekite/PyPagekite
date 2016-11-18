@@ -311,14 +311,15 @@ class Tunnel(ChunkParser):
     socks.DEBUG = (logging.DEBUG_IO or socks.DEBUG) and logging.LogDebug
     sock = socks.socksocket()
     if socks.HAVE_SSL:
-      chain = ['default']
-      if self.conns.config.fe_anon_tls_wrap:
-        chain.append('ssl-anon!%s!%s' % (sspec[0], sspec[1]))
-      if self.conns.config.fe_certname:
-        chain.append('http!%s!%s' % (sspec[0], sspec[1]))
-        chain.append('ssl!%s!443' % ','.join(self.conns.config.fe_certname))
+      pp = socks.parseproxy
+      chain = [pp('default')]
+      if self.conns.config.fe_nocertcheck:
+        chain.append([socks.PROXY_TYPE_SSL_WEAK, sspec[0], int(sspec[1])])
+      elif self.conns.config.fe_certname:
+        chain.append(pp('http!%s!%s' % (sspec[0], sspec[1])))
+        chain.append(pp('ssl!%s!443' % ','.join(self.conns.config.fe_certname)))
       for hop in chain:
-        sock.addproxy(*socks.parseproxy(hop))
+        sock.addproxy(*hop)
     self.SetFD(sock)
 
     try:

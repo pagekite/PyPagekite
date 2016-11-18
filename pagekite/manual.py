@@ -181,6 +181,11 @@ MAN_OPT_BACKEND = ("""\
             this option is repeated, any of the named certificates will be
             accepted, but the first will be preferred.
 
+    --fe_nocertcheck
+            Connect using SSL/TLS, but do not verify the remote certificate.
+            This is largely insecure but still thwarts passive attacks and
+            prevents routers and firewalls from corrupting the PageKite tunnel.
+
     --ca_certs</b>=<a>/path/to/file</a> __
             Path to your trusted root SSL certificates file.
 
