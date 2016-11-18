@@ -1,6 +1,16 @@
 Version history - highlights
 ============================
 
+v0.5.8f     2016.11.18
+-------
+   - CRITICAL: Fix how we load CA Certificates  (backport from v0.5.9)
+   - Minor back-ported bugfixes
+
+v0.5.6f     2016.11.18
+-------
+   - CRITICAL: Fix how we load CA Certificates  (backport from v0.5.9)
+
+
 v0.5.8e     2016.03.02
 -------
    - Fix dynamic DNS update bug which would advertise too many IPs
