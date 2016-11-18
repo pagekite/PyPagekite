@@ -1,6 +1,6 @@
 ## Name ##
 
-pagekite v0.5.8e - Make localhost servers publicly visible
+pagekite v0.5.9.0 - Make localhost servers publicly visible
 
 ## Synopsis ##
 
@@ -134,6 +134,10 @@ time the program defaults will Just Work.
      Interactively sign up for pagekite.net service.
    * <b>--defaults</b>  
      Set defaults for use with pagekite.net service.
+   * <b>--whitelabel=D</b>  
+     Set defaults for pagekite.net white-labels.
+   * <b>--whitelabels=D</b>  
+     Set defaults for pagekite.net white-labels (with TLS).
    * <b>--nocrashreport</b>  
      Don't send anonymous crash reports to pagekite.net.
 
@@ -204,6 +208,11 @@ time the program defaults will Just Work.
      Connect using SSL, accepting valid certs for this domain. If
      this option is repeated, any of the named certificates will be
      accepted, but the first will be preferred.
+
+   * <b>--fe_nocertcheck
+     Connect using SSL/TLS, but do not verify the remote certificate.
+     This is largely insecure but still thwarts passive attacks and
+     prevents routers and firewalls from corrupting the PageKite tunnel.
 
    * <b>--ca_certs</b>=`/path/to/file` <br />
      Path to your trusted root SSL certificates file.
