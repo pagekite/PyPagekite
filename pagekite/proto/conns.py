@@ -47,10 +47,11 @@ class Tunnel(ChunkParser):
   S_PROTOS = 3
   S_ADD_KITES = 4
   S_IS_MOBILE = 5
+  S_VERSION = 6
 
   def __init__(self, conns):
     ChunkParser.__init__(self, ui=conns.config.ui)
-    self.server_info = ['x.x.x.x:x', [], [], [], False, False]
+    self.server_info = ['x.x.x.x:x', [], [], [], False, False, None]
     self.Init(conns)
     # We want to be sure to read the entire chunk at once, including
     # headers to save cycles, so we double the size we're willing to
@@ -117,6 +118,7 @@ class Tunnel(ChunkParser):
           version = v
         if common.gYamon:
           common.gYamon.vadd('version-%s' % version, 1, wrap=10000000)
+        self.server_info[self.S_VERSION] = version
 
         for replace in conn.parser.Header(prefix+'-Replace'):
           if replace in self.conns.conns_by_id:
@@ -184,6 +186,8 @@ class Tunnel(ChunkParser):
       logi.append(('mobile', 'True'))
     if self.server_info[self.S_ADD_KITES]:
       logi.append(('add_kites', 'True'))
+    if self.server_info[self.S_VERSION]:
+      logi.append(('version', self.server_info[self.S_VERSION]))
 
     if bad:
       for backend in bad:
