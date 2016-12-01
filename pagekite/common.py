@@ -24,7 +24,7 @@ import random
 import time
 
 PROTOVER = '0.8'
-APPVER = '0.5.9.0'
+APPVER = '0.5.9.0+github'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'https://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -44,8 +44,8 @@ SERVICE_CERTS = ['b5p.us', 'frontends.b5p.us', 'pagekite.net', 'pagekite.me',
 
 # Places to search for the CA Certificate bundle
 OS_CA_CERTS = (
-  "/etc/ssl/certs/ca-certificates.crt",      # Debian/Ubuntu/Gentoo etc.
   "/etc/pki/tls/certs/ca-bundle.crt",        # Fedora/RHEL
+  "/etc/ssl/certs/ca-certificates.crt",      # Debian/Ubuntu/Gentoo etc.
   "/etc/ssl/ca-bundle.pem",                  # OpenSUSE
   "/etc/pki/tls/cacert.pem",                 # OpenELEC
   "/etc/ssl/cert.pem",                       # OpenBSD
