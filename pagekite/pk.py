@@ -50,6 +50,7 @@ import Cookie
 from compat import *
 from common import *
 import compat
+import common
 import logging
 
 
@@ -599,11 +600,21 @@ class TunnelManager(threading.Thread):
 
   def PingTunnels(self, now):
     dead = {}
+
+    # If we keep getting disconnected, maybe we have a nasty firewall
+    # and should ping more frequently. Disabled at the frontend!
+    while (common.DISCONNECT_COUNT >= 2) and not self.pkite.isfrontend:
+      common.DISCONNECT_COUNT -= 2
+      common.PING_INTERVAL = max(common.PING_INTERVAL_MIN,
+                                 0.5 * common.PING_INTERVAL)
+      logging.LogDebug('TunnelManager: adjusted ping interval, PI=%s'
+                       % common.PING_INTERVAL)
+
     for tid in self.conns.tunnels:
       for tunnel in self.conns.tunnels[tid]:
-        pings = PING_INTERVAL
+        pings = int(common.PING_INTERVAL)
         if tunnel.server_info[tunnel.S_IS_MOBILE]:
-          pings = PING_INTERVAL_MOBILE
+          pings = common.PING_INTERVAL_MOBILE
         grace = max(PING_GRACE_DEFAULT,
                     len(tunnel.write_blocked)/(tunnel.write_speed or 0.001))
         if tunnel.last_activity == 0:
@@ -737,8 +748,10 @@ class TunnelManager(threading.Thread):
       # Reconnect if necessary, randomized exponential fallback.
       problem, connecting = self.pkite.CreateTunnels(self.conns)
       if problem or connecting:
-        logging.LogDebug('TunnelManager: problem=%s, connecting=%s'
-                         % (problem, connecting))
+        logging.LogDebug(
+          'TunnelManager: problem=%s, connecting=%s, DC=%s, PI=%d'
+          % (problem, connecting,
+             common.DISCONNECT_COUNT, common.PING_INTERVAL))
         incr = int(1+random.random()*self.check_interval)
         self.check_interval = min(60, self.check_interval + incr)
         time.sleep(1)
@@ -2828,13 +2841,25 @@ class PageKite(object):
         active.append(bid)
     return active
 
-  def ChooseFrontEnds(self):
+  def ChooseFrontEnds(self, periodic=False):
     self.servers = []
     self.servers_preferred = []
     self.last_frontend_choice = time.time()
 
     servers_all = {}
     servers_pref = {}
+
+    # Increase our ping interval slightly unless it has been reduced
+    # to the minimum: that means our connection is crap and we should
+    # just leave it be.
+    if (periodic
+        and not self.isfrontend
+        and common.PING_INTERVAL > common.PING_INTERVAL_MIN):
+      common.DISCONNECT_COUNT = 0
+      common.PING_INTERVAL = min(common.PING_INTERVAL * 1.3,
+                                 common.PING_INTERVAL_MAX)
+      logging.LogDebug('TunnelManager: adjusted ping interval, PI=%s'
+                       % common.PING_INTERVAL)
 
     # Enable internal loopback
     if self.isfrontend:
@@ -2960,10 +2985,11 @@ class PageKite(object):
     connections = 0
 
     if len(self.GetActiveBackends()) > 0:
-      if self.last_frontend_choice < time.time()-FE_PING_INTERVAL:
-        self.servers = []
       if (not self.servers) or len(self.servers) > len(live_servers):
         self.ChooseFrontEnds()
+      elif self.last_frontend_choice < time.time()-FE_PING_INTERVAL:
+        self.servers = []
+        self.ChooseFrontEnds(periodic=True)
     else:
       self.servers_preferred = []
       self.servers = []

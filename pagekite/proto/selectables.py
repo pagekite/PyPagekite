@@ -369,17 +369,20 @@ class Selectable(object):
     except IOError, err:
       if err.errno not in self.HARMLESS_ERRNOS:
         self.LogDebug('Error reading socket: %s (%s)' % (err, err.errno))
+        common.DISCONNECT_COUNT += 1
         return False
       else:
         return True
     except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
       self.LogDebug('Error reading socket (SSL): %s' % err)
+      common.DISCONNECT_COUNT += 1
       return False
     except socket.error, (errno, msg):
       if errno in self.HARMLESS_ERRNOS:
         return True
       else:
         self.LogInfo('Error reading socket: %s (errno=%s)' % (msg, errno))
+        common.DISCONNECT_COUNT += 1
         return False
 
     self.last_activity = now
@@ -455,7 +458,9 @@ class Selectable(object):
     if sending:
       try:
         want_send = self.write_retry or min(len(sending), SEND_MAX_BYTES)
-        for try_wait in (0, 0, 0.1, 0.2, 0.5):
+        sent_bytes = None
+        # Try to write for up to 5 seconds before giving up
+        for try_wait in (0, 0, 0.1, 0.2, 0.2, 0.2, 0.3, 0.5, 0.5, 1, 1, 1, 0):
           try:
             sent_bytes = self.fd.send(sending[:want_send])
             if logging.DEBUG_IO:
@@ -467,11 +472,18 @@ class Selectable(object):
           except (SSL.WantWriteError, SSL.WantReadError), err:
             if logging.DEBUG_IO:
               print '=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, want_send)
-            if try_wait: time.sleep(try_wait)
+            if try_wait:
+              time.sleep(try_wait)
+        if sent_bytes is None:
+          self.LogInfo('Error sending: Too many SSL write retries')
+          self.ProcessEofWrite()
+          common.DISCONNECT_COUNT += 1
+          return False
       except IOError, err:
         if err.errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s' % err)
           self.ProcessEofWrite()
+          common.DISCONNECT_COUNT += 1
           return False
         else:
           if logging.DEBUG_IO:
@@ -481,6 +493,7 @@ class Selectable(object):
         if errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s (errno=%s)' % (msg, errno))
           self.ProcessEofWrite()
+          common.DISCONNECT_COUNT += 1
           return False
         else:
           if logging.DEBUG_IO:
@@ -489,6 +502,7 @@ class Selectable(object):
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
         self.LogInfo('Error sending (SSL): %s' % err)
         self.ProcessEofWrite()
+        common.DISCONNECT_COUNT += 1
         return False
       except AttributeError:
         # This has been seen in the wild, is most likely some sort of

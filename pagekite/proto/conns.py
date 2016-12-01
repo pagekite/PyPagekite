@@ -690,6 +690,7 @@ class Tunnel(ChunkParser):
 
   # If a tunnel goes down, we just go down hard and kill all our connections.
   def ProcessEofRead(self):
+    common.DISCONNECT_COUNT += 1
     self.Die()
     return False
 
