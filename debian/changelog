@@ -1,3 +1,9 @@
+pagekite (0.5.9.0-1) UNRELEASED; urgency=medium
+
+  * New upstream release (Closes: #845572)
+
+ -- Federico Ceratto <federico@debian.org>  Sun, 18 Dec 2016 19:53:58 +0000
+
 pagekite (0.5.8e-2) unstable; urgency=medium
 
   [ Sunil Mohan Adapa ]
