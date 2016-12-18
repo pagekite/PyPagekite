@@ -85,7 +85,7 @@ scripts/pagekite
 scripts/pagekite_gtk
 scripts/pagekite_test.py.old
 scripts/pkvnc
-scripts/self-signed.pem
+scripts/vipagekite
 scripts/legacy-testing/pagekite-0.3.21.py
 scripts/legacy-testing/pagekite-0.4.6a.py
 scripts/legacy-testing/pagekite-0.5.6d.py

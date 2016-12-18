@@ -63,12 +63,12 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webpath=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings',
-            'defaults', 'local=', 'domain=',
+            'defaults', 'whitelabel=', 'whitelabels=', 'local=', 'domain=',
             'auththreads=', 'authdomain=', 'motd=', 'register=', 'host=',
             'noupgradeinfo', 'upgradeinfo=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
             'tls_legacy', 'tls_default=', 'tls_endpoint=', 'selfsign',
-            'fe_certname=', 'jakenoia', 'ca_certs=',
+            'fe_certname=', 'fe_nocertcheck', 'ca_certs=',
             'kitename=', 'kitesecret=', 'fingerpath=',
             'backend=', 'define_backend=', 'be_config=', 'insecure',
             'service_on=', 'service_off=', 'service_cfg=',
@@ -76,7 +76,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'frontend=', 'nofrontend=', 'frontends=',
             'torify=', 'socksify=', 'proxy=', 'noproxy',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
-            'buffers=', 'noprobes', 'debugio', 'watch=',
+            'buffers=', 'noprobes', 'debugio', 'watch=', 'overload=',
             # DEPRECATED:
             'reloadfile=', 'autosave', 'noautosave', 'webroot=',
             'webaccess=', 'webindexes=', 'delete_backend=']
@@ -839,7 +839,7 @@ class PageKite(object):
     self.tls_default = None
     self.tls_endpoints = {}
     self.fe_certname = []
-    self.fe_anon_tls_wrap = False
+    self.fe_nocertcheck = False
 
     self.service_provider = SERVICE_PROVIDER
     self.service_xmlrpc = SERVICE_XMLRPC
@@ -895,6 +895,7 @@ class PageKite(object):
     self.keep_looping = True
     self.main_loop = True
     self.watch_level = [None]
+    self.overload = None
 
     self.crash_report_url = '%scgi-bin/crashes.pl' % WWWHOME
     self.rcfile_recursion = 0
@@ -931,12 +932,44 @@ class PageKite(object):
       self.rcfile = 'pagekite.cfg'
       self.devnull = '/dev/null'
 
+    self.SetDefaultCACerts()
+
+  def SetDefaultCACerts(self, **kwargs):
     # Look for CA Certificates. If we don't find them in the host OS,
     # we assume there might be something good in the program itself.
-    self.ca_certs_default = '/etc/ssl/certs/ca-certificates.crt'
-    if not os.path.exists(self.ca_certs_default):
-      self.ca_certs_default = sys.argv[0]
+    self.ca_certs_default = self.FindCACerts(**kwargs)
     self.ca_certs = self.ca_certs_default
+
+  def FindCACerts(self, use_curl_bundle=False):
+    # Search a bunch of paths, preferring the biggest/newest bundle found
+    biggest, newest, found = 0, 0, None
+    own_pemfile = "%s.pem" % '.'.join(self.rcfile.split('.')[:-1])
+
+    for path in list(OS_CA_CERTS) + [own_pemfile]:
+      if os.path.exists(path):
+        # We consider all bundles over 200k to be the same size...
+        size = min(200000, os.stat(path).st_size)
+        mtime = os.stat(path).st_mtime
+        if size > biggest:
+          # Choose the biggest bundle!
+          found, biggest, newest = path, size, mtime
+        elif size == biggest and mtime > newest:
+          # Choose the freshest bundle!
+          found, newest = path, mtime
+
+    if use_curl_bundle and ((not found) or
+        ((found == own_pemfile) and (newest < time.time() - 365*24*3600))):
+      # No bundle found or bundle old, download a new one from the cURL site.
+      try:
+        urllib.URLopener().retrieve(CURL_CA_CERTS, filename=own_pemfile)
+        return self.FindCACerts(use_curl_bundle=False)
+      except:
+        pass
+
+    if found:
+      return found
+
+    return sys.argv[0]  # Fall back to distributed CA certs
 
   ACL_SHORTHAND = {
     'localhost': '((::ffff:)?127\..*|::1)',
@@ -974,22 +1007,41 @@ class PageKite(object):
 
   def SetServiceDefaults(self, clobber=True, check=False):
     def_dyndns    = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
-    def_frontends = (1, 'fe%s.b5p.us' % re.sub(r'[a-z\.]', '', APPVER), 443)
-    def_ca_certs  = sys.argv[0]
+    def_frontends = (1, 'fe4_%s.b5p.us' % re.sub(r'[^\d]', '', APPVER), 443)
     def_fe_certs  = ['b5p.us'] + [c for c in SERVICE_CERTS if c != 'b5p.us']
     def_error_url = 'https://pagekite.net/offline/?'
     if check:
       return (self.dyndns == def_dyndns and
               self.servers_auto == def_frontends and
               self.error_url == def_error_url and
-              self.ca_certs == def_ca_certs and
               (sorted(self.fe_certname) == sorted(def_fe_certs) or
                not socks.HAVE_SSL))
     else:
       self.dyndns = (not clobber and self.dyndns) or def_dyndns
       self.servers_auto = (not clobber and self.servers_auto) or def_frontends
       self.error_url = (not clobber and self.error_url) or def_error_url
-      self.ca_certs = def_ca_certs
+      if socks.HAVE_SSL:
+        for cert in def_fe_certs:
+          if cert not in self.fe_certname:
+            self.fe_certname.append(cert)
+      return True
+
+  def SetWhitelabelDefaults(self, wld, secure=False, clobber=True, check=False):
+    def_dyndns = (DYNDNS['whitelabels' if secure else 'whitelabel'] % wld,
+                  {'user': '', 'pass': ''})
+    def_frontends = (1, 'fe4_%s.%s' % (re.sub(r'[^\d]', '', APPVER), wld), 443)
+    def_fe_certs = ['fe.%s' % wld, wld] + [c for c in SERVICE_CERTS if c != wld]
+    def_error_url = 'http%s://www.%s/offline/?' % ('s' if secure else '', wld)
+    if check:
+      return (self.dyndns == def_dyndns and
+              self.servers_auto == def_frontends and
+              self.error_url == def_error_url and
+              (sorted(self.fe_certname) == sorted(def_fe_certs) or
+               not socks.HAVE_SSL))
+    else:
+      self.dyndns = (not clobber and self.dyndns) or def_dyndns
+      self.servers_auto = (not clobber and self.servers_auto) or def_frontends
+      self.error_url = (not clobber and self.error_url) or def_error_url
       if socks.HAVE_SSL:
         for cert in def_fe_certs:
           if cert not in self.fe_certname:
@@ -1024,19 +1076,41 @@ class PageKite(object):
         ''
       ])
 
-    if self.SetServiceDefaults(check=True):
-      config.extend([
-        '##[ Front-end settings: use pagekite.net defaults ]##',
-        'defaults',
-        ''
-      ])
+    kite_tld = None
+    if self.kitename:
+      kite_tld = '.'.join(self.kitename.split('.')[-2:])
+
+    def addManualFrontends():
       if self.servers_manual or self.servers_never:
+        config.append('')
         config.append('##[ Manual front-ends ]##')
         for server in sorted(self.servers_manual):
           config.append('frontend=%s' % server)
         for server in sorted(self.servers_never):
           config.append('nofrontend=%s' % server)
-        config.append('')
+
+    if self.SetServiceDefaults(check=True):
+      config.extend([
+        '##[ Front-end settings: use pagekite.net defaults ]##',
+        'defaults',
+      ])
+      addManualFrontends()
+    elif (kite_tld and
+          self.SetWhitelabelDefaults(kite_tld, secure=False, check=True)):
+      config.extend([
+        '##[ Front-end settings: use %s defaults ]##' % kite_tld,
+        'whitelabel = %s' % kite_tld,
+        ''
+      ])
+      addManualFrontends()
+    elif (kite_tld and
+          self.SetWhitelabelDefaults(kite_tld, secure=True, check=True)):
+      config.extend([
+        '##[ Front-end settings: use %s defaults ]##' % kite_tld,
+        'whitelabels = %s' % kite_tld,
+        ''
+      ])
+      addManualFrontends()
     else:
       if not self.servers_auto and not self.servers_manual:
         new = True
@@ -1062,8 +1136,8 @@ class PageKite(object):
 
       for server in self.fe_certname:
         config.append('fe_certname = %s' % server)
-      if self.ca_certs != self.ca_certs_default:
-        config.append('ca_certs = %s' % self.ca_certs)
+      if self.fe_nocertcheck:
+        config.append('fe_nocertcheck')
 
       if self.dyndns:
         provider, args = self.dyndns
@@ -1089,7 +1163,9 @@ class PageKite(object):
           p('fingerpath = %s', self.finger_path, '/~%s/.finger'),
           '',
         ])
-      config.append('')
+    if self.ca_certs != self.ca_certs_default:
+      config.append('ca_certs = %s' % self.ca_certs)
+    config.append('')
 
     if self.ui_sspec or self.ui_password or self.ui_pemfile:
       config.extend([
@@ -1523,6 +1599,11 @@ class PageKite(object):
     logging.LogInfo('No authentication found for: %s (%s)' % (domain, protoport))
     return (None, None, None, auth_error_type or 'unauthorized')
 
+  def Overloaded(self):
+    if not self.overload or not self.conns:
+      return False
+    return (len(self.conns.conns) > self.overload)
+
   def ConfigureFromFile(self, filename=None, data=None):
     if not filename: filename = self.rcfile
 
@@ -1877,14 +1958,19 @@ class PageKite(object):
           # together in the tunnel, which makes traffic analysis harder.
           compat.SEND_ALWAYS_BUFFERS = True
 
-      elif opt == '--ca_certs': self.ca_certs = arg
-      elif opt == '--jakenoia': self.fe_anon_tls_wrap = True
+      elif opt == '--ca_certs':
+        if arg == 'auto':
+          self.SetDefaultCACerts(use_curl_bundle=True)
+        else:
+          self.ca_certs = arg
       elif opt == '--fe_certname':
         if arg == '':
           self.fe_certname = []
         else:
           cert = arg.lower()
           if cert not in self.fe_certname: self.fe_certname.append(cert)
+      elif opt == '--fe_nocertcheck':
+        self.fe_nocertcheck = True
       elif opt == '--service_xmlrpc': self.service_xmlrpc = arg
       elif opt == '--frontend': self.servers_manual.append(arg)
       elif opt == '--nofrontend': self.servers_never.append(arg)
@@ -1947,6 +2033,8 @@ class PageKite(object):
       elif opt == '--sslzlib': self.enable_sslzlib = True
       elif opt == '--watch':
         self.watch_level[0] = int(arg)
+      elif opt == '--overload':
+        self.overload = int(arg)
       elif opt == '--debugio':
         logging.DEBUG_IO = True
       elif opt == '--buffers': self.buffer_max = int(arg)
@@ -1956,6 +2044,8 @@ class PageKite(object):
         self.SetLocalSettings([int(p) for p in arg.split(',')])
         if not 'localhost' in args: args.append('localhost')
       elif opt == '--defaults': self.SetServiceDefaults()
+      elif opt == '--whitelabel': self.SetWhitelabelDefaults(arg, secure=False)
+      elif opt == '--whitelabels': self.SetWhitelabelDefaults(arg, secure=True)
       elif opt in ('--clean', '--nopyopenssl', '--nossl', '--settings',
                    '--signup', '--friendly'):
         # These are handled outside the main loop, we just ignore them.
@@ -2260,6 +2350,11 @@ class PageKite(object):
 
     # This is the default...
     be_specs = ['http:%s:localhost:80']
+
+    if self.ca_certs == self.ca_certs_default:
+      # We're using the defaults, but the defaults might be lame so we
+      # reset them here, allowing for downloading the cURL bundle.
+      self.SetDefaultCACerts(use_curl_bundle=True)
 
     service = self.GetServiceXmlRpc()
     service_accounts = {}
@@ -2607,7 +2702,9 @@ class PageKite(object):
 
   def CheckConfig(self):
     if self.ui_sspec: self.BindUiSspec()
-    if not self.servers_manual and not self.servers_auto and not self.isfrontend:
+    if (not self.servers_manual and
+        not self.servers_auto and
+        not self.isfrontend):
       if not self.servers and not self.ui.ALLOWS_INPUT:
         raise ConfigError('Nothing to do!  List some servers, or run me as one.')
     return self
@@ -2631,6 +2728,8 @@ class PageKite(object):
   def Ping(self, host, port):
     cid = uuid = '%s:%s' % (host, port)
 
+    if cid in self.servers_never:
+      return (9999, uuid)
     if self.servers_no_ping:
       return (0, uuid)
 
@@ -2654,9 +2753,10 @@ class PageKite(object):
           fd.setblocking(1)
 
         fd.connect((host, port))
-        fd.send('HEAD / HTTP/1.0\r\n\r\n')
+        fd.send('HEAD /ping HTTP/1.1\r\nHost: ping.pagekite\r\n\r\n')
         data = fd.recv(1024)
         fd.close()
+        assert(data.startswith('HTTP/1.1 503 Unavailable'))
 
       except Exception, e:
         logging.LogDebug('Ping %s:%s failed: %s' % (host, port, e))
@@ -2667,6 +2767,9 @@ class PageKite(object):
         uuid = data.split('X-PageKite-UUID: ')[1].split()[0]
       except:
         uuid = self.TMP_UUID_MAP.get(uuid, uuid)
+
+      if 'X-PageKite-Overloaded:' in data:
+        elapsed += 1  # Simulate slowness: add full second to ping time
 
       if cid not in self.ping_cache:
         self.ping_cache[cid] = []
@@ -2740,17 +2843,18 @@ class PageKite(object):
         if be[BE_BHOST]:
           need_loopback = True
       if need_loopback:
+        # Note: Add to servers_pref to keep from getting disconnected
         servers_all['loopback'] = servers_pref['loopback'] = LOOPBACK_FE
 
-    # Convert the hostnames into IP addresses...
+    # Process the manually requested servers first (--frontend= lines); these
+    # are always added (and preferred, so in DNS) no matter what.
     def sping(server):
       (host, port) = server.split(':')
       ipaddrs = self.CachedGetHostIpAddrs(host)
       if ipaddrs:
         ptime, uuid = self.Ping(ipaddrs[0], int(port))
         server = '%s:%s' % (ipaddrs[0], port)
-        if server not in self.servers_never:
-          servers_all[uuid] = servers_pref[uuid] = server
+        servers_all[uuid] = servers_pref[uuid] = server
     threads, deadline = [], time.time() + 5
     for server in self.servers_manual:
       threads.append(threading.Thread(target=sping, args=(server,)))
@@ -2762,32 +2866,31 @@ class PageKite(object):
     # Lookup and choose from the auto-list (and our old domain).
     if self.servers_auto:
       (count, domain, port) = self.servers_auto
-
-      # First, check for old addresses and always connect to those.
-      selected = {}
-      if not self.servers_new_only:
-        def bping(bid):
-          (proto, bdom) = bid.split(':')
-          for ip in self.CachedGetHostIpAddrs(bdom):
-            # FIXME: What about IPv6 localhost?
-            if not ip.startswith('127.'):
-              server = '%s:%s' % (ip, port)
-              if server not in self.servers_never:
-                servers_all[self.Ping(ip, int(port))[1]] = server
-        threads, deadline = [], time.time() + 5
-        for bid in self.GetActiveBackends():
-          threads.append(threading.Thread(target=bping, args=(bid,)))
-          threads[-1].daemon = True
-          threads[-1].start()
-        for t in threads:
-          t.join(max(0.1, deadline - time.time()))
+      pinged = {}
 
       try:
-        pings = []
-        ips = [ip for ip in self.CachedGetHostIpAddrs(domain)
-               if ('%s:%s' % (ip, port)) not in self.servers_never]
+        # First, check for old addresses and always connect to those.
+        selected = {}
+        if not self.servers_new_only:
+          def bping(bid):
+            (proto, bdom) = bid.split(':')
+            for ip in self.CachedGetHostIpAddrs(bdom):
+              # FIXME: What about IPv6 localhost?
+              if not ip.startswith('127.') and ip not in pinged:
+                server = '%s:%s' % (ip, port)
+                pingtime, uuid = pinged[ip] = self.Ping(ip, int(port))
+                servers_all[uuid] = server
+          threads, deadline = [], time.time() + 5
+          for bid in self.GetActiveBackends():
+            threads.append(threading.Thread(target=bping, args=(bid,)))
+            threads[-1].daemon = True
+            threads[-1].start()
+          for t in threads:
+            t.join(max(0.1, deadline - time.time()))
+
+        ips = [i for i in self.CachedGetHostIpAddrs(domain) if i not in pinged]
         def iping(ip):
-          pings.append(list(self.Ping(ip, port)) + [ip])
+          pinged[ip] = self.Ping(ip, int(port))
         threads, deadline = [], time.time() + 5
         for ip in ips:
           threads.append(threading.Thread(target=iping, args=(ip,)))
@@ -2797,8 +2900,9 @@ class PageKite(object):
           t.join(max(0.1, deadline - time.time()))
       except Exception, e:
         logging.LogDebug('Unreachable: %s, %s' % (domain, e))
-        ips = pings = []
 
+      # Evaluate ping results, mark fastest N servers as preferred
+      pings = [list(ping) + [ip] for ip, ping in pinged.iteritems()]
       while count > 0 and pings:
         mIdx = pings.index(min(pings))
         if pings[mIdx][0] > 60:
@@ -2814,8 +2918,9 @@ class PageKite(object):
             servers_pref[uuid] = server
           del pings[mIdx]
 
-    self.servers = servers_all.values()
-    self.servers_preferred = servers_pref.values()
+    nvr = self.servers_never
+    self.servers = [v for v in servers_all.values() if v not in nvr]
+    self.servers_preferred = [v for v in servers_pref.values() if v not in nvr]
     logging.LogDebug('Preferred: %s' % ', '.join(self.servers_preferred))
 
   def ConnectFrontend(self, conns, server):
@@ -2857,7 +2962,7 @@ class PageKite(object):
     if len(self.GetActiveBackends()) > 0:
       if self.last_frontend_choice < time.time()-FE_PING_INTERVAL:
         self.servers = []
-      if not self.servers or len(self.servers) > len(live_servers):
+      if (not self.servers) or len(self.servers) > len(live_servers):
         self.ChooseFrontEnds()
     else:
       self.servers_preferred = []
@@ -2880,7 +2985,7 @@ class PageKite(object):
           loop.filters.append(HttpHeaderFilter(self.ui))
           if not self.insecure:
             loop.filters.append(HttpSecurityFilter(self.ui))
-        else:
+        elif server not in self.servers_never:
           state = [None, None]
           state[0] = threading.Thread(target=connect_in_thread,
                                       args=(conns, server, state))
@@ -2899,7 +3004,8 @@ class PageKite(object):
         failures += 1
 
     for server in live_servers:
-      if server not in self.servers and server not in self.servers_preferred:
+      if (server not in self.servers and
+          server not in self.servers_preferred):
         if self.DisconnectFrontend(conns, server):
           connections += 1
 
@@ -2940,8 +3046,8 @@ class PageKite(object):
             'ips': iplist,
             'sign': signToken(secret=secret, payload=payload, length=100)
           })
-          # FIXME: This may fail if different front-ends support different
-          #        protocols. In practice, this should be rare.
+          # Note: This may be wrong if different front-ends support different
+          #       protocols. Unfortunately, that isn't easily solvable.
           updates[payload] = ddns_fmt % args
 
       last_updates = self.last_updates
@@ -2977,6 +3083,8 @@ class PageKite(object):
             self.SetBackendStatus(update.split(':')[0],
                                   add=BE_STATUS_ERR_DNS)
             # Hmm, the update may have succeeded - assume the "worst".
+            if domain not in self.dns_cache:
+              self.dns_cache[domain] = {}
             self.dns_cache[domain][int(time.time())] = ips.split(',')
             failures += 1
 

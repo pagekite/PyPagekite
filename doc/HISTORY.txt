@@ -1,6 +1,26 @@
 Version history - highlights
 ============================
 
+v0.5.9      2016.11.19
+------
+   - CRITICAL: Fix how we load CA Certificates
+   - Add --fe_nocertcheck for insecure (obfuscation-only) TLS connections
+   - Add --whitelabel and --whitelabels for auto-configuring default
+     settings for users of the pagekite.net white-label service
+   - Remove --jakenoia, it wasn't documented anywhere and didn't really work
+   - Advertise relay overload, consider during "Ping" evaluation
+   - Create vipagekite helper for safely editing configs
+
+v0.5.8f     2016.11.19
+-------
+   - CRITICAL: Fix how we load CA Certificates  (backport from v0.5.9)
+   - Minor back-ported bugfixes
+
+v0.5.6f     2016.11.19
+-------
+   - CRITICAL: Fix how we load CA Certificates  (backport from v0.5.9)
+
+
 v0.5.8e     2016.03.02
 -------
    - Fix dynamic DNS update bug which would advertise too many IPs

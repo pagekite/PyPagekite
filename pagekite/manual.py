@@ -121,6 +121,8 @@ MAN_OPT_COMMON = ("""\
     --clean         __Skip loading the default configuration file.
     --signup        __Interactively sign up for pagekite.net service.
     --defaults      __Set defaults for use with pagekite.net service.
+    --whitelabel=D  __Set defaults for pagekite.net white-labels.
+    --whitelabels=D __Set defaults for pagekite.net white-labels (with TLS).
     --nocrashreport __Don't send anonymous crash reports to pagekite.net.
 """)
 MAN_OPT_BACKEND = ("""\
@@ -180,6 +182,11 @@ MAN_OPT_BACKEND = ("""\
             Connect using SSL, accepting valid certs for this domain. If
             this option is repeated, any of the named certificates will be
             accepted, but the first will be preferred.
+
+    --fe_nocertcheck
+            Connect using SSL/TLS, but do not verify the remote certificate.
+            This is largely insecure but still thwarts passive attacks and
+            prevents routers and firewalls from corrupting the PageKite tunnel.
 
     --ca_certs</b>=<a>/path/to/file</a> __
             Path to your trusted root SSL certificates file.

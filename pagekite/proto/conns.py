@@ -311,14 +311,15 @@ class Tunnel(ChunkParser):
     socks.DEBUG = (logging.DEBUG_IO or socks.DEBUG) and logging.LogDebug
     sock = socks.socksocket()
     if socks.HAVE_SSL:
-      chain = ['default']
-      if self.conns.config.fe_anon_tls_wrap:
-        chain.append('ssl-anon!%s!%s' % (sspec[0], sspec[1]))
-      if self.conns.config.fe_certname:
-        chain.append('http!%s!%s' % (sspec[0], sspec[1]))
-        chain.append('ssl!%s!443' % ','.join(self.conns.config.fe_certname))
+      pp = socks.parseproxy
+      chain = [pp('default')]
+      if self.conns.config.fe_nocertcheck:
+        chain.append([socks.PROXY_TYPE_SSL_WEAK, sspec[0], int(sspec[1])])
+      elif self.conns.config.fe_certname:
+        chain.append(pp('http!%s!%s' % (sspec[0], sspec[1])))
+        chain.append(pp('ssl!%s!443' % ','.join(self.conns.config.fe_certname)))
       for hop in chain:
-        sock.addproxy(*socks.parseproxy(hop))
+        sock.addproxy(*hop)
     self.SetFD(sock)
 
     try:
@@ -1513,7 +1514,9 @@ class UnknownConn(MagicProtocolParser):
           self.Send(HTTP_Response(400, 'Bad request',
                     ['<html><body><h1>400 Bad request</h1>',
                      '<p>Invalid request, no Host: found.</p>',
-                     '</body></html>\n'], trackable=True))
+                     '</body></html>\n'],
+                    trackable=True,
+                    overloaded=self.conns.config.Overloaded()))
           return False
 
       if self.parser.path.startswith(MAGIC_PREFIX):
@@ -1555,7 +1558,8 @@ class UnknownConn(MagicProtocolParser):
                     try_flush=True)
         else:
           self.Send(HTTP_Unavailable('fe', self.proto, self.host,
-                                     frame_url=self.conns.config.error_url),
+                                     frame_url=self.conns.config.error_url,
+                                     overloaded=self.conns.config.Overloaded()),
                     try_flush=True)
         return False
 
