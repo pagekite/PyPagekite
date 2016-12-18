@@ -455,7 +455,7 @@ class Selectable(object):
     if sending:
       try:
         want_send = self.write_retry or min(len(sending), SEND_MAX_BYTES)
-        while True:
+        for try_wait in (0, 0, 0.1, 0.2, 0.5):
           try:
             sent_bytes = self.fd.send(sending[:want_send])
             if logging.DEBUG_IO:
@@ -467,6 +467,7 @@ class Selectable(object):
           except (SSL.WantWriteError, SSL.WantReadError), err:
             if logging.DEBUG_IO:
               print '=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, want_send)
+            if try_wait: time.sleep(try_wait)
       except IOError, err:
         if err.errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s' % err)

@@ -1,0 +1,212 @@
+#!/bin/bash
+#
+# This is a helper script for performing safe, versioned edits of the
+# PageKite configuration.
+#
+# Since PageKite is often used to facilitate remote access, editing the
+# config can be quite, dangerous as it may break the remote access itself.
+#
+# This script will test the syntax of the pagekite config file, warning
+# the user if it fails to parse and offering remedies. It also tries to
+# detect if the user has changed anything that might effect their SSH
+# configuration and warn about that too.
+#
+# TODO:
+#   - Add a watcher that watches the pagekite log file and reverts the
+#     config if it doesn't appear to make a working connection within
+#     a certain time-frame.
+#   - Add end-to-end probes, revert if they fail (note this can only
+#     work in environments with permissive firewalls, so the above
+#     TODO should have priority).
+#
+set -e
+
+# Default settings
+export VISUAL=${VISUAL:-vi}
+export PAGER=${PAGER:-less}
+export DIFFER=${DIFFER:-diff}
+export RESTART_AFTER=${RESTART_AFTER:-15}
+
+
+# Edit ~/.pagekite.rc by default
+[ "$1" = "" ] && exec "$0" ~/.pagekite.rc
+
+# We can only handle edits to one file at a time
+[ "$2" != "" ] && {
+  echo "ERROR: Please only edit one file at a time"
+  exit 1
+}
+
+# Figure out what we're doing...
+FN="$1"
+DN="$(cd $(dirname "$FN") && pwd)"
+if [ "$DN" = "/etc/pagekite.d" ]; then
+  GD="$DN"
+else
+  GD="$DN/.pagekite.git"
+fi
+
+# Make sure we have the power
+[ "$DN" != "/etc/pagekite.d" -o "$(id -u)" = "0" ] || exec sudo "$0" "$@"
+
+# Make sure our prerequisites are installed
+export PK=$(which pagekite || which pagekite.py)
+export PK=${PAGEKITE:-pagekite}
+for T in sha1sum git $DIFFER $PAGER $VISUAL $PK; do
+  which "$T" >/dev/null || {
+    echo "ERROR: Please install $T";
+    exit 1
+  }
+done
+
+
+# Before we edit anything, parse the config so we can detect changes.
+export OLD_CONFIG=$(tempfile)
+export NEW_CONFIG=$(tempfile)
+cleanup() {
+  rm -f "$OLD_CONFIG" "$NEW_CONFIG"
+}
+trap cleanup EXIT
+if [ "$DN" = "/etc/pagekite.d" ]; then
+  $PK --clean --optdir=$DN --settings >"$OLD_CONFIG"
+else
+  $PK --clean --optfile="$FN" --settings >"$OLD_CONFIG"
+fi
+
+
+# Check to see if we're tunneling SSH. If we are, we will want to take
+# special care when restarting.
+SSHKITE=$(grep -e raw-22: "$OLD_CONFIG" ||true)
+if [ "$SSHKITE" != "" ]; then
+    SSHKITE=$(grep -e raw-22: -e ^kitename -e ^kitesecret "$OLD_CONFIG" \
+             |sha1sum)
+fi
+
+
+# This is the edit loop; keep editing and testing the file until it
+# passes our tests or the user asks to quit anyway.
+E=1
+while [ 1 ]; do
+  [ "$E" = 1 ] && $VISUAL $FN
+
+  if [ "$DN" = "/etc/pagekite.d" ]; then
+    $PK --clean --optdir=$DN --settings >$NEW_CONFIG 2>&1 && E=0 || E=1
+    if [ "$E" != 1 -a "$SSHKITE" != "" ]; then
+      SSHKITE2=$(grep -e raw-22: -e ^kitename -e ^kitesecret "$NEW_CONFIG" \
+                |sha1sum)
+      if [ "$SSHKITE" != "$SSHKITE2" ]; then
+        echo
+        echo "WARNING: Your SSH configuration may have CHANGED."
+        echo
+        E=2
+      fi
+    fi
+  else
+    $PK --clean --optfile=$FN --settings >$NEW_CONFIG 2>&1 && E=0 || E=1
+  fi
+
+  if [ "$E" = 0 ]; then
+    break
+  fi
+  if [ "$E" = 1 ]; then
+    echo
+    echo "ERROR: Configuration failed to parse; a typo or syntax error?"
+    echo
+  fi
+
+  echo "  E) Edit again"
+  if [ -d "$GD/.git" ]; then
+    echo "  U) Undo edits (revert file)"
+  fi
+  echo
+  echo "  D) Display differences between current and previous config"
+  echo "  P) Parse and display complete config (or errors)"
+  echo
+  echo "  C) Keep changes, continue with restart/commit"
+  echo "  Q) Keep changes, quit vipagekite"
+  echo
+  echo -n "Your choice [E]: "
+  read CHOICE
+  case "$CHOICE" in
+    c|C|continue) # Continue
+      break
+    ;;
+    d|D|diff)  # Show what changed
+      clear
+      $DIFFER -u -b "$OLD_CONFIG" "$NEW_CONFIG" |$PAGER
+      echo
+      E=0
+    ;;
+    e|E|edit|"")  # Loop again, edit again
+      E=1
+    ;;
+    p|P|print)  # Display current parsed config
+      clear
+      cat "$NEW_CONFIG" |$PAGER
+      E=0
+    ;;
+    q|Q|quit) # Quit
+      exit
+    ;;
+    u|U|undo) # Undo edits
+      if [ "$DN" = "$GD" ]; then
+        git checkout "$FN"
+      else
+        cp -va "$GD/$(basename "$FN")" "$FN"
+      fi
+      exit
+    ;;
+    *) # Default: Just re-test file and redisplay choices
+      E=0
+    ;;
+  esac
+done
+
+
+# Offer to restart the PageKite service
+if [ "$DN" = "/etc/pagekite.d" ]; then
+  echo
+  while [ 1 ]; do
+    echo -n "Would you like to restart the pagekite service? [y/n] "
+    read YN
+    case "$YN" in
+      y|Y|yes|Yes|YES)
+        (
+          sleep $RESTART_AFTER
+          systemctl restart pagekite \
+          || service pagekite restart \
+          || /etc/rc2.d/S*pagekite restart
+          # TODO: Watch the log for signs of success or failure
+          # TODO: Run e2e tests?
+        ) </dev/null >/dev/null 2>&1 &
+        echo "OK, scheduled a restart for $RESTART_AFTER seconds from now."
+        break
+        ;;
+      n|N|no|No|NO)
+        break
+        ;;
+    esac
+  done
+  echo
+fi
+
+
+# Make sure we have a place for version control
+mkdir "$GD" 2>/dev/null || true
+[ ! -d "$GD/.git" ] && {
+  cd "$GD"
+  git init
+}
+[ ! -d "$GD/.git" ] && {
+  echo "ERROR: Could not initialize git repository in $GD"
+  exit 2
+}
+
+
+# Save our results so we can revert later
+if [ "$GD" != "$DN" ]; then
+  cp -va "$FN" "$GD"
+fi
+cd "$GD"
+git add * "$(basename "$FN")"
+git commit -m 'vipagekite auto-commit'
