@@ -197,6 +197,12 @@ MAN_OPT_BACKEND = ("""\
             the name of one of the 'built-in' providers, or a URL format
             string for ad-hoc updating.
 
+    --keepalive</b>=<a>N</a> __
+            Force traffic over idle tunnels every N seconds, to cope with
+            firewalls that kill idle TCP connections. Backend only: if set
+            to "auto" (the default), the interval will be adjusted
+            automatically in response to disconnects.
+
     --all           __Terminate early if any tunnels fail to register.
     --new           __Don't attempt to connect to any kites' old front-ends.
     --fingerpath</b>=<a>P</a>  __Path recipe for the httpfinger back-end proxy.

@@ -222,6 +222,12 @@ time the program defaults will Just Work.
      the name of one of the 'built-in' providers, or a URL format
      string for ad-hoc updating.
 
+   * <b>--keepalive</b>=`N` <br />
+     Force traffic over idle tunnels every N seconds, to cope with
+     firewalls that kill idle TCP connections. Backend only: if set
+     to "auto" (the default), the interval will be adjusted
+     automatically in response to disconnects.
+
    * <b>--all</b>  
      Terminate early if any tunnels fail to register.
    * <b>--new</b>  

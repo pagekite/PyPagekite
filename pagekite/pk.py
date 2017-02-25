@@ -74,7 +74,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'backend=', 'define_backend=', 'be_config=', 'insecure',
             'service_on=', 'service_off=', 'service_cfg=',
             'tunnel_acl=', 'client_acl=', 'accept_acl_file=',
-            'frontend=', 'nofrontend=', 'frontends=',
+            'frontend=', 'nofrontend=', 'frontends=', 'keepalive=',
             'torify=', 'socksify=', 'proxy=', 'noproxy',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes', 'debugio', 'watch=', 'overload=',
@@ -603,7 +603,9 @@ class TunnelManager(threading.Thread):
 
     # If we keep getting disconnected, maybe we have a nasty firewall
     # and should ping more frequently. Disabled at the frontend!
-    while (common.DISCONNECT_COUNT >= 2) and not self.pkite.isfrontend:
+    while (common.DISCONNECT_COUNT >= 2 and
+           not self.pkite.isfrontend and
+           not self.pkite.keepalive):
       common.DISCONNECT_COUNT -= 2
       common.PING_INTERVAL = max(common.PING_INTERVAL_MIN,
                                  0.5 * common.PING_INTERVAL)
@@ -612,7 +614,7 @@ class TunnelManager(threading.Thread):
 
     for tid in self.conns.tunnels:
       for tunnel in self.conns.tunnels[tid]:
-        pings = int(common.PING_INTERVAL)
+        pings = int(self.pkite.keepalive or common.PING_INTERVAL)
         if tunnel.server_info[tunnel.S_IS_MOBILE]:
           pings = common.PING_INTERVAL_MOBILE
         grace = max(PING_GRACE_DEFAULT,
@@ -751,7 +753,8 @@ class TunnelManager(threading.Thread):
         logging.LogDebug(
           'TunnelManager: problem=%s, connecting=%s, DC=%s, PI=%d'
           % (problem, connecting,
-             common.DISCONNECT_COUNT, common.PING_INTERVAL))
+             common.DISCONNECT_COUNT,
+             (self.pkite.keepalive or common.PING_INTERVAL)))
         incr = int(1+random.random()*self.check_interval)
         self.check_interval = min(60, self.check_interval + incr)
         time.sleep(1)
@@ -894,6 +897,7 @@ class PageKite(object):
     self.servers_no_ping = False
     self.servers_preferred = []
     self.servers_sessionids = {}
+    self.keepalive = None
     self.dns_cache = {}
     self.ping_cache = {}
     self.last_frontend_choice = 0
@@ -1178,6 +1182,8 @@ class PageKite(object):
         ])
     if self.ca_certs != self.ca_certs_default:
       config.append('ca_certs = %s' % self.ca_certs)
+    if self.keepalive != None:
+      config.append('keepalive = %d' % self.keepalive)
     config.append('')
 
     if self.ui_sspec or self.ui_password or self.ui_pemfile:
@@ -1930,6 +1936,11 @@ class PageKite(object):
       elif opt == '--upgradeinfo':
         version, tag, md5, human_url, file_url = arg.split(';')
         self.upgrade_info.append((version, tag, md5, human_url, file_url))
+      elif opt == '--keepalive':
+        if arg == 'auto':
+          self.keepalive = None
+        else:
+          self.keepalive = max(PING_INTERVAL_MIN, int(arg))
       elif opt in ('-f', '--isfrontend'):
         self.isfrontend = True
         logging.LOG_THRESHOLD *= 4
@@ -2853,6 +2864,7 @@ class PageKite(object):
     # to the minimum: that means our connection is crap and we should
     # just leave it be.
     if (periodic
+        and not self.keepalive
         and not self.isfrontend
         and common.PING_INTERVAL > common.PING_INTERVAL_MIN):
       common.DISCONNECT_COUNT = 0
