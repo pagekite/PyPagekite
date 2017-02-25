@@ -1,2 +1,12 @@
-dist
-
+*.pyc
+build/
+dist/
+pagekite.egg-info
+doc/pagekite.1
+.pybuild
+deb/*.log
+deb/*.debhelper
+deb/*.substvars
+deb/files
+deb/pagekite/
+debian
