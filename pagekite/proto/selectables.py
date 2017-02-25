@@ -21,6 +21,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
 import errno
+import re
 import struct
 import threading
 import time
@@ -72,6 +73,8 @@ class Selectable(object):
     self.fd = None
 
     try:
+      if bind and bind[0] and re.match(r'^\d+\.\d+\.\d+\.\d+$', bind[0]):
+        raise ValueError('Avoid INET6 for IPv4 hosts')
       self.SetFD(fd or rawsocket(socket.AF_INET6, socket.SOCK_STREAM), six=True)
       if bind:
         self.fd.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
