@@ -1,4 +1,4 @@
 OPTIONS="--optdir=/etc/pagekite.d"
-PK_UID=daemon
-PK_GID=daemon
+PK_UID=pagekite
+PK_GID=pagekite
 PK_LOGFILE=/var/log/pagekite/pagekite.log
