@@ -2842,12 +2842,12 @@ class PageKite(object):
         ips[ip] = 1
     return ips.keys()
 
-  def GetActiveBackends(self):
+  def GetActiveBackends(self, include_loopback=False):
     active = []
     for bid in self.backends:
       (proto, bdom) = bid.split(':')
       if (self.backends[bid][BE_STATUS] not in BE_INACTIVE and
-          self.backends[bid][BE_SECRET] and
+          (include_loopback or self.backends[bid][BE_SECRET]) and
           not bdom.startswith('*')):
         active.append(bid)
     return active
@@ -2996,7 +2996,7 @@ class PageKite(object):
     failures = 0
     connections = 0
 
-    if len(self.GetActiveBackends()) > 0:
+    if len(self.GetActiveBackends(include_loopback=True)) > 0:
       if (not self.servers) or len(self.servers) > len(live_servers):
         self.ChooseFrontEnds()
       elif self.last_frontend_choice < time.time()-FE_PING_INTERVAL:
