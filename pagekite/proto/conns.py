@@ -567,9 +567,29 @@ class Tunnel(ChunkParser):
     if chunk_headers:
       for ch in chunk_headers: sending.append('%s: %s\r\n' % ch)
     sending.append('\r\n')
-    sending.append(data)
 
-    return self.SendChunked(sending, zhistory=self.zhistory[sid])
+    # Small amounts of data we just send...
+    if len(data) <= 1024:
+      sending.append(data)
+      return self.SendChunked(sending, zhistory=self.zhistory[sid])
+
+    # Larger amounts we break into fragments to work around bugs in
+    # some of our small-buffered embedded clients. We aim for roughly
+    # one fragment per packet, assuming an MTU of 1500 bytes.
+    sending.append('')
+    frag_size = max(1024, 1400-len(''.join(sending)))
+    first = True
+    while data or first:
+      sending[-1] = data[:frag_size]
+      if not self.SendChunked(sending, zhistory=self.zhistory[sid]):
+        return False
+      data = data[frag_size:]
+      if first:
+        sending = ['SID: %s\r\n' % sid, '\r\n', '']
+        frag_size = max(1024, 1400-len(''.join(sending)))
+        first = False
+
+    return True
 
   def SendStreamEof(self, sid, write_eof=False, read_eof=False):
     return self.SendChunked('SID: %s\r\nEOF: 1%s%s\r\n\r\nBye!' % (sid,
