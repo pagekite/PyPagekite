@@ -324,6 +324,8 @@ time the program defaults will Just Work.
      Write PID to the named file.
    * <b>--errorurl</b>=`U`  
      URL to redirect to when back-ends are not found.
+   * <b>--errorurl</b>=`D:U`  
+     Custom error URL for domain D.
 
    * <b>--selfsign <br />
      Configure the built-in HTTP daemon for HTTPS, first generating a

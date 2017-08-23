@@ -880,6 +880,7 @@ class PageKite(object):
     self.enable_sslzlib = False
     self.buffer_max = DEFAULT_BUFFER_MAX
     self.error_url = None
+    self.error_urls = {}
     self.finger_path = '/~%s/.finger'
 
     self.tunnel_manager = None
@@ -1184,6 +1185,8 @@ class PageKite(object):
       config.append('ca_certs = %s' % self.ca_certs)
     if self.keepalive != None:
       config.append('keepalive = %d' % self.keepalive)
+    for dom in sorted(self.error_urls.keys()):
+      config.append('errorurl = %s:%d' % (dom, self.error_urls[dom]))
     config.append('')
 
     if self.ui_sspec or self.ui_password or self.ui_pemfile:
@@ -2002,7 +2005,12 @@ class PageKite(object):
         count, domain, port = arg.split(':')
         self.servers_auto = (int(count), domain, int(port))
 
-      elif opt in ('--errorurl', '-E'): self.error_url = arg
+      elif opt in ('--errorurl', '-E'):
+        if ':http' in arg:
+          dom, url = arg.split(':', 1)
+          self.error_urls[dom] = url
+        else:
+          self.error_url = arg
       elif opt == '--fingerpath': self.finger_path = arg
       elif opt == '--kitename': self.kitename = arg
       elif opt == '--kitesecret': self.kitesecret = arg

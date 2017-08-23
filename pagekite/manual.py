@@ -281,6 +281,7 @@ MAN_OPT_SYSTEM = ("""\
     --runas</b>=<a>U</a>:<a>G</a>    __Set UID:GID after opening our listening sockets.
     --pidfile</b>=<a>P</a>    __Write PID to the named file.
     --errorurl</b>=<a>U</a>   __URL to redirect to when back-ends are not found.
+    --errorurl</b>=<a>D:U</a> __Custom error URL for domain D.
 
     --selfsign __
             Configure the built-in HTTP daemon for HTTPS, first generating a

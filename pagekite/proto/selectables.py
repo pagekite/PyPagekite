@@ -29,6 +29,7 @@ import zlib
 
 from pagekite.compat import *
 from pagekite.common import *
+from pagekite.proto.proto import HTTP_Unavailable
 import pagekite.logging as logging
 import pagekite.compat as compat
 import pagekite.common as common
@@ -591,6 +592,26 @@ class Selectable(object):
       self.write_blocked = ''
     self.read_eof = self.write_eof = True
     return True
+
+  def HTTP_Unavail(self, config, where, proto, host, **kwargs):
+    kwargs['frame_url'] = config.error_url
+    if self.fd:
+      kwargs['relay_ip'] = self.fd.getsockname()
+
+    # Do we have a more specific error URL for this domain? This is a
+    # white-label feature, for folks not wanting to hit the PageKite.net
+    # servers at all. In case of a match, we also disable mention of
+    # PageKite itself in the HTML boilerplate.
+    dparts = host.split('.')
+    while dparts:
+      fu = config.error_urls.get('.'.join(dparts), None)
+      if fu is not None:
+        kwargs['frame_url'] = fu
+        kwargs['advertise'] = False
+        break
+      dparts.pop(0)
+
+    return HTTP_Unavailable(where, proto, host, **kwargs)
 
 
 class LineParser(Selectable):

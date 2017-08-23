@@ -817,8 +817,8 @@ class Tunnel(ChunkParser):
         # conn is None means we have no back-end.
         # conn is False means authentication is required.
         if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
-                                HTTP_Unavailable('be', proto, host,
-                                  frame_url=self.conns.config.error_url,
+                                self.HTTP_Unavail(
+                                  self.conns.config, 'be', proto, host,
                                   code=code
                                 )), just_buffer=True):
           return False, False
@@ -1468,9 +1468,9 @@ class UnknownConn(MagicProtocolParser):
           tunnels = self.conns.tunnels
 
           if not self.conns.config.CheckClientAcls(self.address, conn=self):
-            self.Send(HTTP_Unavailable('fe', 'raw', chost,
-                                       code=403, status='Forbidden',
-                                       frame_url=self.conns.config.error_url),
+            self.Send(self.HTTP_Unavail(
+                        self.conns.config, 'fe', 'raw', chost,
+                        code=403, status='Forbidden'),
                       try_flush=True)
             return False
 
@@ -1562,9 +1562,9 @@ class UnknownConn(MagicProtocolParser):
             self.proto = 'websocket'
 
       if not self.conns.config.CheckClientAcls(self.address, conn=self):
-        self.Send(HTTP_Unavailable('fe', self.proto, self.host,
-                                   code=403, status='Forbidden',
-                                   frame_url=self.conns.config.error_url),
+        self.Send(self.HTTP_Unavail(
+                    self.conns.config, 'fe', self.proto, self.host,
+                    code=403, status='Forbidden'),
                   try_flush=True)
         return False
 
@@ -1582,10 +1582,10 @@ class UnknownConn(MagicProtocolParser):
           self.Send(HTTP_NoFeConnection(self.proto),
                     try_flush=True)
         else:
-          self.Send(HTTP_Unavailable('fe', self.proto, self.host,
-                                     frame_url=self.conns.config.error_url,
-                                     overloaded=self.conns.config.Overloaded()),
-                    try_flush=True)
+          self.Send(self.HTTP_Unavail(
+                        self.conns.config, 'fe', self.proto, self.host,
+                        overloaded=self.conns.config.Overloaded()
+                    ), try_flush=True)
         return False
 
     # We are done!

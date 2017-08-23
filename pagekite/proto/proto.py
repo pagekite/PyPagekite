@@ -233,18 +233,28 @@ def HTTP_GoodBeConnection(proto):
 
 def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None,
                      code=503, status='Unavailable', headers=None,
-                     overloaded=False):
+                     overloaded=False, advertise=True, relay_ip=None):
+  if advertise:
+    label = "PageKite"
+    whatis = ''.join(['<a href="', WWWHOME, '"><i>', label, '</i></a>'])
+  else:
+    label = "Connection"
+    whatis = "connection"
+
   if code == 401:
     headers = headers or []
-    headers.append(HTTP_Header('WWW-Authenticate', 'Basic realm=PageKite'))
+    headers.append(HTTP_Header('WWW-Authenticate', 'Basic realm=%s' % label))
+
   message = ''.join(['<h1>Sorry! (', where, ')</h1>',
-                     '<p>The ', proto.upper(),' <a href="', WWWHOME, '">',
-                     '<i>PageKite</i></a> for <b>', domain,
-                     '</b> is unavailable at the moment.</p>',
+                     '<p>The ', proto.upper(), ' ', whatis, ' for <b>',
+                     domain, '</b> is unavailable at the moment.</p>',
                      '<p>Please try again later.</p><!-- ', comment, ' -->'])
   if frame_url:
     if '?' in frame_url:
-      frame_url += '&where=%s&proto=%s&domain=%s' % (where.upper(), proto, domain)
+      frame_url += ('&where=%s&proto=%s&domain=%s'
+                    % (where.upper(), proto, domain))
+      if relay_ip is not None:
+        frame_url += ('&relay=%s' % relay_ip)
     return HTTP_Response(code, status,
                          ['<html><frameset cols="*">',
                           '<frame target="_top" src="', frame_url, '" />',
