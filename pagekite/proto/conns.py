@@ -1083,7 +1083,7 @@ class UserConn(Selectable):
 
     if ':' in host: host, port = host.split(':', 1)
     self.proto = proto
-    self.host = host
+    self.host = StripEncodedIP(host)
 
     # If the listening port is an alias for another...
     if int(on_port) in conns.config.server_portalias:
@@ -1462,7 +1462,7 @@ class UnknownConn(MagicProtocolParser):
           chost, cport = connect_parser.path.split(':', 1)
 
           cport = int(cport)
-          chost = chost.lower()
+          chost = StripEncodedIP(chost.lower())
           sid1 = ':%s' % chost
           sid2 = '-%s:%s' % (cport, chost)
           tunnels = self.conns.tunnels
@@ -1534,7 +1534,7 @@ class UnknownConn(MagicProtocolParser):
       if not self.host:
         hosts = self.parser.Header('Host')
         if hosts:
-          self.host = hosts[0].lower()
+          self.host = StripEncodedIP(hosts[0].lower())
         else:
           self.Send(HTTP_Response(400, 'Bad request',
                     ['<html><body><h1>400 Bad request</h1>',
@@ -1546,7 +1546,7 @@ class UnknownConn(MagicProtocolParser):
 
       if self.parser.path.startswith(MAGIC_PREFIX):
         try:
-          self.host = self.parser.path.split('/')[2]
+          self.host = StripEncodedIP(self.parser.path.split('/')[2])
           if self.parser.path.endswith('.json'):
             self.proto = 'probe.json'
           else:

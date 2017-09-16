@@ -596,7 +596,7 @@ class Selectable(object):
   def HTTP_Unavail(self, config, where, proto, host, **kwargs):
     kwargs['frame_url'] = config.error_url
     if self.fd:
-      kwargs['relay_ip'] = self.fd.getsockname()
+      kwargs['relay_sockname'] = self.fd.getsockname()
 
     # Do we have a more specific error URL for this domain? This is a
     # white-label feature, for folks not wanting to hit the PageKite.net

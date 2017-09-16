@@ -20,6 +20,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+import re
+
 from pagekite.compat import *
 from pagekite.common import *
 import pagekite.logging as logging
@@ -28,6 +30,14 @@ HTTP_METHODS = ['OPTIONS', 'CONNECT', 'GET', 'HEAD', 'POST', 'PUT', 'TRACE',
                 'PROPFIND', 'PROPPATCH', 'MKCOL', 'DELETE', 'COPY', 'MOVE',
                 'LOCK', 'UNLOCK', 'PING', 'PATCH']
 HTTP_VERSIONS = ['HTTP/1.0', 'HTTP/1.1']
+
+EMBEDDED_IP_RE = re.compile(r'^0x(?:[0-9a-fA-F]{8,8}|[0-9a-fA-F]{32,32})--')
+
+
+def StripEncodedIP(domain):
+  if domain:
+    return EMBEDDED_IP_RE.sub('', str(domain))
+  return domain
 
 
 class BaseLineParser(object):
