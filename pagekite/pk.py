@@ -1177,7 +1177,7 @@ class PageKite(object):
           '# dyndns = user:pass@dyndns.org OR',
           '# dyndns = user:pass@no-ip.com' ,
           '#',
-          p('errorurl  = %s', self.error_url, 'http://host/page/'),
+          p('errorurl = %s', self.error_url, 'http://host/page/'),
           p('fingerpath = %s', self.finger_path, '/~%s/.finger'),
           '',
         ])
@@ -1186,7 +1186,7 @@ class PageKite(object):
     if self.keepalive != None:
       config.append('keepalive = %d' % self.keepalive)
     for dom in sorted(self.error_urls.keys()):
-      config.append('errorurl = %s:%d' % (dom, self.error_urls[dom]))
+      config.append('errorurl = %s:%s' % (dom, self.error_urls[dom]))
     config.append('')
 
     if self.ui_sspec or self.ui_password or self.ui_pemfile:
