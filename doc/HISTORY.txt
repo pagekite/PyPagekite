@@ -1,8 +1,8 @@
 Version history - highlights
 ============================
 
-v0.5.9a     2017.11.13
--------
+v0.5.9.1    2017.12.09  (same as 0.5.9a)
+--------
    - Adjust tunnel ping frequency on disconnect, to cope with bad firewalls
    - Add --keepalive for manual tunnel ping frequency configuration
    - Workaround Debian (and others) distrusting StartCOM issued certificates
