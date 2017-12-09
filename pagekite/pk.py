@@ -1051,12 +1051,12 @@ class PageKite(object):
       return True
 
   def SetWhitelabelDefaults(self, wld, secure=False, clobber=True, check=False):
-    def_dyndns = (DYNDNS['whitelabels' if secure else 'whitelabel'] % wld,
+    def_dyndns = (DYNDNS[secure and 'whitelabels' or 'whitelabel'] % wld,
                   {'user': '', 'pass': ''})
     def_frontends = (1, 'fe4_%s.%s' % (re.sub(r'[^\d]', '', APPVER), wld), 443)
     def_fe_certs = ['fe.%s' % wld, wld] + [c for c in SERVICE_CERTS if c != wld]
     def_ca_certs  = sys.argv[0]
-    def_error_url = 'http%s://www.%s/offline/?' % ('s' if secure else '', wld)
+    def_error_url = 'http%s://www.%s/offline/?' % (secure and 's' or '', wld)
     if check:
       return (self.dyndns == def_dyndns and
               self.servers_auto == def_frontends and
@@ -2810,8 +2810,11 @@ class PageKite(object):
       except:
         uuid = self.TMP_UUID_MAP.get(uuid, uuid)
 
-      if 'X-PageKite-Overloaded:' in data:
-        elapsed += 1  # Simulate slowness: add full second to ping time
+      try:
+        if data.index('X-PageKite-Overloaded:') >= 0:
+          elapsed += 1  # Simulate slowness: add full second to ping time
+      except ValueError:
+        pass
 
       if cid not in self.ping_cache:
         self.ping_cache[cid] = []
