@@ -950,12 +950,14 @@ class PageKite(object):
       self.rcfile = 'pagekite.cfg'
       self.devnull = '/dev/null'
 
+    self.ca_certs_default = self.ca_certs = None
     self.SetDefaultCACerts()
 
   def SetDefaultCACerts(self, **kwargs):
     # Look for CA Certificates. If we don't find them in the host OS,
     # we assume there might be something good in the program itself.
-    self.ca_certs_default = self.FindCACerts(**kwargs)
+    if self.ca_certs_default != sys.argv[0]:
+      self.ca_certs_default = self.FindCACerts(**kwargs)
     self.ca_certs = self.ca_certs_default
 
   def FindCACerts(self, use_curl_bundle=False):
@@ -1027,11 +1029,13 @@ class PageKite(object):
     def_dyndns    = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
     def_frontends = (1, 'fe4_%s.b5p.us' % re.sub(r'[^\d]', '', APPVER), 443)
     def_fe_certs  = ['b5p.us'] + [c for c in SERVICE_CERTS if c != 'b5p.us']
+    def_ca_certs  = sys.argv[0]
     def_error_url = 'https://pagekite.net/offline/?'
     if check:
       return (self.dyndns == def_dyndns and
               self.servers_auto == def_frontends and
               self.error_url == def_error_url and
+              self.ca_certs == def_ca_certs and
               (sorted(self.fe_certname) == sorted(def_fe_certs) or
                not socks.HAVE_SSL))
     else:
@@ -1039,6 +1043,8 @@ class PageKite(object):
       self.servers_auto = (not clobber and self.servers_auto) or def_frontends
       self.error_url = (not clobber and self.error_url) or def_error_url
       if socks.HAVE_SSL:
+        self.ca_certs_default = (not clobber and self.ca_certs_default) or def_ca_certs
+        self.ca_certs = (not clobber and self.ca_certs) or def_ca_certs
         for cert in def_fe_certs:
           if cert not in self.fe_certname:
             self.fe_certname.append(cert)
@@ -1049,11 +1055,13 @@ class PageKite(object):
                   {'user': '', 'pass': ''})
     def_frontends = (1, 'fe4_%s.%s' % (re.sub(r'[^\d]', '', APPVER), wld), 443)
     def_fe_certs = ['fe.%s' % wld, wld] + [c for c in SERVICE_CERTS if c != wld]
+    def_ca_certs  = sys.argv[0]
     def_error_url = 'http%s://www.%s/offline/?' % ('s' if secure else '', wld)
     if check:
       return (self.dyndns == def_dyndns and
               self.servers_auto == def_frontends and
               self.error_url == def_error_url and
+              self.ca_certs == def_ca_certs and
               (sorted(self.fe_certname) == sorted(def_fe_certs) or
                not socks.HAVE_SSL))
     else:
@@ -1061,6 +1069,8 @@ class PageKite(object):
       self.servers_auto = (not clobber and self.servers_auto) or def_frontends
       self.error_url = (not clobber and self.error_url) or def_error_url
       if socks.HAVE_SSL:
+        self.ca_certs_default = (not clobber and self.ca_certs_default) or def_ca_certs
+        self.ca_certs = (not clobber and self.ca_certs) or def_ca_certs
         for cert in def_fe_certs:
           if cert not in self.fe_certname:
             self.fe_certname.append(cert)
