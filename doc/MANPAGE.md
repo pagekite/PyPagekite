@@ -1,6 +1,6 @@
 ## Name ##
 
-pagekite v0.5.9.0 - Make localhost servers publicly visible
+pagekite v0.5.9a - Make localhost servers publicly visible
 
 ## Synopsis ##
 
@@ -397,7 +397,7 @@ lapcat(1), <http://pagekite.org/>, <https://pagekite.net/>
 
 ## Copyright and license ##
 
-Copyright 2010-2016, the Beanstalks Project ehf. and Bjarni R. Einarsson.
+Copyright 2010-2017, the Beanstalks Project ehf. and Bjarni R. Einarsson.
 
 This program is free software: you can redistribute it and/or modify it
 under the terms of the GNU Affero General Public License as published by

@@ -1,10 +1,14 @@
 Version history - highlights
 ============================
 
-v0.5.9.1    2016.??
---------
+v0.5.9a     2017.11.13
+-------
    - Adjust tunnel ping frequency on disconnect, to cope with bad firewalls
    - Add --keepalive for manual tunnel ping frequency configuration
+   - Workaround Debian (and others) distrusting StartCOM issued certificates
+   - Allow multiple --errorurl arguments for per-domain customization
+   - Fix loopback (local backends on a frontend)
+
 
 v0.5.9      2016.11.18
 ------
