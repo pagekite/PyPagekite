@@ -2798,7 +2798,8 @@ class PageKite(object):
         fd.send('HEAD /ping HTTP/1.1\r\nHost: ping.pagekite\r\n\r\n')
         data = fd.recv(1024)
         fd.close()
-        assert(data.startswith('HTTP/1.1 503 Unavailable'))
+        if not data.startswith('HTTP/1.1 503 Unavailable'):
+          raise Exception()
 
       except Exception, e:
         logging.LogDebug('Ping %s:%s failed: %s' % (host, port, e))
