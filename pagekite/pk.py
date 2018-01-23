@@ -839,6 +839,7 @@ class PageKite(object):
   def __init__(self, ui=None, http_handler=None, http_server=None):
     self.progname = ((sys.argv[0] or 'pagekite.py').split('/')[-1]
                                                    .split('\\')[-1])
+    self.pyfile = os.path.abspath(sys.argv[0])
     self.ui = ui or NullUi()
     self.ui_request_handler = http_handler
     self.ui_http_server = http_server
@@ -969,7 +970,7 @@ class PageKite(object):
   def SetDefaultCACerts(self, **kwargs):
     # Look for CA Certificates. If we don't find them in the host OS,
     # we assume there might be something good in the program itself.
-    if self.ca_certs_default != sys.argv[0]:
+    if self.ca_certs_default != self.pyfile:
       self.ca_certs_default = self.FindCACerts(**kwargs)
     self.ca_certs = self.ca_certs_default
 
@@ -1042,7 +1043,7 @@ class PageKite(object):
     def_dyndns    = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
     def_frontends = (1, 'fe4_%s.b5p.us' % re.sub(r'[^\d]', '', APPVER), 443)
     def_fe_certs  = ['b5p.us'] + [c for c in SERVICE_CERTS if c != 'b5p.us']
-    def_ca_certs  = sys.argv[0]
+    def_ca_certs  = self.pyfile
     def_error_url = 'https://pagekite.net/offline/?'
     if check:
       return (self.dyndns == def_dyndns and
@@ -1068,7 +1069,7 @@ class PageKite(object):
                   {'user': '', 'pass': ''})
     def_frontends = (1, 'fe4_%s.%s' % (re.sub(r'[^\d]', '', APPVER), wld), 443)
     def_fe_certs = ['fe.%s' % wld, wld] + [c for c in SERVICE_CERTS if c != wld]
-    def_ca_certs  = sys.argv[0]
+    def_ca_certs  = self.pyfile
     def_error_url = 'http%s://www.%s/offline/?' % (secure and 's' or '', wld)
     if check:
       return (self.dyndns == def_dyndns and
@@ -2127,7 +2128,8 @@ class PageKite(object):
 
     # Make sure these are configured before we try and do XML-RPC stuff.
     socks.DEBUG = (logging.DEBUG_IO or socks.DEBUG) and logging.LogDebug
-    if self.ca_certs: socks.setdefaultcertfile(self.ca_certs)
+    if self.ca_certs:
+      socks.setdefaultcertfile(self.ca_certs)
 
     # Handle the user-friendly argument stuff and simple registration.
     return self.ParseFriendlyBackendSpecs(args)
@@ -2457,7 +2459,8 @@ class PageKite(object):
                                      '- <a href="%s">%s</a>' % (SERVICE_TOS_URL, SERVICE_TOS_URL)],
                                 default=True, back=-1, no='Abort')
           if ch is True:
-            self.SetServiceDefaults(clobber=False)
+            self.SetServiceDefaults(clobber=True)
+            socks.setdefaultcertfile(self.ca_certs)
             if not kitename:
               Goto('service_signup_email')
             elif is_cname_for and is_cname_ready:
@@ -3018,7 +3021,7 @@ class PageKite(object):
           self.ui.Notify(socks.HAVE_PYOPENSSL and
             ' - Using pyOpenSSL wrapper, good.'  or
             ' - Using standard Python ssl: try installing pyOpenSSL?')
-          self.ui.Notify(' - CA certificates loaded from: %s' % self.ca_certs)
+          self.ui.Notify(' - CA certificates loaded: %s' % self.ca_certs)
           for dom in self.fe_certname:
             self.ui.Notify(' - Would accept a certificate for: %s' % dom)
           self.ui.Notify(' - Check your system clock (dates matter)')
@@ -3403,7 +3406,7 @@ class PageKite(object):
                     ) % (self.progname, APPVER),
                     prefix='>', color=self.ui.GREEN,
                     alignright='[%s]' % howtoquit)
-    config_report = [('started', sys.argv[0]), ('version', APPVER),
+    config_report = [('started', self.pyfile), ('version', APPVER),
                      ('platform', sys.platform),
                      ('argv', ' '.join(sys.argv[1:])),
                      ('ca_certs', self.ca_certs)]
