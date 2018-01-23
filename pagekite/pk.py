@@ -715,17 +715,30 @@ class TunnelManager(threading.Thread):
     if tunnel_count == 0:
       if self.pkite.isfrontend:
         self.pkite.ui.Status('idle', message='Waiting for back-ends.')
+
       elif tunnel_total == 0:
-        self.pkite.ui.Notify('It looks like your Internet connection might be '
-                             'down! Will retry soon.')
         self.pkite.ui.Status('down', color=self.pkite.ui.GREY,
-                       message='No kites ready to fly.  Waiting...')
+                             message='No kites ready to fly.  Waiting...')
+        self.pkite.ui.Notify('It looks like your Internet connection might '
+                             'be down! Will retry soon.',
+                             color=self.pkite.ui.YELLOW)
+        self.pkite.ui.Notify(
+          ' - Check whether you can ping pagekite.net or google.com')
+        if self.pkite.servers_auto:
+          hostname = self.pkite.servers_auto[1]
+          self.pkite.ui.Notify(
+            ' - Check whether `%s` can be looked up in DNS' % hostname)
+        for hostport in self.pkite.servers_manual:
+          hostname = hostport.split(':')[0]
+          self.pkite.ui.Notify(
+            ' - Check whether `%s` can be looked up in DNS' % hostname)
+
       elif connecting == 0:
         self.pkite.ui.Status('down', color=self.pkite.ui.RED,
-                       message='Not connected to any front-ends, will retry...')
+                       message='Not connected to any front-end relays, will retry...')
     elif tunnel_count < tunnel_total:
       self.pkite.ui.Status('flying', color=self.pkite.ui.YELLOW,
-                    message=('Only connected to %d/%d front-ends, will retry...'
+                    message=('Only connected to %d/%d front-end relays, will retry...'
                              ) % (tunnel_count, tunnel_total))
     elif problem:
       self.pkite.ui.Status('flying', color=self.pkite.ui.YELLOW,
@@ -2992,13 +3005,29 @@ class PageKite(object):
         tun.filters.append(HttpSecurityFilter(self.ui))
         if self.watch_level[0] is not None:
           tun.filters.append(TunnelWatcher(self.ui, self.watch_level))
-        logging.Log([('connect', server)])
-        return True
-      else:
-        logging.LogInfo('Failed to connect', [('FE', server)])
-        self.ui.Notify('Failed to connect to %s' % server,
-                       prefix='!', color=self.ui.YELLOW)
-        return False
+      logging.Log([('connect', server)])
+      return True
+    else:
+      logging.LogInfo('Failed to connect', [('FE', server)])
+      self.ui.Notify('Failed to connect to %s' % server,
+                     prefix='!', color=self.ui.YELLOW)
+
+      for line in logging.LOG[-5:]:
+        if 'err' in line and 'ssl' in line['err'].lower():
+          self.ui.Notify('Unable to verify SSL certificates!')
+          self.ui.Notify(socks.HAVE_PYOPENSSL and
+            ' - Using pyOpenSSL wrapper, good.'  or
+            ' - Using standard Python ssl: try installing pyOpenSSL?')
+          self.ui.Notify(' - CA certificates loaded from: %s' % self.ca_certs)
+          for dom in self.fe_certname:
+            self.ui.Notify(' - Would accept a certificate for: %s' % dom)
+          self.ui.Notify(' - Check your system clock (dates matter)')
+          self.ui.Notify(
+            ' - Beware firewalls that intercept outgoing SSL/TLS connections!')
+          self.ui.Notify(
+            ' - Danger Zone: use --fe_nocertcheck to connect insecurely.')
+
+      return False
 
   def DisconnectFrontend(self, conns, server):
     logging.Log([('disconnect', server)])

@@ -1,6 +1,12 @@
 Version history - highlights
 ============================
 
+v0.5.9.2    2018.01.23
+--------
+   - Improve UI and provide debugging hints when failing to connect
+   - Remove incorrect use of assert()
+
+
 v0.5.9.1    2017.12.09  (same as 0.5.9a)
 --------
    - Adjust tunnel ping frequency on disconnect, to cope with bad firewalls
