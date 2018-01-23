@@ -1039,9 +1039,13 @@ class PageKite(object):
     self.server_ports = ports
     self.backends = self.ArgToBackendSpecs('http:localhost:localhost:builtin:-')
 
+  def APPVER_DNS(self, tld):
+    appver_without_patchlevel = '.'.join(APPVER.split('.')[:3])
+    return ('fe4_%s.' + tld) % re.sub(r'[^\d]', '', appver_without_patchlevel)
+
   def SetServiceDefaults(self, clobber=True, check=False):
     def_dyndns    = (DYNDNS['pagekite.net'], {'user': '', 'pass': ''})
-    def_frontends = (1, 'fe4_%s.b5p.us' % re.sub(r'[^\d]', '', APPVER), 443)
+    def_frontends = (1, self.APPVER_DNS('b5p.us'), 443)
     def_fe_certs  = ['b5p.us'] + [c for c in SERVICE_CERTS if c != 'b5p.us']
     def_ca_certs  = self.pyfile
     def_error_url = 'https://pagekite.net/offline/?'
@@ -1067,7 +1071,7 @@ class PageKite(object):
   def SetWhitelabelDefaults(self, wld, secure=False, clobber=True, check=False):
     def_dyndns = (DYNDNS[secure and 'whitelabels' or 'whitelabel'] % wld,
                   {'user': '', 'pass': ''})
-    def_frontends = (1, 'fe4_%s.%s' % (re.sub(r'[^\d]', '', APPVER), wld), 443)
+    def_frontends = (1, self.APPVER_DNS(wld), 443)
     def_fe_certs = ['fe.%s' % wld, wld] + [c for c in SERVICE_CERTS if c != wld]
     def_ca_certs  = self.pyfile
     def_error_url = 'http%s://www.%s/offline/?' % (secure and 's' or '', wld)
