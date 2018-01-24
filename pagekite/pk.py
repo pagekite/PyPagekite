@@ -3034,6 +3034,15 @@ class PageKite(object):
           self.ui.Notify(
             ' - Danger Zone: use --fe_nocertcheck to connect insecurely.')
 
+          # Dammit, if we know what the problem is, just fix it.
+          if (self.ca_certs != self.pyfile
+                  and 'b5p.us' in (self.servers_auto or ['', ''])[1]):
+              logging.LogInfo('Reconfiguring', [('ca_certs', self.pyfile)])
+              self.ui.Notify('Reconfiguring to use internal CA certificates',
+                             prefix="!", color=self.ui.RED)
+              self.ca_certs = self.pyfile
+              socks.setdefaultcertfile(self.ca_certs)
+
       return False
 
   def DisconnectFrontend(self, conns, server):

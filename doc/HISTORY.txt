@@ -4,6 +4,7 @@ Version history - highlights
 v0.5.9.3    2018.01.24
 --------
    - Fix problems with setting CA cert location within wizard
+   - Add workaround to cope with broken CA cert configurations
 
 
 v0.5.9.2    2018.01.23
