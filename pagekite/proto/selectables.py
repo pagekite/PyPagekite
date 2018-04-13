@@ -595,7 +595,7 @@ class Selectable(object):
 
   def HTTP_Unavail(self, config, where, proto, host, **kwargs):
     kwargs['frame_url'] = config.error_url
-    if self.fd:
+    if self.fd and where in ('FE', 'fe'):
       kwargs['relay_sockname'] = self.fd.getsockname()
 
     # Do we have a more specific error URL for this domain? This is a

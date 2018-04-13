@@ -3141,6 +3141,11 @@ class PageKite(object):
       updates = {}
       for domain, (secret, ips) in domains.iteritems():
         if ips:
+          # NOTE: Here it would be tempting to skip updates if we already
+          #       see correct results in DNS. We avoid this temptation,
+          #       because always updating DNS will resolve and mitigate
+          #       harms caused by stale DNS caches. The DDNS service just
+          #       has to deal with the load.
           iplist = ','.join(ips)
           payload = '%s:%s' % (domain, iplist)
           args = {}

@@ -251,10 +251,10 @@ def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None,
                      '<p>Please try again later.</p><!-- ', comment, ' -->'])
   if frame_url:
     if '?' in frame_url:
-      frame_url += ('&where=%s&proto=%s&domain=%s'
+      frame_url += ('&amp;where=%s&amp;proto=%s&amp;domain=%s'
                     % (where.upper(), proto, domain))
       if relay_sockname is not None:
-        frame_url += ('&relay=%s' % relay_sockname[0])
+        frame_url += ('&amp;relay=%s' % relay_sockname[0])
     return HTTP_Response(code, status,
                          ['<html><frameset cols="*">',
                           '<frame target="_top" src="', frame_url, '" />',
