@@ -154,19 +154,32 @@ class NullUi(object):
 
   def NotifyServer(self, obj, server_info):
     self.server_info = server_info
-    self.Notify('Connecting to front-end relay %s ...' % server_info[obj.S_NAME],
-                color=self.GREY)
-    self.NotifyList('Protocols', server_info[obj.S_PROTOS], self.GREY)
-    self.NotifyList('Ports', server_info[obj.S_PORTS], self.GREY)
+    self.Notify(
+      'Connecting to front-end relay %s ...' % server_info[obj.S_NAME],
+      color=self.GREY)
+    self.Notify(
+      ' - Relay supports %d protocols on %d public ports.'
+        % (len(server_info[obj.S_PROTOS]), len(server_info[obj.S_PORTS])),
+      color=self.GREY)
     if 'raw' in server_info[obj.S_PROTOS]:
-      self.NotifyList('Raw ports', server_info[obj.S_RAW_PORTS], self.GREY)
+      self.Notify(
+        ' - Raw TCP/IP (HTTP proxied) kites are available.',
+        color=self.GREY)
+    self.Notify(
+      ' - Enable logging more info, add option: --logfile=/path/to/logfile',
+      color=self.GREY)
 
   def NotifyQuota(self, quota, q_days, q_conns):
-    qMB = 1024
-    msg = 'Quota: You have %.2f MB' % (float(quota) / qMB)
-    if q_days is not None: msg += ', %d days' % q_days
-    if q_conns is not None: msg += ' and %d connections' % q_conns
-    self.Notify(msg + ' left.',
+    q, qMB = [], float(quota) / 1024
+    if qMB < 1024:
+      q.append('%.2f MB' % qMB)
+    if q_days is not None and q_days < 400:
+      q.append('%d days' % q_days)
+    if q_conns is not None and q_conns < 10:
+      q.append('%s tunnels' % q_conns)
+    if not q:
+      q = ['plenty of time and bandwidth']
+    self.Notify('Quota: You have %s left.' % ', '.join(q),
                 prefix=(int(quota) < qMB) and '!' or ' ',
                 color=self.MAGENTA)
 

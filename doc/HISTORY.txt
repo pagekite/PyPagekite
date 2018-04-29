@@ -4,6 +4,7 @@ Version history - highlights
 v0.5.9.4    ???
 --------
    - Fix IP address leak in BE offline page, fix &-encoding in URL
+   - Made relay capability description and quota report less confusing
 
 
 v0.5.9.3    2018.01.24

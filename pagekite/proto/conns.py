@@ -397,6 +397,13 @@ class Tunnel(ChunkParser):
       if 'motd' in args and args['motd'][0]:
         config.ui.NotifyMOTD(sname, args['motd'][0])
 
+    # Log the server capabilities
+    logging.Log([
+      ('FE', sname),
+      ('ports', ','.join(self.server_info[self.S_PORTS])),
+      ('protocols', ','.join(self.server_info[self.S_PROTOS])),
+      ('raw_ports', ','.join(self.server_info[self.S_RAW_PORTS] or []))])
+
     # FIXME: Really, we should keep track of quota dimensions for
     #        each kite.  At the moment that isn't even reported...
     for quota in parse.Header('X-PageKite-Quota'):
