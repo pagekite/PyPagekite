@@ -1099,7 +1099,7 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
 
     if ssl_pem_filename:
       ctx = socks.SSL.Context(socks.SSL.TLSv1_METHOD)
-      ctx.set_cipher_list('HIGH:-aNULL:-eNULL:-PSK:RC4-SHA:RC4-MD5')
+      ctx.set_cipher_list('HIGH:!MEDIUM:!LOW:!aNULL:!NULL:!SHA')
       ctx.use_privatekey_file (ssl_pem_filename)
       ctx.use_certificate_chain_file(ssl_pem_filename)
       self.socket = socks.SSL_Connect(ctx, socket.socket(self.address_family,
