@@ -602,7 +602,7 @@ class Selectable(object):
     # white-label feature, for folks not wanting to hit the PageKite.net
     # servers at all. In case of a match, we also disable mention of
     # PageKite itself in the HTML boilerplate.
-    dparts = host.split('.')
+    dparts = host.split(':')[0].split('.')
     while dparts:
       fu = config.error_urls.get('.'.join(dparts), None)
       if fu is not None:
