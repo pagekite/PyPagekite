@@ -132,12 +132,21 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   # Make all paths/endpoints legal, we interpret them below.
   rpc_paths = ( )
 
+  E_PB = { 'code': 400, 'msg': 'Failed', 'mimetype': 'text/html',
+           'title': 'PhotoBackup Error',
+           'body': '<p>PhotoBackup Error</p>' }
+  E401 = { 'code': '401', 'msg': 'Forbidden', 'mimetype': 'text/html',
+           'title': '401 Forbidden',
+           'body': '<p>Access Denied. Sorry!</p>' }
   E403 = { 'code': '403', 'msg': 'Forbidden', 'mimetype': 'text/html',
            'title': '403 Forbidden',
            'body': '<p>Access Denied. Sorry!</p>' }
   E404 = { 'code': '404', 'msg': 'Not found', 'mimetype': 'text/html',
            'title': '404 Not found',
            'body': '<p>File or directory not found. Sorry!</p>' }
+  E500 = { 'code': '500', 'msg': 'Internal Error', 'mimetype': 'text/html',
+           'title': '500 Internal Error',
+           'body': '<p>Something is misconfigured or broken. Sorry!</p>' }
   ROBOTSTXT = { 'code': '200', 'msg': 'OK', 'mimetype': 'text/plain',
                 'body': ('User-agent: *\n'
                          'Disallow: /\n'
@@ -555,11 +564,11 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
     return host_paths, full_path
 
-  def handleFileUpload(self, path, uploaded, shtml_vars=None):
+  def handleFileUpload(self, path, uploaded, data=None, shtml_vars=None):
     host_paths, full_path = self.convertPaths(path)
     if not (full_path
             and os.path.isdir(full_path)
-            and self.allowUploads(full_path)):
+            and (data or self.allowUploads(full_path))):
       return False
 
     try:
@@ -587,13 +596,66 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
           count += 1
 
         fd = open(target, 'wb')
-        fd.write(upload.value)
+        fd.write(data or upload.value)
         fd.close()
 
       return True
     except:
-      traceback.print_exc()
       return False
+
+  def handlePhotoBackup(self, path, posted, shtml_vars=None):
+    password = self.host_config.get('photobackup', False)
+    host_paths, full_path = self.convertPaths('/')
+
+    # This allows the user to store just the SHA512 in their PageKite
+    # config file. Users with exactly 128 char passwords are screwed.
+    if password and (len(password) != 128):
+      password = hashlib.sha512(password).hexdigest()
+
+    userpass = ('password' in posted and posted['password'])
+    if isinstance(userpass, list):
+      userpass = userpass[0]
+    else:
+      userpass = userpass.value
+
+    if path == '/test':
+      if not password:
+        shtml_vars.update(self.E401)
+      elif str(userpass) != password:
+        shtml_vars.update(self.E403)
+      elif not full_path or not os.path.isdir(full_path):
+        shtml_vars.update(self.E500)
+      else:
+        self.sendResponse('OK', mimetype='text/plain')
+        self.sendEof()
+        return True
+
+    elif path == '/':
+      filesize = ('filesize' in posted and posted['filesize'].value)
+      photo = ('upfile' in posted and posted['upfile'])
+      photo_data = ((photo not in (None, False)) and photo.value or '')
+
+      shtml_vars.update(self.E_PB)
+      if not filesize:
+        shtml_vars['code'] = 400
+      elif photo in (None, False):
+        shtml_vars['code'] = 401
+      elif str(userpass) != password:
+        shtml_vars.update(self.E403)
+      elif len(photo_data) != int(filesize):
+        shtml_vars['code'] = 411
+      elif self.handleFileUpload('/', photo,
+                                 data=photo_data, shtml_vars=shtml_vars):
+        self.sendResponse('OK', mimetype='text/plain')
+        self.sendEof()
+        return True
+      else:
+        shtml_vars['code'] = 500
+
+    else:
+      shtml_vars.update(self.E404)
+
+    return False
 
   def sendStaticPath(self, path, mimetype, shtml_vars=None):
     is_shtml, is_cgi, is_dir = False, False, False
@@ -777,6 +839,9 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     # Do we expose the built-in console?
     console = self.host_config.get('console', False)
 
+    # Are we implementing the PhotoBackup protocol?
+    photobackup = self.host_config.get('photobackup', False)
+
     if path == self.host_config.get('yamon', False):
       if common.gYamon:
         data['body'] = common.gYamon.render_vars_text(qs.get('view', [None])[0])
@@ -837,7 +902,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       else:
         data.update(self.E403)
     else:
-      if (posted is not None) and 'upload' in posted:
+      if photobackup and (posted is not None) and (path in '/', '/test'):
+        if self.handlePhotoBackup(path, posted, shtml_vars=data):
+          return
+      elif (posted is not None) and 'upload' in posted:
         if self.handleFileUpload(path, posted['upload'], shtml_vars=data):
           if self.sendStaticPath(path, data['mimetype'], shtml_vars=data):
             return

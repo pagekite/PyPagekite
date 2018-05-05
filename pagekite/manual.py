@@ -108,6 +108,10 @@ MAN_FLAGS_BUILTIN = ("""\
     +cgi</b>=<a>list</a>
             A list of extensions, for which files should be treated as
             CGI scripts (example: <tt>+cgi=cgi,pl,sh</tt>).
+
+    +photobackup</b>=<a>password</a>
+            Enable built-in PhotoBackup server with the given password.
+            See https://photobackup.github.io/ for details.
 """)
 MAN_OPTIONS = ("""\
     The full power of <b>pagekite.py</b> lies in the numerous options which
