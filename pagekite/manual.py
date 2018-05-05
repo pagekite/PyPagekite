@@ -101,6 +101,9 @@ MAN_FLAGS_BUILTIN = ("""\
     +indexes        __Enable directory indexes.
     +indexes</b>=<a>all</a>    __Enable directory indexes including hidden (dot-) files.
     +hide           __Obfuscate URLs of shared files.
+    +uploads        __Accept file uploads.
+    +uploads</b>=<a>RE</a>     __Accept uploads to paths matching regexp RE.
+    +ul_filenames</b>=<a>P</a> __Upload naming policy. P = overwrite, keep or rename
 
     +cgi</b>=<a>list</a>
             A list of extensions, for which files should be treated as

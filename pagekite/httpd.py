@@ -132,9 +132,9 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   # Make all paths/endpoints legal, we interpret them below.
   rpc_paths = ( )
 
-  E403 = { 'code': '403', 'msg': 'Missing', 'mimetype': 'text/html',
-           'title': '403 Not found',
-           'body': '<p>File or directory not found. Sorry!</p>' }
+  E403 = { 'code': '403', 'msg': 'Forbidden', 'mimetype': 'text/html',
+           'title': '403 Forbidden',
+           'body': '<p>Access Denied. Sorry!</p>' }
   E404 = { 'code': '404', 'msg': 'Not found', 'mimetype': 'text/html',
            'title': '404 Not found',
            'body': '<p>File or directory not found. Sorry!</p>' }
@@ -259,6 +259,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     self.sendStdHdrs(header_list=header_list, mimetype=mimetype)
     if message and not self.suppress_body:
       self.sendChunk(message)
+
+  def allowUploads(self, full_path):
+    uploads = self.host_config.get('uploads', False)
+    return (uploads and ((uploads is True) or re.match(uploads, full_path)))
 
   def needPassword(self):
     if self.server.pkite.ui_password: return True
@@ -392,10 +396,13 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       self.rfile = self.post_data
 
       ctype, pdict = cgi.parse_header(self.headers.get('content-type'))
-      if ctype == 'multipart/form-data':
+      if ctype.lower() == 'multipart/form-data':
         self.post_data.seek(0)
-        posted = cgi.parse_multipart(self.rfile, pdict)
-      elif ctype == 'application/x-www-form-urlencoded':
+        posted = cgi.FieldStorage(
+          fp=self.post_data,
+          headers=self.headers,
+          environ={'REQUEST_METHOD': command, 'CONTENT_TYPE': ctype})
+      elif ctype.lower() == 'application/x-www-form-urlencoded':
         if clength >= 50*1024*1024:
           raise Exception(("Refusing to parse giant posted query "
                            "string (%s bytes).") % clength)
@@ -423,7 +430,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     except socket.error:
       pass
     except Exception, e:
-      logging.Log([('err', 'POST error at %s: %s' % (path, e))])
+      logging.Log([('err', 'Error handling POST at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
     self.rfile = self.old_rfile
@@ -518,37 +525,81 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     fhtml.append('</table>')
     return ''.join(fhtml)
 
+  def convertPaths(self, path):
+    path = urllib.unquote(path)
+    if path.find('..') >= 0: raise IOError("Evil")
+
+    paths = self.server.pkite.ui_paths
+    def_paths = paths.get('*', {})
+    http_host = self.http_host
+    if ':' not in http_host: http_host += ':80'
+    host_paths = paths.get(http_host.replace(':', '/'), {})
+    path_parts = path.split('/')
+    path_rest = []
+    full_path = ''
+    root_path = ''
+    while len(path_parts) > 0 and not full_path:
+      pf = '/'.join(path_parts)
+      pd = pf+'/'
+      m = None
+      if   pf in host_paths: m = host_paths[pf]
+      elif pd in host_paths: m = host_paths[pd]
+      elif pf in def_paths: m = def_paths[pf]
+      elif pd in def_paths: m = def_paths[pd]
+      if m:
+        policy = m[0]
+        root_path = m[1]
+        full_path = os.path.join(root_path, *path_rest)
+      else:
+        path_rest.insert(0, path_parts.pop())
+
+    return host_paths, full_path
+
+  def handleFileUpload(self, path, uploaded, shtml_vars=None):
+    host_paths, full_path = self.convertPaths(path)
+    if not (full_path
+            and os.path.isdir(full_path)
+            and self.allowUploads(full_path)):
+      return False
+
+    try:
+      if not isinstance(uploaded, list):
+        uploaded = [uploaded]
+      for upload in uploaded:
+        fn = os.path.basename(
+          hasattr(upload, 'filename') and upload.filename or 'file.dat')
+
+        name_policy = self.host_config.get('ul_filenames', 'keep')
+        if name_policy not in ('keep', 'overwrite'):
+          ext = ('.' in fn and fn.split('.')[-1] or 'dat')
+          fn = 'upload-%x.%s' % (time.time(), ext)
+
+        target = os.path.join(full_path, fn)
+        count = 1
+        while os.path.exists(target) and name_policy != 'overwrite':
+          if '.' in fn:
+            bn, ext = fn.rsplit('.', 1)
+          else:
+            bn, ext = fn, ''
+          target = os.path.join(full_path, bn)
+          target += '_%d' % count
+          if ext: target += '.%s' % ext
+          count += 1
+
+        fd = open(target, 'wb')
+        fd.write(upload.value)
+        fd.close()
+
+      return True
+    except:
+      traceback.print_exc()
+      return False
+
   def sendStaticPath(self, path, mimetype, shtml_vars=None):
-    pkite = self.server.pkite
     is_shtml, is_cgi, is_dir = False, False, False
     index_list = None
     try:
-      path = urllib.unquote(path)
-      if path.find('..') >= 0: raise IOError("Evil")
-
-      paths = pkite.ui_paths
-      def_paths = paths.get('*', {})
-      http_host = self.http_host
-      if ':' not in http_host: http_host += ':80'
-      host_paths = paths.get(http_host.replace(':', '/'), {})
-      path_parts = path.split('/')
-      path_rest = []
-      full_path = ''
-      root_path = ''
-      while len(path_parts) > 0 and not full_path:
-        pf = '/'.join(path_parts)
-        pd = pf+'/'
-        m = None
-        if   pf in host_paths: m = host_paths[pf]
-        elif pd in host_paths: m = host_paths[pd]
-        elif pf in def_paths: m = def_paths[pf]
-        elif pd in def_paths: m = def_paths[pd]
-        if m:
-          policy = m[0]
-          root_path = m[1]
-          full_path = os.path.join(root_path, *path_rest)
-        else:
-          path_rest.insert(0, path_parts.pop())
+      host_paths, full_path = self.convertPaths(path)
 
       if full_path:
         is_dir = os.path.isdir(full_path)
@@ -666,6 +717,13 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       else:
         shtml_vars['body'] = ('<p><i>Directory listings disabled and</i> '
                               'index.html <i>not found.</i></p>')
+
+      if is_dir and self.allowUploads(full_path):
+        shtml_vars['body'] += (
+          '<p><form method="POST" enctype="multipart/form-data">'
+          '<input type="submit" value="Upload File">'
+          '<input type="file" name="upload"></form></p>')
+
       self.sendChunk(self.TEMPLATE_HTML % shtml_vars)
 
     self.sendEof()
@@ -779,12 +837,19 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       else:
         data.update(self.E403)
     else:
-      if self.sendStaticPath(path, data['mimetype'], shtml_vars=data):
-        return
-      if path == '/robots.txt':
-        data.update(self.ROBOTSTXT)
+      if (posted is not None) and 'upload' in posted:
+        if self.handleFileUpload(path, posted['upload'], shtml_vars=data):
+          if self.sendStaticPath(path, data['mimetype'], shtml_vars=data):
+            return
+        else:
+          data.update(self.E403)
       else:
-        data.update(self.E404)
+        if self.sendStaticPath(path, data['mimetype'], shtml_vars=data):
+          return
+        if path == '/robots.txt':
+          data.update(self.ROBOTSTXT)
+        else:
+          data.update(self.E404)
 
     if data['mimetype'] in ('application/octet-stream', 'text/plain'):
       response = self.TEMPLATE_RAW % data
