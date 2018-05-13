@@ -191,7 +191,7 @@ MAN_OPT_BACKEND = ("""\
             this option is repeated, any of the named certificates will be
             accepted, but the first will be preferred.
 
-    --fe_nocertcheck
+    --fe_nocertcheck __
             Connect using SSL/TLS, but do not verify the remote certificate.
             This is largely insecure but still thwarts passive attacks and
             prevents routers and firewalls from corrupting the PageKite tunnel.
@@ -279,6 +279,9 @@ MAN_OPT_SYSTEM = ("""\
     --settings</b> __
             Dump the current settings to STDOUT, formatted as a configuration
             file would be.
+
+    --nopyopenssl  __Avoid use of the pyOpenSSL library (not in config file)
+    --nossl        __Avoid use SSL entirely (not allowed in config file)
 
     --nozchunks    __Disable zlib tunnel compression.
     --sslzlib      __Enable zlib compression in OpenSSL.
