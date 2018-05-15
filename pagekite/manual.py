@@ -215,6 +215,12 @@ MAN_OPT_FRONTEND = ("""\
             Accept tunneling requests for the named protocols and specified
             domain, using the given secret.  A * may be used as a wildcard for
             subdomains or protocols.
+            
+    --domaindir</b>=<a>/path/to/directory</a> __
+            Read --domain settings from <tt>/path/to/directory/*.rc</tt>, will
+            update internal dictionary dynamically when files in this
+            directory are added or removed and a connection is attempted
+            by a backend.
 
     --authdomain</b>=<a>auth-domain</a>,\
  <b>--authdomain</b>=<a>target-domain</a>:<a>auth-domain</a> __

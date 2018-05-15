@@ -246,7 +246,13 @@ time the program defaults will Just Work.
      Accept tunneling requests for the named protocols and specified
      domain, using the given secret.  A * may be used as a wildcard for
      subdomains or protocols.
-
+	 
+   * <b>--domaindir</b>=`/path/to/directory` <br />
+	 Read --domain settings from `/path/to/directory/*.rc`, will
+ 	 update internal dictionary dynamically when files in this
+	 directory are added or removed and a connection is attempted
+	 by a backend.
+	 
    * <b>--authdomain</b>=`auth-domain`, <b>--authdomain</b>=`target-domain`:`auth-domain` <br />
      Use `auth-domain` as a remote authentication server for the
      DNS-based authetication protocol.  If no <i>target-domain</i>
