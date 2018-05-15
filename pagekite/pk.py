@@ -58,6 +58,7 @@ OPT_FLAGS = 'o:O:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'nullui', 'remoteui', 'uiport=', 'help', 'settings',
             'optfile=', 'optdir=', 'savefile=',
+            'domaindir=',
             'friendly', 'shell',
             'signup', 'list', 'add', 'only', 'disable', 'remove', 'save',
             'service_xmlrpc=', 'controlpanel', 'controlpass',
@@ -946,6 +947,10 @@ class PageKite(object):
     self.kite_only = False
     self.kite_disable = False
     self.kite_remove = False
+    
+    # Member variables used for option --domaindir
+    self.configTimestamp = -1
+    self.domaindirPath = None
 
     # Searching for our configuration file!  We prefer the documented
     # 'standard' locations, but if nothing is found there and something local
@@ -1533,8 +1538,36 @@ class PageKite(object):
              ('status', '0x%x' % self.backends[bid][BE_STATUS])])
 
   def GetBackendData(self, proto, domain, recurse=True):
+    
     backend = '%s:%s' % (proto.lower(), domain.lower())
+          
+    # Check if a domain directory was configured
+    if ( self.domaindirPath != None ) :
+      # Check if the config file temstamp is FRESHER and if the desired backed is NOT in the dictionnary
+      # Additionnal sanity check : is the current instance a frontend ?
+      if( self.configTimestamp < os.path.getmtime(self.domaindirPath) and ( self.isfrontend == True ) ) :
+
+        # Update the domain directory timestamp
+        self.configTimestamp = os.path.getmtime(self.domaindirPath) 
+
+        # Save the existing dictionnary to preserve the BE_INACTIVE flags
+        old_backends = dict(self.backends)
+        # Clean the existing dictionnary to have the Configure function read everything again
+        self.backends = {}
+
+        # Call the ConfigureFromDirectory function on the domain directory
+        self.ConfigureFromDirectory(self.domaindirPath)
+        # Find every backend that was added from the domain directory
+        for bid in self.backends:
+          # Check if any of these backends were already present before the new configuration
+          if bid in old_backends:
+            # If so, restore their BE_INACTIVE flags
+            self.backends[bid][BE_STATUS] = old_backends[bid][BE_STATUS]
+    
+    # Check again if the backed IS in the dictionnary 
     if backend in self.backends:
+
+      # Then check if it is active, and return it
       if self.backends[backend][BE_STATUS] not in BE_INACTIVE:
         return self.backends[backend]
 
@@ -1835,6 +1868,15 @@ class PageKite(object):
         self.ConfigureFromFile(arg)
       elif opt in ('-O', '--optdir'):
         self.ConfigureFromDirectory(arg)
+        
+      # --domaindir option : allows a directory of domains to
+      # be specified and modified throughout script operation
+      elif opt == '--domaindir':
+        # Initialize the value of the domain directory path
+        self.domaindirPath = arg
+        # Configure with this directory of domains
+        self.ConfigureFromDirectory(arg)
+        
       elif opt in ('-S', '--savefile'):
         if self.savefile: raise ConfigError('Multiple save-files!')
         self.savefile = arg

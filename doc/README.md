@@ -33,6 +33,7 @@ you can run your own using pagekite.py.
       10. [Unix/Linux systems integration                  ](#unx)
       11. [Saving your configuration                       ](#cfg)
       12. [A word about security and logs                  ](#sec)
+      13. [Support for dynamic domains through --domaindir ](#ddir)
 
    3. [Limitations, caveats and known bugs                 ](#lim)
 
@@ -849,6 +850,34 @@ For logging purposes, the HTTP and WebSocket protocols, the "standard"
 X-Forwarded-For header is added to initial requests (if HTTP 1.1 persistent
 connections are used, subsequent requests may be lacking the header), in all
 cases pagekite.py will report the actual remote IP in its own log.
+
+[ [up](#toc) ]
+
+
+<a                                                              name=ddir></a>
+### 2.13. Support for dynamic domains through --domaindir ###
+
+A frontend instance (started using the `--is-front-end`) can support changes in
+the configuration of the backends it allows connections to through the use of 
+the `--domaindir` option. This option can be used to specify the path to a 
+folder containing --domain specifications that may be changed during the life 
+of the frontend instance. 
+
+Calling the frontend will therefore look like this :
+
+    $ pagekite.py \
+      --is-front-end \
+  	  --domaindir=pathToYourDirectory
+	
+With the folder at "pathToYourDirectory" expected to contain the --domain 
+specifications corresponding to each backend that must be allowed to connect 
+to the frontend.
+
+The frontend will update its internal list of backends on  each connection 
+attempt of any backend, as long as the specified directory's timestamp changed. 
+The recommended way to do handle a changing domain list is to add a new file 
+when adding the configuration of a new backend, and to remove a file when 
+removing a backend.
 
 [ [up](#toc) ]
 
