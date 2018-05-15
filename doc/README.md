@@ -33,6 +33,7 @@ you can run your own using pagekite.py.
       10. [Unix/Linux systems integration                  ](#unx)
       11. [Saving your configuration                       ](#cfg)
       12. [A word about security and logs                  ](#sec)
+      13. [Support for dynamic domains through --domaindir ](#ddir)
 
    3. [Limitations, caveats and known bugs                 ](#lim)
 
