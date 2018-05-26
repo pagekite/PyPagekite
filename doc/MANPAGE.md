@@ -1,6 +1,6 @@
 ## Name ##
 
-pagekite v0.5.9.1 - Make localhost servers publicly visible
+pagekite v0.5.9.3+github - Make localhost servers publicly visible
 
 ## Synopsis ##
 
@@ -219,7 +219,7 @@ time the program defaults will Just Work.
      this option is repeated, any of the named certificates will be
      accepted, but the first will be preferred.
 
-   * <b>--fe_nocertcheck <br />
+   * <b>--fe_nocertcheck</b> <br />
      Connect using SSL/TLS, but do not verify the remote certificate.
      This is largely insecure but still thwarts passive attacks and
      prevents routers and firewalls from corrupting the PageKite tunnel.
