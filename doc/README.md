@@ -45,7 +45,8 @@ you can run your own using pagekite.py.
 <a                                                              name=req></a>
 ### 1.1. Requirements ###
 
-`Pagekite.py` requires Python 2.x, version 2.2 or later.
+`Pagekite.py` requires Python 2.x, version 2.2 or later. Some front-end
+relay functionality requires Python 2.6 or better.
 
 `Pagekite.py` includes a basic web server for serving static content, but is
 more commonly used to expose other HTTP servers running on localhost (such
@@ -319,6 +320,10 @@ as you like. So something like this might make sense:
       --ports=80,443,8080 --protos=http,https \
       --domain=http,https:*.YOURDOMAIN.COM:YOURSECRET \
       --domain=http,https:*.YOUROTHERDOMAIN.NET:YOUROTHERSECRET
+
+(If you would like even more flexibility in how you configure which domains
+you provide service to, consult the [man page](MANPAGE.md) for information
+about the `--authdomain=` flag and external authentication apps.)
 
 Unfortunately, root permissions are required in order to bind ports 80
 and 443, but it is possible to instruct pagekite.py to drop all privileges

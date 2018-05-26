@@ -220,14 +220,21 @@ MAN_OPT_FRONTEND = ("""\
 
     --domain</b>=<a>proto,proto2,pN</a>:<a>domain</a>:<a>secret</a> __
             Accept tunneling requests for the named protocols and specified
-            domain, using the given secret.  A * may be used as a wildcard for
-            subdomains or protocols.
+            domain, using the given secret.  A * may be used as a wildcard
+            for subdomains or protocols. This is for static configurations,
+            for dynamic access controls use the `--authdomain` mechanism.
 
-    --authdomain</b>=<a>auth-domain</a>,\
- <b>--authdomain</b>=<a>target-domain</a>:<a>auth-domain</a> __
-            Use <a>auth-domain</a> as a remote authentication server for the
-            DNS-based authetication protocol.  If no <i>target-domain</i>
-            is given, use this as the default authentication method.
+    --authdomain</b>=<a>DNS-suffix</a>,\
+ <b>--authdomain</b>=<a>/path/to/app</a>,\
+ <b>--authdomain</b>=<a>kite-domain</a>:<a>DNS-suffix</a>,\
+ <b>--authdomain</b>=<a>kite-domain</a>:<a>/path/to/app</a> __
+            Use <a>DNS-suffix</a> for remote DNS-based authentication of
+            incoming tunnel requests, or invoke an external application
+            for this purpose.  If no <i>kite-domain</i> is given, use
+            this as the default authentication method.  See the section
+            below on tunnel authentication for further details.  In order
+            for the app path to be recognized as such, it must contain at
+            least one / character.
 
     --motd</b>=<a>/path/to/motd</a> __
             Send the contents of this file to new back-ends as a
@@ -353,6 +360,38 @@ MAN_SECURITY = ("""\
 
     For more, please visit: <https://pagekite.net/support/security/>
 """)
+MAN_TUNNEL_AUTH = ("""\
+    When running <b>pagekite.py</b> as a front-end relay, you can enable
+    dynamic authentication of incoming tunnel requests in two ways.
+
+    One uses a DNS-based protocol for delegating authentication to a remote
+    server. The nice thing about this, is relays can be deployed without
+    any direct access to your user account databases - in particular, a
+    zero-knowlege challenge/response protocol is used which means the relay
+    never sees the shared secret used to authenticate the kite.
+
+    The second method delegates authentication to an external app; this
+    external app can be written in any language you like, as long as it
+    implements the following command-line arguments:
+    <pre>
+      --capabilities     Print a list of capabilities to STDOUT and exit
+      --server           Run as a "server", reading queries on STDIN and
+                         sending one-line replies to STDOUT.
+      --auth <domain>    Return JSON formatted auth and quota details
+      --zk-auth <query>  Implement the DNS-based zero-knowlege protocol
+    </pre>
+    The recognized capabilities are SERVER, ZK-AUTH and AUTH. One of AUTH
+    or ZK-AUTH is required.
+
+    The JSON `--auth` responses should be dictionaries which have at least
+    one element, `secret` or `error`. The secret is the shared secret to
+    be used to authenticate the tunnel. The dictionary may also contain
+    advisory quota values (`quota_kb`, `quota_days` and `quota_conns`), and
+    IP rate limiting parameters (`ips_per_sec-ips` and `ips_per_sec-secs`).
+
+    The source distribution of <b>pagekite.py</b> includes a script named
+    `demo_auth_app.py` which implements this protocol.
+""")
 MAN_LICENSE = ("""\
     Copyright 2010-2017, the Beanstalks Project ehf. and Bjarni R. Einarsson.
 
@@ -403,6 +442,7 @@ MANUAL_TOC = (
   ('SS', 'System options', MAN_OPT_SYSTEM),
   ('SH', 'Configuration files', MAN_CONFIG_FILES),
   ('SH', 'Security', MAN_SECURITY),
+  ('SH', 'Tunnel Request Authentication', MAN_TUNNEL_AUTH),
   ('SH', 'Bugs', MAN_BUGS),
   ('SH', 'See Also', MAN_SEE_ALSO),
   ('SH', 'Credits', MAN_CREDITS),

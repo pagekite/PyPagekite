@@ -53,6 +53,13 @@ import compat
 import common
 import logging
 
+# This allows us to run, degraded, on Python < 2.6.
+try:
+    import subprocess
+    import json
+except ImportError:
+    subprocess = json = None
+
 
 OPT_FLAGS = 'o:O:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
@@ -114,8 +121,47 @@ from proto.conns import *
 from ui.nullui import NullUi
 
 
-# FIXME: This could easily be a pool of threads to let us handle more
-#        than one incoming request at a time.
+class AuthApp(object):
+  def __init__(self, app_path):
+    assert(subprocess is not None)
+    self.app_path = app_path
+    self.capabilities = [cap.upper() for cap in
+      subprocess.check_output([app_path, '--capabilities']).split() if cap]
+    if 'SERVER' in self.capabilities:
+      self.lock = threading.Lock()
+      self.server = subprocess.Popen([app_path, '--server'],
+                                     stdin=subprocess.PIPE,
+                                     stdout=subprocess.PIPE)
+    else:
+      self.server = None
+      self.lock = None
+
+  def _q(self, args):
+    if self.server is not None:
+      try:
+        self.lock.acquire()
+        self.server.stdin.write(' '.join(args) + '\n')
+        self.server.stdin.flush()
+        return self.server.stdout.readline().strip()
+      finally:
+        self.lock.release()
+    else:
+      return subprocess.check_output([self.app_path] + args).strip()
+
+  def auth(self, domain):
+    return json.loads(self._q(['--auth', domain]))
+
+  def zk_auth(self, query):
+    r = json.loads(self._q(['--zk-auth', query]))
+    return (r['hostname'], r.get('alias', ''), r.get('ips', ['']))
+
+  def supports_zk_auth(self):
+    return ('ZK-AUTH' in self.capabilities)
+
+  def supports_auth(self):
+    return ('AUTH' in self.capabilities)
+
+
 class AuthThread(threading.Thread):
   """Handle authentication work in a separate thread."""
 
@@ -859,6 +905,7 @@ class PageKite(object):
     self.auth_threads = 1
     self.auth_domain = None
     self.auth_domains = {}
+    self.auth_apps = {}
     self.motd = None
     self.motd_message = None
     self.server_host = ''
@@ -1571,11 +1618,42 @@ class PageKite(object):
     return checkSignature(sign=sign, secret=secret,
                           payload='%s:%s:%s:%s' % (proto, domain, srand, token))
 
-  def LookupDomainQuota(self, lookup):
+  def GetAuthApp(self, command):
+    auth_app = self.auth_apps.get(command)
+    if auth_app is None:
+      self.auth_apps[command] = AuthApp(command)
+    return self.auth_apps[command]
+
+  def LookupDomainQuota(self, srand, token, sign, protoport, domain, adom):
+    if '/' in adom:
+      auth_app = self.GetAuthApp(adom)
+      if not auth_app.supports_zk_auth():
+        auth = auth_app.auth(domain)
+        secret = auth.get('secret', '')
+        if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
+          return (auth.get('quota_kb', -1),
+                  auth.get('quota_days'),
+                  auth.get('quota_conns'),
+                  auth.get('ips_per_sec-ips'),
+                  auth.get('ips_per_sec-secs'),
+                  auth.get('error'))
+        else:
+          logging.LogError('Invalid signature for: %s (%s)'
+                           % (domain, protoport))
+          return (None, None, None, None, None, 'signature')
+    else:
+      auth_app = None
+
+    lookup = '.'.join([srand, token, sign, protoport, domain, adom])
     if not lookup.endswith('.'): lookup += '.'
     if logging.DEBUG_IO: print '=== AUTH LOOKUP\n%s\n===' % lookup
-    (hn, al, ips) = socket.gethostbyname_ex(lookup)
-    if logging.DEBUG_IO: print 'hn=%s\nal=%s\nips=%s\n' % (hn, al, ips)
+
+    if auth_app:
+      (hn, al, iplist) = auth_app.zk_auth(lookup)
+    else:
+      (hn, al, iplist) = socket.gethostbyname_ex(lookup)
+
+    if logging.DEBUG_IO: print 'hn=%s\nal=%s\niplist=%s\n' % (hn, al, iplist)
 
     # Extract auth error and extended quota info from CNAME replies
     if al:
@@ -1593,7 +1671,7 @@ class PageKite(object):
       error = q_days = q_conns = ipc = ips = None
 
     # If not an authentication error, quota should be encoded as an IP.
-    ip = ips[0]
+    ip = iplist[0]
     if ip.startswith(AUTH_ERRORS):
       if not error and (ip.endswith(AUTH_ERR_USER_UNKNOWN) or
                         ip.endswith(AUTH_ERR_INVALID)):
@@ -1650,7 +1728,7 @@ class PageKite(object):
       if secret:
         if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
           return (-1, None, None, None, None, None)
-        elif not self.auth_domain:
+        elif not (self.auth_domain or self.auth_domains):
           logging.LogError('Invalid signature for: %s (%s)' % (domain, protoport))
           return (None, None, None, None, None, auth_error_type or 'signature')
 
@@ -1661,14 +1739,15 @@ class PageKite(object):
             adom = self.auth_domains[dom]
         if adom:
           try:
-            lookup = '.'.join([srand, token, sign, protoport,
-                               domain.replace('*', '_any_'), adom])
-            (rv, qd, qc, ipc, ips,
-             auth_error_type) = self.LookupDomainQuota(lookup)
+            (rv, qd, qc, ipc, ips, auth_error_type
+             ) = self.LookupDomainQuota(srand, token, sign, protoport,
+                                        domain.replace('*', '_any_'),
+                                        adom)
             if rv is None or rv >= 0:
               return (rv, qd, qc, ipc, ips, auth_error_type)
           except Exception, e:
             # Lookup failed, fail open.
+            if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
             logging.LogError('Quota lookup failed: %s' % e)
             return (-2, None, None, None, None, None)
 
@@ -1987,7 +2066,6 @@ class PageKite(object):
         if ':' in arg:
           d, a = arg.split(':')
           self.auth_domains[d.lower()] = a
-          if not self.auth_domain: self.auth_domain = a
         else:
           self.auth_domains = {}
           self.auth_domain = arg

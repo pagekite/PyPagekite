@@ -8,6 +8,7 @@ v0.5.9.4    ???
    - Add --ratelimit_ips= , for eliminating phishing once and for all
    - HTTPD: Add support for file uploads, new flags: +uploads and +ul_filenames
    - HTTPD: Implement a PhotoBackup server, new flags: +photobackup
+   - Augmented --authdomain= so it supports external authentication apps
 
 
 v0.5.9.3    2018.01.24
