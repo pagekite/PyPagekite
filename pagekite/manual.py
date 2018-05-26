@@ -310,7 +310,7 @@ MAN_OPT_SYSTEM = ("""\
     --errorurl</b>=<a>U</a>   __URL to redirect to when back-ends are not found.
     --errorurl</b>=<a>D:U</a> __Custom error URL for domain D.
 
-    --selfsign __
+    --selfsign</b> __
             Configure the built-in HTTP daemon for HTTPS, first generating a
             new self-signed certificate using <b>openssl</b> if necessary.
 

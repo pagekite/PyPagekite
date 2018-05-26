@@ -356,7 +356,7 @@ time the program defaults will Just Work.
    * <b>--errorurl</b>=`D:U`  
      Custom error URL for domain D.
 
-   * <b>--selfsign <br />
+   * <b>--selfsign</b> <br />
      Configure the built-in HTTP daemon for HTTPS, first generating a
      new self-signed certificate using <b>openssl</b> if necessary.
 
