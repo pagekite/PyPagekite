@@ -68,6 +68,7 @@ class Tunnel(ChunkParser):
     self.weighted_rtt = -1
     self.using_tls = False
     self.filters = []
+    self.ip_limits = None
 
   def Cleanup(self, close=True):
     if self.users:
@@ -97,6 +98,57 @@ class Tunnel(ChunkParser):
         requests.append((proto.lower(), domain.lower(),
                          srand, token, sign, prefix))
     return requests
+
+  def AcceptTraffic(conn, address, host):
+    # This function allows the tunnel to reject an incoming connection
+    # based on the remote address and the requested host. For now we
+    # only know how to discriminate by remote IP.
+    if not conn.AcceptRemoteIP(str(address[0]), host):
+      return False
+    return True
+
+  def AcceptRemoteIP(self, ip, host):
+    if not self.ip_limits:
+      return True
+
+    if len(self.ip_limits) == 1:
+      whitelist = self.ip_limits[0]
+      delta = maxips = seen = None
+    else:
+      whitelist = None
+      delta, maxips, seen = self.ip_limits
+
+    # Do we have a whitelist-only policy for this tunnel?
+    if whitelist:
+      for prefix in whitelist:
+        if ip.startswith(prefix):
+          return True
+      self.LogError('Rejecting connection from unrecognized IP')
+      return False
+
+    # Do we have a delta/maxips policy?
+    if delta and maxips:
+      now = time.time()
+      if ip in seen:
+        seen[ip] = now
+        return True
+
+      for seen_ip in seen.keys():
+        if seen[seen_ip] < now - delta:
+          del seen[seen_ip]
+
+      if len(seen.keys()) >= maxips:
+        self.LogError('Rejecting connection from new IP',
+                      [('ips_per_sec', '%d/%ds' % (maxips, delta)),
+                       ('domain', host)])
+        return True  # FIXME: Testing!!!
+        return False
+      else:
+        seen[ip] = now
+        return True
+
+    # All else is allowed
+    return True
 
   def _FrontEnd(conn, body, conns):
     """This is what the front-end does when a back-end requests a new tunnel."""
@@ -137,6 +189,12 @@ class Tunnel(ChunkParser):
       self.LogInfo('Discarding connection: %s' % err)
       self.Cleanup()
       return None
+
+    try:
+      ips, seconds = conns.config.GetDefaultIPsPerSecond()
+      self.UpdateIP_Limits(ips, seconds)
+    except ValueError:
+      pass
 
     self.last_activity = time.time()
     self.CountAs('backends_live')
@@ -197,12 +255,34 @@ class Tunnel(ChunkParser):
       self.Log([('BE', 'Dead'), ('proto', proto), ('domain', domain)] + logi)
       self.conns.CloseTunnel(proto, domain, self)
 
+    # Update IP rate limits, if necessary
+    first = True
+    for r in results:
+      if r[0] in ('X-PageKite-IPsPerSec',):
+        ips, seconds = [int(x) for x in r[1].split('/')]
+        self.UpdateIP_Limits(ips, seconds, force=first)
+        first = False
+    if first:
+      for backend in ok:
+        try:
+          proto, domain, srand = backend.split(':')
+          ips, seconds = self.conns.config.GetDefaultIPsPerSecond(domain)
+          self.UpdateIP_Limits(ips, seconds)
+        except ValueError:
+          pass
+
     if add_tunnels:
+      if self.ip_limits and len(self.ip_limits) > 2:
+        logi.append(('ips_per_sec',
+                     '%d/%ds' % (self.ip_limits[1], self.ip_limits[0])))
+
       for backend in ok:
         if backend not in self.backends:
           self.backends[backend] = 1
         proto, domain, srand = backend.split(':')
-        self.Log([('BE', 'Live'), ('proto', proto), ('domain', domain)] + logi)
+        self.Log([('BE', 'Live'),
+                  ('proto', proto),
+                  ('domain', domain)] + logi)
         self.conns.Tunnel(proto, domain, self)
       if not ok:
         if self.server_info[self.S_ADD_KITES] and not bad:
@@ -379,6 +459,16 @@ class Tunnel(ChunkParser):
           self.server_info[self.S_ADD_KITES] = True
         elif feature == 'Mobile':
           self.server_info[self.S_IS_MOBILE] = True
+
+  def UpdateIP_Limits(self, ips, seconds, force=False):
+    if self.ip_limits and len(self.ip_limits) > 2 and not force:
+      new_rate = float(ips)/(seconds or 1)
+      old_rate = float(self.ip_limits[1] or 9999)/(self.ip_limits[0] or 1)
+      if new_rate < old_rate:
+        self.ip_limits[0] = seconds
+        self.ip_limits[1] = ips
+    else:
+      self.ip_limits = [(seconds or 1), ips, {}]
 
   def HandlePageKiteResponse(self, parse):
     config = self.conns.config
@@ -1111,7 +1201,7 @@ class UserConn(Selectable):
       if proto == 'websocket': protos.append('http')
       elif proto == 'http': protos.extend(['http2', 'http3'])
 
-    tunnels = None
+    tunnels = []
     for p in protos:
       for prt in ports:
         if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, prt), host)
@@ -1122,25 +1212,30 @@ class UserConn(Selectable):
       chunk_headers = [('RIP', self.address[0]), ('RPort', self.address[1])]
       if conn.my_tls: chunk_headers.append(('RTLS', 1))
 
-    if tunnels:
-      if len(tunnels) > 1:
-        tunnels.sort(key=lambda t: t.weighted_rtt)
-      self.tunnel = tunnels[0]
+    if len(tunnels) > 1:
+      tunnels.sort(key=lambda t: t.weighted_rtt)
+
+    for tun in tunnels:
+      if tun.AcceptTraffic(address, host):
+        self.tunnel = tun
+        break
+
     if (self.tunnel and self.tunnel.SendData(self, ''.join(body), host=host,
                                              proto=proto, port=on_port,
                                              chunk_headers=chunk_headers)
                     and self.conns):
-      self.Log([('domain', self.host), ('on_port', on_port), ('proto', self.proto), ('is', 'FE')])
+      self.Log([('domain', self.host), ('on_port', on_port),
+                ('proto', self.proto), ('is', 'FE')])
       self.conns.Add(self)
       if proto.startswith('http'):
         self.conns.TrackIP(address[0], host)
         # FIXME: Use the tracked data to detect & mitigate abuse?
       return self
-    else:
-      self.LogDebug('No back-end', [('on_port', on_port), ('proto', self.proto),
-                                    ('domain', self.host), ('is', 'FE')])
-      self.Cleanup(close=False)
-      return None
+
+    self.LogDebug('No back-end', [('on_port', on_port), ('proto', self.proto),
+                                  ('domain', self.host), ('is', 'FE')])
+    self.Cleanup(close=False)
+    return None
 
   def _BackEnd(proto, host, sid, tunnel, on_port,
                remote_ip=None, remote_port=None, data=None):

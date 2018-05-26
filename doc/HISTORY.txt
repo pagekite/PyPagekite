@@ -5,6 +5,7 @@ v0.5.9.4    ???
 --------
    - Fix IP address leak in BE offline page, fix &-encoding in URL
    - Made relay capability description and quota report less confusing
+   - Add --ratelimit_ips= , for eliminating phishing once and for all
    - HTTPD: Add support for file uploads, new flags: +uploads and +ul_filenames
    - HTTPD: Implement a PhotoBackup server, new flags: +photobackup
 

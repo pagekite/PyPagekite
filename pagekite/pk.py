@@ -71,7 +71,8 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'tls_legacy', 'tls_default=', 'tls_endpoint=', 'selfsign',
             'fe_certname=', 'fe_nocertcheck', 'ca_certs=',
             'kitename=', 'kitesecret=', 'fingerpath=',
-            'backend=', 'define_backend=', 'be_config=', 'insecure',
+            'backend=', 'define_backend=', 'be_config=',
+            'insecure', 'ratelimit_ips=',
             'service_on=', 'service_off=', 'service_cfg=',
             'tunnel_acl=', 'client_acl=', 'accept_acl_file=',
             'frontend=', 'nofrontend=', 'frontends=', 'keepalive=',
@@ -167,6 +168,7 @@ class AuthThread(threading.Thread):
         quotas = []
         q_conns = []
         q_days = []
+        ip_limits = []
         results = []
         log_info = []
         session = '%x:%s:' % (now, globalSecret())
@@ -188,9 +190,10 @@ class AuthThread(threading.Thread):
           else:
             # This is a bit lame, but we only check the token if the quota
             # for this connection has never been verified.
-            (quota, days, conns, reason
-             ) = self.conns.config.GetDomainQuota(proto, domain, srand, token,
-                                         sign, check_token=(conn.quota is None))
+            (quota, days, conns, ipc, ips, reason) = (
+              self.conns.config.GetDomainQuota(
+                proto, domain, srand, token, sign,
+                check_token=(conn.quota is None)))
             duplicates = self.conns.Tunnel(proto, domain)
             if not quota:
               if not reason: reason = 'quota'
@@ -212,6 +215,7 @@ class AuthThread(threading.Thread):
               quotas.append((quota, request))
               if conns: q_conns.append(conns)
               if days: q_days.append(days)
+              if ipc: ip_limits.append((float(ipc)/ips, ipc, ips))
               if (proto.startswith('http') and
                   self.conns.config.GetTlsEndpointCtx(domain)):
                 results.append(('%s-SSL-OK' % prefix, what))
@@ -232,6 +236,10 @@ class AuthThread(threading.Thread):
           min_qdays = min(q_days or [0])
           if q_days and min_qdays:
             results.append(('%s-QDays' % prefix, min_qdays))
+
+          min_ip_limits = min(ip_limits or [(0, None, None)])[1:]
+          if ip_limits and min_ip_limits[0]:
+            results.append(('%s-IPsPerSec' % prefix, '%s/%s' % min_ip_limits))
 
           nz_quotas = [qp for qp in quotas if qp[0] and qp[0] > 0]
           if nz_quotas:
@@ -889,6 +897,7 @@ class PageKite(object):
     self.ui_magic_file = '.pagekite.magic'
     self.ui_paths = {}
     self.insecure = False
+    self.ratelimit_ips = {}
     self.be_config = {}
     self.disable_zchunks = False
     self.enable_sslzlib = False
@@ -1351,14 +1360,19 @@ class PageKite(object):
       '##[ Front-end access controls (default=deny, if configured) ]##',
       p('accept_acl_file = %s', self.accept_acl_file, '/path/to/file'),
     ])
+    for d in sorted(self.ratelimit_ips.keys()):
+      if d == '*':
+        config.append('ratelimit_ips = %s' % self.ratelimit_ips[d])
+      else:
+        config.append('ratelimit_ips = %s:%s' % (d, self.ratelimit_ips[d]))
     for policy, pattern in self.client_acls:
-      config.append('client_acl=%s:%s' % (policy, pattern))
+      config.append('client_acl = %s:%s' % (policy, pattern))
     if not self.client_acls:
-      config.append('# client_acl=[allow|deny]:IP-regexp')
+      config.append('# client_acl = [allow|deny]:IP-regexp')
     for policy, pattern in self.tunnel_acls:
-      config.append('tunnel_acl=%s:%s' % (policy, pattern))
+      config.append('tunnel_acl = %s:%s' % (policy, pattern))
     if not self.tunnel_acls:
-      config.append('# tunnel_acl=[allow|deny]:IP-regexp')
+      config.append('# tunnel_acl = [allow|deny]:IP-regexp')
     config.extend([
       '',
       '',
@@ -1567,9 +1581,16 @@ class PageKite(object):
     if al:
       error, hg, hd, hc, junk = hn.split('.', 4)
       q_days = int(hd, 16)
-      q_conns = int(hc, 16)
+      if '-' in hc:
+        hc, ipc, ips = hc.split('-')
+        hc = int(hc, 16)
+        ipc = int(hc, 16)
+        ips = int(hc, 16)
+      else:
+        q_conns = int(hc, 16)
+        ipc = ips = None
     else:
-      error = q_days = q_conns = None
+      error = q_days = q_conns = ipc = ips = None
 
     # If not an authentication error, quota should be encoded as an IP.
     ip = ips[0]
@@ -1579,13 +1600,15 @@ class PageKite(object):
         error = 'unauthorized'
     else:
       o = [int(x) for x in ip.split('.')]
-      return ((((o[0]*256 + o[1])*256 + o[2])*256 + o[3]), q_days, q_conns, None)
+      return ((((o[0]*256 + o[1])*256 + o[2])*256 + o[3]),
+              q_days, q_conns, ipc, ips, None)
 
     # Errors on real errors are final.
-    if not ip.endswith(AUTH_ERR_USER_UNKNOWN): return (None, q_days, q_conns, error)
+    if not ip.endswith(AUTH_ERR_USER_UNKNOWN):
+      return (None, q_days, q_conns, ipc, ips, error)
 
     # User unknown, fall through to local test.
-    return (-1, q_days, q_conns, error)
+    return (-1, q_days, q_conns, ipc, ips, error)
 
   def GetDomainQuota(self, protoport, domain, srand, token, sign,
                      recurse=True, check_token=True):
@@ -1600,18 +1623,19 @@ class PageKite(object):
         porti = int(port)
         if porti in self.server_aliasport: porti = self.server_aliasport[porti]
         if porti not in port_list and VIRTUAL_PN not in port_list:
-          logging.LogInfo('Unsupported port request: %s (%s:%s)' % (porti, protoport, domain))
-          return (None, None, None, 'port')
+          logging.LogInfo('Unsupported port request: %s (%s:%s)'
+                          % (porti, protoport, domain))
+          return (None, None, None, None, None, 'port')
 
       except ValueError:
         logging.LogError('Invalid port request: %s:%s' % (protoport, domain))
-        return (None, None, None, 'port')
+        return (None, None, None, None, None, 'port')
     else:
       proto, port = protoport, None
 
     if proto not in self.server_protos:
       logging.LogInfo('Invalid proto request: %s:%s' % (protoport, domain))
-      return (None, None, None, 'proto')
+      return (None, None, None, None, None, 'proto')
 
     data = '%s:%s:%s' % (protoport, domain, srand)
     auth_error_type = None
@@ -1625,29 +1649,32 @@ class PageKite(object):
 
       if secret:
         if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
-          return (-1, None, None, None)
+          return (-1, None, None, None, None, None)
         elif not self.auth_domain:
           logging.LogError('Invalid signature for: %s (%s)' % (domain, protoport))
-          return (None, None, None, auth_error_type or 'signature')
+          return (None, None, None, None, None, auth_error_type or 'signature')
 
-      if self.auth_domain:
+      if self.auth_domain or self.auth_domains:
         adom = self.auth_domain
         for dom in self.auth_domains:
           if domain.endswith('.%s' % dom):
             adom = self.auth_domains[dom]
-        try:
-          lookup = '.'.join([srand, token, sign, protoport,
-                             domain.replace('*', '_any_'), adom])
-          (rv, qd, qc, auth_error_type) = self.LookupDomainQuota(lookup)
-          if rv is None or rv >= 0:
-            return (rv, qd, qc, auth_error_type)
-        except Exception, e:
-          # Lookup failed, fail open.
-          logging.LogError('Quota lookup failed: %s' % e)
-          return (-2, None, None, None)
+        if adom:
+          try:
+            lookup = '.'.join([srand, token, sign, protoport,
+                               domain.replace('*', '_any_'), adom])
+            (rv, qd, qc, ipc, ips,
+             auth_error_type) = self.LookupDomainQuota(lookup)
+            if rv is None or rv >= 0:
+              return (rv, qd, qc, ipc, ips, auth_error_type)
+          except Exception, e:
+            # Lookup failed, fail open.
+            logging.LogError('Quota lookup failed: %s' % e)
+            return (-2, None, None, None, None, None)
 
-    logging.LogInfo('No authentication found for: %s (%s)' % (domain, protoport))
-    return (None, None, None, auth_error_type or 'unauthorized')
+    logging.LogInfo('No authentication found for: %s (%s)'
+                    % (domain, protoport))
+    return (None, None, None, None, None, auth_error_type or 'unauthorized')
 
   def Overloaded(self):
     if not self.overload or not self.conns:
@@ -1826,6 +1853,10 @@ class PageKite(object):
     except (OSError, ValueError):
       pass
 
+  def GetDefaultIPsPerSecond(self, dom=None, limit=None):
+    ips, secs = (limit or self.ratelimit_ips.get(dom or '*', '')).split('/')
+    return int(ips), int(secs)
+
   def Configure(self, argv):
     self.conns = self.conns or Connections(self)
     opts, args = getopt.getopt(argv, OPT_FLAGS, OPT_ARGS)
@@ -1978,6 +2009,13 @@ class PageKite(object):
 
       elif opt in ('-a', '--all'): self.require_all = True
       elif opt in ('-N', '--new'): self.servers_new_only = True
+      elif opt == '--ratelimit_ips':
+        if ':' in arg:
+          which, limit = arg.split(':')
+        else:
+          which, limit = '*', arg
+        self.GetDefaultIPsPerSecond(None, limit.strip())  # ValueErrors if bad
+        self.ratelimit_ips[which.strip()] = limit.strip()
       elif opt == '--accept_acl_file':
         self.accept_acl_file = arg
       elif opt == '--client_acl':

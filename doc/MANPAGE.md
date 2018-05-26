@@ -269,6 +269,12 @@ time the program defaults will Just Work.
      Listen for raw connections these ports. The string '%s'
      allows arbitrary ports in HTTP CONNECT.
 
+   * <b>--ratelimit_ips</b>=`IPs/seconds` <br />
+     Limit how many different IP addresses can request data from
+     a tunnel within a given window of time, e.g. 5/3600. This is
+     useful as either a crude form of DDoS mitigation, or as a
+     mechanism to make public kite services unusable for phishing.
+
    * <b>--accept_acl_file</b>=`/path/to/file` <br />
      Consult an external access control file before accepting an
      incoming connection. Quick'n'dirty for mitigating abuse. The
