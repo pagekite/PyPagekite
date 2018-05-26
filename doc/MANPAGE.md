@@ -108,10 +108,20 @@ server.
      Enable directory indexes including hidden (dot-) files.
    * <b>+hide</b>  
      Obfuscate URLs of shared files.
+   * <b>+uploads</b>  
+     Accept file uploads.
+   * <b>+uploads</b>=`RE`  
+     Accept uploads to paths matching regexp RE.
+   * <b>+ul_filenames</b>=`P`  
+     Upload naming policy. P = overwrite, keep or rename
 
    * <b>+cgi</b>=`list`
      A list of extensions, for which files should be treated as
      CGI scripts (example: `+cgi=cgi,pl,sh`).
+
+   * <b>+photobackup</b>=`password`
+     Enable built-in PhotoBackup server with the given password.
+     See https://photobackup.github.io/ for details.
 
 ## Options ##
 
@@ -209,7 +219,7 @@ time the program defaults will Just Work.
      this option is repeated, any of the named certificates will be
      accepted, but the first will be preferred.
 
-   * <b>--fe_nocertcheck
+   * <b>--fe_nocertcheck <br />
      Connect using SSL/TLS, but do not verify the remote certificate.
      This is largely insecure but still thwarts passive attacks and
      prevents routers and firewalls from corrupting the PageKite tunnel.
@@ -244,13 +254,18 @@ time the program defaults will Just Work.
 
    * <b>--domain</b>=`proto,proto2,pN`:`domain`:`secret` <br />
      Accept tunneling requests for the named protocols and specified
-     domain, using the given secret.  A * may be used as a wildcard for
-     subdomains or protocols.
+     domain, using the given secret.  A * may be used as a wildcard
+     for subdomains or protocols. This is for static configurations,
+     for dynamic access controls use the `--authdomain` mechanism.
 
-   * <b>--authdomain</b>=`auth-domain`, <b>--authdomain</b>=`target-domain`:`auth-domain` <br />
-     Use `auth-domain` as a remote authentication server for the
-     DNS-based authetication protocol.  If no <i>target-domain</i>
-     is given, use this as the default authentication method.
+   * <b>--authdomain</b>=`DNS-suffix`, <b>--authdomain</b>=`/path/to/app`, <b>--authdomain</b>=`kite-domain`:`DNS-suffix`, <b>--authdomain</b>=`kite-domain`:`/path/to/app` <br />
+     Use `DNS-suffix` for remote DNS-based authentication of
+     incoming tunnel requests, or invoke an external application
+     for this purpose.  If no <i>kite-domain</i> is given, use
+     this as the default authentication method.  See the section
+     below on tunnel authentication for further details.  In order
+     for the app path to be recognized as such, it must contain at
+     least one / character.
 
    * <b>--motd</b>=`/path/to/motd` <br />
      Send the contents of this file to new back-ends as a
@@ -269,11 +284,14 @@ time the program defaults will Just Work.
      Listen for raw connections these ports. The string '%s'
      allows arbitrary ports in HTTP CONNECT.
 
-   * <b>--ratelimit_ips</b>=`IPs/seconds` <br />
+   * <b>--ratelimit_ips</b>=`IPs/seconds`, <b>--ratelimit_ips</b>=`kitename`:`IPs/seconds` <br />
      Limit how many different IP addresses can request data from
      a tunnel within a given window of time, e.g. 5/3600. This is
      useful as either a crude form of DDoS mitigation, or as a
      mechanism to make public kite services unusable for phishing.
+     Note that limits are enforced per-tunnel (not per kite), and
+     tunnels serving multiple kites will use the settings of the
+     strictest kite.
 
    * <b>--accept_acl_file</b>=`/path/to/file` <br />
      Consult an external access control file before accepting an
@@ -313,6 +331,11 @@ time the program defaults will Just Work.
    * <b>--settings</b> <br />
      Dump the current settings to STDOUT, formatted as a configuration
      file would be.
+
+   * <b>--nopyopenssl</b>  
+     Avoid use of the pyOpenSSL library (not in config file)
+   * <b>--nossl</b>  
+     Avoid use SSL entirely (not allowed in config file)
 
    * <b>--nozchunks</b>  
      Disable zlib tunnel compression.
@@ -382,6 +405,39 @@ other sensitive systems.  If it gets in your way, the <b>+insecure</b>
 flag or <b>--insecure</b> option can be used to turn it off.
 
 For more, please visit: <https://pagekite.net/support/security/>
+
+## Tunnel Request Authentication ##
+
+When running <b>pagekite</b> as a front-end relay, you can enable
+dynamic authentication of incoming tunnel requests in two ways.
+
+One uses a DNS-based protocol for delegating authentication to a remote
+server. The nice thing about this, is relays can be deployed without
+any direct access to your user account databases - in particular, a
+zero-knowlege challenge/response protocol is used which means the relay
+never sees the shared secret used to authenticate the kite.
+
+The second method delegates authentication to an external app; this
+external app can be written in any language you like, as long as it
+implements the following command-line arguments:
+<pre>
+  --capabilities     Print a list of capabilities to STDOUT and exit
+  --server           Run as a "server", reading queries on STDIN and
+                  sending one-line replies to STDOUT.
+  --auth <domain>    Return JSON formatted auth and quota details
+  --zk-auth <query>  Implement the DNS-based zero-knowlege protocol
+</pre>
+The recognized capabilities are SERVER, ZK-AUTH and AUTH. One of AUTH
+or ZK-AUTH is required.
+
+The JSON `--auth` responses should be dictionaries which have at least
+one element, `secret` or `error`. The secret is the shared secret to
+be used to authenticate the tunnel. The dictionary may also contain
+advisory quota values (`quota_kb`, `quota_days` and `quota_conns`), and
+IP rate limiting parameters (`ips_per_sec-ips` and `ips_per_sec-secs`).
+
+The source distribution of <b>pagekite</b> includes a script named
+`demo_auth_app.py` which implements this protocol.
 
 ## Bugs ##
 
