@@ -38,6 +38,17 @@ SCRIPTNAME=/etc/init.d/$NAME
 grep -c ^abort_not_configured /etc/pagekite.d/10_account.rc \
   2>/dev/null >/dev/null && exit 0
 
+# Choose the best available Python interpretor
+PYTHON="python"
+[ -x "/usr/bin/python2" ] && PYTHON="/usr/bin/python2"
+[ -x "/usr/bin/python2.7" ] && PYTHON="/usr/bin/python2.7"
+# This will allow pypy to work, but we leave it up to the brave admin to
+# enable pypy by setting PYTHON=/usr/bin/pypy in /etc/default/pagekite.
+if [ -d /usr/lib/python2.7/dist-packages/pagekite/ ]; then
+  export PYTHONPATH=/usr/lib/python2.7/dist-packages/
+  export PYTHONDONTWRITEBYTECODE=1
+fi
+
 # Read configuration variable file if it is present
 [ -r /etc/default/$NAME ] && . /etc/default/$NAME
 
@@ -65,16 +76,16 @@ do_start()
 	  	|| return 1
 	  start-stop-daemon \
             --quiet --pidfile $WRAPPER_PIDFILE --start --startas $WRAPPER -- \
-                    --pidfile $WRAPPER_PIDFILE $WRAPPER_ARGS -- $DAEMON \
-                    --pidfile $PIDFILE $DAEMON_ARGS --noloop \
+                    --pidfile $WRAPPER_PIDFILE $WRAPPER_ARGS -- \
+                    $PYTHON $DAEMON --pidfile $PIDFILE $DAEMON_ARGS --noloop \
 		|| return 2
         else
 	  start-stop-daemon --quiet --pidfile $PIDFILE --test --start \
                             --startas $DAEMON  > /dev/null \
 	  	|| return 1
 	  start-stop-daemon \
-            --quiet --pidfile $PIDFILE --start --startas $DAEMON -- \
-                    --pidfile $PIDFILE --daemonize $DAEMON_ARGS \
+            --quiet --pidfile $PIDFILE --start --startas $PYTHON -- \
+                    $DAEMON --pidfile $PIDFILE --daemonize $DAEMON_ARGS \
 		|| return 2
         fi
 	# Add code here, if necessary, that waits for the process to be ready

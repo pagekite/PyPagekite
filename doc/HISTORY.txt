@@ -9,6 +9,7 @@ v0.5.9.4    ???
    - HTTPD: Add support for file uploads, new flags: +uploads and +ul_filenames
    - HTTPD: Implement a PhotoBackup server, new flags: +photobackup
    - Augmented --authdomain= so it supports external authentication apps
+   - Debian: Make it easy to use pypy for daemon (see init script)
 
 
 v0.5.9.3    2018.01.24
