@@ -1179,7 +1179,7 @@ class UserConn(Selectable):
     self.SetConn(conn)
 
     if ':' in host: host, port = host.split(':', 1)
-    self.proto = proto
+    self.proto = oproto = proto
     self.host = StripEncodedIP(host)
 
     # If the listening port is an alias for another...
@@ -1198,15 +1198,21 @@ class UserConn(Selectable):
     else:
       protos = [proto]
       ports = [on_port]
-      if proto == 'websocket': protos.append('http')
+      if proto == 'websocket': protos.extend(['http', 'http2', 'http3'])
       elif proto == 'http': protos.extend(['http2', 'http3'])
 
     tunnels = []
     for p in protos:
       for prt in ports:
-        if not tunnels: tunnels = conns.Tunnel('%s-%s' % (p, prt), host)
-      if not tunnels: tunnels = conns.Tunnel(p, host)
-    if not tunnels: tunnels = conns.Tunnel(protos[0], CATCHALL_HN)
+        if not tunnels:
+          tunnels = conns.Tunnel('%s-%s' % (p, prt), host)
+          if tunnels: self.proto = proto = p
+      if not tunnels:
+        tunnels = conns.Tunnel(p, host)
+        if tunnels: self.proto = proto = p
+    if not tunnels:
+      tunnels = conns.Tunnel(protos[0], CATCHALL_HN)
+      if tunnels: self.proto = proto = protos[0]
 
     if self.address:
       chunk_headers = [('RIP', self.address[0]), ('RPort', self.address[1])]
@@ -1224,10 +1230,13 @@ class UserConn(Selectable):
                                              proto=proto, port=on_port,
                                              chunk_headers=chunk_headers)
                     and self.conns):
-      self.Log([('domain', self.host), ('on_port', on_port),
-                ('proto', self.proto), ('is', 'FE')])
+      log_info = [('domain', self.host), ('on_port', on_port),
+                  ('proto', self.proto), ('is', 'FE')]
+      if oproto != proto:
+        log_info.append(('sniffed_proto', proto))
+      self.Log(log_info)
       self.conns.Add(self)
-      if proto.startswith('http'):
+      if proto in ('http', 'http2', 'http3', 'websocket'):
         self.conns.TrackIP(address[0], host)
         # FIXME: Use the tracked data to detect & mitigate abuse?
       return self
