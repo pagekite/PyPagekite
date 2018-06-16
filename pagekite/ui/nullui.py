@@ -166,7 +166,7 @@ class NullUi(object):
         ' - Raw TCP/IP (HTTP proxied) kites are available.',
         color=self.GREY)
     self.Notify(
-      ' - Enable logging more info, add option: --logfile=/path/to/logfile',
+      ' - To enable more logging, add option: --logfile=/path/to/logfile',
       color=self.GREY)
 
   def NotifyQuota(self, quota, q_days, q_conns):
