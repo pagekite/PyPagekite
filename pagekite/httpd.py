@@ -564,7 +564,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
     return host_paths, full_path
 
-  def handleFileUpload(self, path, uploaded, data=None, shtml_vars=None):
+  def handleFileUpload(self, path, uploaded,
+                       data=None, shtml_vars=None, subdir=None):
     host_paths, full_path = self.convertPaths(path)
     if not (full_path
             and os.path.isdir(full_path)
@@ -582,6 +583,11 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         if name_policy not in ('keep', 'overwrite'):
           ext = ('.' in fn and fn.split('.')[-1] or 'dat')
           fn = 'upload-%x.%s' % (time.time(), ext)
+
+        if subdir:
+          full_path = os.path.join(full_path, subdir)
+          if not os.path.exists(full_path):
+            os.mkdir(full_path)
 
         target = os.path.join(full_path, fn)
         count = 1
@@ -632,8 +638,16 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
     elif path == '/':
       filesize = ('filesize' in posted and posted['filesize'].value)
+      album = ('album' in posted and posted['album'].value)
       photo = ('upfile' in posted and posted['upfile'])
       photo_data = ((photo not in (None, False)) and photo.value or '')
+
+      if album and (
+          (':' in album) or
+          ('/' in album) or
+          ('\\' in album) or
+          (album[:1] == '.')):
+        raise ValueError('Illegal album name')
 
       shtml_vars.update(self.E_PB)
       if not filesize:
@@ -645,7 +659,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       elif len(photo_data) != int(filesize):
         shtml_vars['code'] = 411
       elif self.handleFileUpload('/', photo,
-                                 data=photo_data, shtml_vars=shtml_vars):
+                                 data=photo_data, subdir=album,
+                                 shtml_vars=shtml_vars):
         self.sendResponse('OK', mimetype='text/plain')
         self.sendEof()
         return True
