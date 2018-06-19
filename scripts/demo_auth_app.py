@@ -26,16 +26,29 @@ def Auth(domain):
     # accounting happens elsewhere and Pagekite.py is mostly just relaying
     # values back to the user as information.
     #
-    # The exception to this is the IPs-per-second rate limiting, which IS
-    # enforced by pagekite.py, using the semantics of the --ratelimit_ips
-    # option.
+    # Exception #1: a quota_kb value of zero means the user exists but no
+    # longer has access to the service (ran out of quota). Negative or
+    # missing quota_kb values mean "no bandwidth quota, just grant access."
+    #
+    # Exception #2: The IPs-per-second rate limits are enforced by
+    # pagekite.py, using the semantics of the --ratelimit_ips option.
+    #
+    # Valid rejection reasons that will be understood by the connector
+    # include: "unauthorized", "quota", "nodays", "noquota", "noconns"
+    #
+    # Note that rejection reasons are ignored unless quota_kb is 0.
+    #
     return {
         'secret': 'testing',  # Important! This is used for authentication.
-        'quota_kb': 10240,
-        'quota_days': 24,
-        'quota_conns': 5,
-        'ips_per_sec-ips': 1,
-        'ips_per_sec-secs': 900}
+
+        'quota_kb': 10240,    # If set, 0 means "out of quota"; else advisory
+        'quota_days': 24,     # Advisory
+        'quota_conns': 5,     # Advisory
+        'reason': 'reason',   # If set, explains why user is "out of quota"
+
+        'ips_per_sec-ips': 1,    # Inform PageKite what IP rate limits apply
+        'ips_per_sec-secs': 900} # ... to this tunnel's incoming traffic.
+
 
 
 def ZkAuth(domain):

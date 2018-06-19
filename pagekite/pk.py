@@ -1629,14 +1629,18 @@ class PageKite(object):
       auth_app = self.GetAuthApp(adom)
       if not auth_app.supports_zk_auth():
         auth = auth_app.auth(domain)
-        secret = auth.get('secret', '')
-        if self.IsSignatureValid(sign, secret, protoport, domain, srand, token):
-          return (auth.get('quota_kb', -1),
+        secret = auth.get('secret')
+        if not secret:
+          # We cannot validate: the auth app was unavailable or broken.
+          raise ValueError('Auth app provided no secret for: %s' % domain)
+        elif self.IsSignatureValid(sign, secret, protoport, domain,
+                                   srand, token):
+          return (auth.get('quota_kb', -2),  # None or Zero would deny access
                   auth.get('quota_days'),
                   auth.get('quota_conns'),
                   auth.get('ips_per_sec-ips'),
                   auth.get('ips_per_sec-secs'),
-                  auth.get('error'))
+                  auth.get('reason', auth.get('error')))
         else:
           logging.LogError('Invalid signature for: %s (%s)'
                            % (domain, protoport))
@@ -1733,18 +1737,18 @@ class PageKite(object):
           return (None, None, None, None, None, auth_error_type or 'signature')
 
       if self.auth_domain or self.auth_domains:
-        adom = self.auth_domain
-        for dom in self.auth_domains:
-          if domain.endswith('.%s' % dom):
+        adom = ''
+        adom_keys = self.auth_domains.keys()
+        adom_keys.sort(key=lambda k: (len(k), k))  # Longest match will win
+        for dom in adom_keys:
+          if domain.endswith('.' + dom):
             adom = self.auth_domains[dom]
+        if not adom:
+          adom = self.auth_domain
         if adom:
           try:
-            (rv, qd, qc, ipc, ips, auth_error_type
-             ) = self.LookupDomainQuota(srand, token, sign, protoport,
-                                        domain.replace('*', '_any_'),
-                                        adom)
-            if rv is None or rv >= 0:
-              return (rv, qd, qc, ipc, ips, auth_error_type)
+            return self.LookupDomainQuota(srand, token, sign, protoport,
+                                          domain.replace('*', '_any_'), adom)
           except Exception, e:
             # Lookup failed, fail open.
             if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
