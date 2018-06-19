@@ -976,6 +976,7 @@ class PageKite(object):
     self.kitesecret = ''
     self.dyndns = None
     self.last_updates = []
+    self.postpone_ddns_updates = [0, 0]
     self.backends = {}  # These are the backends we want tunnels for.
     self.conns = None
     self.last_loop = 0
@@ -3229,7 +3230,7 @@ class PageKite(object):
         if self.DisconnectFrontend(conns, server):
           connections += 1
 
-    if self.dyndns:
+    if self.dyndns and ([time.time(), 0] > self.postpone_ddns_updates):
       ddns_fmt, ddns_args = self.dyndns
 
       domains = {}
@@ -3275,13 +3276,19 @@ class PageKite(object):
           #       protocols. Unfortunately, that isn't easily solvable.
           updates[payload] = ddns_fmt % args
 
-      last_updates = self.last_updates
-      self.last_updates = []
-      for update in updates:
-        if update in last_updates:
-          # Was successful last time, no point in doing it again.
-          self.last_updates.append(update)
-        else:
+      failed_updates = []
+      planned_updates = sorted(updates.values())
+      last_updates = sorted(self.last_updates)
+      if last_updates != planned_updates:
+
+        self.last_updates = []
+        for update in updates:
+          if update in last_updates:
+            self.last_updates.append(update)
+
+        for update in updates:
+          if update in last_updates:
+            continue
           domain, ips = update.split(':', 1)
           try:
             self.ui.Status('dyndns', color=self.ui.YELLOW,
@@ -3290,28 +3297,47 @@ class PageKite(object):
             result = ''.join(urllib.urlopen(updates[update]).readlines())
             if result.startswith('good') or result.startswith('nochg'):
               logging.Log([('dyndns', result), ('data', update)])
-              self.SetBackendStatus(update.split(':')[0],
-                                    sub=BE_STATUS_ERR_DNS)
+              self.SetBackendStatus(domain, sub=BE_STATUS_ERR_DNS)
               self.last_updates.append(update)
               # Success!  Make sure we remember these IP were live.
               if domain not in self.dns_cache:
                 self.dns_cache[domain] = {}
               self.dns_cache[domain][int(time.time())] = ips.split(',')
             else:
-              logging.LogInfo('DynDNS update failed: %s' % result, [('data', update)])
-              self.SetBackendStatus(update.split(':')[0],
-                                    add=BE_STATUS_ERR_DNS)
-              failures += 1
+              failed_updates.append(domain)
+              logging.LogInfo('DynDNS update failed: %s' % result,
+                              [('data', update)])
           except Exception, e:
+            failed_updates.append(update.split(':')[0])
             logging.LogInfo('DynDNS update failed: %s' % e, [('data', update)])
-            if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
-            self.SetBackendStatus(update.split(':')[0],
-                                  add=BE_STATUS_ERR_DNS)
+            if logging.DEBUG_IO:
+              traceback.print_exc(file=sys.stderr)
+
             # Hmm, the update may have succeeded - assume the "worst".
             if domain not in self.dns_cache:
               self.dns_cache[domain] = {}
             self.dns_cache[domain][int(time.time())] = ips.split(',')
-            failures += 1
+
+            # Avoid hammering broken services.
+            break
+
+      if failed_updates:
+        for domain in failed_updates:
+          self.SetBackendStatus(domain, add=BE_STATUS_ERR_DNS)
+          failures += 1
+
+        # Exponential fallback for DDNS updates, up to at most half an hour.
+        self.postpone_ddns_updates[1] += 1
+        self.postpone_ddns_updates[0] = int(
+          time.time() + (56 * (2 ** min(5, self.postpone_ddns_updates[1]))))
+        logging.LogInfo('DynDNS updates postponed until ts>%x (errors=%d)'
+                        % tuple(self.postpone_ddns_updates))
+      else:
+        self.postpone_ddns_updates = [0, 0]
+
+    # DDNS updates being postponed counts as at least one failure.
+    if self.dyndns and self.postpone_ddns_updates[1]:
+      failures = min(1, failures)
 
     return failures, connections
 

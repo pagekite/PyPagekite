@@ -10,6 +10,7 @@ v0.5.9.4    ???
    - HTTPD: Implement a PhotoBackup server, new flags: +photobackup
    - Augmented --authdomain= so it supports external authentication apps
    - Debian: Make it easy to use pypy for daemon (see init script)
+   - Implement exponential fallback for DDNS update failures
 
 
 v0.5.9.3    2018.01.24
