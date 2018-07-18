@@ -1,6 +1,6 @@
 ## Name ##
 
-pagekite v0.5.9.3+github - Make localhost servers publicly visible
+pagekite - Make localhost servers publicly visible
 
 ## Synopsis ##
 
@@ -285,13 +285,15 @@ time the program defaults will Just Work.
      allows arbitrary ports in HTTP CONNECT.
 
    * <b>--ratelimit_ips</b>=`IPs/seconds`, <b>--ratelimit_ips</b>=`kitename`:`IPs/seconds` <br />
-     Limit how many different IP addresses can request data from
+     Limit how many different clients (IPs) can request data from
      a tunnel within a given window of time, e.g. 5/3600. This is
      useful as either a crude form of DDoS mitigation, or as a
      mechanism to make public kite services unusable for phishing.
      Note that limits are enforced per-tunnel (not per kite), and
      tunnels serving multiple kites will use the settings of the
-     strictest kite.
+     strictest kite. Limits apply to subdomains as well. A single
+     IP may be counted more than once if request headers (such as
+     User-Agent) differ.
 
    * <b>--accept_acl_file</b>=`/path/to/file` <br />
      Consult an external access control file before accepting an

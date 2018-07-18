@@ -251,13 +251,15 @@ MAN_OPT_FRONTEND = ("""\
 
     --ratelimit_ips</b>=<a>IPs/seconds</a>,\
  <b>--ratelimit_ips</b>=<a>kitename</a>:<a>IPs/seconds</a> __
-            Limit how many different IP addresses can request data from
+            Limit how many different clients (IPs) can request data from
             a tunnel within a given window of time, e.g. 5/3600. This is
             useful as either a crude form of DDoS mitigation, or as a
             mechanism to make public kite services unusable for phishing.
             Note that limits are enforced per-tunnel (not per kite), and
             tunnels serving multiple kites will use the settings of the
-            strictest kite.
+            strictest kite. Limits apply to subdomains as well. A single
+            IP may be counted more than once if request headers (such as
+            User-Agent) differ.
 
     --accept_acl_file</b>=<a>/path/to/file</a> __
             Consult an external access control file before accepting an
