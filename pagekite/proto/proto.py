@@ -233,7 +233,8 @@ def HTTP_GoodBeConnection(proto):
 
 def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None,
                      code=503, status='Unavailable', headers=None,
-                     overloaded=False, advertise=True, relay_sockname=None):
+                     overloaded=False, advertise=True, relay_sockname=None,
+                     other_details=None):
   if advertise:
     label = "PageKite"
     whatis = ''.join(['<a href="', WWWHOME, '"><i>', label, '</i></a>'])
@@ -255,6 +256,8 @@ def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None,
                     % (where.upper(), proto, domain))
       if relay_sockname is not None:
         frame_url += ('&amp;relay=%s' % relay_sockname[0])
+      for key, val in (other_details or {}).items():
+        frame_url += ('&amp;%s=%s' % (key, val))
     return HTTP_Response(code, status,
                          ['<html><frameset cols="*">',
                           '<frame target="_top" src="', frame_url, '" />',

@@ -1937,6 +1937,15 @@ class PageKite(object):
       pass
 
   def GetDefaultIPsPerSecond(self, dom=None, limit=None):
+    if dom:
+      parts = dom.split('.')
+      while len(parts) > 1:
+        pdom = '.'.join(parts)
+        if pdom not in self.ratelimit_ips:
+          parts.pop(0)
+        else:
+          dom = pdom
+          break
     ips, secs = (limit or self.ratelimit_ips.get(dom or '*', '')).split('/')
     return int(ips), int(secs)
 

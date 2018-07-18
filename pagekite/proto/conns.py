@@ -99,17 +99,15 @@ class Tunnel(ChunkParser):
                          srand, token, sign, prefix))
     return requests
 
-  def AcceptTraffic(conn, address, host):
+  def RejectTraffic(self, client_conn, address, host):
     # This function allows the tunnel to reject an incoming connection
     # based on the remote address and the requested host. For now we
     # only know how to discriminate by remote IP.
-    if not conn.AcceptRemoteIP(str(address[0]), host):
-      return False
-    return True
+    return self.RejectRemoteIP(client_conn, str(address[0]), host) or False
 
-  def AcceptRemoteIP(self, ip, host):
+  def RejectRemoteIP(self, client_conn, ip, host):
     if not self.ip_limits:
-      return True
+      return False
 
     if len(self.ip_limits) == 1:
       whitelist = self.ip_limits[0]
@@ -122,33 +120,44 @@ class Tunnel(ChunkParser):
     if whitelist:
       for prefix in whitelist:
         if ip.startswith(prefix):
-          return True
+          return False
       self.LogError('Rejecting connection from unrecognized IP')
-      return False
+      return 'not_whitelisted'
 
     # Do we have a delta/maxips policy?
     if delta and maxips:
+
+      # Since IP addresses are often shared, we try to differentiate browsers
+      # based on few of the request headers as well. We don't track cookies
+      # since they're mutated by the site itself, which would lead to false
+      # positives here.
+      client = ip
+      if (hasattr(client_conn, 'parser') and
+          hasattr(client_conn.parser, 'Header')):
+        client = sha1hex('/'.join([ip] +
+          (client_conn.parser.Header('User-Agent') or []) +
+          (client_conn.parser.Header('Accept-Language') or [])))
+
       now = time.time()
-      if ip in seen:
-        seen[ip] = now
-        return True
+      if client in seen:
+        seen[client] = now
+        return False
 
       for seen_ip in seen.keys():
         if seen[seen_ip] < now - delta:
           del seen[seen_ip]
 
       if len(seen.keys()) >= maxips:
-        self.LogError('Rejecting connection from new IP',
+        self.LogError('Rejecting connection from new client (%s)' % client[:12],
                       [('ips_per_sec', '%d/%ds' % (maxips, delta)),
                        ('domain', host)])
-        return True  # FIXME: Testing!!!
-        return False
+        return 'ips_per_sec'
       else:
-        seen[ip] = now
-        return True
+        seen[client] = now
+        return False
 
     # All else is allowed
-    return True
+    return False
 
   def _FrontEnd(conn, body, conns):
     """This is what the front-end does when a back-end requests a new tunnel."""
@@ -1222,7 +1231,10 @@ class UserConn(Selectable):
       tunnels.sort(key=lambda t: t.weighted_rtt)
 
     for tun in tunnels:
-      if tun.AcceptTraffic(address, host):
+      rejection = tun.RejectTraffic(conn, address, host)
+      if rejection and hasattr(conn, 'error_details'):
+        conn.error_details['rejected'] = rejection
+      else:
         self.tunnel = tun
         break
 
@@ -1493,6 +1505,7 @@ class UnknownConn(MagicProtocolParser):
     self.proto = None
     self.said_hello = False
     self.bad_loops = 0
+    self.error_details = {}
 
   def Cleanup(self, close=True):
     MagicProtocolParser.Cleanup(self, close=close)
@@ -1581,7 +1594,8 @@ class UnknownConn(MagicProtocolParser):
           if not self.conns.config.CheckClientAcls(self.address, conn=self):
             self.Send(self.HTTP_Unavail(
                         self.conns.config, 'fe', 'raw', chost,
-                        code=403, status='Forbidden'),
+                        code=403, status='Forbidden',
+                        other_details=self.error_details),
                       try_flush=True)
             return False
 
@@ -1675,7 +1689,8 @@ class UnknownConn(MagicProtocolParser):
       if not self.conns.config.CheckClientAcls(self.address, conn=self):
         self.Send(self.HTTP_Unavail(
                     self.conns.config, 'fe', self.proto, self.host,
-                    code=403, status='Forbidden'),
+                    code=403, status='Forbidden',
+                    other_details=self.error_details),
                   try_flush=True)
         return False
 
@@ -1695,7 +1710,8 @@ class UnknownConn(MagicProtocolParser):
         else:
           self.Send(self.HTTP_Unavail(
                         self.conns.config, 'fe', self.proto, self.host,
-                        overloaded=self.conns.config.Overloaded()
+                        overloaded=self.conns.config.Overloaded(),
+                        other_details=self.error_details
                     ), try_flush=True)
         return False
 
