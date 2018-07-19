@@ -520,6 +520,13 @@ class Tunnel(ChunkParser):
     if self.quota and self.quota[0] is not None:
       config.ui.NotifyQuota(self.quota[0], self.q_days, self.q_conns)
 
+    for quota in parse.Header('X-PageKite-IPsPerSec'):
+      self.Log([('FE', sname), ('ips_per_sec', quota)])
+      try:
+        config.ui.NotifyIPsPerSec(*[int(i) for i in quota.split('/')])
+      except ValueError:
+        pass
+
     invalid_reasons = {}
     for request in parse.Header('X-PageKite-Invalid-Why'):
       # This is future-compatible, in that we can add more fields later.

@@ -260,7 +260,13 @@ class AuthThread(threading.Thread):
               quotas.append((quota, request))
               if conns: q_conns.append(conns)
               if days: q_days.append(days)
-              if ipc: ip_limits.append((float(ipc)/ips, ipc, ips))
+              if not ipc:
+                try:
+                  ipc, ips = self.conns.config.GetDefaultIPsPerSecond(domain)
+                except ValueError:
+                  pass
+              if ipc and ips:
+                ip_limits.append((float(ipc)/ips, ipc, ips))
               if (proto.startswith('http') and
                   self.conns.config.GetTlsEndpointCtx(domain)):
                 results.append(('%s-SSL-OK' % prefix, what))

@@ -183,6 +183,13 @@ class NullUi(object):
                 prefix=(int(quota) < qMB) and '!' or ' ',
                 color=self.MAGENTA)
 
+  def NotifyIPsPerSec(self, ips, secs):
+    self.Notify(
+      'Abuse/DDOS protection: Relaying traffic for up to %d client IPs per %ds.'
+         % (ips, secs),
+      prefix=' ',
+      color=self.MAGENTA)
+
   def NotifyFlyingFE(self, proto, port, domain, be=None):
     self.Notify(('Flying: %s://%s%s/'
                  ) % (proto, domain, port and ':'+port or ''),
