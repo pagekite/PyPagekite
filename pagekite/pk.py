@@ -1663,14 +1663,15 @@ class PageKite(object):
     if al:
       error, hg, hd, hc, junk = hn.split('.', 4)
       q_days = int(hd, 16)
-      if '-' in hc:
-        hc, ipc, ips = hc.split('-')
-        hc = int(hc, 16)
-        ipc = int(hc, 16)
-        ips = int(hc, 16)
-      else:
-        q_conns = int(hc, 16)
-        ipc = ips = None
+      q_conns = int(hc, 16)
+      ipc = ips = None
+      if '-' in error:
+        try:
+          error, ipc, ips = error.split('-')[:3]  # More fields may come later
+          ipc = int(ipc, 16)
+          ips = int(ips, 16)
+        except ValueError:
+          pass
     else:
       error = q_days = q_conns = ipc = ips = None
 
