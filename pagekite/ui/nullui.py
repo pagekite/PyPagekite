@@ -185,7 +185,7 @@ class NullUi(object):
 
   def NotifyIPsPerSec(self, ips, secs):
     self.Notify(
-      'Abuse/DDOS protection: Relaying traffic for up to %d client IPs per %ds.'
+      'Abuse/DDOS protection: Relaying traffic for up to %d clients per %ds.'
          % (ips, secs),
       prefix=' ',
       color=self.MAGENTA)

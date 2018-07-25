@@ -132,11 +132,15 @@ class Tunnel(ChunkParser):
       # since they're mutated by the site itself, which would lead to false
       # positives here.
       client = ip
-      if (hasattr(client_conn, 'parser') and
-          hasattr(client_conn.parser, 'Header')):
-        client = sha1hex('/'.join([ip] +
-          (client_conn.parser.Header('User-Agent') or []) +
-          (client_conn.parser.Header('Accept-Language') or [])))
+      log_info = []
+      if hasattr(client_conn, 'parser'):
+        if hasattr(client_conn.parser, 'Header'):
+          client = sha1hex('/'.join([ip] +
+            (client_conn.parser.Header('User-Agent') or []) +
+            (client_conn.parser.Header('Accept-Language') or [])))
+        if hasattr(client_conn.parser, 'method'):
+          log_info.append(
+            (str(client_conn.parser.method), str(client_conn.parser.path)))
 
       now = time.time()
       if client in seen:
@@ -148,9 +152,10 @@ class Tunnel(ChunkParser):
           del seen[seen_ip]
 
       if len(seen.keys()) >= maxips:
-        self.LogError('Rejecting connection from new client (%s)' % client[:12],
-                      [('ips_per_sec', '%d/%ds' % (maxips, delta)),
-                       ('domain', host)])
+        self.LogError('Rejecting connection from new client',
+                      [('client', client[:12]),
+                       ('ips_per_sec', '%d/%ds' % (maxips, delta)),
+                       ('domain', host)] + log_info)
         return 'ips_per_sec'
       else:
         seen[client] = now
