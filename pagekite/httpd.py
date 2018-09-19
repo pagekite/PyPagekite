@@ -859,6 +859,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
     if path == self.host_config.get('yamon', False):
       if common.gYamon:
+        self.server.pkite.Overloaded(yamon=common.gYamon)
         data['body'] = common.gYamon.render_vars_text(qs.get('view', [None])[0])
       else:
         data['body'] = ''

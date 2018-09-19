@@ -1766,10 +1766,15 @@ class PageKite(object):
                     % (domain, protoport))
     return (None, None, None, None, None, auth_error_type or 'unauthorized')
 
-  def Overloaded(self):
+  def Overloaded(self, yamon=None):
     if not self.overload or not self.conns:
       return False
-    return (len(self.conns.conns) > self.overload)
+    ccount = len(self.conns.conns)
+    if yamon is not None:
+      yamon.vset('overload_threshold', self.overload)
+      yamon.vset('overload_headroom', max(0, self.overload - ccount))
+      yamon.vset('overload', float(ccount) / self.overload)
+    return (ccount >= self.overload)
 
   def ConfigureFromFile(self, filename=None, data=None):
     if not filename: filename = self.rcfile
