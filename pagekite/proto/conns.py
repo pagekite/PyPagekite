@@ -689,7 +689,7 @@ class Tunnel(ChunkParser):
     # Small amounts of data we just send...
     if len(data) <= 1024:
       sending.append(data)
-      return self.SendChunked(sending, zhistory=self.zhistory[sid])
+      return self.SendChunked(sending, zhistory=self.zhistory.get(sid))
 
     # Larger amounts we break into fragments to work around bugs in
     # some of our small-buffered embedded clients. We aim for roughly
@@ -699,7 +699,7 @@ class Tunnel(ChunkParser):
     first = True
     while data or first:
       sending[-1] = data[:frag_size]
-      if not self.SendChunked(sending, zhistory=self.zhistory[sid]):
+      if not self.SendChunked(sending, zhistory=self.zhistory.get(sid)):
         return False
       data = data[frag_size:]
       if first:
