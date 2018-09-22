@@ -2928,7 +2928,7 @@ class PageKite(object):
     '2600:3c01::f03c:91ff:fe96:257:443': '173.230.155.164:443',
     '69.164.211.158:443': '50.116.52.206:443',
   }
-  def Ping(self, host, port):
+  def Ping(self, host, port, check_overload=True):
     cid = uuid = '%s:%s' % (host, port)
 
     if cid in self.servers_never:
@@ -2973,8 +2973,10 @@ class PageKite(object):
         uuid = self.TMP_UUID_MAP.get(uuid, uuid)
 
       try:
-        if data.index('X-PageKite-Overloaded:') >= 0:
-          elapsed += 1  # Simulate slowness: add full second to ping time
+        if check_overload and data.index('X-PageKite-Overloaded:') >= 0:
+          # Simulate slowness: add 250ms to ping time. This should keep us from
+          # going clear across the planet, but give overloaded relays some rest.
+          elapsed += 0.250
       except ValueError:
         pass
 
@@ -3072,7 +3074,7 @@ class PageKite(object):
       (host, port) = server.split(':')
       ipaddrs = self.CachedGetHostIpAddrs(host)
       if ipaddrs:
-        ptime, uuid = self.Ping(ipaddrs[0], int(port))
+        ptime, uuid = self.Ping(ipaddrs[0], int(port), check_overload=False)
         server = '%s:%s' % (ipaddrs[0], port)
         servers_all[uuid] = servers_pref[uuid] = server
     threads, deadline = [], time.time() + 5
@@ -3098,7 +3100,8 @@ class PageKite(object):
               # FIXME: What about IPv6 localhost?
               if not ip.startswith('127.') and ip not in pinged:
                 server = '%s:%s' % (ip, port)
-                pingtime, uuid = pinged[ip] = self.Ping(ip, int(port))
+                pingtime, uuid = pinged[ip] = self.Ping(ip, int(port),
+                                                        check_overload=False)
                 servers_all[uuid] = server
           threads, deadline = [], time.time() + 5
           for bid in self.GetActiveBackends():
