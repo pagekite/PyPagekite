@@ -284,6 +284,16 @@ time the program defaults will Just Work.
      Listen for raw connections these ports. The string '%s'
      allows arbitrary ports in HTTP CONNECT.
 
+   * <b>--overload</b>=`baseline`, <b>--overload_cpu</b>=`fraction, 0-1`, <b>--overload_mem</b>=`fraction, 0-1` <br />
+     Enable "overload" calculations, which cause the front-end to
+     recommend back-ends go elsewhere if possible, once connection
+     counts go above a certain number. The baseline is the initial
+     overload level, but it will be adjusted dynamically based on
+     load average (CPU use) and memory usage. This will really only
+     work well on Linux and if PageKite is the only thing happening
+     on the machine. Setting both fractions to 0 disables dynamic
+     scaling.
+
    * <b>--ratelimit_ips</b>=`IPs/seconds`, <b>--ratelimit_ips</b>=`kitename`:`IPs/seconds` <br />
      Limit how many different clients (IPs) can request data from
      a tunnel within a given window of time, e.g. 5/3600. This is

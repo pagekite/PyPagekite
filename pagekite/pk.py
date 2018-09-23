@@ -85,7 +85,8 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'frontend=', 'nofrontend=', 'frontends=', 'keepalive=',
             'torify=', 'socksify=', 'proxy=', 'noproxy',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
-            'buffers=', 'noprobes', 'debugio', 'watch=', 'overload=',
+            'buffers=', 'noprobes', 'debugio', 'watch=',
+            'overload=', 'overload_cpu=', 'overload_mem=',
             # DEPRECATED:
             'reloadfile=', 'autosave', 'noautosave', 'webroot=',
             'webaccess=', 'webindexes=', 'delete_backend=']
@@ -721,9 +722,13 @@ class TunnelManager(threading.Thread):
         time.sleep(5)
     logging.LogDebug('TunnelManager: done')
 
-  def DoFrontendWork(self):
+  def DoFrontendWork(self, loop_count):
     self.CheckTunnelQuotas(time.time())
     self.pkite.LoadMOTD()
+
+    # Update our idea of what it means to be overloaded.
+    if self.pkite.overload and (1 == loop_count % 20):
+      self.pkite.CalculateOverload()
 
     # FIXME: Front-ends should close dead back-end tunnels.
     for tid in self.conns.tunnels:
@@ -835,7 +840,7 @@ class TunnelManager(threading.Thread):
 
       # Make sure tunnels are really alive.
       if self.pkite.isfrontend:
-        self.DoFrontendWork()
+        self.DoFrontendWork(loop_count=loop_count)
       self.PingTunnels(time.time())
 
       # FIXME: This is constant noise, instead there should be a
@@ -989,7 +994,12 @@ class PageKite(object):
     self.keep_looping = True
     self.main_loop = True
     self.watch_level = [None]
+
     self.overload = None
+    self.overload_cpu = 0.75
+    self.overload_mem = 0.85
+    self.overload_current = None
+    self.overload_membase = None
 
     self.crash_report_url = '%scgi-bin/crashes.pl' % WWWHOME
     self.rcfile_recursion = 0
@@ -1766,15 +1776,91 @@ class PageKite(object):
                     % (domain, protoport))
     return (None, None, None, None, None, auth_error_type or 'unauthorized')
 
+  def _get_overload_factor(self):
+    if common.gYamon is not None:
+      return (
+        common.gYamon.values.get('backends_live', 0) +
+        common.gYamon.values.get('selectables_live', 1))
+    return (len(self.conns.tunnels) or 1)
+
+  def CalculateOverload(self, cload=None):
+    # FIXME: This is almost certainly linux specific.
+    # FIXME: There are too many magic numbers in here.
+    try:
+      # Check internal load, abort if load is low anyway.
+      cload = cload or self._get_overload_factor()
+      if ((cload <= (self.overload // 2)) and
+          (self.overload == self.overload_current)):
+        return
+
+      # If both are disabled, just bail out.
+      if not (self.overload_cpu or self.overload_mem):
+        return
+
+      # Check system load.
+      loadavg = float(open('/proc/loadavg', 'r').read().strip().split()[1])
+      meminfo = {}
+      for line in open('/proc/meminfo', 'r'):
+        try:
+          key, val = line.lower().split(':')
+          meminfo[key] = int(val.strip().split()[0])
+        except ValueError:
+          pass
+
+      # Figure out how much RAM is available
+      memfree = meminfo.get('memavailable')
+      if not memfree:
+        memfree = meminfo.get('memfree', 0) + meminfo.get('cached', 0)
+
+      # Record baseline memory usage if this is our first run
+      if not self.overload_membase:
+        self.overload_membase = float(meminfo['memtotal']) - memfree
+        # Sanity checks... are these really necessary?
+        self.overload_membase = max(75000, self.overload_membase)
+        self.overload_membase = min(self.overload_membase,
+                                    0.9 * meminfo['memtotal'])
+
+      # Calculate the implied unit cost of every live connection
+      memtotal = float(meminfo['memtotal'] - self.overload_membase)
+      munit = max(75, float(memtotal - memfree) / cload)  # 75KB/conn=optimism!
+      lunit = loadavg / cload
+
+      # Calculate overload factors based on the unit costs
+      moverload = int(self.overload_mem * float(memtotal) / munit)
+      loverload = int(self.overload_cpu / lunit)
+
+      # Choose a new overload value.
+      new_overload = int(max(
+         # Dynamic load scaling can reduce our overload from the baseline
+         # as well as raise it, but only up to a point.
+         self.overload / 2,
+         # This hack lets us disable memory or CPU overload checks
+         # with --overload_cpu=0 or --overload_mem=0.
+         min(moverload or loverload, loverload or moverload)))
+
+      # Smooth things out a little bit...
+      self.overload_current = int(
+        (0.8 * self.overload_current) + (0.2 * new_overload))
+
+      logging.LogInfo(
+        ('Overload level is now %d'
+         ' (bml=%d/%d/%d; cml=%d/%d/%.4f free=%d/%d loadavg=%.2f)'
+         ) % (self.overload_current,
+              self.overload, moverload, loverload,
+              cload, munit, lunit,
+              memfree, memtotal, loadavg))
+    except (IOError, OSError, ValueError, KeyError, TypeError):
+      pass
+
   def Overloaded(self, yamon=None):
-    if not self.overload or not self.conns:
+    if not self.overload_current or not self.conns:
       return False
-    ccount = len(self.conns.conns)
+    cload = self._get_overload_factor()
     if yamon is not None:
-      yamon.vset('overload_threshold', self.overload)
-      yamon.vset('overload_headroom', max(0, self.overload - ccount))
-      yamon.vset('overload', float(ccount) / self.overload)
-    return (ccount >= self.overload)
+      yamon.vset('overload_threshold', self.overload_current)
+      yamon.vset('overload_headroom', max(0, self.overload_current - cload))
+      yamon.vset('overload', float(cload) / self.overload_current)
+    return (cload >= self.overload_current)
 
   def ConfigureFromFile(self, filename=None, data=None):
     if not filename: filename = self.rcfile
@@ -2235,7 +2321,11 @@ class PageKite(object):
       elif opt == '--watch':
         self.watch_level[0] = int(arg)
       elif opt == '--overload':
-        self.overload = int(arg)
+        self.overload_current = self.overload = int(arg)
+      elif opt == '--overload_cpu':
+        self.overload_cpu = max(0, float(arg))
+      elif opt == '--overload_mem':
+        self.overload_mem = max(0, min(float(arg), 1.5))
       elif opt == '--debugio':
         logging.DEBUG_IO = True
       elif opt == '--buffers': self.buffer_max = int(arg)
@@ -2928,7 +3018,7 @@ class PageKite(object):
     '2600:3c01::f03c:91ff:fe96:257:443': '173.230.155.164:443',
     '69.164.211.158:443': '50.116.52.206:443',
   }
-  def Ping(self, host, port, check_overload=True):
+  def Ping(self, host, port, overload_ms=250):
     cid = uuid = '%s:%s' % (host, port)
 
     if cid in self.servers_never:
@@ -2973,10 +3063,12 @@ class PageKite(object):
         uuid = self.TMP_UUID_MAP.get(uuid, uuid)
 
       try:
-        if check_overload and data.index('X-PageKite-Overloaded:') >= 0:
-          # Simulate slowness: add 250ms to ping time. This should keep us from
-          # going clear across the planet, but give overloaded relays some rest.
-          elapsed += 0.250
+        if overload_ms and data.index('X-PageKite-Overloaded:') >= 0:
+          # Simulate slowness: How much depends on what context this relay
+          # is in (in use, preferred, forced, ...), the default is 250ms
+          # which will bump us to a less ideal geographic region, but not
+          # all the way around the planet.
+          elapsed += (overload_ms / 1000.0)
       except ValueError:
         pass
 
@@ -3074,7 +3166,7 @@ class PageKite(object):
       (host, port) = server.split(':')
       ipaddrs = self.CachedGetHostIpAddrs(host)
       if ipaddrs:
-        ptime, uuid = self.Ping(ipaddrs[0], int(port), check_overload=False)
+        ptime, uuid = self.Ping(ipaddrs[0], int(port), overload_ms=0)
         server = '%s:%s' % (ipaddrs[0], port)
         servers_all[uuid] = servers_pref[uuid] = server
     threads, deadline = [], time.time() + 5
@@ -3101,7 +3193,7 @@ class PageKite(object):
               if not ip.startswith('127.') and ip not in pinged:
                 server = '%s:%s' % (ip, port)
                 pingtime, uuid = pinged[ip] = self.Ping(ip, int(port),
-                                                        check_overload=False)
+                                                        overload_ms=50)
                 servers_all[uuid] = server
           threads, deadline = [], time.time() + 5
           for bid in self.GetActiveBackends():
