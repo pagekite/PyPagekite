@@ -86,7 +86,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'torify=', 'socksify=', 'proxy=', 'noproxy',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes', 'debugio', 'watch=',
-            'overload=', 'overload_cpu=', 'overload_mem=',
+            'overload=', 'overload_cpu=', 'overload_mem=', 'overload_file=',
             # DEPRECATED:
             'reloadfile=', 'autosave', 'noautosave', 'webroot=',
             'webaccess=', 'webindexes=', 'delete_backend=']
@@ -998,6 +998,7 @@ class PageKite(object):
     self.overload = None
     self.overload_cpu = 0.75
     self.overload_mem = 0.85
+    self.overload_file = None
     self.overload_current = None
     self.overload_membase = None
 
@@ -1418,6 +1419,17 @@ class PageKite(object):
         '# proxy    = socks://user:password@host:port/'
       ])
 
+    if self.isfrontend or self.overload or self.overload_file:
+      com = (not self.overload) and '# ' or ''
+      config.extend([
+        '',
+        '##[ Overload settings ]##',
+        p('overload = %s', self.overload, ('max-backends (int)',)),
+        p('overload_file = %s', self.overload_file, ('/path/to/max/backends/file',)),
+        com + ('overload_mem = %-5s # 0=fixed' % self.overload_cpu),
+        com + ('overload_cpu = %-5s # 0=fixed' % self.overload_mem)
+      ])
+
     config.extend([
       '',
       '##[ Front-end access controls (default=deny, if configured) ]##',
@@ -1784,6 +1796,19 @@ class PageKite(object):
     return (len(self.conns.tunnels) or 1)
 
   def CalculateOverload(self, cload=None):
+    # Check overload file first, it overrides everything
+    if self.overload_file:
+      try:
+        new_overload = int(open(self.overload_file, 'r').read().strip())
+        if new_overload != self.overload_current:
+          self.overload_current = new_overload
+          logging.LogInfo(
+            ('Overload level is now %d (from %s)'
+             ) % (self.overload_current, self.overload_file))
+        return
+      except (OSError, IOError, ValueError):
+        pass
+
     # FIXME: This is almost certainly linux specific.
     # FIXME: There are too many magic numbers in here.
     try:
@@ -2322,6 +2347,8 @@ class PageKite(object):
         self.watch_level[0] = int(arg)
       elif opt == '--overload':
         self.overload_current = self.overload = int(arg)
+      elif opt == '--overload_file':
+        self.overload_file = arg
       elif opt == '--overload_cpu':
         self.overload_cpu = max(0, float(arg))
       elif opt == '--overload_mem':

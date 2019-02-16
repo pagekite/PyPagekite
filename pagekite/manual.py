@@ -261,6 +261,13 @@ MAN_OPT_FRONTEND = ("""\
             on the machine. Setting both fractions to 0 disables dynamic
             scaling.
 
+    --overload_file</b>=<a>/path/to/baseline/file</a> __
+            Path to a file, the contents of which overrides all overload
+            calculations. This can be used to manage load calculations
+            using an external process (or by hand, e.g. to prepare for
+            maintenance). Note that <i>overload</i> must specify a non-zero
+            baseline, otherwise this setting is ignored.
+
     --ratelimit_ips</b>=<a>IPs/seconds</a>,\
  <b>--ratelimit_ips</b>=<a>kitename</a>:<a>IPs/seconds</a> __
             Limit how many different clients (IPs) can request data from

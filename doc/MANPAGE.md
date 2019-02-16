@@ -294,6 +294,13 @@ time the program defaults will Just Work.
      on the machine. Setting both fractions to 0 disables dynamic
      scaling.
 
+   * <b>--overload_file</b>=`/path/to/baseline/file` <br />
+     Path to a file, the contents of which overrides all overload
+     calculations. This can be used to manage load calculations
+     using an external process (or by hand, e.g. to prepare for
+     maintenance). Note that <i>overload</i> must specify a non-zero
+     baseline, otherwise this setting is ignored.
+
    * <b>--ratelimit_ips</b>=`IPs/seconds`, <b>--ratelimit_ips</b>=`kitename`:`IPs/seconds` <br />
      Limit how many different clients (IPs) can request data from
      a tunnel within a given window of time, e.g. 5/3600. This is
