@@ -1,8 +1,9 @@
 Version history - highlights
 ============================
 
-v0.5.9.4    ???
---------
+v1.0.0.1902??  2019.??
+-------------
+   - Call this 1.0, change versioning schemes. We're pretty stable!
    - Fix IP address leak in BE offline page, fix &-encoding in URL
    - Made relay capability description and quota report less confusing
    - Add --ratelimit_ips= , for eliminating phishing once and for all
