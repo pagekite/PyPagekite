@@ -9,7 +9,8 @@ v0.5.9.4    ???
    - HTTPD: Add support for file uploads, new flags: +uploads and +ul_filenames
    - HTTPD: Implement a PhotoBackup server, new flags: +photobackup
    - Augmented --authdomain= so it supports external authentication apps
-   - Debian: Make it easy to use pypy for daemon (see init script)
+   - Added --authfail_closed, to avoid failing open if tunnel auth is broken
+   - Debian: Make it easy to use alternate Python for daemon (see init script)
    - Implement exponential fallback for DDNS update failures
    - Implement --overload= and friends.
 

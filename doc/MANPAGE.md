@@ -267,6 +267,13 @@ time the program defaults will Just Work.
      for the app path to be recognized as such, it must contain at
      least one / character.
 
+   * <b>--auththreads</b>=`N` <br />
+     Start N threads to process auth requests. Default is 1.
+
+   * <b>--authfail_closed</b> <br />
+     If authentication fails, reject tunnel requests. The default is
+     to fail open and allow tunnels if the auth checks are broken.
+
    * <b>--motd</b>=`/path/to/motd` <br />
      Send the contents of this file to new back-ends as a
      "message of the day".

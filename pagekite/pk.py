@@ -72,8 +72,8 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings',
             'defaults', 'whitelabel=', 'whitelabels=', 'local=', 'domain=',
-            'auththreads=', 'authdomain=', 'motd=', 'register=', 'host=',
-            'noupgradeinfo', 'upgradeinfo=',
+            'auththreads=', 'authdomain=', 'authfail_closed',
+            'motd=', 'register=', 'host=', 'noupgradeinfo', 'upgradeinfo=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
             'tls_legacy', 'tls_default=', 'tls_endpoint=', 'selfsign',
             'fe_certname=', 'fe_nocertcheck', 'ca_certs=',
@@ -172,6 +172,7 @@ class AuthThread(threading.Thread):
     self.qc = threading.Condition()
     self.jobs = []
     self.conns = conns
+    self.qtime = 0.250  # A decent initial estimate
 
   def check(self, requests, conn, callback):
     self.qc.acquire()
@@ -234,12 +235,22 @@ class AuthThread(threading.Thread):
                             '%s:%s' % (what, signToken(payload=what,
                                                        timestamp=now))))
           else:
-            # This is a bit lame, but we only check the token if the quota
-            # for this connection has never been verified.
-            (quota, days, conns, ipc, ips, reason) = (
-              self.conns.config.GetDomainQuota(
-                proto, domain, srand, token, sign,
-                check_token=(conn.quota is None)))
+            if ((not self.conns.config.authfail_closed)
+                  and len(self.jobs) >= (15 / self.qtime)):
+              logging.LogError('Quota lookup skipped, over 15s worth of jobs queued')
+              (quota, days, conns, ipc, ips, reason) = (
+                -2, None, None, None, None, None)
+            else:
+              # This is a bit lame, but we only check the token if the quota
+              # for this connection has never been verified.
+              t0 = time.time()
+              (quota, days, conns, ipc, ips, reason) = (
+                self.conns.config.GetDomainQuota(
+                  proto, domain, srand, token, sign,
+                  check_token=(conn.quota is None)))
+              elapsed = (time.time() - t0)
+              self.qtime = max(0.2, (0.9 * self.qtime) + (0.1 * elapsed))
+
             duplicates = self.conns.Tunnel(proto, domain)
             if not quota:
               if not reason: reason = 'quota'
@@ -337,6 +348,13 @@ class Connections(object):
     self.conns.append(conn)
 
   def auth(self):
+    if common.gYamon:
+      common.gYamon.vset('auth_threads', len(self.auth_pool))
+      common.gYamon.vset('auth_thread_qtime',
+                         sum([at.qtime for at in self.auth_pool]
+                             ) / len(self.auth_pool))
+      common.gYamon.vset('auth_thread_jobs',
+                         sum([len(at.jobs) for at in self.auth_pool]))
     return self.auth_pool[random.randint(0, len(self.auth_pool)-1)]
 
   def SetAltId(self, conn, new_id):
@@ -916,6 +934,7 @@ class PageKite(object):
     self.auth_domain = None
     self.auth_domains = {}
     self.auth_apps = {}
+    self.authfail_closed = False
     self.motd = None
     self.motd_message = None
     self.server_host = ''
@@ -1370,6 +1389,8 @@ class PageKite(object):
                            ','.join(['%s' % x for x in sorted(self.server_raw_ports)] or [VIRTUAL_PN])),
         p('auththreads = %s', self.isfrontend and self.auth_threads, 1),
         p('authdomain = %s', self.isfrontend and self.auth_domain, 'foo.com'),
+        (self.authfail_closed and 'authfail_closed' or
+         '# authfail_closed  # Tunnel auth fails OPEN without this'),
         p('motd = %s', self.isfrontend and self.motd, '/path/to/motd.txt')
       ])
       for d in sorted(self.auth_domains.keys()):
@@ -1782,7 +1803,8 @@ class PageKite(object):
             # Lookup failed, fail open.
             if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
             logging.LogError('Quota lookup failed: %s' % e)
-            return (-2, None, None, None, None, None)
+            if not self.authfail_closed:
+              return (-2, None, None, None, None, None)
 
     logging.LogInfo('No authentication found for: %s (%s)'
                     % (domain, protoport))
@@ -2205,6 +2227,8 @@ class PageKite(object):
         else:
           self.auth_domains = {}
           self.auth_domain = arg
+      elif opt == '--authfail_closed':
+        self.authfail_closed = True
       elif opt == '--motd':
         self.motd = arg
         self.LoadMOTD()

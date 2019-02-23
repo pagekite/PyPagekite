@@ -236,6 +236,13 @@ MAN_OPT_FRONTEND = ("""\
             for the app path to be recognized as such, it must contain at
             least one / character.
 
+    --auththreads</b>=<a>N</a> __
+            Start N threads to process auth requests. Default is 1.
+
+    --authfail_closed</b> __
+            If authentication fails, reject tunnel requests. The default is
+            to fail open and allow tunnels if the auth checks are broken.
+
     --motd</b>=<a>/path/to/motd</a> __
             Send the contents of this file to new back-ends as a
             "message of the day".
