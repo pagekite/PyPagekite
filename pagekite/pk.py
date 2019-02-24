@@ -3069,13 +3069,13 @@ class PageKite(object):
     '2600:3c01::f03c:91ff:fe96:257:443': '173.230.155.164:443',
     '69.164.211.158:443': '50.116.52.206:443',
   }
-  def Ping(self, host, port, overload_ms=250):
+  def Ping(self, host, port, overload_ms=250, bias=0):
     cid = uuid = '%s:%s' % (host, port)
 
     if cid in self.servers_never:
-      return (9999, uuid)
+      return (999999, uuid)
     if self.servers_no_ping:
-      return (0, uuid)
+      return (bias, uuid)
 
     while ((cid not in self.ping_cache) or
            (len(self.ping_cache[cid]) < 2) or
@@ -3105,7 +3105,7 @@ class PageKite(object):
 
       except Exception, e:
         logging.LogDebug('Ping %s:%s failed: %s' % (host, port, e))
-        return (100000, uuid)
+        return (999999, uuid)
 
       elapsed = (time.time() - start)
       try:
@@ -3136,7 +3136,7 @@ class PageKite(object):
 
     logging.LogDebug(('Pinged %s:%s: %f [win=%s, uuid=%s]'
                       ) % (host, port, pingval, window, uuid))
-    return (pingval, uuid)
+    return (bias + pingval, uuid)
 
   def GetHostIpAddrs(self, host):
     rv = []
@@ -3201,25 +3201,21 @@ class PageKite(object):
       logging.LogDebug('TunnelManager: adjusted ping interval, PI=%s'
                        % common.PING_INTERVAL)
 
-    # Enable internal loopback
-    if self.isfrontend:
-      need_loopback = False
-      for be in self.backends.values():
-        if be[BE_BHOST]:
-          need_loopback = True
-      if need_loopback:
-        # Note: Add to servers_pref to keep from getting disconnected
-        servers_all['loopback'] = servers_pref['loopback'] = LOOPBACK_FE
-
     # Process the manually requested servers first (--frontend= lines); these
-    # are always added (and preferred, so in DNS) no matter what.
+    # are always added (and likely preferred) as long as they respond at all.
+    # We may still check the wider pool for faster relays, so these are not
+    # guaranteed to be in DNS. To force that, the user should not specify a
+    # --frontends pool at all, and maybe use --new to ignore DNS too.
     def sping(server):
       (host, port) = server.split(':')
       ipaddrs = self.CachedGetHostIpAddrs(host)
       if ipaddrs:
-        ptime, uuid = self.Ping(ipaddrs[0], int(port), overload_ms=0)
+        ptime, uuid = self.Ping(ipaddrs[0], int(port), overload_ms=125, bias=0)
         server = '%s:%s' % (ipaddrs[0], port)
-        servers_all[uuid] = servers_pref[uuid] = server
+        if ptime < 60:
+          servers_all[uuid] = server
+        if ptime < 0.250:
+          servers_pref[uuid] = server
     threads, deadline = [], time.time() + 5
     for server in self.servers_manual:
       threads.append(threading.Thread(target=sping, args=(server,)))
@@ -3244,8 +3240,10 @@ class PageKite(object):
               if not ip.startswith('127.') and ip not in pinged:
                 server = '%s:%s' % (ip, port)
                 pingtime, uuid = pinged[ip] = self.Ping(ip, int(port),
-                                                        overload_ms=50)
-                servers_all[uuid] = server
+                                                        overload_ms=50,
+                                                        bias=0)
+                if pingtime < 60:
+                  servers_all[uuid] = server
           threads, deadline = [], time.time() + 5
           for bid in self.GetActiveBackends():
             threads.append(threading.Thread(target=bping, args=(bid,)))
@@ -3254,22 +3252,34 @@ class PageKite(object):
           for t in threads:
             t.join(max(0.1, deadline - time.time()))
 
-        ips = [i for i in self.CachedGetHostIpAddrs(domain) if i not in pinged]
-        def iping(ip):
-          pinged[ip] = self.Ping(ip, int(port))
-        threads, deadline = [], time.time() + 5
-        for ip in ips:
-          threads.append(threading.Thread(target=iping, args=(ip,)))
-          threads[-1].daemon = True
-          threads[-1].start()
-        for t in threads:
-          t.join(max(0.1, deadline - time.time()))
+        # Optimization: If we already have a long enough list of preferred
+        #               relays, skip the rest of the pings. In practice
+        # this means a combination of --frontend and --frontends arguments
+        # will treat the frontends pool as a fallback if the preferred ones
+        # are unavailable.
+        if len(servers_pref) < count:
+          ips = [i for i in
+                 self.CachedGetHostIpAddrs(domain) if i not in pinged]
+          def iping(ip):
+            # We add 50ms to these pings, to add stability and implement
+            # a preference for the servers that are already in DNS. This
+            # number matches the overload_ms value above, which means if
+            # our server-in-DNS is overloaded, we'll initiate a move
+            # elsewhere if an unbiased ping would recommend we do so.
+            pinged[ip] = self.Ping(ip, int(port), overload_ms=250, bias=0.50)
+          threads, deadline = [], time.time() + 5
+          for ip in ips:
+            threads.append(threading.Thread(target=iping, args=(ip,)))
+            threads[-1].daemon = True
+            threads[-1].start()
+          for t in threads:
+            t.join(max(0.1, deadline - time.time()))
       except Exception, e:
         logging.LogDebug('Unreachable: %s, %s' % (domain, e))
 
       # Evaluate ping results, mark fastest N servers as preferred
       pings = [list(ping) + [ip] for ip, ping in pinged.iteritems()]
-      while count > 0 and pings:
+      while pings and len(servers_pref) < count:
         mIdx = pings.index(min(pings))
         if pings[mIdx][0] > 60:
           # This is worthless data, abort.
@@ -3283,6 +3293,16 @@ class PageKite(object):
           if uuid not in servers_pref:
             servers_pref[uuid] = server
           del pings[mIdx]
+
+    # Enable internal loopback
+    if self.isfrontend:
+      need_loopback = False
+      for be in self.backends.values():
+        if be[BE_BHOST]:
+          need_loopback = True
+      if need_loopback:
+        # Note: Add to servers_pref to keep from getting disconnected
+        servers_all['loopback'] = servers_pref['loopback'] = LOOPBACK_FE
 
     nvr = self.servers_never
     self.servers = [v for v in servers_all.values() if v not in nvr]
