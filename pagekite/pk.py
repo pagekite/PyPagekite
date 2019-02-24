@@ -3272,8 +3272,7 @@ class PageKite(object):
                                            overload_ms=50,
                                            bias=server_bias(server))
                 pinged[ip] = (pingtime, uuid)
-                if pingtime < 60:
-                  servers_all[uuid] = server
+                servers_all[uuid] = server
                 if pingtime < 0.055 and len(servers_pref) < wanted_conns:
                   # If we have a relay in DNS with a nice low ping time, mark
                   # it as preferred and potentially skip pinging the pool.
