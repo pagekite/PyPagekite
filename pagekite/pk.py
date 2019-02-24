@@ -235,6 +235,8 @@ class AuthThread(threading.Thread):
                             '%s:%s' % (what, signToken(payload=what,
                                                        timestamp=now))))
           else:
+            # Note: These 15 seconds are a magic number which should be well
+            #       below the timeout in proto.conns.Tunnel._Connect().
             if ((not self.conns.config.authfail_closed)
                   and len(self.jobs) >= (15 / self.qtime)):
               logging.LogError('Quota lookup skipped, over 15s worth of jobs queued')

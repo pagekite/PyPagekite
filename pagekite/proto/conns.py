@@ -421,7 +421,9 @@ class Tunnel(ChunkParser):
     self.SetFD(sock)
 
     try:
-      self.fd.settimeout(20.0) # Missing in Python 2.2
+      # Note: This value is a magic number which should correlate with
+      #       bounds on auth thread queue length, set in AuthThread._run().
+      self.fd.settimeout(30.0)  # Missing in Python 2.2
     except:
       self.fd.setblocking(1)
 
