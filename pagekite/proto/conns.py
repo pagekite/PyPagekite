@@ -493,6 +493,7 @@ class Tunnel(ChunkParser):
 
     sname = self.server_info[self.S_NAME]
     config.ui.NotifyServer(self, self.server_info)
+    logged = 0
 
     for misc in parse.Header('X-PageKite-Misc'):
       args = parse_qs(misc)
@@ -502,33 +503,28 @@ class Tunnel(ChunkParser):
       logging.Log(logdata)
       if 'motd' in args and args['motd'][0]:
         config.ui.NotifyMOTD(sname, args['motd'][0])
-
-    # Log the server capabilities
-    logging.Log([
-      ('FE', sname),
-      ('ports', ','.join(self.server_info[self.S_PORTS])),
-      ('protocols', ','.join(self.server_info[self.S_PROTOS])),
-      ('raw_ports', ','.join(self.server_info[self.S_RAW_PORTS] or []))])
+      logged += 1
 
     # FIXME: Really, we should keep track of quota dimensions for
     #        each kite.  At the moment that isn't even reported...
     for quota in parse.Header('X-PageKite-Quota'):
       self.quota = [float(quota), None, None]
       self.Log([('FE', sname), ('quota', quota)])
+      logged += 1
 
     for quota in parse.Header('X-PageKite-QConns'):
       self.q_conns = float(quota)
       self.Log([('FE', sname), ('q_conns', quota)])
+      logged += 1
 
     for quota in parse.Header('X-PageKite-QDays'):
       self.q_days = float(quota)
       self.Log([('FE', sname), ('q_days', quota)])
-
-    if self.quota and self.quota[0] is not None:
-      config.ui.NotifyQuota(self.quota[0], self.q_days, self.q_conns)
+      logged += 1
 
     for quota in parse.Header('X-PageKite-IPsPerSec'):
       self.Log([('FE', sname), ('ips_per_sec', quota)])
+      logged += 1
       try:
         config.ui.NotifyIPsPerSec(*[int(i) for i in quota.split('/')])
       except ValueError:
@@ -539,6 +535,7 @@ class Tunnel(ChunkParser):
       # This is future-compatible, in that we can add more fields later.
       details = request.split(';')
       invalid_reasons[details[0]] = details[1]
+      logged += 1
 
     for request in parse.Header('X-PageKite-Invalid'):
       have_kite_info = True
@@ -551,6 +548,7 @@ class Tunnel(ChunkParser):
                 ('domain', domain)])
       config.ui.NotifyKiteRejected(proto, domain, reason, crit=True)
       config.SetBackendStatus(domain, proto, add=BE_STATUS_ERR_TUNNEL)
+      logged += 1
 
     for request in parse.Header('X-PageKite-Duplicate'):
       have_kite_info = True
@@ -561,10 +559,12 @@ class Tunnel(ChunkParser):
                 ('domain', domain)])
       config.ui.NotifyKiteRejected(proto, domain, 'duplicate')
       config.SetBackendStatus(domain, proto, add=BE_STATUS_ERR_TUNNEL)
+      logged += 1
 
     ssl_available = {}
     for request in parse.Header('X-PageKite-SSL-OK'):
       ssl_available[request] = True
+      logged += 1
 
     for request in parse.Header('X-PageKite-OK'):
       have_kite_info = True
@@ -580,6 +580,19 @@ class Tunnel(ChunkParser):
                 ('domain', domain),
                 ('ssl', (request in ssl_available))])
       config.SetBackendStatus(domain, proto, add=status)
+      logged += 1
+
+    if logged:
+      if self.quota and self.quota[0] is not None:
+        config.ui.NotifyQuota(self.quota[0], self.q_days, self.q_conns)
+
+      # Also log the server capabilities
+      logging.Log([
+        ('FE', sname),
+        ('ports', ','.join(self.server_info[self.S_PORTS])),
+        ('protocols', ','.join(self.server_info[self.S_PROTOS])),
+        ('raw_ports', ','.join(self.server_info[self.S_RAW_PORTS] or []))])
+
 
     return have_kite_info and have_kites
 
