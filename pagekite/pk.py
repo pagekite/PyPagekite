@@ -3413,10 +3413,15 @@ class PageKite(object):
     connections = 0
     now = time.time()
 
+    # We re-evaluate our choices more frequently, if we have many
+    # tunnel connections open. This speeds up the process of dropping
+    # old conns, hopefully reducing the load on the relays.
+    fec_interval = max(900, FE_PING_INTERVAL / max(1, len(live_servers)))
+
     if len(self.GetActiveBackends(include_loopback=True)) > 0:
       if (not self.servers) or len(self.servers) > len(live_servers):
         self.ChooseFrontEnds(live_servers)
-      elif self.last_frontend_choice < time.time()-FE_PING_INTERVAL:
+      elif self.last_frontend_choice < (time.time() - fec_interval):
         self.servers = []
         self.ChooseFrontEnds(live_servers, periodic=True)
     else:
