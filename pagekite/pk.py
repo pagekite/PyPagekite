@@ -3477,8 +3477,12 @@ class PageKite(object):
     for server in live_servers:
       if (server not in self.servers and
           server not in self.servers_preferred):
-        if self.DisconnectFrontend(conns, server):
-          connections += 1
+        # Never disconnect after less than 10 minutes.
+        if self.servers_connected.get(server, 0) < (time.time() - 600):
+          if self.DisconnectFrontend(conns, server):
+            if server in self.servers_connected:
+              del self.servers_connected[server]
+            connections += 1
 
     if self.dyndns and ([time.time(), 0] > self.postpone_ddns_updates):
       ddns_fmt, ddns_args = self.dyndns
