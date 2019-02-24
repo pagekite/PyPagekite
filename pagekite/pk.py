@@ -995,6 +995,7 @@ class PageKite(object):
     self.servers_auto = None
     self.servers_new_only = False
     self.servers_no_ping = False
+    self.servers_errored = {}
     self.servers_preferred = []
     self.servers_sessionids = {}
     self.keepalive = None
@@ -3134,8 +3135,8 @@ class PageKite(object):
     pingval = sum([e[1][0] for e in self.ping_cache[cid][:window]])/window
     uuid = self.ping_cache[cid][0][1][1]
 
-    logging.LogDebug(('Pinged %s:%s: %f [win=%s, uuid=%s]'
-                      ) % (host, port, pingval, window, uuid))
+    logging.LogDebug(('Pinged %s:%s: %f [win=%s, bias=%.3f, uuid=%s]'
+                      ) % (host, port, pingval, window, bias, uuid))
     return (bias + pingval, uuid)
 
   def GetHostIpAddrs(self, host):
@@ -3185,8 +3186,16 @@ class PageKite(object):
     self.servers_preferred = []
     self.last_frontend_choice = time.time()
 
+    now = time.time()
     servers_all = {}
     servers_pref = {}
+    pinged = {}
+
+    # This calculates a ping penalty, based on when we last had problems
+    # connecting to this server.
+    def error_penalty(server):
+      seconds_since_error = (now - self.servers_errored.get(server, 0))
+      return max(0, (1800 - seconds_since_error) / 1800)
 
     # Increase our ping interval slightly unless it has been reduced
     # to the minimum: that means our connection is crap and we should
@@ -3210,11 +3219,14 @@ class PageKite(object):
       (host, port) = server.split(':')
       ipaddrs = self.CachedGetHostIpAddrs(host)
       if ipaddrs:
-        ptime, uuid = self.Ping(ipaddrs[0], int(port), overload_ms=125, bias=0)
         server = '%s:%s' % (ipaddrs[0], port)
-        if ptime < 60:
+        pingtime, uuid = self.Ping(ipaddrs[0], int(port),
+                                   overload_ms=125,
+                                   bias=error_penalty(server))
+        pinged[ipaddrs[0]] = (pingtime, uuid)
+        if pingtime < 60:
           servers_all[uuid] = server
-        if ptime < 0.250:
+        if pingtime < 0.250:
           servers_pref[uuid] = server
     threads, deadline = [], time.time() + 5
     for server in self.servers_manual:
@@ -3227,7 +3239,6 @@ class PageKite(object):
     # Lookup and choose from the auto-list (and our old domain).
     if self.servers_auto:
       (count, domain, port) = self.servers_auto
-      pinged = {}
 
       try:
         # First, check for old addresses and always connect to those.
@@ -3239,9 +3250,10 @@ class PageKite(object):
               # FIXME: What about IPv6 localhost?
               if not ip.startswith('127.') and ip not in pinged:
                 server = '%s:%s' % (ip, port)
-                pingtime, uuid = pinged[ip] = self.Ping(ip, int(port),
-                                                        overload_ms=50,
-                                                        bias=0)
+                pingtime, uuid = self.Ping(ip, int(port),
+                                           overload_ms=50,
+                                           bias=error_penalty(server))
+                pinged[ip] = (pingtime, uuid)
                 if pingtime < 60:
                   servers_all[uuid] = server
           threads, deadline = [], time.time() + 5
@@ -3266,7 +3278,10 @@ class PageKite(object):
             # number matches the overload_ms value above, which means if
             # our server-in-DNS is overloaded, we'll initiate a move
             # elsewhere if an unbiased ping would recommend we do so.
-            pinged[ip] = self.Ping(ip, int(port), overload_ms=250, bias=0.50)
+            server = '%s:%s' % (ip, port)
+            pinged[ip] = self.Ping(ip, int(port),
+                                   overload_ms=250,
+                                   bias=0.50 + error_penalty(server))
           threads, deadline = [], time.time() + 5
           for ip in ips:
             threads.append(threading.Thread(target=iping, args=(ip,)))
@@ -3322,9 +3337,14 @@ class PageKite(object):
       logging.Log([('connect', server)])
       return True
     else:
-      logging.LogInfo('Failed to connect', [('FE', server)])
-      self.ui.Notify('Failed to connect to %s' % server,
-                     prefix='!', color=self.ui.YELLOW)
+      if tun is False:
+        logging.LogInfo('Rejected', [('FE', server)])
+        self.ui.Notify('Rejected by %s' % server,
+                       prefix='!', color=self.ui.YELLOW)
+      else:
+        logging.LogInfo('Failed to connect', [('FE', server)])
+        self.ui.Notify('Failed to connect to %s' % server,
+                       prefix='!', color=self.ui.YELLOW)
 
       for line in logging.LOG[-5:]:
         if 'err' in line and 'ssl' in line['err'].lower():
@@ -3350,7 +3370,7 @@ class PageKite(object):
               self.ca_certs = self.pyfile
               socks.setdefaultcertfile(self.ca_certs)
 
-      return False
+      return tun  # False or None
 
   def DisconnectFrontend(self, conns, server):
     logging.Log([('disconnect', server)])
@@ -3389,7 +3409,7 @@ class PageKite(object):
       try:
         state[1] = self.ConnectFrontend(conns, server)
       except (IOError, OSError):
-        state[1] = False
+        state[1] = None
     for server in self.servers:
       if server not in live_servers:
         if server == LOOPBACK_FE:
@@ -3398,22 +3418,25 @@ class PageKite(object):
           if not self.insecure:
             loop.filters.append(HttpSecurityFilter(self.ui))
         elif server not in self.servers_never:
-          state = [None, None]
+          state = [None, None, server]
           state[0] = threading.Thread(target=connect_in_thread,
                                       args=(conns, server, state))
           state[0].daemon = True
           state[0].start()
           threads.append(state)
 
-    for thread, result in threads:
+    for thread, result, server in threads:
       thread.join(max(0.1, deadline - time.time()))
 
-    for thread, result in threads:
-      # This will treat timeouts both as connections AND failures
+    for thread, result, server in threads:
+      # This will treat timeouts/errors both as connections AND failures.
+      # We record the errors, as input into the chooser.
       if result is not False:
         connections += 1
       if result is not True:
         failures += 1
+      if result is None:
+        self.servers_errored[server] = time.time()
 
     for server in live_servers:
       if (server not in self.servers and

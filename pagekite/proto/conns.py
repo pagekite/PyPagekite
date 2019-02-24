@@ -436,12 +436,12 @@ class Tunnel(ChunkParser):
                       activity=False, try_flush=True, allow_blocking=False)
         or not self.Flush(wait=True, allow_blocking=False)):
       self.LogDebug('Failed to send kite request, closing.')
-      return None, None
+      raise IOError('Failed to send kite request, closing.')
 
     data = self._RecvHttpHeaders()
     if not data:
       self.LogDebug('Failed to parse kite response, closing.')
-      return None, None
+      raise IOError('Failed to parse kite response, closing.')
 
     self.fd.setblocking(0)
     parse = HttpLineParser(lines=data.splitlines(),
@@ -628,12 +628,12 @@ class Tunnel(ChunkParser):
       return None
 
     except Exception, e:
-      self.LogError('Server response parsing failed: %s' % e)
+      self.LogError('Connect failed: %s' % e)
       self.Cleanup()
       return None
 
     if abort:
-      return None
+      return False
 
     conns.Add(self)
     self.CountAs('frontends_live')
