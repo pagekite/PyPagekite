@@ -769,15 +769,28 @@ class Tunnel(ChunkParser):
       if self.weighted_rtt < 0:
         self.weighted_rtt = rtt
       else:
-        self.weighted_rtt = (self.weighted_rtt + rtt)/2
+        self.weighted_rtt = int(0.9 * self.weighted_rtt + 0.1 * rtt)
 
-      self.Log([('host', self.server_info[self.S_NAME]),
-                ('rtt', '%d' % rtt),
-                ('wrtt', '%d' % self.weighted_rtt)])
+      sname = self.server_info[self.S_NAME]
+      log_info = [('host', sname),
+                  ('rtt', '%d' % rtt),
+                  ('wrtt', '%d' % self.weighted_rtt)]
 
+      if self.weighted_rtt > 2500:  # Magic number: 2.5 seconds is a long time!
+        if not self.conns.config.isfrontend:
+          # If the weighted RTT is this high, then we've had poor connectivity
+          # for quite some time. Set things in motion to try another relay.
+          self.conns.config.servers_errored[sname] = time.time()
+          self.conns.config.last_frontend_choice = 0
+          # Avoid re-triggering again right away
+          self.weighted_rtt = 0
+          log_info.append(('flagged', 'Flagged relay as broken'))
+
+      self.Log(log_info)
       if common.gYamon:
         common.gYamon.ladd('tunnel_rtt', rtt)
         common.gYamon.ladd('tunnel_wrtt', self.weighted_rtt)
+
     except ValueError:
       pass
 

@@ -3200,17 +3200,17 @@ class PageKite(object):
     # connection to this server.
     wanted_conns = self.servers_auto and self.servers_auto[0] or 1
     def server_bias(server, base=0):
-      if server in live_servers:
-        return lambda p: (p + base)
+      if server not in live_servers:
+        # If we already have >wanted live connections, pretend all the other
+        # servers are very far away. This dampens the sloshing when many
+        # of the front-end relays are in an overloaded state. This also
+        # avoids us connecting to too many relays if both our current relay
+        # and the dynamic DNS updater are overloaded.
+        base += max(0, (len(live_servers) - wanted_conns) * 0.200)
 
-      # If we already have >wanted live connections, pretend all the other
-      # servers are very far away. This dampens the sloshing when many
-      # of the front-end relays are in an overloaded state. This also
-      # avoids us connecting to too many relays if both our current relay
-      # and the dynamic DNS updater are overloaded.
-      base += max(0, (len(live_servers) - wanted_conns) * 0.200)
-
-      # Further avoid servers that had problems
+      # Further avoid servers that had problems. We also check this for
+      # servers that are live, in case we've detected the tunnel is just
+      # really slow.
       seconds_since_error = (now - self.servers_errored.get(server, 0))
       error_penalty = max(0, (1800 - seconds_since_error) / 1800)
       return lambda p: (p + base + error_penalty)
@@ -3446,6 +3446,8 @@ class PageKite(object):
           if now - self.servers_connected.get(server, 0) < 60:
             connections += 1  # Assume this one may still be in flight
           else:
+            if server in self.servers_errored:
+              del self.servers_errored[server]
             state = [None, None, server]
             state[0] = threading.Thread(target=connect_in_thread,
                                         args=(conns, server, state))
