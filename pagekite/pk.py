@@ -164,8 +164,7 @@ class AuthApp(object):
 
 class AuthThread(threading.Thread):
   """Handle authentication work in a separate thread."""
-
-  #daemon = True
+  daemon = True
 
   def __init__(self, conns):
     threading.Thread.__init__(self)
@@ -509,7 +508,6 @@ class Connections(object):
 
 class HttpUiThread(threading.Thread):
   """Handle HTTP UI in a separate thread."""
-
   daemon = True
 
   def __init__(self, pkite, conns,
@@ -560,6 +558,7 @@ class HttpUiThread(threading.Thread):
 
 class UiCommunicator(threading.Thread):
   """Listen for interactive commands."""
+  daemon = True
 
   def __init__(self, config, conns):
     threading.Thread.__init__(self)
@@ -665,7 +664,6 @@ class UiCommunicator(threading.Thread):
 
 class TunnelManager(threading.Thread):
   """Create new tunnels as necessary or kill idle ones."""
-
   daemon = True
 
   def __init__(self, pkite, conns):
