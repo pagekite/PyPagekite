@@ -3262,26 +3262,26 @@ class PageKite(object):
         # First, check for old addresses and always connect to those.
         selected = {}
         if not self.servers_new_only:
-          def bping(bid):
-            (proto, bdom) = bid.split(':')
-            for ip in self.CachedGetHostIpAddrs(bdom):
-              # FIXME: What about IPv6 localhost?
-              if not ip.startswith('127.') and ip not in pinged:
-                server = '%s:%s' % (ip, port)
-                pingtime, uuid = self.Ping(ip, int(port),
-                                           overload_ms=50,
-                                           bias=server_bias(server))
-                pinged[ip] = (pingtime, uuid)
-                servers_all[uuid] = server
-                if pingtime < 0.055 and len(servers_pref) < wanted_conns:
-                  # If we have a relay in DNS with a nice low ping time, mark
-                  # it as preferred and potentially skip pinging the pool.
-                  servers_pref[uuid] = server
+          def bping():
+            for bid in self.GetActiveBackends():
+              (proto, bdom) = bid.split(':')
+              for ip in self.CachedGetHostIpAddrs(bdom):
+                # FIXME: What about IPv6 localhost?
+                if not ip.startswith('127.') and ip not in pinged:
+                  server = '%s:%s' % (ip, port)
+                  pingtime, uuid = self.Ping(ip, int(port),
+                                             overload_ms=50,
+                                             bias=server_bias(server))
+                  pinged[ip] = (pingtime, uuid)
+                  servers_all[uuid] = server
+                  if pingtime < 0.055 and len(servers_pref) < wanted_conns:
+                    # If we have a relay in DNS with a nice low ping time, mark
+                    # it as preferred and potentially skip pinging the pool.
+                    servers_pref[uuid] = server
           threads, deadline = [], time.time() + 5
-          for bid in self.GetActiveBackends():
-            threads.append(threading.Thread(target=bping, args=(bid,)))
-            threads[-1].daemon = True
-            threads[-1].start()
+          threads.append(threading.Thread(target=bping, args=set()))
+          threads[-1].daemon = True
+          threads[-1].start()
           for t in threads:
             t.join(max(0.1, deadline - time.time()))
 
