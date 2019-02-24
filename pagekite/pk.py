@@ -3072,7 +3072,7 @@ class PageKite(object):
     '2600:3c01::f03c:91ff:fe96:257:443': '173.230.155.164:443',
     '69.164.211.158:443': '50.116.52.206:443',
   }
-  def Ping(self, host, port, overload_ms=250, bias=0):
+  def Ping(self, host, port, overload_ms=250, bias=None):
     cid = uuid = '%s:%s' % (host, port)
 
     if cid in self.servers_never:
@@ -3137,9 +3137,10 @@ class PageKite(object):
     pingval = sum([e[1][0] for e in self.ping_cache[cid][:window]])/window
     uuid = self.ping_cache[cid][0][1][1]
 
-    logging.LogDebug(('Pinged %s:%s: %f [win=%s, bias=%.3f, uuid=%s]'
-                      ) % (host, port, pingval, window, bias, uuid))
-    return (bias + pingval, uuid)
+    biased = max(0.01, (bias is None) and pingval or bias(pingval))
+    logging.LogDebug(('Pinged %s:%s: %.3f [win=%s, unbiased=%.3f, uuid=%s]'
+                      ) % (host, port, biased, window, pingval, uuid))
+    return (biased, uuid)
 
   def GetHostIpAddrs(self, host):
     rv = []
@@ -3183,7 +3184,7 @@ class PageKite(object):
         active.append(bid)
     return active
 
-  def ChooseFrontEnds(self, periodic=False):
+  def ChooseFrontEnds(self, live_servers, periodic=False):
     self.servers = []
     self.servers_preferred = []
     self.last_frontend_choice = time.time()
@@ -3194,10 +3195,23 @@ class PageKite(object):
     pinged = {}
 
     # This calculates a ping penalty, based on when we last had problems
-    # connecting to this server.
-    def error_penalty(server):
+    # connecting to this server, and a bonus if we already have a live
+    # connection to this server.
+    def server_bias(server, base=0):
+      if server in live_servers:
+        return lambda p: (p + base)
+
+      # If we already have >1 live connections, pretend all the other
+      # servers are very far away. This dampens the sloshing when many
+      # of the front-end relays are in an overloaded state. This also
+      # avoids us connecting to too many relays if both our current relay
+      # and the dynamic DNS updater are overloaded.
+      base += max(0, (len(live_servers) - 1) * 0.200)
+
+      # Further avoid servers that had problems
       seconds_since_error = (now - self.servers_errored.get(server, 0))
-      return max(0, (1800 - seconds_since_error) / 1800)
+      error_penalty = max(0, (1800 - seconds_since_error) / 1800)
+      return lambda p: (p + base + error_penalty)
 
     # Increase our ping interval slightly unless it has been reduced
     # to the minimum: that means our connection is crap and we should
@@ -3224,7 +3238,7 @@ class PageKite(object):
         server = '%s:%s' % (ipaddrs[0], port)
         pingtime, uuid = self.Ping(ipaddrs[0], int(port),
                                    overload_ms=125,
-                                   bias=error_penalty(server))
+                                   bias=server_bias(server))
         pinged[ipaddrs[0]] = (pingtime, uuid)
         if pingtime < 60:
           servers_all[uuid] = server
@@ -3254,10 +3268,14 @@ class PageKite(object):
                 server = '%s:%s' % (ip, port)
                 pingtime, uuid = self.Ping(ip, int(port),
                                            overload_ms=50,
-                                           bias=error_penalty(server))
+                                           bias=server_bias(server))
                 pinged[ip] = (pingtime, uuid)
                 if pingtime < 60:
                   servers_all[uuid] = server
+                if pingtime < 0.055 and len(servers_pref) < count:
+                  # If we have a relay in DNS with a nice low ping time, mark
+                  # it as preferred and potentially skip pinging the pool.
+                  servers_pref[uuid] = server
           threads, deadline = [], time.time() + 5
           for bid in self.GetActiveBackends():
             threads.append(threading.Thread(target=bping, args=(bid,)))
@@ -3283,12 +3301,13 @@ class PageKite(object):
             server = '%s:%s' % (ip, port)
             pinged[ip] = self.Ping(ip, int(port),
                                    overload_ms=250,
-                                   bias=0.50 + error_penalty(server))
+                                   bias=server_bias(server, base=0.05))
           threads, deadline = [], time.time() + 5
           for ip in ips:
-            threads.append(threading.Thread(target=iping, args=(ip,)))
-            threads[-1].daemon = True
-            threads[-1].start()
+            if ip not in pinged:
+              threads.append(threading.Thread(target=iping, args=(ip,)))
+              threads[-1].daemon = True
+              threads[-1].start()
           for t in threads:
             t.join(max(0.1, deadline - time.time()))
       except Exception, e:
@@ -3394,10 +3413,10 @@ class PageKite(object):
 
     if len(self.GetActiveBackends(include_loopback=True)) > 0:
       if (not self.servers) or len(self.servers) > len(live_servers):
-        self.ChooseFrontEnds()
+        self.ChooseFrontEnds(live_servers)
       elif self.last_frontend_choice < time.time()-FE_PING_INTERVAL:
         self.servers = []
-        self.ChooseFrontEnds(periodic=True)
+        self.ChooseFrontEnds(live_servers, periodic=True)
     else:
       self.servers_preferred = []
       self.servers = []
