@@ -997,6 +997,7 @@ class PageKite(object):
     self.servers_auto = None
     self.servers_new_only = False
     self.servers_no_ping = False
+    self.servers_connected = {}
     self.servers_errored = {}
     self.servers_preferred = []
     self.servers_sessionids = {}
@@ -3197,16 +3198,17 @@ class PageKite(object):
     # This calculates a ping penalty, based on when we last had problems
     # connecting to this server, and a bonus if we already have a live
     # connection to this server.
+    wanted_conns = self.servers_auto and self.servers_auto[0] or 1
     def server_bias(server, base=0):
       if server in live_servers:
         return lambda p: (p + base)
 
-      # If we already have >1 live connections, pretend all the other
+      # If we already have >wanted live connections, pretend all the other
       # servers are very far away. This dampens the sloshing when many
       # of the front-end relays are in an overloaded state. This also
       # avoids us connecting to too many relays if both our current relay
       # and the dynamic DNS updater are overloaded.
-      base += max(0, (len(live_servers) - 1) * 0.200)
+      base += max(0, (len(live_servers) - wanted_conns) * 0.200)
 
       # Further avoid servers that had problems
       seconds_since_error = (now - self.servers_errored.get(server, 0))
@@ -3254,7 +3256,7 @@ class PageKite(object):
 
     # Lookup and choose from the auto-list (and our old domain).
     if self.servers_auto:
-      (count, domain, port) = self.servers_auto
+      (wanted_conns, domain, port) = self.servers_auto
 
       try:
         # First, check for old addresses and always connect to those.
@@ -3272,7 +3274,7 @@ class PageKite(object):
                 pinged[ip] = (pingtime, uuid)
                 if pingtime < 60:
                   servers_all[uuid] = server
-                if pingtime < 0.055 and len(servers_pref) < count:
+                if pingtime < 0.055 and len(servers_pref) < wanted_conns:
                   # If we have a relay in DNS with a nice low ping time, mark
                   # it as preferred and potentially skip pinging the pool.
                   servers_pref[uuid] = server
@@ -3289,7 +3291,7 @@ class PageKite(object):
         # this means a combination of --frontend and --frontends arguments
         # will treat the frontends pool as a fallback if the preferred ones
         # are unavailable.
-        if len(servers_pref) < count:
+        if len(servers_pref) < wanted_conns:
           ips = [i for i in
                  self.CachedGetHostIpAddrs(domain) if i not in pinged]
           def iping(ip):
@@ -3315,13 +3317,13 @@ class PageKite(object):
 
       # Evaluate ping results, mark fastest N servers as preferred
       pings = [list(ping) + [ip] for ip, ping in pinged.iteritems()]
-      while pings and len(servers_pref) < count:
+      while pings and len(servers_pref) < wanted_conns:
         mIdx = pings.index(min(pings))
         if pings[mIdx][0] > 60:
           # This is worthless data, abort.
           break
         else:
-          count -= 1
+          wanted_conns -= 1
           ptime, uuid, ip = pings[mIdx]
           server = '%s:%s' % (ip, port)
           if uuid not in servers_all:
@@ -3410,6 +3412,7 @@ class PageKite(object):
     live_servers = conns.TunnelServers()
     failures = 0
     connections = 0
+    now = time.time()
 
     if len(self.GetActiveBackends(include_loopback=True)) > 0:
       if (not self.servers) or len(self.servers) > len(live_servers):
@@ -3428,6 +3431,7 @@ class PageKite(object):
     threads, deadline = [], time.time() + 120
     def connect_in_thread(conns, server, state):
       try:
+        self.servers_connected[server] = time.time()
         state[1] = self.ConnectFrontend(conns, server)
       except (IOError, OSError):
         state[1] = None
@@ -3439,12 +3443,15 @@ class PageKite(object):
           if not self.insecure:
             loop.filters.append(HttpSecurityFilter(self.ui))
         elif server not in self.servers_never:
-          state = [None, None, server]
-          state[0] = threading.Thread(target=connect_in_thread,
-                                      args=(conns, server, state))
-          state[0].daemon = True
-          state[0].start()
-          threads.append(state)
+          if now - self.servers_connected.get(server, 0) < 60:
+            connections += 1  # Assume this one may still be in flight
+          else:
+            state = [None, None, server]
+            state[0] = threading.Thread(target=connect_in_thread,
+                                        args=(conns, server, state))
+            state[0].daemon = True
+            state[0].start()
+            threads.append(state)
 
     for thread, result, server in threads:
       thread.join(max(0.1, deadline - time.time()))
@@ -3457,6 +3464,8 @@ class PageKite(object):
       if result is not True:
         failures += 1
       if result is None:
+        if server in self.servers_connected:
+          del self.servers_connected[server]
         self.servers_errored[server] = time.time()
 
     for server in live_servers:
