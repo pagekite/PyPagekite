@@ -854,7 +854,9 @@ class TunnelManager(threading.Thread):
         self.check_interval = min(60, self.check_interval + incr)
         time.sleep(1)
       else:
-        self.check_interval = 5
+        # No servers probably means we don't have a working Internet
+        # connection, so try not to be too frantic.
+        self.check_interval = self.pkite.servers and 5 or 30
 
       # Make sure tunnels are really alive.
       if self.pkite.isfrontend:
@@ -866,10 +868,10 @@ class TunnelManager(threading.Thread):
       self.ListBackEnds()
       self.UpdateUiStatus(problem, connecting)
 
-      for i in xrange(0, self.check_interval):
+      for i in xrange(0, (self.check_interval / 5)):
         if self.keep_running:
-          time.sleep(1)
-          if i > self.check_interval:
+          time.sleep(self.check_interval / 5)
+          if i > (self.check_interval / 5):
             break
           if self.pkite.isfrontend:
             self.conns.CheckIdleConns(time.time())
