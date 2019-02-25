@@ -448,8 +448,8 @@ MAN_CREDITS = ("""\
     <pre>- Bjarni R. Einarsson <http://bre.klaki.net/>
     - The Beanstalks Project ehf. <https://pagekite.net/company/>
     - The Rannis Technology Development Fund <http://www.rannis.is/>
-    - Joar Wandborg <http://wandborg.se/></pre>
-    - Luc-Pierre Terral
+    - Joar Wandborg <http://wandborg.se/>
+    - Luc-Pierre Terral</pre>
 """)
 
 MANUAL_TOC = (
