@@ -1,19 +1,20 @@
 Version history - highlights
 ============================
 
-v1.0.0.1902??  2019.??
+v1.0.0.190225  2019.02.25
 -------------
    - Call this 1.0, change versioning schemes. We're pretty stable!
-   - Fix IP address leak in BE offline page, fix &-encoding in URL
-   - Made relay capability description and quota report less confusing
-   - Add --ratelimit_ips= , for eliminating phishing once and for all
+   - UI: Made relay capability description and quota report less confusing
+   - BE: Many refinements to the front-end relay selection algorithm
+   - BE: Implement exponential fallback for DDNS update failures
+   - BE: Fix IP address leak in BE offline page, fix &-encoding in URL
+   - FE: Add --ratelimit_ips= , for eliminating phishing once and for all
+   - FE: Augmented --authdomain= so it supports external authentication apps
+   - FE: Added --authfail_closed, to avoid failing open if tunnel auth is broken
+   - FE: Implement --overload= and friends.
+   - Debian: Make it easy to use alternate Python for daemon (see init script)
    - HTTPD: Add support for file uploads, new flags: +uploads and +ul_filenames
    - HTTPD: Implement a PhotoBackup server, new flags: +photobackup
-   - Augmented --authdomain= so it supports external authentication apps
-   - Added --authfail_closed, to avoid failing open if tunnel auth is broken
-   - Debian: Make it easy to use alternate Python for daemon (see init script)
-   - Implement exponential fallback for DDNS update failures
-   - Implement --overload= and friends.
 
 
 v0.5.9.3    2018.01.24
