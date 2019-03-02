@@ -13,7 +13,9 @@ except:
 
 setup(
     name="pagekite",
-    version=APPVER.replace('github', 'dev%d' % (120*int(time.time()/120))),
+    version=os.getenv(
+        'PAGEKITE_VERSION',
+        APPVER.replace('github', 'dev%d' % (120*int(time.time()/120)))),
     license="AGPLv3+",
     author="Bjarni R. Einarsson",
     author_email="bre@pagekite.net",
