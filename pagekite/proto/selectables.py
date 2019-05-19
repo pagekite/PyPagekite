@@ -809,7 +809,7 @@ class ChunkParser(Selectable):
     self.compressed = False
     self.header = ''
     self.chunk = ''
-    self.zr = zlib.decompressobj()
+    self.zr = None
 
   def __html__(self):
     return Selectable.__html__(self)
@@ -871,6 +871,8 @@ class ChunkParser(Selectable):
       if self.want_bytes == 0:
         if self.compressed:
           try:
+            if not self.zr:
+              self.zr = zlib.decompressobj()
             cchunk = self.zr.decompress(self.chunk)
           except zlib.error:
             cchunk = ''
