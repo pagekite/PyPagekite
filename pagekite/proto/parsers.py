@@ -126,7 +126,7 @@ class HttpLineParser(BaseLineParser):
     BaseLineParser.__init__(self, lines, state, self.PROTO)
 
   def ParseResponse(self, line):
-    self.version, self.code, self.message = line.split()
+    self.version, self.code, self.message = line.split(' ', 2)
 
     if not self.version.upper() in HTTP_VERSIONS:
       logging.LogDebug('Invalid version: %s' % self.version)

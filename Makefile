@@ -7,6 +7,7 @@ BREED_PAGEKITE = pagekite/__init__.py \
 	         pagekite/logging.py \
 	         pagekite/manual.py \
 	         pagekite/proto/__init__.py \
+	         pagekite/proto/ws_abnf.py \
 	         pagekite/proto/proto.py \
 	         pagekite/proto/parsers.py \
 	         pagekite/proto/selectables.py \

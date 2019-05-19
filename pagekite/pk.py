@@ -84,7 +84,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'tunnel_acl=', 'client_acl=', 'accept_acl_file=',
             'frontend=', 'nofrontend=', 'frontends=', 'keepalive=',
             'torify=', 'socksify=', 'proxy=', 'noproxy',
-            'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
+            'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib', 'wschunks',
             'buffers=', 'noprobes', 'debugio', 'watch=',
             'overload=', 'overload_cpu=', 'overload_mem=', 'overload_file=',
             # DEPRECATED:
@@ -978,6 +978,7 @@ class PageKite(object):
     self.ratelimit_ips = {}
     self.be_config = {}
     self.disable_zchunks = False
+    self.websocket_chunks = False
     self.enable_sslzlib = False
     self.buffer_max = DEFAULT_BUFFER_MAX
     self.error_url = None
@@ -2365,6 +2366,7 @@ class PageKite(object):
       elif opt == '--nodaemonize': self.daemonize = False
       elif opt == '--noall': self.require_all = False
       elif opt == '--nozchunks': self.disable_zchunks = True
+      elif opt == '--wschunks': self.websocket_chunks = True
       elif opt == '--nullui': self.ui = NullUi()
       elif opt == '--remoteui':
         import pagekite.ui.remote

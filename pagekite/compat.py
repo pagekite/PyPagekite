@@ -77,16 +77,20 @@ try:
 except ImportError, e:
   from cgi import parse_qs
   from urlparse import urlparse
+
+import base64
 try:
   import hashlib
   def sha1hex(data):
-    hl = hashlib.sha1()
-    hl.update(data)
-    return hl.hexdigest().lower()
+    return hashlib.sha1(data).hexdigest().lower()
+  def sha1b64(data):
+    return base64.b64encode(hashlib.sha1(data).digest())
 except ImportError:
   import sha
   def sha1hex(data):
     return sha.new(data).hexdigest().lower()
+  def sha1b64(data):
+    return base64.b64encode(sha.new(data).digest())
 
 common.MAGIC_UUID = sha1hex(common.MAGIC_UUID)
 

@@ -48,10 +48,14 @@ class Tunnel(ChunkParser):
   S_ADD_KITES = 4
   S_IS_MOBILE = 5
   S_VERSION = 6
+  S_WEBSOCKET = 7
 
   def __init__(self, conns):
     ChunkParser.__init__(self, ui=conns.config.ui)
-    self.server_info = ['x.x.x.x:x', [], [], [], False, False, None]
+    if conns.config.websocket_chunks:
+      self.PrepareWebsockets()
+
+    self.server_info = ['x.x.x.x:x', [], [], [], False, False, None, False]
     self.Init(conns)
     # We want to be sure to read the entire chunk at once, including
     # headers to save cycles, so we double the size we're willing to
@@ -164,34 +168,41 @@ class Tunnel(ChunkParser):
     # All else is allowed
     return False
 
+  def ProcessPageKiteHeaders(self, parser):
+    for prefix in ('X-Beanstalk', 'X-PageKite'):
+      for feature in parser.Header(prefix+'-Features'):
+        if feature == 'ZChunks':
+          if not self.conns.config.disable_zchunks:
+            self.EnableZChunks(level=1)
+        elif feature == 'AddKites':
+          self.server_info[self.S_ADD_KITES] = True
+        elif feature == 'Mobile':
+          self.server_info[self.S_IS_MOBILE] = True
+
+      # Track which versions we see in the wild.
+      version = 'old'
+      for v in parser.Header(prefix+'-Version'):
+        version = v
+      if common.gYamon:
+        common.gYamon.vadd('version-%s' % version, 1, wrap=10000000)
+      self.server_info[self.S_VERSION] = version
+
+      for replace in parser.Header(prefix+'-Replace'):
+        if replace in self.conns.conns_by_id:
+          repl = self.conns.conns_by_id[replace]
+          self.LogInfo('Disconnecting old tunnel: %s' % repl)
+          repl.Die(discard_buffer=True)
+
   def _FrontEnd(conn, body, conns):
     """This is what the front-end does when a back-end requests a new tunnel."""
     self = Tunnel(conns)
     try:
-      for prefix in ('X-Beanstalk', 'X-PageKite'):
-        for feature in conn.parser.Header(prefix+'-Features'):
-          if feature == 'ZChunks':
-            if not conns.config.disable_zchunks:
-              self.EnableZChunks(level=1)
-          elif feature == 'AddKites':
-            self.server_info[self.S_ADD_KITES] = True
-          elif feature == 'Mobile':
-            self.server_info[self.S_IS_MOBILE] = True
+      if 'websocket' in conn.parser.Header('Upgrade'):
+        self.server_info[self.S_ADD_KITES] = True
+        self.server_info[self.S_WEBSOCKET] = (
+          ''.join(conn.parser.Header('Sec-WebSocket-Key')) or True)
 
-        # Track which versions we see in the wild.
-        version = 'old'
-        for v in conn.parser.Header(prefix+'-Version'):
-          version = v
-        if common.gYamon:
-          common.gYamon.vadd('version-%s' % version, 1, wrap=10000000)
-        self.server_info[self.S_VERSION] = version
-
-        for replace in conn.parser.Header(prefix+'-Replace'):
-          if replace in self.conns.conns_by_id:
-            repl = self.conns.conns_by_id[replace]
-            self.LogInfo('Disconnecting old tunnel: %s' % repl)
-            repl.Die(discard_buffer=True)
-
+      self.ProcessPageKiteHeaders(conn.parser)
       requests = self.GetKiteRequests(conn.parser)
 
     except Exception, err:
@@ -216,6 +227,9 @@ class Tunnel(ChunkParser):
     if requests:
       conns.auth().check(requests[:], conn,
                          lambda r, l: self.AuthCallback(conn, r, l))
+    elif self.server_info[self.S_WEBSOCKET]:
+      self.AuthCallback(conn, [], [])
+
     return self
 
   def RecheckQuota(self, conns, when=None):
@@ -258,6 +272,8 @@ class Tunnel(ChunkParser):
       logi.append(('mobile', 'True'))
     if self.server_info[self.S_ADD_KITES]:
       logi.append(('add_kites', 'True'))
+    if self.server_info[self.S_WEBSOCKET]:
+      logi.append(('websocket', 'True'))
     if self.server_info[self.S_VERSION]:
       logi.append(('version', self.server_info[self.S_VERSION]))
 
@@ -329,29 +345,36 @@ class Tunnel(ChunkParser):
     if log_info:
       logging.Log(log_info)
 
-    output = [HTTP_ResponseHeader(200, 'OK'),
-              HTTP_Header('Transfer-Encoding', 'chunked'),
+    if self.server_info[self.S_WEBSOCKET]:
+      output = [HTTP_WebsocketResponse(self.server_info[self.S_WEBSOCKET])]
+      extras = []
+    else:
+      output = [HTTP_ResponseHeader(200, 'OK'),
+                HTTP_Header('Transfer-Encoding', 'chunked')]
+      extras = output
+      if not self.conns.config.disable_zchunks:
+        output.append(HTTP_Header('X-PageKite-Features', 'ZChunks'))
+
+    extras.extend([
+              HTTP_Header('X-PageKite-Features', 'WebSockets'),
               HTTP_Header('X-PageKite-Features', 'AddKites'),
               HTTP_Header('X-PageKite-Protos', ', '.join(['%s' % p
                             for p in self.conns.config.server_protos])),
               HTTP_Header('X-PageKite-Ports', ', '.join(
                             ['%s' % self.conns.config.server_portalias.get(p, p)
-                             for p in self.conns.config.server_ports]))]
-
-    if not self.conns.config.disable_zchunks:
-      output.append(HTTP_Header('X-PageKite-Features', 'ZChunks'))
+                             for p in self.conns.config.server_ports]))])
 
     if self.conns.config.server_raw_ports:
-      output.append(
+      extras.append(
         HTTP_Header('X-PageKite-Raw-Ports',
                     ', '.join(['%s' % p for p
                                in self.conns.config.server_raw_ports])))
 
     for r in results:
-      output.append('%s: %s\r\n' % r)
+      extras.append('%s: %s\r\n' % r)
 
     output.append(HTTP_StartBody())
-    if not self.Send(output, activity=False, just_buffer=True):
+    if not self.Send(output, activity=False):
       conn.LogDebug('No tunnels configured, closing connection (send failed).')
       self.Die(discard_buffer=True)
       return self
@@ -360,7 +383,11 @@ class Tunnel(ChunkParser):
       self.quota = conn.quota
       self.Log([('BE-Quota', self.quota[0])])
 
-    if self.ProcessAuthResults(results):
+    if self.server_info[self.S_WEBSOCKET]:
+      self.EnableWebsockets()
+      self.SendChunked('NOOP: 1\r\n%s\r\n!' % ''.join(extras))
+      self.conns.Add(self)
+    elif self.ProcessAuthResults(results):
       self.conns.Add(self)
     else:
       self.Die()
@@ -434,7 +461,8 @@ class Tunnel(ChunkParser):
                                          conns.config.backends,
                                        tokens,
                                      nozchunks=conns.config.disable_zchunks,
-                                    replace=replace_sessionid),
+                                    replace=replace_sessionid,
+                                   websocket_key=self.websocket_key),
                       activity=False, try_flush=True, allow_blocking=False)
         or not self.Flush(wait=True, allow_blocking=False)):
       self.LogDebug('Failed to send kite request, closing.')
@@ -454,10 +482,11 @@ class Tunnel(ChunkParser):
   def CheckForTokens(self, parse):
     tcount = 0
     tokens = {}
-    for request in parse.Header('X-PageKite-SignThis'):
-      proto, domain, srand, token = request.split(':')
-      tokens['%s:%s' % (proto, domain)] = token
-      tcount += 1
+    if parse:
+      for request in parse.Header('X-PageKite-SignThis'):
+        proto, domain, srand, token = request.split(':')
+        tokens['%s:%s' % (proto, domain)] = token
+        tcount += 1
     return tcount, tokens
 
   def ParsePageKiteCapabilities(self, parse):
@@ -617,6 +646,11 @@ class Tunnel(ChunkParser):
         for sessionid in parse.Header('X-PageKite-SessionID'):
           conns.SetAltId(self, sessionid)
           conns.config.servers_sessionids[server] = sessionid
+
+        for upgrade in parse.Header('Upgrade'):
+          if upgrade.lower() == 'websocket':
+            self.EnableWebsockets()
+            abort = data = parse = False
 
         tryagain, tokens = self.CheckForTokens(parse)
         if tryagain:
@@ -1014,25 +1048,28 @@ class Tunnel(ChunkParser):
   def ProcessKiteUpdates(self, parse):
     # Look for requests for new tunnels
     if self.conns.config.isfrontend:
+      self.ProcessPageKiteHeaders(parse)
       requests = self.GetKiteRequests(parse)
       if requests:
         self.conns.auth().check(requests[:], self,
                                 lambda r, l: self.ChunkAuthCallback(r, l))
+    else:
+      self.ParsePageKiteCapabilities(parse)
 
-    # Look for responses to requests for new tunnels
-    tryagain, tokens = self.CheckForTokens(parse)
-    if tryagain:
-      server = self.server_info[self.S_NAME]
-      backends = { }
-      for bid in tokens:
-        backends[bid] = self.conns.config.backends[bid]
-      request = '\r\n'.join(PageKiteRequestHeaders(server, backends, tokens))
-      self.SendChunked('NOOP: 1\r\n%s\r\n\r\n!' % request,
-                       compress=False, just_buffer=True)
+      # Look for responses to requests for new tunnels
+      tryagain, tokens = self.CheckForTokens(parse)
+      if tryagain:
+        server = self.server_info[self.S_NAME]
+        backends = { }
+        for bid in tokens:
+          backends[bid] = self.conns.config.backends[bid]
+        request = ''.join(PageKiteRequestHeaders(server, backends, tokens))
+        self.SendChunked('NOOP: 1\r\n%s\r\n\r\n!' % request,
+                         compress=False, just_buffer=True)
 
-    kites = self.HandlePageKiteResponse(parse)
-    if (kites is not None) and (kites < 1):
-      self.Die()
+      kites = self.HandlePageKiteResponse(parse)
+      if (kites is not None) and (kites < 1):
+        self.Die()
 
   def ProcessChunk(self, data):
     # First, we process the chunk headers.
@@ -1683,9 +1720,10 @@ class UnknownConn(MagicProtocolParser):
         except ValueError:
           pass
 
-    if (not done and self.parser.method == 'POST'
-                 and self.parser.path in MAGIC_PATHS):
-      # FIXME: DEPRECATE: Make this go away!
+    if (not done and self.parser.method == 'GET'
+                 and self.parser.path in MAGIC_PATHS
+                 and 'v1.pagekite.org' in self.parser.Header('Sec-WebSocket-Protocol')
+                 and 'websocket' in self.parser.Header('Upgrade')):
       if not self.conns.config.CheckTunnelAcls(self.address, conn=self):
         self.Send(HTTP_ConnectBad(code=403, status='Forbidden'),
                   try_flush=True)

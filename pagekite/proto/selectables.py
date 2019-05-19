@@ -21,6 +21,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
 import errno
+import os
 import re
 import struct
 import threading
@@ -30,6 +31,7 @@ import zlib
 from pagekite.compat import *
 from pagekite.common import *
 from pagekite.proto.proto import HTTP_Unavailable
+from pagekite.proto.ws_abnf import ABNF
 import pagekite.logging as logging
 import pagekite.compat as compat
 import pagekite.common as common
@@ -128,6 +130,10 @@ class Selectable(object):
     self.zlevel = 1
     self.zreset = False
 
+    # This is the default, until we switch to Websockets...
+    self.use_websocket = False
+    self.ws_zero_mask = False
+
     # Logging
     self.alt_id = None
     self.countas = 'selectables_live'
@@ -211,13 +217,21 @@ class Selectable(object):
                      self.dead and 'dead' or 'alive')
 
   def ResetZChunks(self):
-    if self.zw:
-      self.zreset = True
-      self.zw = zlib.compressobj(self.zlevel)
+    with self.lock:
+      if self.zw:
+        self.zreset = True
+        self.zw = zlib.compressobj(self.zlevel)
 
   def EnableZChunks(self, level=1):
-    self.zlevel = level
-    self.zw = zlib.compressobj(level)
+    with self.lock:
+      self.zlevel = level
+      self.zw = zlib.compressobj(level)
+
+  def EnableWebsockets(self):
+    with self.lock:
+      self.use_websocket = True
+      self.ws_zero_mask = (
+        hasattr(self.fd, 'get_cipher_name') or hasattr(self.fd, 'getpeercert'))
 
   def SetFD(self, fd, six=False):
     if self.fd:
@@ -528,6 +542,13 @@ class Selectable(object):
     return True
 
   def SendChunked(self, data, compress=True, zhistory=None, just_buffer=False):
+    if self.use_websocket:
+      with self.lock:
+        return self.Send(
+          [ABNF.create_frame(
+            ''.join(data), ABNF.OPCODE_BINARY, 1, self.ws_zero_mask).format()],
+          activity=False, try_flush=(not just_buffer), just_buffer=just_buffer)
+
     rst = ''
     if self.zreset:
       self.zreset = False
@@ -535,10 +556,8 @@ class Selectable(object):
 
     # Stop compressing streams that just get bigger.
     if zhistory and (zhistory[0] < zhistory[1]): compress = False
-    try:
+    with self.lock:
       try:
-        if self.lock:
-          self.lock.acquire()
         sdata = ''.join(data)
         if self.zw and compress and len(sdata) > 64:
           try:
@@ -559,9 +578,6 @@ class Selectable(object):
       except UnicodeDecodeError:
         logging.LogError('UnicodeDecodeError in SendChunked, wtf?')
         return False
-    finally:
-      if self.lock:
-        self.lock.release()
 
   def Flush(self, loops=50, wait=False, allow_blocking=False):
     while (loops != 0 and
@@ -810,6 +826,13 @@ class ChunkParser(Selectable):
     self.header = ''
     self.chunk = ''
     self.zr = None
+    self.websocket_key = None
+
+  def ProcessData(self, *args, **kwargs):
+    if self.use_websocket:
+      return self.ProcessWebsocketData(*args, **kwargs)
+    else:
+      return self.ProcessPageKiteData(*args, **kwargs)
 
   def __html__(self):
     return Selectable.__html__(self)
@@ -818,8 +841,50 @@ class ChunkParser(Selectable):
     Selectable.Cleanup(self, close=close)
     self.zr = self.chunk = self.header = None
 
-  def ProcessData(self, data):
-    loops = 1500
+  def PrepareWebsockets(self):
+    self.websocket_key = os.urandom(16)
+
+  def ProcessWebsocketData(self, data):
+    loops = 150
+    happy = more = True
+    while happy and more and (loops > 0):
+      loops -= 1
+
+      if self.peeking:
+        self.header = ''
+        self.chunk = ''
+
+      self.header += (data or '')
+      try:
+        ws_frame, data = ABNF.parse(self.header)
+        more = data and (len(data) > 0)
+      except ValueError, err:
+        self.LogError('ChunkParser::ProcessData: %s' % err)
+        self.Log([('bad_data', data)])
+        return False
+
+      if ws_frame and ws_frame.length == len(ws_frame.data):
+        # We have a complete frame, process it!
+        self.header = ''
+        happy = self.ProcessChunk(ws_frame.data) if ws_frame.data else True
+      else:
+        if self.read_eof:
+          return self.ProcessEofRead()
+        # Frame is incomplete, but there were no errors: we're done for now.
+        return True
+
+    if happy and more:
+      self.LogError('Unprocessed data: %s' % data)
+      raise BugFoundError('Too much data')
+    elif self.read_eof:
+      return self.ProcessEofRead() and happy
+    else:
+      return happy
+
+    return False  # Not reached
+
+  def ProcessPageKiteData(self, data):
+    loops = 150
     result = more = True
     while result and more and (loops > 0):
       loops -= 1

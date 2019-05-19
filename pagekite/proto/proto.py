@@ -94,8 +94,10 @@ def checkSignature(sign='', secret='', payload=''):
     valid = signToken(token=sign, secret=secret, payload=payload)
     return sign == valid
 
-def PageKiteRequestHeaders(server, backends, tokens=None, testtoken=None):
-  req = []
+def PageKiteRequestHeaders(server, backends, tokens=None, testtoken=None, replace=None):
+  req = ['X-PageKite-Version: %s\r\n' % APPVER]
+  if replace:
+    req.append('X-PageKite-Replace: %s\r\n' % replace)
   tokens = tokens or {}
   for d in backends.keys():
     if (backends[d][BE_BHOST] and
@@ -121,22 +123,38 @@ def PageKiteRequestHeaders(server, backends, tokens=None, testtoken=None):
   return req
 
 def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
-                         tls=False, testtoken=None, replace=None):
-  req = ['CONNECT PageKite:1 HTTP/1.0\r\n',
-         'X-PageKite-Features: AddKites\r\n',
-         'X-PageKite-Version: %s\r\n' % APPVER]
+                         tls=False, testtoken=None, replace=None,
+                         websocket_key=None):
+  if websocket_key is not None:
+    key = base64.b64encode(websocket_key).strip()
+    req = ['GET %s HTTP/1.1\r\n' % MAGIC_PATH,
+           'Upgrade: websocket\r\n',
+           'Connection: Upgrade\r\n',
+           'Sec-WebSocket-Key: %s\r\n' % key,
+           'Sec-WebSocket-Protocol: v1.pagekite.org\r\n',
+           'Sec-WebSocket-Version: 13\r\n']
+  else:
+    req = ['CONNECT PageKite:1 HTTP/1.0\r\n',
+           'X-PageKite-Features: AddKites\r\n',
+           'X-PageKite-Version: %s\r\n' % APPVER]
+    if not nozchunks:
+      req.append('X-PageKite-Features: ZChunks\r\n')
 
-  if not nozchunks:
-    req.append('X-PageKite-Features: ZChunks\r\n')
-  if replace:
-    req.append('X-PageKite-Replace: %s\r\n' % replace)
   if tls:
     req.append('X-PageKite-Features: TLS\r\n')
 
-  req.extend(PageKiteRequestHeaders(server, backends,
-                                    tokens=tokens, testtoken=testtoken))
+  req.extend(
+    PageKiteRequestHeaders(server, backends,
+                           tokens=tokens, testtoken=testtoken,replace=replace))
   req.append('\r\n')
   return ''.join(req)
+
+def HTTP_WebsocketResponse(ws_key):
+  signed_key = sha1b64(ws_key.strip() + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
+  return ('HTTP/1.1 101 Switching Protocols\r\n'
+          'Upgrade: websocket\r\nConnection: upgrade\r\n'
+          'Sec-WebSocket-Accept: %s\r\nSec-WebSocket-Protocol: v1.pagekite.org\r\n'
+    % signed_key)
 
 def HTTP_ResponseHeader(code, title, mimetype='text/html', first_headers=None):
   if mimetype.startswith('text/') and ';' not in mimetype:
