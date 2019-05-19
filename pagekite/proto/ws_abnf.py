@@ -22,11 +22,7 @@ Copyright (C) 2010 Hiroki Ohtani(liris)
 import array
 import os
 import struct
-
 import six
-
-from ._exceptions import *
-from ._utils import validate_utf8
 from threading import Lock
 
 try:
@@ -71,6 +67,8 @@ __all__ = [
     'STATUS_UNEXPECTED_CONDITION',
     'STATUS_BAD_GATEWAY',
     'STATUS_TLS_HANDSHAKE_ERROR',
+    'WebSocketException',
+    'WebSocketProtocolException'
 ]
 
 # closing frame status codes.
@@ -100,6 +98,14 @@ VALID_CLOSE_STATUS = (
     STATUS_UNEXPECTED_CONDITION,
     STATUS_BAD_GATEWAY,
 )
+
+
+class WebSocketException(IOError):
+    pass
+
+
+class WebSocketProtocolException(WebSocketException):
+    pass
 
 
 class ABNF(object):
@@ -153,10 +159,9 @@ class ABNF(object):
         self.data = data
         self.get_mask_key = os.urandom
 
-    def validate(self, skip_utf8_validation=False):
+    def validate(self):
         """
         validate the ABNF frame.
-        skip_utf8_validation: skip utf8 validation.
         """
         if self.rsv1 or self.rsv2 or self.rsv3:
             raise WebSocketProtocolException("rsv is not implemented, yet")
@@ -172,8 +177,6 @@ class ABNF(object):
             if not l:
                 return
             if l == 1 or l >= 126:
-                raise WebSocketProtocolException("Invalid close frame.")
-            if l > 2 and not skip_utf8_validation and not validate_utf8(self.data[2:]):
                 raise WebSocketProtocolException("Invalid close frame.")
 
             code = 256 * \
@@ -288,9 +291,8 @@ class frame_buffer(object):
     _HEADER_MASK_INDEX = 5
     _HEADER_LENGTH_INDEX = 6
 
-    def __init__(self, recv_fn, skip_utf8_validation):
+    def __init__(self, recv_fn):
         self.recv = recv_fn
-        self.skip_utf8_validation = skip_utf8_validation
         # Buffers over the packets from the layer beneath until desired amount
         # bytes of bytes are received.
         self.recv_buffer = []
@@ -380,7 +382,7 @@ class frame_buffer(object):
             self.clear()
 
             frame = ABNF(fin, rsv1, rsv2, rsv3, opcode, has_mask, payload)
-            frame.validate(self.skip_utf8_validation)
+            frame.validate()
 
         return frame
 
@@ -409,9 +411,8 @@ class frame_buffer(object):
 
 class continuous_frame(object):
 
-    def __init__(self, fire_cont_frame, skip_utf8_validation):
+    def __init__(self, fire_cont_frame):
         self.fire_cont_frame = fire_cont_frame
-        self.skip_utf8_validation = skip_utf8_validation
         self.cont_data = None
         self.recving_frames = None
 
@@ -440,8 +441,4 @@ class continuous_frame(object):
         data = self.cont_data
         self.cont_data = None
         frame.data = data[1]
-        if not self.fire_cont_frame and data[0] == ABNF.OPCODE_TEXT and not self.skip_utf8_validation and not validate_utf8(frame.data):
-            raise WebSocketPayloadException(
-                "cannot decode: " + repr(frame.data))
-
         return [data[0], frame]
