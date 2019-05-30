@@ -3,6 +3,11 @@
 
 service_on = http:@kitename : localhost:80 : @kitesecret
 
+# If you have TLS/SSL configured locally, uncomment this to enable end-to-end
+# TLS encryption instead of relying on the wild-card certificate at the relay.
+#
+#service_on = https:@kitename : localhost:443 : @kitesecret
+
 #
 # Uncomment the following to globally DISABLE the request firewall.  Do this
 # if you are sure you know what you are doing, for more details please see
