@@ -170,13 +170,13 @@ class Tunnel(ChunkParser):
     try:
       for prefix in ('X-Beanstalk', 'X-PageKite'):
         for feature in conn.parser.Header(prefix+'-Features'):
-          if not conns.config.disable_zchunks:
-            if feature == 'ZChunks':
+          if feature == 'ZChunks':
+            if not conns.config.disable_zchunks:
               self.EnableZChunks(level=1)
-            elif feature == 'AddKites':
-              self.server_info[self.S_ADD_KITES] = True
-            elif feature == 'Mobile':
-              self.server_info[self.S_IS_MOBILE] = True
+          elif feature == 'AddKites':
+            self.server_info[self.S_ADD_KITES] = True
+          elif feature == 'Mobile':
+            self.server_info[self.S_IS_MOBILE] = True
 
         # Track which versions we see in the wild.
         version = 'old'
