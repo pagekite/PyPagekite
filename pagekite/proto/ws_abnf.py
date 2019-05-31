@@ -86,6 +86,9 @@ STATUS_UNEXPECTED_CONDITION = 1011
 STATUS_BAD_GATEWAY = 1014
 STATUS_TLS_HANDSHAKE_ERROR = 1015
 
+# A mask that does nothing
+ZERO_MASK = "\0\0\0\0"
+
 VALID_CLOSE_STATUS = (
     STATUS_NORMAL,
     STATUS_GOING_AWAY,
@@ -98,6 +101,10 @@ VALID_CLOSE_STATUS = (
     STATUS_UNEXPECTED_CONDITION,
     STATUS_BAD_GATEWAY,
 )
+
+
+class WebSocketNeedMoreDataException(Exception):
+    pass
 
 
 class WebSocketException(IOError):
@@ -143,7 +150,7 @@ class ABNF(object):
     LENGTH_63 = 1 << 63
 
     def __init__(self, fin=0, rsv1=0, rsv2=0, rsv3=0,
-                 opcode=OPCODE_TEXT, mask=1, data=""):
+                 opcode=OPCODE_TEXT, mask=1, data="", zero_mask=False):
         """
         Constructor for ABNF.
         please check RFC for arguments.
@@ -154,10 +161,12 @@ class ABNF(object):
         self.rsv3 = rsv3
         self.opcode = opcode
         self.mask = mask
-        if data is None:
-            data = ""
-        self.data = data
-        self.get_mask_key = os.urandom
+        self.data = data or ""
+        self.length = len(self.data)
+        if zero_mask:
+            self.get_mask_key = lambda c: ZERO_MASK
+        else:
+            self.get_mask_key = os.urandom
 
     def validate(self):
         """
@@ -194,7 +203,7 @@ class ABNF(object):
             + " data=" + str(self.data)
 
     @staticmethod
-    def create_frame(data, opcode, fin=1):
+    def create_frame(data, opcode, fin=1, zero_mask=False):
         """
         create frame to send text, binary and other data.
 
@@ -209,7 +218,7 @@ class ABNF(object):
         if opcode == ABNF.OPCODE_TEXT and isinstance(data, six.text_type):
             data = data.encode("utf-8")
         # mask must be set if send data from client
-        return ABNF(fin, 0, 0, 0, opcode, 1, data)
+        return ABNF(fin, 0, 0, 0, opcode, 1, data, zero_mask)
 
     def format(self):
         """
@@ -242,15 +251,7 @@ class ABNF(object):
             return frame_header + self.data
         else:
             mask_key = self.get_mask_key(4)
-            return frame_header + self._get_masked(mask_key)
-
-    def _get_masked(self, mask_key):
-        s = ABNF.mask(mask_key, self.data)
-
-        if isinstance(mask_key, six.text_type):
-            mask_key = mask_key.encode('utf-8')
-
-        return mask_key + s
+            return frame_header + mask_key + ABNF.mask(mask_key, self.data)
 
     @staticmethod
     def mask(mask_key, data):
@@ -264,11 +265,17 @@ class ABNF(object):
         if data is None:
             data = ""
 
+        if mask_key == ZERO_MASK:
+            return data
+
         if isinstance(mask_key, six.text_type):
             mask_key = six.b(mask_key)
 
         if isinstance(data, six.text_type):
             data = six.b(data)
+
+        if len(data) < 1:
+            return data
 
         if numpy:
             origlen = len(data)
@@ -286,159 +293,68 @@ class ABNF(object):
             _d = array.array("B", data)
             return _mask(_m, _d)
 
-
-class frame_buffer(object):
-    _HEADER_MASK_INDEX = 5
-    _HEADER_LENGTH_INDEX = 6
-
-    def __init__(self, recv_fn):
-        self.recv = recv_fn
-        # Buffers over the packets from the layer beneath until desired amount
-        # bytes of bytes are received.
-        self.recv_buffer = []
-        self.clear()
-        self.lock = Lock()
-
-    def clear(self):
-        self.header = None
-        self.length = None
-        self.mask = None
-
-    def has_received_header(self):
-        return self.header is None
-
-    def recv_header(self):
-        header = self.recv_strict(2)
-        b1 = header[0]
+    def parse_header(self, data):
+        try:
+            b1 = data[0]
+            b2 = data[1]
+        except IndexError:
+            raise WebSocketNeedMoreDataException()
 
         if six.PY2:
             b1 = ord(b1)
-
-        fin = b1 >> 7 & 1
-        rsv1 = b1 >> 6 & 1
-        rsv2 = b1 >> 5 & 1
-        rsv3 = b1 >> 4 & 1
-        opcode = b1 & 0xf
-        b2 = header[1]
-
-        if six.PY2:
             b2 = ord(b2)
+
+        self.fin = b1 >> 7 & 1
+        self.rsv1 = b1 >> 6 & 1
+        self.rsv2 = b1 >> 5 & 1
+        self.rsv3 = b1 >> 4 & 1
+        self.opcode = b1 & 0xf
 
         has_mask = b2 >> 7 & 1
         length_bits = b2 & 0x7f
 
-        self.header = (fin, rsv1, rsv2, rsv3, opcode, has_mask, length_bits)
+        return has_mask, length_bits, data[2:]
 
-    def has_mask(self):
-        if not self.header:
-            return False
-        return self.header[frame_buffer._HEADER_MASK_INDEX]
-
-    def has_received_length(self):
-        return self.length is None
-
-    def recv_length(self):
-        bits = self.header[frame_buffer._HEADER_LENGTH_INDEX]
-        length_bits = bits & 0x7f
+    def parse_length(self, length_bits, data):
         if length_bits == 0x7e:
-            v = self.recv_strict(2)
-            self.length = struct.unpack("!H", v)[0]
+            if len(data) < 2:
+                raise WebSocketNeedMoreDataException()
+            self.length = struct.unpack("!H", data[:2])[0]
+            return data[2:]
         elif length_bits == 0x7f:
-            v = self.recv_strict(8)
-            self.length = struct.unpack("!Q", v)[0]
+            if len(data) < 8:
+                raise WebSocketNeedMoreDataException()
+            self.length = struct.unpack("!Q", data[:8])[0]
+            return data[8:]
         else:
             self.length = length_bits
+            return data
 
-    def has_received_mask(self):
-        return self.mask is None
-
-    def recv_mask(self):
-        self.mask = self.recv_strict(4) if self.has_mask() else ""
-
-    def recv_frame(self):
-
-        with self.lock:
-            # Header
-            if self.has_received_header():
-                self.recv_header()
-            (fin, rsv1, rsv2, rsv3, opcode, has_mask, _) = self.header
-
-            # Frame length
-            if self.has_received_length():
-                self.recv_length()
-            length = self.length
-
-            # Mask
-            if self.has_received_mask():
-                self.recv_mask()
-            mask = self.mask
-
-            # Payload
-            payload = self.recv_strict(length)
-            if has_mask:
-                payload = ABNF.mask(mask, payload)
-
-            # Reset for next frame
-            self.clear()
-
-            frame = ABNF(fin, rsv1, rsv2, rsv3, opcode, has_mask, payload)
-            frame.validate()
-
-        return frame
-
-    def recv_strict(self, bufsize):
-        shortage = bufsize - sum(len(x) for x in self.recv_buffer)
-        while shortage > 0:
-            # Limit buffer size that we pass to socket.recv() to avoid
-            # fragmenting the heap -- the number of bytes recv() actually
-            # reads is limited by socket buffer and is relatively small,
-            # yet passing large numbers repeatedly causes lots of large
-            # buffers allocated and then shrunk, which results in
-            # fragmentation.
-            bytes_ = self.recv(min(16384, shortage))
-            self.recv_buffer.append(bytes_)
-            shortage -= len(bytes_)
-
-        unified = six.b("").join(self.recv_buffer)
-
-        if shortage == 0:
-            self.recv_buffer = []
-            return unified
+    def parse_mask(self, has_mask, data):
+        if has_mask:
+            if len(data) < 4:
+                raise WebSocketNeedMoreDataException()
+            self.mask = data[:4]
+            return data[4:]
         else:
-            self.recv_buffer = [unified[bufsize:]]
-            return unified[:bufsize]
+            self.mask = ""
+            return data
 
+    def parse_data(self, data):
+        payload = data[:self.length]
+        if len(payload) == self.length:
+            self.data = ABNF.mask(self.mask, payload)
+            self.validate()
+        return data[self.length:]
 
-class continuous_frame(object):
-
-    def __init__(self, fire_cont_frame):
-        self.fire_cont_frame = fire_cont_frame
-        self.cont_data = None
-        self.recving_frames = None
-
-    def validate(self, frame):
-        if not self.recving_frames and frame.opcode == ABNF.OPCODE_CONT:
-            raise WebSocketProtocolException("Illegal frame")
-        if self.recving_frames and \
-                frame.opcode in (ABNF.OPCODE_TEXT, ABNF.OPCODE_BINARY):
-            raise WebSocketProtocolException("Illegal frame")
-
-    def add(self, frame):
-        if self.cont_data:
-            self.cont_data[1] += frame.data
-        else:
-            if frame.opcode in (ABNF.OPCODE_TEXT, ABNF.OPCODE_BINARY):
-                self.recving_frames = frame.opcode
-            self.cont_data = [frame.opcode, frame.data]
-
-        if frame.fin:
-            self.recving_frames = None
-
-    def is_fire(self, frame):
-        return frame.fin or self.fire_cont_frame
-
-    def extract(self, frame):
-        data = self.cont_data
-        self.cont_data = None
-        frame.data = data[1]
-        return [data[0], frame]
+    @classmethod
+    def parse(cls, all_data):
+        self = cls()
+        try:
+            has_mask, length_bits, data = self.parse_header(all_data)
+            data = self.parse_length(length_bits, data)
+            data = self.parse_mask(has_mask, data)
+            data = self.parse_data(data)
+            return self, data
+        except WebSocketNeedMoreDataException:
+            return None, ""
