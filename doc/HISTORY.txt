@@ -1,6 +1,13 @@
 Version history - highlights
 ============================
 
+v1.0.0.??????
+-------------
+   - Fix a few minor buglets
+   - Added experimental support for relay connections over websockets
+   - Debian: improve .deb config samples
+
+
 v1.0.0.190225  2019.02.25
 -------------
    - Call this 1.0, change versioning schemes. We're pretty stable!
