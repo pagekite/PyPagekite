@@ -25,6 +25,7 @@ import base64
 import cgi
 from cgi import escape as escape_html
 import errno
+import gc
 import getopt
 import httplib
 import os
@@ -3801,7 +3802,15 @@ class PageKite(object):
         if epoll:
           epoll.close()
         epoll, mypoll = self.CreatePollObject()
-        logging.LogDebug('Loop #%d, selectable map: %s' % (loop_count, SELECTABLES))
+        with SELECTABLE_LOCK:
+          gc.collect()
+          logging.LogDebug('Loop #%d, selectable map: %s' % (loop_count, SELECTABLES))
+          if logging.DEBUG_IO:
+            for obj in gc.get_objects():
+              if isinstance(obj, Selectable):
+                if obj.dead:
+                  holders = gc.get_referrers(obj)
+                  print 'Dead: %s held by %s' % (obj, str(holders[-1])[:50])
 
     if epoll:
       epoll.close()
