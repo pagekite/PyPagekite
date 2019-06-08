@@ -52,11 +52,11 @@ def getSelectableId(what):
     count = 0
     while SELECTABLE_ID in SELECTABLES:
       SELECTABLE_ID += 1
-      SELECTABLE_ID %= 0x10000
+      SELECTABLE_ID %= 0x40000
       if (SELECTABLE_ID % 0x00800) == 0:
         logging.LogDebug('Selectable map: %s' % (SELECTABLES, ))
       count += 1
-      if count > 0x10001:
+      if count > 0x40000:
         raise ValueError('Too many conns!')
     SELECTABLES[SELECTABLE_ID] = what
     return SELECTABLE_ID
@@ -179,11 +179,10 @@ class Selectable(object):
         common.gYamon.vadd('selectables', -1)
     except AttributeError:
       pass
-    try:
+    with SELECTABLE_LOCK:
       global SELECTABLES
-      del SELECTABLES[self.gsid]
-    except (KeyError, TypeError):
-      pass
+      if self.gsid in SELECTABLES:
+        del SELECTABLES[self.gsid]
 
   def __str__(self):
     return '%s: %s<%s%s%s>' % (self.log_id, self.__class__,
