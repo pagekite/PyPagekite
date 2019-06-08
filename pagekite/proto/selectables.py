@@ -375,12 +375,12 @@ class Selectable(object):
         data = self.fd.recv(maxread, socket.MSG_PEEK)
         self.peeked = len(data)
         if logging.DEBUG_IO:
-          print '<== PEEK =[%s]==(\n%s)==' % (self, data[:160])
+          print '<== PEEK =[%s]==(\n%s)==' % (self, data[:320])
       else:
         data = self.fd.recv(maxread)
         if logging.DEBUG_IO:
           print ('<== IN =[%s @ %dbps]==(\n%s)=='
-                 ) % (self, self.max_read_speed, data[:160])
+                 ) % (self, self.max_read_speed, data[:320])
     except (SSL.WantReadError, SSL.WantWriteError), err:
       return True
     except IOError, err:
@@ -482,7 +482,7 @@ class Selectable(object):
             sent_bytes = self.fd.send(sending[:want_send])
             if logging.DEBUG_IO:
               print ('==> OUT =[%s: %d/%d bytes]==(\n%s)=='
-                     ) % (self, sent_bytes, want_send, sending[:min(160, sent_bytes)])
+                     ) % (self, sent_bytes, want_send, sending[:min(320, sent_bytes)])
             self.wrote_bytes += sent_bytes
             self.write_retry = None
             break
