@@ -1260,7 +1260,11 @@ class UserConn(Selectable):
   def _FrontEnd(conn, address, proto, host, on_port, body, conns):
     # This is when an external user connects to a server and requests a
     # web-page.  We have to give it to them!
-    self = UserConn(address, ui=conns.config.ui)
+    try:
+      self = UserConn(address, ui=conns.config.ui)
+    except (ValueError, IOError, OSError):
+      conn.LogDebug('Unable to create new connection object!')
+      return None
     self.conns = conns
     self.SetConn(conn)
 
@@ -1338,7 +1342,12 @@ class UserConn(Selectable):
   def _BackEnd(proto, host, sid, tunnel, on_port,
                remote_ip=None, remote_port=None, data=None):
     # This is when we open a backend connection, because a user asked for it.
-    self = UserConn(None, ui=tunnel.conns.config.ui)
+    try:
+      self = UserConn(None, ui=tunnel.conns.config.ui)
+    except (ValueError, IOError, OSError):
+      tunnel.LogDebug('Unable to create new connection object!')
+      return None
+
     self.sid = sid
     self.proto = proto
     self.host = host
