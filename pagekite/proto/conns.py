@@ -1779,6 +1779,7 @@ class UnknownConn(MagicProtocolParser):
                     code=403, status='Forbidden',
                     other_details=self.error_details),
                   try_flush=True)
+        self.Cleanup(close=True)
         return False
 
       address = self.address
@@ -1800,6 +1801,7 @@ class UnknownConn(MagicProtocolParser):
                         overloaded=self.conns.config.Overloaded(),
                         other_details=self.error_details
                     ), try_flush=True)
+        self.Cleanup(close=True)
         return False
 
     # We are done!
