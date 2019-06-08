@@ -685,42 +685,11 @@ class MagicProtocolParser(LineParser):
             '%s') % (self.is_tls,
                      LineParser.__html__(self))
 
-  # FIXME: DEPRECATE: Make this all go away, switch to CONNECT.
-  def ProcessMagic(self, data):
-    args = {}
-    try:
-      prefix, words, data = data.split('\r\n', 2)
-      for arg in words.split('; '):
-        key, val = arg.split('=', 1)
-        args[key] = val
-
-      self.EatPeeked(eat_bytes=len(prefix)+2+len(words)+2)
-    except ValueError, e:
-      return True
-
-    try:
-      port = 'port' in args and args['port'] or None
-      if port: self.on_port = int(port)
-    except ValueError, e:
-      return False
-
-    proto = 'proto' in args and args['proto'] or None
-    if proto in ('http', 'http2', 'http3', 'websocket'):
-      return LineParser.ProcessData(self, data)
-
-    domain = 'domain' in args and args['domain'] or None
-    if proto == 'https': return self.ProcessTls(data, domain)
-    if proto == 'raw' and domain: return self.ProcessProto(data, 'raw', domain)
-    return False
-
   def ProcessData(self, data):
     # Uncomment when adding support for new protocols:
     #
     #self.LogDebug(('DATA: >%s<'
     #               ) % ' '.join(['%2.2x' % ord(d) for d in data]))
-
-    if data.startswith(MAGIC_PREFIX):
-      return self.ProcessMagic(data)
 
     if self.might_be_tls:
       self.might_be_tls = False
