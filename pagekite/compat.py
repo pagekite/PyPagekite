@@ -149,3 +149,7 @@ else:
         raise ConfigError('Neither pyOpenSSL nor python 2.6+ '
                           'ssl modules found!')
 
+
+class WithableStub(object):
+    def __enter__(self): pass
+    def __exit__(self, et, ev, tb): pass

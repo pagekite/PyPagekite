@@ -134,18 +134,15 @@ class AuthApp(object):
                                      stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE)
     else:
+      self.lock = WithableStub()
       self.server = None
-      self.lock = None
 
   def _q(self, args):
     if self.server is not None:
-      try:
-        self.lock.acquire()
+      with self.lock:
         self.server.stdin.write(' '.join(args) + '\n')
         self.server.stdin.flush()
         return self.server.stdout.readline().strip()
-      finally:
-        self.lock.release()
     else:
       return subprocess.check_output([self.app_path] + args).strip()
 
