@@ -1569,6 +1569,20 @@ class PageKite(object):
   def PrintSettings(self, safe=False):
     print '\n'.join(self.GenerateConfig(safe=safe))
 
+  def CanSaveConfig(self, savefile=None, _raise=None):
+    savefile = savefile or self.savefile or self.rcfile
+    try:
+      if os.path.exists(savefile):
+        open(savefile, 'r+').close()
+      else:
+        open(savefile, 'w').close()  # FIXME: Python3.3 adds mode=x, use it!
+        os.remove(savefile)
+    except (IOError, OSError):
+      if _raise is not None:
+        raise _raise("Could not write to: %s" % savefile)
+      return False
+    return savefile
+
   def SaveUserConfig(self, quiet=False):
     self.savefile = self.savefile or self.rcfile
     try:
@@ -2109,27 +2123,31 @@ class PageKite(object):
         self.ConfigureFromDirectory(arg)
       elif opt in ('-S', '--savefile'):
         if self.savefile: raise ConfigError('Multiple save-files!')
-        self.savefile = arg
+        self.savefile = self.CanSaveConfig(savefile=arg, _raise=ConfigError)
       elif opt == '--shell':
         self.shell = True
       elif opt == '--save':
-        self.save = True
+        self.save = self.CanSaveConfig(_raise=ConfigError) and True
       elif opt == '--only':
-        self.save = self.kite_only = True
+        self.kite_only = True
         if self.kite_remove or self.kite_add or self.kite_disable:
           raise ConfigError('One change at a time please!')
+        self.save = self.CanSaveConfig(_raise=ConfigError) and True
       elif opt == '--add':
-        self.save = self.kite_add = True
+        self.kite_add = True
         if self.kite_remove or self.kite_only or self.kite_disable:
           raise ConfigError('One change at a time please!')
+        self.save = self.CanSaveConfig(_raise=ConfigError) and True
       elif opt == '--remove':
-        self.save = self.kite_remove = True
+        self.kite_remove = True
         if self.kite_add or self.kite_only or self.kite_disable:
           raise ConfigError('One change at a time please!')
+        self.save = self.CanSaveConfig(_raise=ConfigError) and True
       elif opt == '--disable':
-        self.save = self.kite_disable = True
+        self.kite_disable = True
         if self.kite_add or self.kite_only or self.kite_remove:
           raise ConfigError('One change at a time please!')
+        self.save = self.CanSaveConfig(_raise=ConfigError) and True
       elif opt == '--list': pass
 
       elif opt in ('-I', '--pidfile'): self.pidfile = arg
@@ -2678,6 +2696,7 @@ class PageKite(object):
 
   def RegisterNewKite(self, kitename=None, first=False,
                             ask_be=False, autoconfigure=False):
+    self.CanSaveConfig(_raise=ConfigError)
     registered = False
     if kitename:
       (secret, is_subdomain_of, is_service_domain,
@@ -4080,7 +4099,7 @@ def Configure(pk):
     if '--signup' in sys.argv or friendly_mode:
       pk.RegisterNewKite(autoconfigure=True, first=True)
     if friendly_mode:
-      pk.save = True
+      pk.save = pk.CanSaveConfig(_raise=ConfigError) and True
 
   pk.CheckConfig()
 
