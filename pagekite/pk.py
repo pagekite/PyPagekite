@@ -2071,12 +2071,14 @@ class PageKite(object):
     if self.ui_httpd and self.ui_httpd.httpd:
       if not force: return self.ui_sspec
       self.ui_httpd.httpd.socket.close()
+    if self.ui_httpd:
+      self.ui_httpd.quit()
 
     self.ui_sspec = self.ui_sspec or ('localhost', 0)
     self.ui_httpd = HttpUiThread(self, self.conns,
                                  handler=self.ui_request_handler,
                                  server=self.ui_http_server,
-                                 ssl_pem_filename = self.ui_pemfile)
+                                 ssl_pem_filename=self.ui_pemfile)
     return self.ui_sspec
 
   def LoadMOTD(self):
@@ -3956,18 +3958,8 @@ class PageKite(object):
 
     self.ui.Status('exiting', message='Stopping...')
     logging.Log([('stopping', 'pagekite.py')])
-    if self.ui_httpd:
-      self.ui_httpd.quit()
     if self.ui_comm:
       self.ui_comm.quit()
-    if self.tunnel_manager:
-      self.tunnel_manager.quit()
-    if self.conns:
-      if self.conns.auth_pool:
-        for th in self.conns.auth_pool:
-          th.quit()
-      for conn in self.conns.conns:
-        conn.Cleanup()
 
 
 ##[ Main ]#####################################################################
@@ -3993,7 +3985,9 @@ def Main(pagekite, configure, uiclass=NullUi,
           raise ConfigError(e)
 
         shell_mode = shell_mode or pk.shell
-        if shell_mode is not True:
+        if shell_mode is True:
+          pk.FallDown('', help=False, noexit=True)
+        else:
           pk.Start()
 
       except (ConfigError, getopt.GetoptError), msg:
@@ -4002,10 +3996,11 @@ def Main(pagekite, configure, uiclass=NullUi,
           shell_mode = 'more'
 
       except KeyboardInterrupt, msg:
-        pk.FallDown(None, help=False, noexit=True)
         if shell_mode:
+          pk.FallDown(None, help=False, noexit=True)
           shell_mode = 'auto'
         else:
+          pk.ui.Status('exiting', message='Good-bye!')
           return
 
     except SystemExit, status:
@@ -4015,15 +4010,17 @@ def Main(pagekite, configure, uiclass=NullUi,
         sys.exit(status)
 
     except Exception, msg:
-      traceback.print_exc(file=sys.stderr)
-      if pk.crash_report_url:
+      crash_msg = format_exc()
+      logging.LogDebug('Crashed: %s' % crash_msg)
+      sys.stderr.write('Crashed: %s\n' % crash_msg)
+      if pk.crash_report_url and not shell_mode:
         try:
           print 'Submitting crash report to %s' % pk.crash_report_url
           logging.LogDebug(''.join(urllib.urlopen(pk.crash_report_url,
                                           urllib.urlencode({
                                             'platform': sys.platform,
                                             'appver': APPVER,
-                                            'crash': format_exc()
+                                            'crash': crash_msg
                                           })).readlines()))
         except Exception, e:
           print 'FAILED: %s' % e

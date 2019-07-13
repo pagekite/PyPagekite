@@ -252,6 +252,8 @@ class RemoteUi(NullUi):
 
 
 class PageKiteThread(threading.Thread):
+  daemon = True
+
   def __init__(self, startup_args=None, debug=False):
     threading.Thread.__init__(self)
     self.pk = None
@@ -414,6 +416,8 @@ class PageKiteRestarter(PageKiteThread):
 
 
 class CommThread(threading.Thread):
+  daemon = True
+
   def __init__(self, pkThread):
     threading.Thread.__init__(self)
     self.pkThread = pkThread
