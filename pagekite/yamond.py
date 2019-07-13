@@ -95,6 +95,7 @@ class YamonHttpServer(BaseHTTPServer.HTTPServer):
 
 class YamonD(threading.Thread):
   """Handle HTTP in a separate thread."""
+  daemon = True
 
   def __init__(self, sspec,
                server=YamonHttpServer,
