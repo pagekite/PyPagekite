@@ -428,7 +428,7 @@ class Tunnel(ChunkParser):
     if self.fd:
       self.fd.close()
 
-    sspec = rsplit(':', server)
+    sspec = server.rsplit(':', 1)
     if len(sspec) < 2:
       sspec = (sspec[0], 443)
 

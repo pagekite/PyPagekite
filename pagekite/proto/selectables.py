@@ -47,8 +47,7 @@ SELECTABLE_ID = 0
 SELECTABLES = {}
 def getSelectableId(what):
   global SELECTABLES, SELECTABLE_ID, SELECTABLE_LOCK
-  try:
-    SELECTABLE_LOCK.acquire()
+  with SELECTABLE_LOCK:
     count = 0
     while SELECTABLE_ID in SELECTABLES:
       SELECTABLE_ID += 1
@@ -60,8 +59,6 @@ def getSelectableId(what):
         raise ValueError('Too many conns!')
     SELECTABLES[SELECTABLE_ID] = what
     return SELECTABLE_ID
-  finally:
-    SELECTABLE_LOCK.release()
 
 
 class Selectable(object):

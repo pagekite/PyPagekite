@@ -22,6 +22,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 ##############################################################################
 import common
 from common import *
+from traceback import format_exc
 
 
 # System logging on Unix
@@ -79,39 +80,15 @@ except ImportError, e:
   from urlparse import urlparse
 
 import base64
-try:
-  import hashlib
-  def sha1hex(data):
-    return hashlib.sha1(data).hexdigest().lower()
-  def sha1b64(data):
-    return base64.b64encode(hashlib.sha1(data).digest())
-except ImportError:
-  import sha
-  def sha1hex(data):
-    return sha.new(data).hexdigest().lower()
-  def sha1b64(data):
-    return base64.b64encode(sha.new(data).digest())
+import hashlib
+def sha1hex(data):
+  return hashlib.sha1(data).hexdigest().lower()
+def sha1b64(data):
+  return base64.b64encode(hashlib.sha1(data).digest())
+def sha256b64(data):
+  return base64.b64encode(hashlib.sha256(data).digest())
 
 common.MAGIC_UUID = sha1hex(common.MAGIC_UUID)
-
-try:
-  from traceback import format_exc
-except ImportError:
-  import traceback
-  import StringIO
-  def format_exc():
-    sio = StringIO.StringIO()
-    traceback.print_exc(file=sio)
-    return sio.getvalue()
-
-# Old Pythons lack rsplit
-def rsplit(ch, data):
-  parts = data.split(ch)
-  if (len(parts) > 2):
-    tail = parts.pop(-1)
-    return (ch.join(parts), tail)
-  else:
-    return parts
 
 # SSL/TLS strategy: prefer pyOpenSSL, as it comes with built-in Context
 # objects. If that fails, look for Python 2.6+ native ssl support and

@@ -3064,7 +3064,7 @@ class PageKite(object):
         if history:
           Back()
         else:
-          raise KeyboardInterrupt()
+          raise
 
     self.ui.EndWizard()
     return None
@@ -3518,7 +3518,7 @@ class PageKite(object):
           ips, bips = [], []
           for tunnel in conns.tunnels[bid]:
             srv = tunnel.server_info[tunnel.S_NAME]
-            ip = rsplit(':', srv)[0]
+            ip = srv.rsplit(':', 1)[0]
             if not ip == LOOPBACK_HN and not tunnel.read_eof:
               if (not self.servers_preferred) or srv in self.servers_preferred:
                 ips.append(ip)
@@ -4022,7 +4022,7 @@ def Main(pagekite, configure, uiclass=NullUi,
                                             'appver': APPVER,
                                             'crash': crash_msg
                                           })).readlines()))
-        except Exception, e:
+        except Exception as e:
           print 'FAILED: %s' % e
 
       pk.FallDown(msg, help=False, noexit=pk.main_loop)
