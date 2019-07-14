@@ -23,12 +23,13 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 ##############################################################################
 import re
 import time
+import pagekite.logging as logging
 from pagekite.compat import *
 
 
 class TunnelFilter:
   """Base class for watchers/filters for data going in/out of Tunnels."""
-
+  FILTERS = ('connected', 'data_in', 'data_out')
   IDLE_TIMEOUT = 1800
 
   def __init__(self, ui):
@@ -49,6 +50,12 @@ class TunnelFilter:
     self.sid[sid]['_ts'] = now
     self.clean_idle_sids(now=now)
 
+  def filter_connected(self, tunnel, sid, data):
+    if sid not in self.sid:
+      self.sid[sid] = {}
+    self.sid[sid]['_ts'] = time.time()
+    return data
+
   def filter_data_in(self, tunnel, sid, data):
     if sid not in self.sid:
       self.sid[sid] = {}
@@ -64,6 +71,7 @@ class TunnelFilter:
 
 class TunnelWatcher(TunnelFilter):
   """Base class for watchers/filters for data going in/out of Tunnels."""
+  FILTERS = ('data_in', 'data_out')
 
   def __init__(self, ui, watch_level=0):
     TunnelFilter.__init__(self, ui)
@@ -119,9 +127,33 @@ class TunnelWatcher(TunnelFilter):
     return TunnelFilter.filter_data_out(self, tunnel, sid, data)
 
 
+class HaproxyProtocolFilter(TunnelFilter):
+  """Filter prefixes the HAProxy PROXY protocol info to requests."""
+  FILTERS = ('connected')
+  ENABLE = 'proxyproto'
+
+  def filter_connected(self, tunnel, sid, data):
+    info = self.sid.get(sid)
+    if info:
+      if not info.get(self.ENABLE, False):
+        pass
+      elif info[self.ENABLE] in ("1", True):
+        remote_ip = info['remote_ip']
+        if '.' in remote_ip:
+          remote_ip = remote_ip.rsplit(':', 1)[1]
+        data = 'PROXY TCP%s %s 0.0.0.0 %s %s\r\n%s' % (
+          '4' if ('.' in remote_ip) else '6',
+          remote_ip, info['remote_port'], info['port'], data or '')
+      else:
+        logging.LogError(
+          'FIXME: Unimplemented PROXY protocol v%s\n' % info[self.ENABLE])
+
+    return TunnelFilter.filter_connected(self, tunnel, sid, data)
+
+
 class HttpHeaderFilter(TunnelFilter):
   """Filter that adds X-Forwarded-For and X-Forwarded-Proto to requests."""
-
+  FILTERS = ('data_in')
   HTTP_HEADER = re.compile('(?ism)^(([A-Z]+) ([^\n]+) HTTP/\d+\.\d+\s*)$')
   DISABLE = 'rawheaders'
 

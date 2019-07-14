@@ -95,6 +95,7 @@ MAN_FLAGS_HTTP = ("""\
     +rewritehost</b>    __Rewrite the incoming Host: header.
     +rewritehost</b>=<a>N</a>  __Replace Host: header value with N.
     +rawheaders</b>     __Do not rewrite (or add) any HTTP headers at all.
+    +proxyproto</b>     __Use HAProxy's PROXY Protocol (v1) to relay IPs etc.
     +insecure</b>       __Allow access to phpMyAdmin, /admin, etc. (per kite).
 """)
 MAN_FLAGS_BUILTIN = ("""\

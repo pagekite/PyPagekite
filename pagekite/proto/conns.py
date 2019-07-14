@@ -716,11 +716,12 @@ class Tunnel(ChunkParser):
 
     # Pass outgoing data through any defined filters
     for f in self.filters:
-      try:
-        data = f.filter_data_out(self, sid, data)
-      except:
-        logging.LogError(('Ignoring error in filter_out %s: %s'
-                          ) % (f, format_exc()))
+      if 'data_out' in f.FILTERS:
+        try:
+          data = f.filter_data_out(self, sid, data)
+        except:
+          logging.LogError(('Ignoring error in filter_out %s: %s'
+                            ) % (f, format_exc()))
 
     sending = ['SID: %s\r\n' % sid]
     if proto: sending.append('Proto: %s\r\n' % proto)
@@ -928,17 +929,20 @@ class Tunnel(ChunkParser):
 
     return None
 
-  def FilterIncoming(self, sid, data=None, info=None):
+  def FilterIncoming(self, sid, data=None, info=None, connecting=False):
     """Pass incoming data through filters, if we have any."""
     for f in self.filters:
-      try:
-        if sid and info:
-          f.filter_set_sid(sid, info)
-        if data is not None:
-          data = f.filter_data_in(self, sid, data)
-      except:
-        logging.LogError(('Ignoring error in filter_in %s: %s'
-                          ) % (f, format_exc()))
+      if 'data_in' in f.FILTERS or (connecting and 'connected' in f.FILTERS):
+        try:
+          if sid and info:
+            f.filter_set_sid(sid, info)
+          if connecting and 'connected' in f.FILTERS:
+            data = f.filter_connected(self, sid, data)
+          if data is not None:
+            data = f.filter_data_in(self, sid, data)
+        except:
+          logging.LogError(('Ignoring error in filter_in %s: %s'
+                            ) % (f, format_exc()))
     return data
 
   def GetChunkDestination(self, parse):
@@ -983,8 +987,9 @@ class Tunnel(ChunkParser):
         'trusted': conn and (conn.security or
                              conn.config.get('insecure', False)),
         'rawheaders': conn and conn.config.get('rawheaders', False),
+        'proxyproto': conn and conn.config.get('proxyproto', False),
         'rewritehost': rewritehost
-      })
+      }, connecting=True)
 
     if proto in ('http', 'http2', 'http3', 'websocket'):
       if conn and data.startswith(HttpSecurityFilter.REJECT):

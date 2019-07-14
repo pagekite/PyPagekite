@@ -7,6 +7,7 @@ v1.0.0.??????
    - Added experimental support for relay connections over websockets
    - Debian: improve .deb config samples
    - Improve errors/feedback if config is unwritable during signup, add, etc.
+   - Added +proxyproto: HAProxy PROXY (v1) protocol support at the backend
 
 
 v1.0.0.190225  2019.02.25

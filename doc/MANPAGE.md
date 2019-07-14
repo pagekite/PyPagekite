@@ -97,6 +97,8 @@ server.
      Replace Host: header value with N.
    * <b>+rawheaders</b>  
      Do not rewrite (or add) any HTTP headers at all.
+   * <b>+proxyproto</b>  
+     Use HAProxy's PROXY Protocol (v1) to relay IPs etc.
    * <b>+insecure</b>  
      Allow access to phpMyAdmin, /admin, etc. (per kite).
 
