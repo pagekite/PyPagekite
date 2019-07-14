@@ -684,8 +684,8 @@ class TunnelManager(threading.Thread):
            not self.pkite.isfrontend and
            not self.pkite.keepalive):
       common.DISCONNECT_COUNT -= 2
-      common.PING_INTERVAL = max(common.PING_INTERVAL_MIN,
-                                 0.5 * common.PING_INTERVAL)
+      common.PING_INTERVAL = int(max(common.PING_INTERVAL_MIN,
+                                     0.5 * common.PING_INTERVAL))
       logging.LogDebug('TunnelManager: adjusted ping interval, PI=%s'
                        % common.PING_INTERVAL)
 
