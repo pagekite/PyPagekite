@@ -27,6 +27,7 @@ from cgi import escape as escape_html
 import errno
 import gc
 import getopt
+import getpass
 import httplib
 import os
 import random
@@ -1522,7 +1523,7 @@ class PageKite(object):
     else:
       return config
 
-  def ConfigSecret(self, new=False):
+  def ConfigSecret(self, new=False, username=None):
     # This method returns a stable secret for the lifetime of this process.
     #
     # The secret depends on the active configuration as, reported by
@@ -1532,8 +1533,13 @@ class PageKite(object):
     #
     if self.ui_httpd and self.ui_httpd.httpd and not new:
       return self.ui_httpd.httpd.secret
+    elif not self.kitesecret and not self.ui_password and not self.backends:
+      # Our config has no secrets, generate a completely random one
+      return sha256b64(globalSecret())[:24]
     else:
-      return sha1hex('\n'.join(self.GenerateConfig()))
+      return sha256b64(
+        '\n'.join([username or getpass.getuser()] + self.GenerateConfig())
+        )[:24]
 
   def LoginPath(self, goto):
     return '/_pagekite/login/%s/%s' % (self.ConfigSecret(), goto)
@@ -2175,12 +2181,18 @@ class PageKite(object):
           CreateSelfSignedCert(pf, self.ui)
         self.SetPem(pf)
       elif opt in ('-H', '--httpd'):
-        parts = arg.split(':')
-        host = parts[0] or 'localhost'
-        if len(parts) > 1:
-          self.ui_sspec = self.ui_sspec_cfg = (host, int(parts[1]))
+        if self.ui_httpd:
+          self.ui_httpd.quit()
+          self.ui_httpd = None
+        if arg.lower() in ('off', 'none', 'disabled'):
+          self.ui_sspec = None
         else:
-          self.ui_sspec = self.ui_sspec_cfg = (host, 0)
+          parts = arg.split(':')
+          host = parts[0] or 'localhost'
+          if len(parts) > 1:
+            self.ui_sspec = self.ui_sspec_cfg = (host, int(parts[1]))
+          else:
+            self.ui_sspec = self.ui_sspec_cfg = (host, 0)
 
       elif opt == '--nowebpath':
         host, path = arg.split(':', 1)
@@ -3911,6 +3923,14 @@ class PageKite(object):
 
     # Flush in-memory log, if necessary
     logging.FlushLogMemory()
+
+    # Report status of built-in HTTPD
+    if self.ui_httpd and self.ui_httpd.httpd:
+      httpd_sspec = '%s:%s' % self.ui_httpd.ui_sspec
+      conf_secret = self.ConfigSecret()
+      logging.Log([('builtin_httpd', httpd_sspec), ('secret', conf_secret)])
+      self.ui.Notify(
+        'Built-in HTTPD is on %s, secret=%s' % (httpd_sspec, conf_secret))
 
     # Set up SIGHUP handler.
     if self.logfile:
