@@ -3526,7 +3526,7 @@ class PageKite(object):
                 bips.append(ip)
 
           for ip in (ips or bips):
-            if ip not in domains[domain]:
+            if ip not in domains[domain][1]:
               domains[domain][1].append(ip)
 
       updates = {}
