@@ -8,6 +8,7 @@ v1.0.0.??????
    - Debian: improve .deb config samples
    - Improve errors/feedback if config is unwritable during signup, add, etc.
    - Added +proxyproto: HAProxy PROXY (v1) protocol support at the backend
+   - Added --loglevel=N, massage logging & defaults to be more user friendly
 
 
 v1.0.0.190225  2019.02.25

@@ -37,6 +37,37 @@ LOG_LINE = 0
 LOG_LENGTH = 300
 LOG_THRESHOLD = 256 * 1024
 
+LOG_LEVEL_NONE = 1
+LOG_LEVEL_ERR = 2
+LOG_LEVEL_WARN = 3
+LOG_LEVEL_INFO = 4
+LOG_LEVEL_MACH = 5
+LOG_LEVEL_DEBUG = 6
+LOG_LEVEL_DEFAULT = LOG_LEVEL_INFO
+LOG_LEVELS = {
+  'none': LOG_LEVEL_NONE,
+  'err': LOG_LEVEL_ERR,
+  'errors': LOG_LEVEL_ERR,
+  'warn': LOG_LEVEL_WARN,
+  'warnings': LOG_LEVEL_WARN,
+  'info': LOG_LEVEL_INFO,
+  'mach': LOG_LEVEL_MACH,
+  'machine': LOG_LEVEL_MACH,
+  'debug': LOG_LEVEL_DEBUG,
+  'full': LOG_LEVEL_DEBUG,
+  'all': LOG_LEVEL_DEBUG,
+  0: 'none',
+  LOG_LEVEL_NONE: 'none',
+  LOG_LEVEL_ERR: 'err',
+  LOG_LEVEL_WARN: 'warn',
+  LOG_LEVEL_INFO: 'info',
+  LOG_LEVEL_MACH: 'mach',
+  LOG_LEVEL_DEBUG: 'debug'}
+LOG_LEVEL_DEFNAME = LOG_LEVELS[LOG_LEVEL_DEFAULT]
+
+LOG_LEVEL = LOG_LEVEL_DEFAULT
+
+
 def LogValues(values, testtime=None):
   global LOG, LOG_LINE, LOG_LAST_TIME
   now = int(testtime or time.time())
@@ -56,17 +87,21 @@ def LogValues(values, testtime=None):
 
   return (words, wdict)
 
-def LogSyslog(values, wdict=None, words=None):
+def LogSyslog(values, wdict=None, words=None, level=LOG_LEVEL_INFO):
+  global LOG_LEVEL
+  if level > LOG_LEVEL: return
   if values:
     words, wdict = LogValues(values)
-  if 'err' in wdict:
+  if level <= LOG_LEVEL_ERR or ('err' in wdict):
     syslog.syslog(syslog.LOG_ERR, '; '.join(['='.join(x) for x in words]))
-  elif 'debug' in wdict:
-    syslog.syslog(syslog.LOG_DEBUG, '; '.join(['='.join(x) for x in words]))
-  else:
+  elif level <= LOG_LEVEL_INFO:
     syslog.syslog(syslog.LOG_INFO, '; '.join(['='.join(x) for x in words]))
+  else:
+    syslog.syslog(syslog.LOG_DEBUG, '; '.join(['='.join(x) for x in words]))
 
-def LogToFile(values, wdict=None, words=None):
+def LogToFile(values, wdict=None, words=None, level=LOG_LEVEL_INFO):
+  global LOG_LEVEL
+  if level > LOG_LEVEL: return
   if values:
     words, wdict = LogValues(values)
   try:
@@ -77,32 +112,38 @@ def LogToFile(values, wdict=None, words=None):
     # Avoid crashing if the disk fills up or something lame like that
     pass
 
-def LogToMemory(values, wdict=None, words=None):
-  if values:
+def LogToMemory(values, wdict=None, words=None, level=LOG_LEVEL_INFO):
+  global LOG_LEVEL
+  if values and (level <= LOG_LEVEL):
     LogValues(values)
 
 def FlushLogMemory():
   global LOG
   for l in LOG:
-    Log(None, wdict=l, words=[(w, l[w]) for w in l])
+    Log(None, wdict=l, words=[(w, l[w]) for w in l], level=LOG_LEVEL)
 
 def LogError(msg, parms=None):
   emsg = [('err', msg)]
   if parms: emsg.extend(parms)
-  Log(emsg)
+  Log(emsg, level=LOG_LEVEL_ERR)
 
   if common.gYamon:
     common.gYamon.vadd('errors', 1, wrap=1000000)
 
+def LogWarning(msg, parms=None):
+  emsg = [('warn', msg)]
+  if parms: emsg.extend(parms)
+  Log(emsg, level=LOG_LEVEL_WARN)
+
 def LogDebug(msg, parms=None):
   emsg = [('debug', msg)]
   if parms: emsg.extend(parms)
-  Log(emsg)
+  Log(emsg, level=LOG_LEVEL_DEBUG)
 
 def LogInfo(msg, parms=None):
   emsg = [('info', msg)]
   if parms: emsg.extend(parms)
-  Log(emsg)
+  Log(emsg, level=LOG_LEVEL_INFO)
 
 def ResetLog():
   global LogFile, Log, org_stdout

@@ -87,7 +87,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'frontend=', 'nofrontend=', 'frontends=', 'keepalive=',
             'torify=', 'socksify=', 'proxy=', 'noproxy',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib', 'wschunks',
-            'buffers=', 'noprobes', 'debugio', 'watch=',
+            'buffers=', 'noprobes', 'debugio', 'watch=', 'loglevel=',
             'overload=', 'overload_cpu=', 'overload_mem=', 'overload_file=',
             # DEPRECATED:
             'reloadfile=', 'autosave', 'noautosave', 'webroot=',
@@ -237,7 +237,7 @@ class AuthThread(threading.Thread):
             #       below the timeout in proto.conns.Tunnel._Connect().
             if ((not self.conns.config.authfail_closed)
                   and len(self.jobs) >= (15 / self.qtime)):
-              logging.LogError('Quota lookup skipped, over 15s worth of jobs queued')
+              logging.LogWarning('Quota lookup skipped, over 15s worth of jobs queued')
               (quota, days, conns, ipc, ips, reason) = (
                 -2, None, None, None, None, None)
             else:
@@ -441,7 +441,7 @@ class Connections(object):
       except:
         evil.append(s)
     for s in evil:
-      logging.LogDebug('Removing broken Selectable: %s' % s)
+      logging.LogWarning('Removing broken Selectable: %s' % s)
       s.Cleanup()
       self.Remove(s)
 
@@ -475,7 +475,7 @@ class Connections(object):
       if conn.last_activity > last_activity:
         active.append(elc)
       elif expire < now:
-        logging.LogDebug('Killing idle connection: %s' % conn)
+        logging.LogInfo('Killing idle connection', [('conn', '%s' % conn)])
         conn.Die(discard_buffer=True)
       elif conn.created < now - 1:
         conn.SayHello()
@@ -1480,6 +1480,9 @@ class PageKite(object):
       '',
       '##[ Miscellaneous settings ]##',
       p('logfile = %s', self.logfile, '/path/to/file'),
+      p('loglevel = %s',
+        logging.LOG_LEVELS.get(logging.LOG_LEVEL, logging.LOG_LEVEL_DEBUG),
+        logging.LOG_LEVEL_DEFNAME),
       p('buffers = %s', self.buffer_max, DEFAULT_BUFFER_MAX),
       (self.servers_new_only is True) and 'new' or '# new',
       (self.require_all and 'all' or '# all'),
@@ -1663,7 +1666,8 @@ class PageKite(object):
         if add: self.backends[bid][BE_STATUS] |= add
         if sub and (status & sub): self.backends[bid][BE_STATUS] -= sub
         logging.Log([('bid', bid),
-             ('status', '0x%x' % self.backends[bid][BE_STATUS])])
+             ('status', '0x%x' % self.backends[bid][BE_STATUS])],
+             level=logging.LOG_LEVEL_MACH)
 
   def GetBackendData(self, proto, domain, recurse=True):
     backend = '%s:%s' % (proto.lower(), domain.lower())
@@ -1778,8 +1782,8 @@ class PageKite(object):
         porti = int(port)
         if porti in self.server_aliasport: porti = self.server_aliasport[porti]
         if porti not in port_list and VIRTUAL_PN not in port_list:
-          logging.LogInfo('Unsupported port request: %s (%s:%s)'
-                          % (porti, protoport, domain))
+          logging.LogWarning('Unsupported port request: %s (%s:%s)'
+                             % (porti, protoport, domain))
           return (None, None, None, None, None, 'port')
 
       except ValueError:
@@ -1789,7 +1793,7 @@ class PageKite(object):
       proto, port = protoport, None
 
     if proto not in self.server_protos:
-      logging.LogInfo('Invalid proto request: %s:%s' % (protoport, domain))
+      logging.LogWarning('Invalid proto request: %s:%s' % (protoport, domain))
       return (None, None, None, None, None, 'proto')
 
     data = '%s:%s:%s' % (protoport, domain, srand)
@@ -1829,8 +1833,8 @@ class PageKite(object):
             if not self.authfail_closed:
               return (-2, None, None, None, None, None)
 
-    logging.LogInfo('No authentication found for: %s (%s)'
-                    % (domain, protoport))
+    logging.LogWarning('No authentication found for: %s (%s)'
+                       % (domain, protoport))
     return (None, None, None, None, None, auth_error_type or 'unauthorized')
 
   def _get_overload_factor(self):
@@ -2159,6 +2163,11 @@ class PageKite(object):
 
       elif opt in ('-I', '--pidfile'): self.pidfile = arg
       elif opt in ('-L', '--logfile'): self.logfile = arg
+      elif opt == '--loglevel':
+        try:
+          logging.LOG_LEVEL = int(arg)
+        except ValueError:
+          logging.LOG_LEVEL = logging.LOG_LEVELS[arg]
       elif opt in ('-Z', '--daemonize'):
         self.daemonize = True
         if not self.ui.DAEMON_FRIENDLY: self.ui = NullUi()
@@ -3172,8 +3181,12 @@ class PageKite(object):
     uuid = self.ping_cache[cid][0][1][1]
 
     biased = max(0.01, (bias is None) and pingval or bias(pingval))
-    logging.LogDebug(('Pinged %s:%s: %.3f [win=%s, unbiased=%.3f, uuid=%s]'
-                      ) % (host, port, biased, window, pingval, uuid))
+    logging.Log([
+      ('FE', '%s:%s' % (host, port)),
+      ('http_ping_ms', '%d' % (1000 * biased)),
+      ('win', window),
+      ('unbiased', '%.3f' % pingval),
+      ('uuid', uuid)])
     return (biased, uuid)
 
   def GetHostIpAddrs(self, host):
@@ -3836,13 +3849,17 @@ class PageKite(object):
         epoll, mypoll = self.CreatePollObject()
         with SELECTABLE_LOCK:
           gc.collect()
-          logging.LogDebug('Loop #%d, selectable map: %s' % (loop_count, SELECTABLES))
+          log_info, lvl = [('main_loop', loop_count)], logging.LOG_LEVEL_INFO
+          if logging.LOG_LEVEL >= logging.LOG_LEVEL_DEBUG:
+            log_info.append(('selectable_map', '%s' % SELECTABLES))
+            lvl = logging.LOG_LEVEL_DEBUG
+          logging.Log(log_info, level=lvl)
           if logging.DEBUG_IO:
             for obj in gc.get_objects():
               if isinstance(obj, Selectable):
                 if obj.dead:
                   holders = gc.get_referrers(obj)
-                  print 'Dead: %s held by %s' % (obj, str(holders[-1])[:50])
+                  logging.LogDebug('Dead: %s held by %s' % (obj, str(holders[-1])[:50]))
 
     if epoll:
       epoll.close()
@@ -3868,7 +3885,7 @@ class PageKite(object):
                      ('ca_certs', self.ca_certs)]
     for optf in self.rcfiles_loaded:
       config_report.append(('optfile_%s' % optf, 'ok'))
-    logging.Log(config_report)
+    logging.Log(config_report, level=logging.LOG_LEVEL)
 
     if not socks.HAVE_SSL:
       self.ui.Notify('SECURITY WARNING: No SSL support was found, tunnels are insecure!',
@@ -3878,7 +3895,7 @@ class PageKite(object):
 
     # Create global secret
     self.ui.Status('startup', message='Collecting entropy for a secure secret...')
-    logging.LogInfo('Collecting entropy for a secure secret.')
+    logging.LogDebug('Collecting entropy for a secure secret.')
     globalSecret()
     self.ui.Status('startup', message='Starting up...')
 
@@ -3942,7 +3959,8 @@ class PageKite(object):
             logging.LogDebug('SIGHUP received, reopening: %s' % self.logfile)
         signal.signal(signal.SIGHUP, reopen)
       except Exception:
-        logging.LogError('Warning: signal handler unavailable, logrotate will not work.')
+        logging.LogWarning(
+          'Warning: signal handler unavailable, logrotate will not work.')
 
     # Disable compression in OpenSSL
     if socks.HAVE_SSL and not self.enable_sslzlib:

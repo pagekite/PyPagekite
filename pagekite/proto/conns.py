@@ -156,10 +156,10 @@ class Tunnel(ChunkParser):
           del seen[seen_ip]
 
       if len(seen.keys()) >= maxips:
-        self.LogError('Rejecting connection from new client',
-                      [('client', client[:12]),
-                       ('ips_per_sec', '%d/%ds' % (maxips, delta)),
-                       ('domain', host)] + log_info)
+        self.LogWarning('Rejecting connection from new client',
+                        [('client', client[:12]),
+                         ('ips_per_sec', '%d/%ds' % (maxips, delta)),
+                         ('domain', host)] + log_info)
         return 'ips_per_sec'
       else:
         seen[client] = now
@@ -282,7 +282,8 @@ class Tunnel(ChunkParser):
         if backend in self.backends:
           del self.backends[backend]
       proto, domain, srand = backend.split(':')
-      self.Log([('BE', 'Dead'), ('proto', proto), ('domain', domain)] + logi)
+      self.Log([('BE', 'Dead'), ('proto', proto), ('domain', domain)] + logi,
+               level=logging.LOG_LEVEL_MACH)
       self.conns.CloseTunnel(proto, domain, self)
 
     # Update IP rate limits, if necessary
@@ -312,14 +313,15 @@ class Tunnel(ChunkParser):
         proto, domain, srand = backend.split(':')
         self.Log([('BE', 'Live'),
                   ('proto', proto),
-                  ('domain', domain)] + logi)
+                  ('domain', domain)] + logi,
+                 level=logging.LOG_LEVEL_MACH)
         self.conns.Tunnel(proto, domain, self)
       if not ok:
         if self.server_info[self.S_ADD_KITES] and not bad:
           self.LogDebug('No tunnels configured, idling...')
           self.conns.SetIdle(self, 60)
         else:
-          self.LogDebug('No tunnels configured, closing connection.')
+          self.LogWarning('No tunnels configured, closing connection.')
           self.Die()
 
     return True
@@ -337,7 +339,7 @@ class Tunnel(ChunkParser):
 
     # Nothing is OK anymore, give up and shut down the tunnel.
     self.Log(log_info)
-    self.LogInfo('Ran out of quota or account deleted, closing tunnel.')
+    self.LogWarning('Ran out of quota or account deleted, closing tunnel.')
     self.Die()
     return self
 
@@ -396,7 +398,7 @@ class Tunnel(ChunkParser):
 
   def ChunkAuthCallback(self, results, log_info):
     if log_info:
-      logging.Log(log_info)
+      logging.Log(log_info, level=logging.LOG_LEVEL_MACH)
 
     if self.ProcessAuthResults(results):
       output = ['NOOP: 1\r\n']
@@ -465,12 +467,12 @@ class Tunnel(ChunkParser):
                                    websocket_key=self.websocket_key),
                       activity=False, try_flush=True, allow_blocking=False)
         or not self.Flush(wait=True, allow_blocking=False)):
-      self.LogDebug('Failed to send kite request, closing.')
+      self.LogError('Failed to send kite request, closing.')
       raise IOError('Failed to send kite request, closing.')
 
     data = self._RecvHttpHeaders()
     if not data:
-      self.LogDebug('Failed to parse kite response, closing.')
+      self.LogError('Failed to parse kite response, closing.')
       raise IOError('Failed to parse kite response, closing.')
 
     self.fd.setblocking(0)
@@ -529,35 +531,32 @@ class Tunnel(ChunkParser):
       logdata = [('FE', sname)]
       for arg in args:
         logdata.append((arg, args[arg][0]))
-      logging.Log(logdata)
+      logging.Log(logdata, level=logging.LOG_LEVEL_MACH)
       if 'motd' in args and args['motd'][0]:
         config.ui.NotifyMOTD(sname, args['motd'][0])
       logged += 1
 
     # FIXME: Really, we should keep track of quota dimensions for
     #        each kite.  At the moment that isn't even reported...
+    quota_log = []
     for quota in parse.Header('X-PageKite-Quota'):
       self.quota = [float(quota), None, None]
-      self.Log([('FE', sname), ('quota', quota)])
-      logged += 1
-
+      quota_log.append(('quota_bw', quota))
     for quota in parse.Header('X-PageKite-QConns'):
       self.q_conns = float(quota)
-      self.Log([('FE', sname), ('q_conns', quota)])
-      logged += 1
-
+      quota_log.append(('quota_conns', quota))
     for quota in parse.Header('X-PageKite-QDays'):
       self.q_days = float(quota)
-      self.Log([('FE', sname), ('q_days', quota)])
-      logged += 1
-
+      quota_log.append(('quota_days', quota))
     for quota in parse.Header('X-PageKite-IPsPerSec'):
-      self.Log([('FE', sname), ('ips_per_sec', quota)])
-      logged += 1
+      quota_log.append(('ips_per_sec', quota))
       try:
         config.ui.NotifyIPsPerSec(*[int(i) for i in quota.split('/')])
       except ValueError:
         pass
+    if quota_log:
+      self.Log([('FE', sname)] + quota_log)
+      logged += 1
 
     invalid_reasons = {}
     for request in parse.Header('X-PageKite-Invalid-Why'):
@@ -574,7 +573,8 @@ class Tunnel(ChunkParser):
                 ('err', 'Rejected'),
                 ('proto', proto),
                 ('reason', reason),
-                ('domain', domain)])
+                ('domain', domain)],
+               level=logging.LOG_LEVEL_WARN)
       config.ui.NotifyKiteRejected(proto, domain, reason, crit=True)
       config.SetBackendStatus(domain, proto, add=BE_STATUS_ERR_TUNNEL)
       logged += 1
@@ -585,7 +585,8 @@ class Tunnel(ChunkParser):
       self.Log([('FE', self.server_info[self.S_NAME]),
                 ('err', 'Duplicate'),
                 ('proto', proto),
-                ('domain', domain)])
+                ('domain', domain)],
+               level=logging.LOG_LEVEL_WARN)
       config.ui.NotifyKiteRejected(proto, domain, 'duplicate')
       config.SetBackendStatus(domain, proto, add=BE_STATUS_ERR_TUNNEL)
       logged += 1
@@ -607,7 +608,8 @@ class Tunnel(ChunkParser):
       self.Log([('FE', sname),
                 ('proto', proto),
                 ('domain', domain),
-                ('ssl', (request in ssl_available))])
+                ('ssl', (request in ssl_available))],
+               level=logging.LOG_LEVEL_INFO)
       config.SetBackendStatus(domain, proto, add=status)
       logged += 1
 
@@ -621,7 +623,6 @@ class Tunnel(ChunkParser):
         ('ports', ','.join(self.server_info[self.S_PORTS])),
         ('protocols', ','.join(self.server_info[self.S_PROTOS])),
         ('raw_ports', ','.join(self.server_info[self.S_RAW_PORTS] or []))])
-
 
     return have_kite_info and have_kites
 
@@ -720,8 +721,8 @@ class Tunnel(ChunkParser):
         try:
           data = f.filter_data_out(self, sid, data)
         except:
-          logging.LogError(('Ignoring error in filter_out %s: %s'
-                            ) % (f, format_exc()))
+          logging.LogWarning(('Ignoring error in filter_out %s: %s'
+                              ) % (f, format_exc()))
 
     sending = ['SID: %s\r\n' % sid]
     if proto: sending.append('Proto: %s\r\n' % proto)
@@ -794,8 +795,11 @@ class Tunnel(ChunkParser):
   def SendPing(self):
     now = time.time()
     self.last_ping = int(now)
-    self.LogDebug("Ping", [('host', self.server_info[self.S_NAME])])
-    return self.SendChunked('NOOP: 1\r\nPING: %.3f\r\n\r\n!' % now,
+    self.Log([
+      ('FE', self.server_info[self.S_NAME]),
+      ('pinged_tunnel', '@%.4f' % now)],
+      level=logging.LOG_LEVEL_DEBUG)
+    return self.SendChunked('NOOP: 1\r\nPING: %.4f\r\n\r\n!' % now,
                             compress=False, just_buffer=True)
 
   def ProcessPong(self, pong):
@@ -807,9 +811,9 @@ class Tunnel(ChunkParser):
         self.weighted_rtt = int(0.9 * self.weighted_rtt + 0.1 * rtt)
 
       sname = self.server_info[self.S_NAME]
-      log_info = [('host', sname),
-                  ('rtt', '%d' % rtt),
-                  ('wrtt', '%d' % self.weighted_rtt)]
+      log_info = [('FE', sname),
+                  ('tunnel_ping_ms', '%d' % rtt),
+                  ('tunnel_ping_wrtt', '%d' % self.weighted_rtt)]
 
       if self.weighted_rtt > 2500:  # Magic number: 2.5 seconds is a long time!
         if not self.conns.config.isfrontend:
@@ -821,7 +825,9 @@ class Tunnel(ChunkParser):
           self.weighted_rtt = 0
           log_info.append(('flagged', 'Flagged relay as broken'))
 
-      self.Log(log_info)
+      self.Log(log_info, level=(
+        logging.LOG_LEVEL_WARN if ('flagged' in log_info) else
+        logging.LOG_LEVEL_INFO))
       if common.gYamon:
         common.gYamon.ladd('tunnel_rtt', rtt)
         common.gYamon.ladd('tunnel_wrtt', self.weighted_rtt)
@@ -941,8 +947,8 @@ class Tunnel(ChunkParser):
           if data is not None:
             data = f.filter_data_in(self, sid, data)
         except:
-          logging.LogError(('Ignoring error in filter_in %s: %s'
-                            ) % (f, format_exc()))
+          logging.LogWarning(('Ignoring error in filter_in %s: %s'
+                              ) % (f, format_exc()))
     return data
 
   def GetChunkDestination(self, parse):
@@ -1268,7 +1274,7 @@ class UserConn(Selectable):
     try:
       self = UserConn(address, ui=conns.config.ui)
     except (ValueError, IOError, OSError):
-      conn.LogDebug('Unable to create new connection object!')
+      conn.LogError('Unable to create new connection object!')
       return None
     self.conns = conns
     self.SetConn(conn)
@@ -1390,14 +1396,13 @@ class UserConn(Selectable):
       ('on_port', on_port),
       ('proto', proto),
       ('domain', host),
-      ('is', 'BE')
-    ]
-    if remote_ip:
-      logInfo.append(('remote_ip', remote_ip))
+      ('is', 'BE')]
 
     # Strip off useless IPv6 prefix, if this is an IPv4 address.
     if remote_ip.startswith('::ffff:') and ':' not in remote_ip[7:]:
       remote_ip = remote_ip[7:]
+    if remote_ip:
+      logInfo.append(('remote_ip', remote_ip))
 
     if not backend or not backend[0]:
       self.ui.Notify(('%s - %s://%s:%s (FAIL: no server)'
@@ -1422,13 +1427,19 @@ class UserConn(Selectable):
         else:
           self.security = 'ip'
 
+      # Parse things!
+      if proto in ('websocket', 'http', 'http2', 'http3'):
+        http_parse = HttpLineParser(lines=data.splitlines())
+        logInfo[0:0] = [(http_parse.method, http_parse.path)]
+      else:
+        http_parse = None
+
       # Access control interception: check for HTTP Basic authentication.
       user_keys = [k for k in host_config if k.startswith('password/')]
       if user_keys:
         user, pwd, fail = None, None, True
-        if proto in ('websocket', 'http', 'http2', 'http3'):
-          parse = HttpLineParser(lines=data.splitlines())
-          auth = parse.Header('Authorization')
+        if http_parse:
+          auth = http_parse.Header('Authorization')
           try:
             (how, ab64) = auth[0].strip().split()
             if how.lower() == 'basic':
@@ -1455,7 +1466,7 @@ class UserConn(Selectable):
 
     if not backend:
       logInfo.append(('err', 'No back-end'))
-      self.Log(logInfo)
+      self.Log(logInfo, level=logging.LOG_LEVEL_ERR)
       self.Cleanup(close=False)
       return failure
 
@@ -1478,7 +1489,7 @@ class UserConn(Selectable):
                       ) % (remote_ip or 'unknown', proto, host, on_port,
                            sspec[0], sspec[1]),
                      prefix='!', color=self.ui.YELLOW)
-      self.Log(logInfo)
+      self.Log(logInfo, level=logging.LOG_LEVEL_ERR)
       self.Cleanup(close=False)
       return None
 

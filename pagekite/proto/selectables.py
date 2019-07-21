@@ -252,9 +252,9 @@ class Selectable(object):
     self.read_bytes = conn.read_bytes
     self.wrote_bytes = conn.wrote_bytes
 
-  def Log(self, values):
+  def Log(self, values, level=logging.LOG_LEVEL_DEFAULT):
     if self.log_id: values.append(('id', self.log_id))
-    logging.Log(values)
+    logging.Log(values, level=level)
 
   def LogError(self, error, params=None):
     values = params or []
@@ -265,6 +265,11 @@ class Selectable(object):
     values = params or []
     if self.log_id: values.append(('id', self.log_id))
     logging.LogDebug(message, values)
+
+  def LogWarning(self, warning, params=None):
+    values = params or []
+    if self.log_id: values.append(('id', self.log_id))
+    logging.LogWarning(warning, values)
 
   def LogInfo(self, message, params=None):
     values = params or []
@@ -291,16 +296,18 @@ class Selectable(object):
         self.Log([('wrote', '%d' % self.wrote_bytes),
                   ('wbps', '%d' % self.write_speed),
                   ('read', '%d' % self.read_bytes),
-                  ('eof', '1')])
+                  ('eof', '1')],
+                 level=logging.LOG_LEVEL_MACH)
       else:
         self.Log([('wrote', '%d' % self.wrote_bytes),
                   ('wbps', '%d' % self.write_speed),
-                  ('read', '%d' % self.read_bytes)])
+                  ('read', '%d' % self.read_bytes)],
+                 level=logging.LOG_LEVEL_MACH)
 
       self.bytes_logged = now
       self.wrote_bytes = self.read_bytes = 0
     elif final:
-      self.Log([('eof', '1')])
+      self.Log([('eof', '1')], level=logging.LOG_LEVEL_MACH)
 
     global SELECTABLES
     SELECTABLES[self.gsid] = '%s %s' % (self.countas, self)
