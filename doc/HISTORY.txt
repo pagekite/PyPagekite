@@ -1,15 +1,15 @@
 Version history - highlights
 ============================
 
-v1.0.0.??????
+v1.0.0.190721
 -------------
-   - Fix a few minor buglets
-   - Added experimental support for relay connections over websockets
    - Debian: improve .deb config samples
+   - Fix buglets: broken --shell, dup IPs in DynDNS, logrotate config, ...
+   - Postpone allocation of ZLib decompressor until we see a ZChunk
    - Improve errors/feedback if config is unwritable during signup, add, etc.
 
 
-v1.0.0.190225  2019.02.25
+v1.0.0.190225  <- The date is there now!
 -------------
    - Call this 1.0, change versioning schemes. We're pretty stable!
    - UI: Made relay capability description and quota report less confusing
