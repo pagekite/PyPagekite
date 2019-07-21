@@ -1,8 +1,10 @@
 Version history - highlights
 ============================
 
-v1.0.0.??????
+v1.1.0.??????
 -------------
+   - Bump versions: New Dev Is Happening! Also, breaking compatibility...
+   - Dropped protocols: finger, httpfinger, minecraft
    - Fix a few minor buglets
    - Added experimental support for relay connections over websockets
    - Debian: improve .deb config samples

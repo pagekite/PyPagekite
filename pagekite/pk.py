@@ -1534,15 +1534,17 @@ class PageKite(object):
     # secret and use the remote-control APIs as long as they can read the
     # *entire* config (which contains all the sensitive bits anyway).
     #
+    # FIXME: This runs too early! Before the config is fully loaded! BOO.
+    #
     if self.ui_httpd and self.ui_httpd.httpd and not new:
       return self.ui_httpd.httpd.secret
     elif not self.kitesecret and not self.ui_password and not self.backends:
       # Our config has no secrets, generate a completely random one
       return sha256b64(globalSecret())[:24]
     else:
-      return sha256b64(
-        '\n'.join([username or getpass.getuser()] + self.GenerateConfig())
-        )[:24]
+      config = [username or getpass.getuser()] + self.GenerateConfig()
+      sys.stderr.write('%s\n' % config)
+      return sha256b64('\n'.join(config))[:24]
 
   def LoginPath(self, goto):
     return '/_pagekite/login/%s/%s' % (self.ConfigSecret(), goto)
@@ -3941,7 +3943,7 @@ class PageKite(object):
     # Flush in-memory log, if necessary
     logging.FlushLogMemory()
 
-    # Report status of built-in HTTPD
+    # Report status of built-in HTTPD, update secret
     if self.ui_httpd and self.ui_httpd.httpd:
       httpd_sspec = '%s:%s' % self.ui_httpd.ui_sspec
       conf_secret = self.ConfigSecret()

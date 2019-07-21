@@ -387,7 +387,10 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     self.getHostInfo()
     self.command = command
 
-    if not self.performAuthChecks(scheme, netloc, path, qs): return
+    ctype, pdict = cgi.parse_header(self.headers.get('content-type'))
+    if (not (ctype == 'text/xml' and self.host_config.get('xmlrpc')) and
+        not self.performAuthChecks(scheme, netloc, path, qs)):
+      return
 
     posted = None
     self.post_data = tempfile.TemporaryFile()
@@ -404,7 +407,6 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       self.post_data.seek(0)
       self.rfile = self.post_data
 
-      ctype, pdict = cgi.parse_header(self.headers.get('content-type'))
       if ctype.lower() == 'multipart/form-data':
         self.post_data.seek(0)
         posted = cgi.FieldStorage(
@@ -953,6 +955,7 @@ class RemoteControlInterface(object):
   ACL_OPEN = ''
   ACL_READ = 'r'
   ACL_WRITE = 'w'
+  ACL_BOTH = 'rw'
 
   def __init__(self, httpd, pkite, conns):
     self.httpd = httpd
@@ -963,8 +966,10 @@ class RemoteControlInterface(object):
     self.lock = threading.Lock()
     self.request = None
 
-    # For now, nobody gets ACL_WRITE
     self.auth_tokens = {httpd.secret: self.ACL_READ}
+    if self.pkite.ui_password:
+      self.auth_tokens[httpd.secret] = self.ACL_BOTH
+      self.auth_tokens[self.pkite.ui_password] = self.ACL_BOTH
 
     # Channels are in-memory logs which can be tailed over XML-RPC.
     # Javascript apps can create these for implementing chat etc.
@@ -999,8 +1004,7 @@ class RemoteControlInterface(object):
     pass
 
   def get_kites(self, auth_token):
-    if (not self.request.host_config.get('console', False) or
-        self.ACL_READ not in self.auth_tokens.get(auth_token, self.ACL_OPEN)):
+    if self.ACL_READ not in self.auth_tokens.get(auth_token, self.ACL_OPEN):
       raise AuthError('Unauthorized')
 
     kites = []
@@ -1014,8 +1018,8 @@ class RemoteControlInterface(object):
         'fe_port': (len(fe_proto) > 1) and fe_proto[1] or '',
         'fe_secret': self.pkite.backends[bid][BE_SECRET],
         'be_proto': self.pkite.backends[bid][BE_PROTO],
-        'backend': self.pkite.backends[bid][BE_BACKEND],
-        'fe_list': [{'name': fe.server_name,
+        'backend': self.pkite.backends[bid][BE_BHOST],
+        'fe_list': [{'name': fe.server_info[0],
                      'tls': fe.using_tls,
                      'sid': fe.sid} for fe in self.conns.Tunnel(proto, domain)]
       }
@@ -1027,14 +1031,12 @@ class RemoteControlInterface(object):
                fe_port, fe_domain,
                be_port, be_domain,
                shared_secret):
-    if (not self.request.host_config.get('console', False) or
-        self.ACL_WRITE not in self.auth_tokens.get(auth_token, self.ACL_OPEN)):
+    if self.ACL_WRITE not in self.auth_tokens.get(auth_token, self.ACL_OPEN):
       raise AuthError('Unauthorized')
     # FIXME
 
   def remove_kite(self, auth_token, kite_id):
-    if (not self.request.host_config.get('console', False) or
-        self.ACL_WRITE not in self.auth_tokens.get(auth_token, self.ACL_OPEN)):
+    if self.ACL_WRITE not in self.auth_tokens.get(auth_token, self.ACL_OPEN):
       raise AuthError('Unauthorized')
 
     if kite_id in self.pkite.backends:
