@@ -74,7 +74,7 @@ except:
 
 try:
   from urlparse import parse_qs, urlparse
-except ImportError, e:
+except ImportError as e:
   from cgi import parse_qs
   from urlparse import urlparse
 try:

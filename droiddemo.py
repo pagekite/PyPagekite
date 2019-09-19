@@ -33,7 +33,7 @@ import os
 from urllib import unquote
 try:
   from urlparse import parse_qs, urlparse
-except Exception, e:
+except Exception as e:
   from cgi import parse_qs
   from urlparse import urlparse
 
@@ -100,7 +100,7 @@ class UiRequestHandler(pagekite.UiRequestHandler):
             pass
         return
  
-      except Exception, e:
+      except Exception as e:
         print '%s' % e
         pass 
 
@@ -116,7 +116,7 @@ class UiRequestHandler(pagekite.UiRequestHandler):
         self.begin_headers(200, 'text/plain')
         self.end_headers()
         self.wfile.write(pyfile.read().replace(SECRET, 'mysecret'))
-      except IOError, e:
+      except IOError as e:
         self.begin_headers(404, 'text/plain')
         self.end_headers()
         self.wfile.write('Could not read %s: %s' % (SOURCE, e))

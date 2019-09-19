@@ -194,12 +194,12 @@ class Tunnel(ChunkParser):
 
       requests = self.GetKiteRequests(conn.parser)
 
-    except Exception, err:
+    except Exception as err:
       self.LogError('Discarding connection: %s' % err)
       self.Cleanup()
       return None
 
-    except socket.error, err:
+    except socket.error as err:
       self.LogInfo('Discarding connection: %s' % err)
       self.Cleanup()
       return None
@@ -642,7 +642,7 @@ class Tunnel(ChunkParser):
       self.Cleanup()
       return None
 
-    except Exception, e:
+    except Exception as e:
       self.LogError('Connect failed: %s' % e)
       self.Cleanup()
       return None
@@ -987,7 +987,7 @@ class Tunnel(ChunkParser):
                 'X-Forwarded-For: %s\r\n'
                 'Connection: close\r\n'
                 'Host: %s\r\n\r\n%s') % args
-      except Exception, e:
+      except Exception as e:
         self.LogError('Error formatting HTTP-Finger: %s' % e)
         conn.Die()
         conn = None
@@ -1421,7 +1421,7 @@ class UserConn(Selectable):
 
       self.fd.setblocking(0)
 
-    except socket.error, err:
+    except socket.error as err:
       logInfo.append(('socket_error', '%s' % err))
       self.ui.Notify(('%s - %s://%s:%s (FAIL: %s:%s is down)'
                       ) % (remote_ip or 'unknown', proto, host, on_port,
@@ -1454,7 +1454,7 @@ class UserConn(Selectable):
             self.fd.sock_shutdown(direction)
         else:
           self.fd.shutdown(direction)
-    except Exception, e:
+    except Exception as e:
       pass
 
   def ProcessTunnelEof(self, read_eof=False, write_eof=False):
@@ -1992,13 +1992,14 @@ class Listener(Selectable):
         self.Log(log_info)
         return True
 
-    except IOError, err:
+    except IOError as err:
       self.LogDebug('Listener::ReadData: error: %s (%s)' % (err, err.errno))
 
-    except socket.error, (errno, msg):
+    except socket.error as err:
+      (errno, msg) = err.args
       self.LogInfo('Listener::ReadData: error: %s (errno=%s)' % (msg, errno))
 
-    except Exception, e:
+    except Exception as e:
       self.LogDebug('Listener::ReadData: %s' % e)
 
     return True

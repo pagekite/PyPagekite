@@ -38,7 +38,7 @@ import urllib
 import BaseHTTPServer
 try:
   from urlparse import parse_qs, urlparse
-except Exception, e:
+except Exception as e:
   from cgi import parse_qs
   from urlparse import urlparse
 

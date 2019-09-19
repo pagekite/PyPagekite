@@ -194,7 +194,7 @@ class AuthThread(threading.Thread):
     while self.keep_running:
       try:
         self._run()
-      except Exception, e:
+      except Exception as e:
         logging.LogError('AuthThread died: %s' % e)
         time.sleep(5)
     logging.LogDebug('AuthThread: done')
@@ -550,7 +550,7 @@ class HttpUiThread(threading.Thread):
         self.httpd.handle_request()
       except KeyboardInterrupt:
         self.serve = False
-      except Exception, e:
+      except Exception as e:
         logging.LogInfo('HTTP UI caught exception: %s' % e)
     if self.httpd: self.httpd.socket.close()
     logging.LogDebug('HttpUiThread: done')
@@ -733,7 +733,7 @@ class TunnelManager(threading.Thread):
     while self.keep_running:
       try:
         self._run()
-      except Exception, e:
+      except Exception as e:
         logging.LogError('TunnelManager died: %s' % e)
         if logging.DEBUG_IO:
           traceback.print_exc(file=sys.stderr)
@@ -1055,7 +1055,7 @@ class PageKite(object):
         self.rcfile = os.path.join(os.path.expanduser('~'), '.pagekite.rc')
         self.devnull = '/dev/null'
 
-    except Exception, e:
+    except Exception as e:
       # The above stuff may fail in some cases, e.g. on Android in SL4A.
       self.rcfile = 'pagekite.cfg'
       self.devnull = '/dev/null'
@@ -1579,7 +1579,7 @@ class PageKite(object):
         self.ui.Tell(['Settings saved to: %s' % self.savefile])
         self.ui.Spacer()
       logging.Log([('saved', 'Settings saved to: %s' % self.savefile)])
-    except Exception, e:
+    except Exception as e:
       if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
       self.ui.Tell(['Could not save to %s: %s' % (self.savefile, e)],
                    error=True)
@@ -1803,7 +1803,7 @@ class PageKite(object):
           try:
             return self.LookupDomainQuota(srand, token, sign, protoport,
                                           domain.replace('*', '_any_'), adom)
-          except Exception, e:
+          except Exception as e:
             # Lookup failed, fail open.
             if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
             logging.LogError('Quota lookup failed: %s' % e)
@@ -3004,7 +3004,7 @@ class PageKite(object):
               for be_spec in be_specs:
                 cfgs.update(self.ArgToBackendSpecs(be_spec % kitename,
                                                    secret=secret))
-          except Exception, e:
+          except Exception as e:
             error = '%s' % e
 
           if error:
@@ -3107,7 +3107,7 @@ class PageKite(object):
         if not data.startswith('HTTP/1.1 503 Unavailable'):
           raise Exception()
 
-      except Exception, e:
+      except Exception as e:
         logging.LogDebug('Ping %s:%s failed: %s' % (host, port, e))
         return (999999, uuid)
 
@@ -3311,7 +3311,7 @@ class PageKite(object):
               threads[-1].start()
           for t in threads:
             t.join(max(0.1, deadline - time.time()))
-      except Exception, e:
+      except Exception as e:
         logging.LogDebug('Unreachable: %s, %s' % (domain, e))
 
       # Evaluate ping results, mark fastest N servers as preferred
@@ -3561,7 +3561,7 @@ class PageKite(object):
               failed_updates.append(domain)
               logging.LogInfo('DynDNS update failed: %s' % result,
                               [('data', update)])
-          except Exception, e:
+          except Exception as e:
             failed_updates.append(update.split(':')[0])
             logging.LogInfo('DynDNS update failed: %s' % e, [('data', update)])
             if logging.DEBUG_IO:
@@ -3620,7 +3620,7 @@ class PageKite(object):
         if not self.ui.WANTS_STDERR:
           os.dup2(fd.fileno(), sys.stdin.fileno())
           os.dup2(fd.fileno(), sys.stderr.fileno())
-      except Exception, e:
+      except Exception as e:
         raise ConfigError('%s' % e)
 
   def Daemonize(self):
@@ -3861,7 +3861,7 @@ class PageKite(object):
       # Create the Tunnel Manager
       self.tunnel_manager = TunnelManager(self, conns)
 
-    except Exception, e:
+    except Exception as e:
       self.LogTo('stdio')
       logging.FlushLogMemory()
       if logging.DEBUG_IO:
@@ -3958,9 +3958,9 @@ def Main(pagekite, configure, uiclass=NullUi,
       try:
         try:
           configure(pk)
-        except SystemExit, status:
+        except SystemExit as status:
           sys.exit(status)
-        except Exception, e:
+        except Exception as e:
           if logging.DEBUG_IO:
               raise
           raise ConfigError(e)
@@ -3969,25 +3969,25 @@ def Main(pagekite, configure, uiclass=NullUi,
         if shell_mode is not True:
           pk.Start()
 
-      except (ConfigError, getopt.GetoptError), msg:
+      except (ConfigError, getopt.GetoptError) as msg:
         pk.FallDown(msg, help=(not shell_mode), noexit=shell_mode)
         if shell_mode:
           shell_mode = 'more'
 
-      except KeyboardInterrupt, msg:
+      except KeyboardInterrupt as msg:
         pk.FallDown(None, help=False, noexit=True)
         if shell_mode:
           shell_mode = 'auto'
         else:
           return
 
-    except SystemExit, status:
+    except SystemExit as status:
       if shell_mode:
         shell_mode = 'more'
       else:
         sys.exit(status)
 
-    except Exception, msg:
+    except Exception as msg:
       traceback.print_exc(file=sys.stderr)
       if pk.crash_report_url:
         try:
@@ -3998,7 +3998,7 @@ def Main(pagekite, configure, uiclass=NullUi,
                                             'appver': APPVER,
                                             'crash': format_exc()
                                           })).readlines()))
-        except Exception, e:
+        except Exception as e:
           print 'FAILED: %s' % e
 
       pk.FallDown(msg, help=False, noexit=pk.main_loop)

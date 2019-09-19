@@ -67,7 +67,7 @@ except:
 # where we pull these from.
 try:
   from urlparse import parse_qs, urlparse
-except ImportError, e:
+except ImportError as e:
   from cgi import parse_qs
   from urlparse import urlparse
 try:
@@ -312,7 +312,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       self.checkRequestAuth(scheme, netloc, path, qs)
       return True
 
-    except (ValueError, KeyError, AuthError), e:
+    except (ValueError, KeyError, AuthError) as e:
       logging.LogDebug('HTTP Auth failed: %s' % e)
     else:
       logging.LogDebug('HTTP Auth failed: Unauthorized')
@@ -372,7 +372,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                                     qs, None)
     except socket.error:
       pass
-    except Exception, e:
+    except Exception as e:
       logging.Log([('err', 'GET error at %s: %s' % (path, e))])
       if logging.DEBUG_IO: print '=== ERROR\n%s\n===' % format_exc()
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
@@ -425,7 +425,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       self.post_data.seek(0)
     except socket.error:
       pass
-    except Exception, e:
+    except Exception as e:
       logging.Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
       self.rfile = self.old_rfile
@@ -438,7 +438,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                                     qs, posted)
     except socket.error:
       pass
-    except Exception, e:
+    except Exception as e:
       logging.Log([('err', 'Error handling POST at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
@@ -745,7 +745,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
             rf_size = rf_stat.st_size
           except:
             self.chunked = True
-    except (IOError, OSError), e:
+    except (IOError, OSError) as e:
       return False
 
     headers = [ ]

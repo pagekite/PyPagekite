@@ -56,7 +56,7 @@ class PageKiteLogParser(object):
         new_fd = open(filename, 'r')
         fd.close()
         return new_fd
-    except (OSError, IOError), e:
+    except (OSError, IOError) as e:
       # Failed to stat or open new file, just try again later.
       pass
 
@@ -98,7 +98,7 @@ class PageKiteLogParser(object):
               data = self.ParseLine(parts[3].strip())
               if after is None or int(data['ts'], 16) > after:
                 self.ProcessData(data)
-          except ValueError, e:
+          except ValueError as e:
             pass
         else:
           fd.seek(fd.tell() - len(line))

@@ -457,7 +457,7 @@ def DisableSSLCompression():
     openssl.SSL_COMP_get_compression_methods.restype = ctypes.c_void_p
     openssl.sk_zero.argtypes = [ctypes.c_void_p]
     openssl.sk_zero(openssl.SSL_COMP_get_compression_methods())
-  except Exception, e:
+  except Exception as e:
     LogError('disableSSLCompression: Failed: %s' % e)
  
 
@@ -465,7 +465,7 @@ def DisableSSLCompression():
 # where we pull these from.
 try:
   from urlparse import parse_qs, urlparse
-except ImportError, e:
+except ImportError as e:
   from cgi import parse_qs
   from urlparse import urlparse
 try:
@@ -787,7 +787,7 @@ class AuthThread(threading.Thread):
     while self.keep_running:
       try:
         self._run()
-      except Exception, e:
+      except Exception as e:
         LogError('AuthThread died: %s' % e)
         time.sleep(5)
 
@@ -1144,7 +1144,7 @@ class HttpUiThread(threading.Thread):
         self.httpd.handle_request()
       except KeyboardInterrupt:
         self.serve = False
-      except Exception, e:
+      except Exception as e:
         LogInfo('HTTP UI caught exception: %s' % e)
     LogDebug('HttpUiThread: done')
     self.httpd.socket.close()
@@ -1233,7 +1233,7 @@ class HttpParser(object):
       elif (self.state == self.IN_BODY):
         return self.ParseBody(line)
 
-    except ValueError, err:
+    except ValueError as err:
       LogInfo('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
 
     self.state = self.PARSE_FAILED
@@ -1480,7 +1480,8 @@ class Selectable(object):
     while len(discard) < eat_bytes:
       try:
         discard += self.fd.recv(eat_bytes - len(discard))
-      except socket.error, (errno, msg):
+      except socket.error as err:
+        (errno, msg) = err.args
         self.LogInfo('Error reading (%d/%d) socket: %s (errno=%s)' % (
                        eat_bytes, self.peeked, msg, errno))
         time.sleep(0.1)
@@ -1502,18 +1503,19 @@ class Selectable(object):
       else:
         data = self.fd.recv(maxread)
         if DEBUG_IO: print '<== IN\n%s\n===' % data
-    except (SSL.WantReadError, SSL.WantWriteError), err:
+    except (SSL.WantReadError, SSL.WantWriteError) as err:
       return True
-    except IOError, err:
+    except IOError as err:
       if err.errno not in self.HARMLESS_ERRNOS:
         self.LogDebug('Error reading socket: %s (%s)' % (err, err.errno))
         return False
       else:
         return True
-    except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
+    except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError) as err:
       self.LogDebug('Error reading socket (SSL): %s' % err)
       return False
-    except socket.error, (errno, msg):
+    except socket.error as err:
+      (errno, msg) = err.args
       if errno in self.HARMLESS_ERRNOS:
         return True
       else:
@@ -1566,23 +1568,24 @@ class Selectable(object):
         if DEBUG_IO: print '==> OUT\n%s\n===' % sending[:sent_bytes]
         self.wrote_bytes += sent_bytes
         self.write_retry = None
-      except IOError, err:
+      except IOError as err:
         if err.errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s' % err)
           self.ProcessEofWrite()
           return False
         else:
           self.write_retry = len(sending)
-      except (SSL.WantWriteError, SSL.WantReadError), err:
+      except (SSL.WantWriteError, SSL.WantReadError) as err:
         self.write_retry = len(sending)
-      except socket.error, (errno, msg):
+      except socket.error as err:
+        (errno, msg) = err.args
         if errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s (errno=%s)' % (msg, errno))
           self.ProcessEofWrite()
           return False
         else:
           self.write_retry = len(sending)
-      except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
+      except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError) as err:
         self.LogInfo('Error sending (SSL): %s' % err)
         self.ProcessEofWrite()
         return False
@@ -1791,13 +1794,13 @@ class MagicProtocolParser(LineParser):
         args[key] = val
 
       self.EatPeeked(eat_bytes=len(prefix)+2+len(words)+2)
-    except ValueError, e:
+    except ValueError as e:
       return True 
 
     try:
       port = 'port' in args and args['port'] or None
       if port: self.on_port = int(port)
-    except ValueError, e:
+    except ValueError as e:
       return False
 
     proto = 'proto' in args and args['proto'] or None
@@ -1922,7 +1925,7 @@ class ChunkParser(Selectable):
           self.compressed = False
           self.want_bytes = int(size, 16)
 
-      except ValueError, err:
+      except ValueError as err:
         self.LogError('ChunkParser::ProcessData: %s' % err)
         self.Log([('bad_data', data)])
         return False
@@ -2024,12 +2027,12 @@ class Tunnel(ChunkParser):
           requests.append((proto.lower(), domain.lower(), srand, token, sign,
                            prefix))
       
-    except Exception, err:
+    except Exception as err:
       self.LogError('Discarding connection: %s' % err)
       self.Cleanup()
       return None
 
-    except socket.error, err:
+    except socket.error as err:
       self.LogInfo('Discarding connection: %s' % err)
       self.Cleanup()
       return None
@@ -2168,7 +2171,7 @@ class Tunnel(ChunkParser):
         self.fd = SSL_Connect(ctx, self.fd, connected=True, server_side=False,
                               verify_names=self.conns.config.fe_certname)
         LogDebug('TLS connection to %s OK' % server)
-      except SSL.Error, e:
+      except SSL.Error as e:
         self.fd = raw_fd
         self.fd.close()
         LogError('SSL handshake failed: probably a bad cert (%s)' % e)
@@ -2275,11 +2278,11 @@ class Tunnel(ChunkParser):
         self.rtt = (time.time() - begin)
     
 
-    except socket.error, e:
+    except socket.error as e:
       self.Cleanup()
       return None
 
-    except Exception, e:
+    except Exception as e:
       self.LogError('Server response parsing failed: %s' % e)
       self.Cleanup()
       return None
@@ -2380,7 +2383,7 @@ class Tunnel(ChunkParser):
       sid = int(parse.Header('SID')[0])
       bps = int(parse.Header('SPD')[0])
       if sid in self.users: self.users[sid].Throttle(bps, remote=True)
-    except Exception, e:
+    except Exception as e:
       LogError('Tunnel::ProcessChunk: Invalid throttle request!')
     return True
 
@@ -2413,7 +2416,7 @@ class Tunnel(ChunkParser):
       if parse.Header('ZRST') and not self.ResetZChunks(): return False
       if parse.Header('SPD') and not self.Throttle(parse): return False
       if parse.Header('NOOP'): return True
-    except Exception, e:
+    except Exception as e:
       LogError('Tunnel::ProcessChunk: Corrupt chunk: %s' % e)
       return False
 
@@ -2422,7 +2425,7 @@ class Tunnel(ChunkParser):
     try:
       sid = int(parse.Header('SID')[0])
       eof = parse.Header('EOF')
-    except IndexError, e:
+    except IndexError as e:
       LogError('Tunnel::ProcessChunk: Corrupt packet!')
       return False
 
@@ -2663,7 +2666,7 @@ class UserConn(Selectable):
 
       self.fd.setblocking(0)
 
-    except socket.error, err:
+    except socket.error as err:
       logInfo.append(('socket_error', '%s' % err))
       self.Log(logInfo)
       self.Cleanup(close=False)
@@ -2687,7 +2690,7 @@ class UserConn(Selectable):
             self.fd.sock_shutdown(direction)
         else:
           self.fd.shutdown(direction)
-    except Exception, e:
+    except Exception as e:
       pass
 
   def ProcessTunnelEof(self, read_eof=False, write_eof=False):
@@ -2964,7 +2967,7 @@ class Listener(Selectable):
         self.Log([('accept', '%s:%s' % (obfuIp(address[0]), address[1]))])
         uc = self.connclass(client, address, self.port, self.conns)
         return True
-    except Exception, e:
+    except Exception as e:
       LogDebug('Listener::ReadData: %s' % e)
     return False
 
@@ -3005,7 +3008,7 @@ class TunnelManager(threading.Thread):
     while self.keep_running:
       try:
         self._run()
-      except Exception, e:
+      except Exception as e:
         LogError('TunnelManager died: %s' % e)
         time.sleep(5)
 
@@ -3107,7 +3110,7 @@ class PageKite(object):
         self.rcfile = os.path.join(os.getenv('HOME'), '.pagekite.rc')
         self.devnull = '/dev/null'
 
-    except Exception, e:
+    except Exception as e:
       # The above stuff may fail in some cases, e.g. on Android in SL4A.
       self.rcfile = 'pagekite.cfg'
       self.devnull = '/dev/null'
@@ -3324,7 +3327,7 @@ class PageKite(object):
           lookup = '.'.join([srand, token, sign, protoport, domain, self.auth_domain])
           (rv, auth_error_type) = self.LookupDomainQuota(lookup)
           if rv is None or rv >= 0: return (rv, auth_error_type)
-        except Exception, e:
+        except Exception as e:
           # Lookup failed, fail open.
           LogError('Quota lookup failed: %s' % e)
           return (-2, None)
@@ -3464,7 +3467,7 @@ class PageKite(object):
           # together in the tunnel, which makes traffic analysis harder.
           global SEND_ALWAYS_BUFFERS
           SEND_ALWAYS_BUFFERS = True
-        except Exception, e:
+        except Exception as e:
           raise ConfigError("Please instally SocksiPy: "
                             " http://code.google.com/p/socksipy-branch/")
 
@@ -3569,7 +3572,7 @@ class PageKite(object):
       fd.recv(1024)
       fd.close()
 
-    except Exception, e:
+    except Exception as e:
       LogDebug('Ping %s:%s failed: %s' % (host, port, e))
       return 100000 
 
@@ -3605,7 +3608,7 @@ class PageKite(object):
         if server not in self.servers:
           self.servers.append(server)
           self.servers_preferred.append(ipaddr)
-      except Exception, e:
+      except Exception as e:
         LogDebug('DNS lookup failed for %s' % host)
 
     # Lookup and choose from the auto-list (and our old domain).
@@ -3621,13 +3624,13 @@ class PageKite(object):
             for ip in ips:
               server = '%s:%s' % (ip, port)
               if server not in self.servers: self.servers.append(server)
-          except Exception, e:
+          except Exception as e:
             LogDebug('DNS lookup failed for %s' % bdom)
 
       try:
         (hn, al, ips) = socket.gethostbyname_ex(domain)
         times = [self.Ping(ip, port) for ip in ips]
-      except Exception, e:
+      except Exception as e:
         LogDebug('Unreachable: %s, %s' % (domain, e))
         ips = times = []
 
@@ -3712,7 +3715,7 @@ class PageKite(object):
             else:
               LogInfo('DynDNS update failed: %s' % result, [('data', update)])
               failures += 1
-          except Exception, e:
+          except Exception as e:
             LogInfo('DynDNS update failed: %s' % e, [('data', update)])
             failures += 1
       if not self.last_updates:
@@ -3740,7 +3743,7 @@ class PageKite(object):
         os.dup2(fd.fileno(), sys.stdin.fileno())
         os.dup2(fd.fileno(), sys.stdout.fileno())
         os.dup2(fd.fileno(), sys.stderr.fileno())
-      except Exception, e:
+      except Exception as e:
         raise ConfigError('%s' % e)
 
   def Daemonize(self):
@@ -3767,9 +3770,9 @@ class PageKite(object):
         else:
           # Windoes does not seem to like empty selects, so we do this instead.
           time.sleep(0.5)
-      except KeyboardInterrupt, e:
+      except KeyboardInterrupt as e:
         raise KeyboardInterrupt()
-      except Exception, e:
+      except Exception as e:
         LogError('Error in select: %s (%s/%s)' % (e, isocks, osocks))
         conns.CleanFds()
         last_loop -= 1
@@ -3816,7 +3819,7 @@ class PageKite(object):
 
     try:
       epoll = select.epoll()
-    except Exception, msg:
+    except Exception as msg:
       epoll = None 
 
     if epoll: LogDebug("FIXME: Should try epoll!")
@@ -3852,7 +3855,7 @@ class PageKite(object):
       # Create the Tunnel Manager
       self.tunnel_manager = TunnelManager(self, conns)
 
-    except Exception, e:
+    except Exception as e:
       Log = LogToFile
       FlushLogMemory()
       raise ConfigError(e)
@@ -3934,22 +3937,22 @@ def Main(pagekite, configure):
       try:
         try:
           configure(pk)
-        except Exception, e:
+        except Exception as e:
           raise ConfigError(e)
 
         pk.Start()
 
-      except (ConfigError, getopt.GetoptError), msg:
+      except (ConfigError, getopt.GetoptError) as msg:
         pk.FallDown(msg)
 
-      except KeyboardInterrupt, msg:
+      except KeyboardInterrupt as msg:
         pk.FallDown(None, help=False, noexit=True)
         return
 
     except SystemExit:
       sys.exit(0)
 
-    except Exception, msg:
+    except Exception as msg:
       traceback.print_exc(file=sys.stderr)
 
       if pk.crash_report_url:
@@ -3959,7 +3962,7 @@ def Main(pagekite, configure):
                                           urllib.urlencode({ 
                                             'crash': traceback.format_exc() 
                                           })).readlines()))
-        except Exception, e:
+        except Exception as e:
           print 'FAILED: %s' % e
 
       pk.FallDown(msg, help=False, noexit=pk.main_loop)
