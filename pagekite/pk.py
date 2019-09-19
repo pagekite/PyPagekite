@@ -27,6 +27,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
 
+import six
 from six.moves import range
 from six.moves import xmlrpc_client
 from six.moves.urllib.request import URLopener, urlopen
@@ -381,7 +382,7 @@ class Connections(object):
     tick = '%d' % (time.time()//12)
     if tick not in self.ip_tracker:
       deadline = int(tick)-10
-      for ot in self.ip_tracker.keys():
+      for ot in list(six.iterkeys(self.ip_tracker)):
         if int(ot) < deadline:
           del self.ip_tracker[ot]
       self.ip_tracker[tick] = {}
@@ -411,7 +412,7 @@ class Connections(object):
           rmp.append(elc)
       for elc in rmp:
         self.idle.remove(elc)
-      for tid, tunnels in self.tunnels.items():
+      for tid, tunnels in list(six.iteritems(self.tunnels)):
         if conn in tunnels:
           tunnels.remove(conn)
           if not tunnels:
@@ -468,7 +469,7 @@ class Connections(object):
         server = tunnel.server_info[tunnel.S_NAME]
         if server is not None:
           servers[server] = 1
-    return servers.keys()
+    return list(six.iterkeys(servers))
 
   def CloseTunnel(self, proto, domain, conn):
     tid = '%s:%s' % (proto, domain)
@@ -716,7 +717,7 @@ class TunnelManager(threading.Thread):
           elif random.randint(0, 10*pings) == 0:
             tunnel.SendPing()
 
-    for tunnel in dead.values():
+    for tunnel in list(six.itervalues(dead)):
       logging.Log([('dead', tunnel.server_info[tunnel.S_NAME])])
       tunnel.Die(discard_buffer=True)
 
@@ -1801,7 +1802,7 @@ class PageKite(object):
 
       if self.auth_domain or self.auth_domains:
         adom = ''
-        adom_keys = self.auth_domains.keys()
+        adom_keys = list(six.iterkeys(self.auth_domains))
         adom_keys.sort(key=lambda k: (len(k), k))  # Longest match will win
         for dom in adom_keys:
           if domain.endswith('.' + dom):
@@ -1959,7 +1960,7 @@ class PageKite(object):
     req = {}
     for server in self.conns.TunnelServers():
       req[server] = '\r\n'.join(PageKiteRequestHeaders(server, new_specs, {}))
-    for tid, tunnels in self.conns.tunnels.iteritems():
+    for tid, tunnels in six.iteritems(self.conns.tunnels):
       for tunnel in tunnels:
         server_name = tunnel.server_info[tunnel.S_NAME]
         if server_name in req:
@@ -2530,7 +2531,7 @@ class PageKite(object):
       specs = self.ArgToBackendSpecs(spec)
       just_these_backends.update(specs)
 
-      spec = specs[specs.keys()[0]]
+      spec = specs[list(six.iterkeys(specs))[0]]
       http_host = '%s/%s' % (spec[BE_DOMAIN], spec[BE_PORT] or '80')
       if be_config:
         # Map the +foo=bar values to per-site config settings.
@@ -2551,10 +2552,10 @@ class PageKite(object):
       if be_paths:
         host_paths = just_these_webpaths.get(http_host, {})
         host_config = just_these_be_configs.get(http_host, {})
-        rand_seed = '%s:%x' % (specs[specs.keys()[0]][BE_SECRET],
+        rand_seed = '%s:%x' % (specs[list(six.iterkeys(specs))[0]][BE_SECRET],
                                time.time()//3600)
 
-        first = (len(host_paths.keys()) == 0) or be_path_prefix
+        first = (len(list(six.iterkeys(host_paths))) == 0) or be_path_prefix
         paranoid = host_config.get('hide', False)
         set_root = host_config.get('root', True)
         if len(be_paths) == 1:
@@ -2587,7 +2588,7 @@ class PageKite(object):
         just_these_webpaths[http_host] = host_paths
 
     need_registration = {}
-    for be in just_these_backends.values():
+    for be in list(six.itervalues(just_these_backends)):
       if not be[BE_SECRET]:
         if self.kitesecret and be[BE_DOMAIN] == self.kitename:
           be[BE_SECRET] = self.kitesecret
@@ -2610,14 +2611,14 @@ class PageKite(object):
 
       # Update the kite names themselves, if they changed.
       if rdom != domain:
-        for bid in just_these_backends.keys():
+        for bid in list(six.iterkeys(just_these_backends)):
           nbid = bid.replace(':'+domain, ':'+rdom)
           if nbid != bid:
             just_these_backends[nbid] = just_these_backends[bid]
             just_these_backends[nbid][BE_DOMAIN] = rdom
             del just_these_backends[bid]
 
-    if just_these_backends.keys():
+    if list(six.iterkeys(just_these_backends)):
       if self.kite_add:
         self.backends.update(just_these_backends)
       elif self.kite_remove:
@@ -2723,7 +2724,7 @@ class PageKite(object):
           is_cname_ready = True
         if be[BE_SECRET] not in service_accounts.values():
           service_accounts[be[BE_DOMAIN]] = be[BE_SECRET]
-    service_account_list = service_accounts.keys()
+    service_account_list = list(six.iterkeys(service_accounts))
 
     if registered:
       state = ['choose_backends']
@@ -3182,7 +3183,7 @@ class PageKite(object):
     for ipaddrs in self.dns_cache[host].values():
       for ip in ipaddrs:
         ips[ip] = 1
-    return ips.keys()
+    return list(six.iterkeys(ips))
 
   def GetActiveBackends(self, include_loopback=False):
     active = []
@@ -3324,7 +3325,7 @@ class PageKite(object):
         logging.LogDebug('Unreachable: %s, %s' % (domain, e))
 
       # Evaluate ping results, mark fastest N servers as preferred
-      pings = [list(ping) + [ip] for ip, ping in pinged.iteritems()]
+      pings = [list(ping) + [ip] for ip, ping in six.iteritems(pinged)]
       while pings and len(servers_pref) < wanted_conns:
         mIdx = pings.index(min(pings))
         if pings[mIdx][0] > 60:
@@ -3412,7 +3413,7 @@ class PageKite(object):
             tunnel.countas.startswith('frontend')):
           kill.append(tunnel)
     for tunnel in kill:
-      if len(tunnel.users.keys()) < 1:
+      if len(list(six.iterkeys(tunnel.users))) < 1:
         tunnel.Die()
     return kill and True or False
 
@@ -3497,7 +3498,7 @@ class PageKite(object):
       ddns_fmt, ddns_args = self.dyndns
 
       domains = {}
-      for bid in self.backends.keys():
+      for bid in list(six.iterkeys(self.backends)):
         proto, domain = bid.split(':')
         if domain not in domains:
           domains[domain] = (self.backends[bid][BE_SECRET], [])
@@ -3518,7 +3519,7 @@ class PageKite(object):
               domains[domain][1].append(ip)
 
       updates = {}
-      for domain, (secret, ips) in domains.iteritems():
+      for domain, (secret, ips) in six.iteritems(domains):
         if ips:
           # NOTE: Here it would be tempting to skip updates if we already
           #       see correct results in DNS. We avoid this temptation,
@@ -4085,7 +4086,7 @@ def Configure(pk):
     pk.PrintSettings(safe=True)
     sys.exit(0)
 
-  if not pk.backends.keys() and (not pk.kitesecret or not pk.kitename):
+  if not list(six.iterkeys(pk.backends)) and (not pk.kitesecret or not pk.kitename):
     if '--signup' in sys.argv or friendly_mode:
       pk.RegisterNewKite(autoconfigure=True, first=True)
     if friendly_mode:
@@ -4096,7 +4097,7 @@ def Configure(pk):
   if pk.added_kites:
     if (pk.save or
         pk.ui.AskYesNo('Save settings to %s?' % pk.rcfile,
-                       default=(len(pk.backends.keys()) > 0))):
+                       default=(len(list(six.iterkeys(pk.backends))) > 0))):
       pk.SaveUserConfig()
     pk.servers_new_only = 'Once'
   elif pk.save:

@@ -27,6 +27,8 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
 
+import six
+
 import socket
 import sys
 import threading
@@ -78,7 +80,7 @@ class Tunnel(ChunkParser):
 
   def Cleanup(self, close=True):
     if self.users:
-      for sid in self.users.keys():
+      for sid in list(six.iterkeys(self.users)):
         self.CloseStream(sid)
     ChunkParser.Cleanup(self, close=close)
     self.Init(None)
@@ -153,11 +155,11 @@ class Tunnel(ChunkParser):
         seen[client] = now
         return False
 
-      for seen_ip in seen.keys():
+      for seen_ip in list(six.iterkeys(seen)):
         if seen[seen_ip] < now - delta:
           del seen[seen_ip]
 
-      if len(seen.keys()) >= maxips:
+      if len(list(six.iterkeys(seen))) >= maxips:
         self.LogError('Rejecting connection from new client',
                       [('client', client[:12]),
                        ('ips_per_sec', '%d/%ds' % (maxips, delta)),
@@ -1126,7 +1128,7 @@ class LoopbackTunnel(Tunnel):
     self.buffer_count = 0
     self.CountAs('loopbacks_live')
     if which == 'FE':
-      for d in backends.keys():
+      for d in list(six.iterkeys(backends)):
         if backends[d][BE_BHOST]:
           proto, domain = d.split(':')
           self.conns.Tunnel(proto, domain, self)

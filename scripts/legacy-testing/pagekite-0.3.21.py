@@ -279,6 +279,7 @@ DYNDNS = {
 
 ##[ Standard imports ]########################################################
 
+import six
 from six.moves import range
 from six.moves.urllib.parse import parse_qs, urlencode, urlparse
 from six.moves.urllib.request import urlopen
@@ -593,7 +594,7 @@ def HTTP_PageKiteRequest(server, backends, tokens=None, nozchunks=False,
   if tls: req.append('X-PageKite-Features: TLS\r\n')
          
   tokens = tokens or {}
-  for d in backends.keys():
+  for d in list(six.iterkeys(backends)):
     if backends[d][BE_BACKEND]:
 
       # A stable (for replay on challenge) but unguessable salt.
@@ -982,7 +983,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       if not alllog and ('debug' in line) != debug: continue
       if not alllog and ('uireq' in line) != httpd: continue
 
-      keys = line.keys()
+      keys = list(six.iterkeys(line))
       keys.sort()
       lhtml = ('<tr><td colspan=3><b>%s</b></td>'
                '</tr>' % time.strftime('%Y-%m-%d %H:%M:%S',
@@ -1002,7 +1003,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def html_conns(self):
     html = ['<ul>']
-    sids = SELECTABLES.keys()
+    sids = list(six.iterkeys(SELECTABLES))
     sids.sort(reverse=True)
     for sid in sids:
       sel = SELECTABLES[sid]
@@ -1658,7 +1659,7 @@ class Connections(object):
     tick = '%d' % (time.time()//12)
     if tick not in self.ip_tracker:
       deadline = int(tick)-10
-      for ot in self.ip_tracker.keys():
+      for ot in list(six.iterkeys(self.ip_tracker)):
         if int(ot) < deadline: del self.ip_tracker[ot]
       self.ip_tracker[tick] = {}
 
@@ -1679,7 +1680,7 @@ class Connections(object):
       del self.conns_by_id[conn.alt_id]
     if conn in self.conns:
       self.conns.remove(conn)
-    for tid in self.tunnels.keys():
+    for tid in list(six.iterkeys(self.tunnels)):
       if conn in self.tunnels[tid]:
         self.tunnels[tid].remove(conn)
         if not self.tunnels[tid]: del self.tunnels[tid]
@@ -1722,7 +1723,7 @@ class Connections(object):
         server = tunnel.server_info[tunnel.S_NAME]
         if server is not None:
           servers[server] = 1
-    return servers.keys() 
+    return list(six.iterkeys(servers))
 
   def Tunnel(self, proto, domain, conn=None):
     tid = '%s:%s' % (proto, domain)
@@ -2101,7 +2102,7 @@ class Tunnel(ChunkParser):
       self.Cleanup()
       return None
 
-    self.backends = ok.keys()
+    self.backends = list(six.iterkeys(ok))
     if self.backends:
       for backend in self.backends:
         proto, domain, srand = backend.split(':')
@@ -2347,7 +2348,7 @@ class Tunnel(ChunkParser):
 
   def Cleanup(self, close=True):
     if self.users:
-      for sid in self.users.keys(): self.CloseStream(sid)
+      for sid in list(six.iterkeys(self.users)): self.CloseStream(sid)
     ChunkParser.Cleanup(self, close=close)
     self.conns = None
     self.users = self.zhistory = self.backends = {}
@@ -2508,7 +2509,7 @@ class LoopbackTunnel(Tunnel):
     self.server_info[self.S_NAME] = LOOPBACK[which]
     self.other_end = None
     if which == 'FE':
-      for d in backends.keys():
+      for d in list(six.iterkeys(backends)):
         if backends[d][BE_BACKEND]:
           proto, domain = d.split(':')
           self.conns.Tunnel(proto, domain, self)
@@ -2588,7 +2589,7 @@ class UserConn(Selectable):
     if proto == 'probe':
       protos = ['http', 'https', 'websocket', 'raw']
       ports = conns.config.server_ports[:]
-      ports.extend(conns.config.server_aliasport.keys())
+      ports.extend(list(six.iterkeys(conns.config.server_aliasport)))
       ports.extend([x for x in conns.config.server_raw_ports if x != VIRTUAL_PN])
     else:
       protos = [proto]
@@ -3000,7 +3001,7 @@ class TunnelManager(threading.Thread):
         elif tunnel.last_activity < now-30 and tunnel.last_ping < now-2:
           tunnel.SendPing()
 
-    for tunnel in dead.values():
+    for tunnel in list(six.itervalues(dead)):
       Log([('dead', tunnel.server_info[tunnel.S_NAME])])
       self.conns.Remove(tunnel)
       tunnel.Cleanup()
@@ -3598,7 +3599,7 @@ class PageKite(object):
     # Enable internal loopback
     if self.isfrontend:
       need_loopback = False
-      for be in self.backends.values():
+      for be in list(six.itervalues(self.backends)):
         if be[BE_BACKEND]:
           need_loopback = True
       if need_loopback:
@@ -3675,7 +3676,7 @@ class PageKite(object):
       updates = {}
       ddns_fmt, ddns_args = self.dyndns
 
-      for bid in self.backends.keys():
+      for bid in list(six.iterkeys(self.backends)):
         proto, domain = bid.split(':')
         if bid in conns.tunnels:
           ips = []

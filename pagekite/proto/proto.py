@@ -24,6 +24,9 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+
+import six
+
 import base64
 import os
 import random
@@ -101,7 +104,7 @@ def checkSignature(sign='', secret='', payload=''):
 def PageKiteRequestHeaders(server, backends, tokens=None, testtoken=None):
   req = []
   tokens = tokens or {}
-  for d in backends.keys():
+  for d in list(six.iterkeys(backends)):
     if (backends[d][BE_BHOST] and
         backends[d][BE_SECRET] and
         backends[d][BE_STATUS] not in BE_INACTIVE):

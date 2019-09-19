@@ -24,6 +24,9 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+
+import six
+
 import re
 import time
 from pagekite.compat import *
@@ -40,7 +43,7 @@ class TunnelFilter:
 
   def clean_idle_sids(self, now=None):
     now = now or time.time()
-    for sid in self.sid.keys():
+    for sid in list(six.iterkeys(self.sid)):
       if self.sid[sid]['_ts'] < now - self.IDLE_TIMEOUT:
         del self.sid[sid]
 

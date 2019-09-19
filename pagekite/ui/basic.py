@@ -23,6 +23,9 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 #############################################################################
+
+import six
+
 import re
 import sys
 import time
@@ -60,7 +63,7 @@ class BasicUi(NullUi):
     color = color or self.NORM
 
     # We suppress duplicates that are either new or still on the screen.
-    keys = self.notify_history.keys()
+    keys = list(six.iterkeys(self.notify_history))
     if len(keys) > 20:
       for key in keys:
         if self.notify_history[key] < now-300:

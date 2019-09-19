@@ -32,6 +32,7 @@ SOURCE='/sdcard/sl4a/scripts/droiddemo.py'
 #############################################################################
 #
 
+import six
 from six.moves.urllib import unquote
 from six.moves.urllib.parse import urlparse
 
@@ -74,7 +75,7 @@ class UiRequestHandler(pagekite.UiRequestHandler):
       if iname.endswith('.jpg'):
         mtimes[iname] = os.path.getmtime(iname)
 
-    files = mtimes.keys()
+    files = list(six.iterkeys(mtimes))
     files.sort(key=lambda iname: mtimes[iname])
     return files
 
