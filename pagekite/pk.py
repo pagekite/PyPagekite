@@ -37,7 +37,6 @@ import cgi
 from cgi import escape as escape_html
 import errno
 import getopt
-import httplib
 import os
 import random
 import re
