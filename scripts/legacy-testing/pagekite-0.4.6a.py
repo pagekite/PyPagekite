@@ -1169,7 +1169,7 @@ if __name__ == \"__main__\":
 """
 sys.modules["sockschain"] = imp.new_module("sockschain")
 sys.modules["sockschain"].open = __comb_open
-exec __FILES[".SELF/sockschain/__init__.py"] in sys.modules["sockschain"].__dict__
+exec(__FILES[".SELF/sockschain/__init__.py"], sys.modules["sockschain"].__dict__)
 
 
 ###############################################################################
@@ -7080,7 +7080,7 @@ def Configure(pk):
 """
 sys.modules["pagekite"] = imp.new_module("pagekite")
 sys.modules["pagekite"].open = __comb_open
-exec __FILES[".SELF/pagekite/__init__.py"] in sys.modules["pagekite"].__dict__
+exec(__FILES[".SELF/pagekite/__init__.py"], sys.modules["pagekite"].__dict__)
 
 
 ###############################################################################
@@ -7306,7 +7306,7 @@ class BasicUi(NullUi):
 sys.modules["pagekite.basicui"] = imp.new_module("pagekite.basicui")
 sys.modules["pagekite.basicui"].open = __comb_open
 sys.modules["pagekite"].basicui = sys.modules["pagekite.basicui"]
-exec __FILES[".SELF/pagekite/basicui.py"] in sys.modules["pagekite.basicui"].__dict__
+exec(__FILES[".SELF/pagekite/basicui.py"], sys.modules["pagekite.basicui"].__dict__)
 
 
 ###############################################################################
@@ -7536,7 +7536,7 @@ class RemoteUi(NullUi):
 sys.modules["pagekite.remoteui"] = imp.new_module("pagekite.remoteui")
 sys.modules["pagekite.remoteui"].open = __comb_open
 sys.modules["pagekite"].remoteui = sys.modules["pagekite.remoteui"]
-exec __FILES[".SELF/pagekite/remoteui.py"] in sys.modules["pagekite.remoteui"].__dict__
+exec(__FILES[".SELF/pagekite/remoteui.py"], sys.modules["pagekite.remoteui"].__dict__)
 
 
 ###############################################################################
@@ -7712,7 +7712,7 @@ if __name__ == '__main__':
 sys.modules["pagekite.yamond"] = imp.new_module("pagekite.yamond")
 sys.modules["pagekite.yamond"].open = __comb_open
 sys.modules["pagekite"].yamond = sys.modules["pagekite.yamond"]
-exec __FILES[".SELF/pagekite/yamond.py"] in sys.modules["pagekite.yamond"].__dict__
+exec(__FILES[".SELF/pagekite/yamond.py"], sys.modules["pagekite.yamond"].__dict__)
 
 
 ###############################################################################
@@ -8697,7 +8697,7 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
 sys.modules["pagekite.httpd"] = imp.new_module("pagekite.httpd")
 sys.modules["pagekite.httpd"].open = __comb_open
 sys.modules["pagekite"].httpd = sys.modules["pagekite.httpd"]
-exec __FILES[".SELF/pagekite/httpd.py"] in sys.modules["pagekite.httpd"].__dict__
+exec(__FILES[".SELF/pagekite/httpd.py"], sys.modules["pagekite.httpd"].__dict__)
 
 
 ###############################################################################
