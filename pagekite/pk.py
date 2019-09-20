@@ -50,8 +50,6 @@ import time
 import traceback
 import zlib
 
-import SocketServer
-
 from .compat import *
 from .common import *
 from . import compat

@@ -25,6 +25,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
 
+from six.moves import socketserver
 from six.moves.CGIHTTPServer import CGIHTTPRequestHandler
 from six.moves.urllib.parse import parse_qs, quote, unquote, urlparse
 from six.moves import http_cookies
@@ -41,8 +42,6 @@ import tempfile
 import threading
 import time
 import traceback
-
-import SocketServer
 
 from pagekite.common import *
 from pagekite.compat import *
@@ -1100,7 +1099,7 @@ class RemoteControlInterface(object):
     return [ll for ll in data if int(ll['ll'], 16) > last_seen]
 
 
-class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
+class UiHttpServer(socketserver.ThreadingMixIn, SimpleXMLRPCServer):
   def __init__(self, sspec, pkite, conns,
                handler=UiRequestHandler,
                ssl_pem_filename=None):
