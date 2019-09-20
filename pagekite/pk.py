@@ -27,6 +27,8 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 ##############################################################################
 
 from six.moves import range
+from six.moves.urllib.request import URLopener, urlopen
+from six.moves.urllib.parse import urlencode
 
 import base64
 import cgi
@@ -45,7 +47,6 @@ import tempfile
 import threading
 import time
 import traceback
-import urllib
 import xmlrpclib
 import zlib
 
@@ -59,6 +60,11 @@ from .common import *
 from . import compat
 from . import common
 from . import logging
+
+try:
+    import urllib.request as urllib_request  # Python 3
+except ImportError:
+    import urllib as urllib_request  # Python 2
 
 # This allows us to run, degraded, on Python < 2.6.
 try:
@@ -293,7 +299,7 @@ class AuthThread(threading.Thread):
 
         results.append(('%s-SessionID' % prefix,
                         '%x:%s' % (now, sha1hex(session))))
-        results.append(('%s-Misc' % prefix, urllib.urlencode({
+        results.append(('%s-Misc' % prefix, urlencode({
                           'motd': (self.conns.config.motd_message or ''),
                         })))
         for upgrade in self.conns.config.upgrade_info:
@@ -1098,7 +1104,7 @@ class PageKite(object):
         ((found == own_pemfile) and (newest < time.time() - 365*24*3600))):
       # No bundle found or bundle old, download a new one from the cURL site.
       try:
-        urllib.URLopener().retrieve(CURL_CA_CERTS, filename=own_pemfile)
+        URLopener().retrieve(CURL_CA_CERTS, filename=own_pemfile)
         return self.FindCACerts(use_curl_bundle=False)
       except:
         pass
@@ -2286,7 +2292,7 @@ class PageKite(object):
 
         if not self.proxy_servers:
           # Make DynDNS updates go via the proxy.
-          socks.wrapmodule(urllib)
+          socks.wrapmodule(urllib_request)
           self.proxy_servers = [arg]
         else:
           self.proxy_servers.append(arg)
@@ -3555,7 +3561,7 @@ class PageKite(object):
             self.ui.Status('dyndns', color=self.ui.YELLOW,
                                      message='Updating DNS for %s...' % domain)
             # FIXME: If the network misbehaves, can this stall forever?
-            result = ''.join(urllib.urlopen(updates[update]).readlines())
+            result = ''.join(urlopen(updates[update]).readlines())
             if result.startswith('good') or result.startswith('nochg'):
               logging.Log([('dyndns', result), ('data', update)])
               self.SetBackendStatus(domain, sub=BE_STATUS_ERR_DNS)
@@ -3999,8 +4005,8 @@ def Main(pagekite, configure, uiclass=NullUi,
       if pk.crash_report_url:
         try:
           print('Submitting crash report to %s' % pk.crash_report_url)
-          logging.LogDebug(''.join(urllib.urlopen(pk.crash_report_url,
-                                          urllib.urlencode({
+          logging.LogDebug(''.join(urlopen(pk.crash_report_url,
+                                          urlencode({
                                             'platform': sys.platform,
                                             'appver': APPVER,
                                             'crash': format_exc()

@@ -26,6 +26,8 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 ##############################################################################
 
 from six.moves import range
+from six.moves.urllib.request import urlopen
+from six.moves.urllib.parse import parse_qs, urlparse
 
 import getopt
 import os
@@ -38,14 +40,8 @@ import sys
 import threading
 import time
 import traceback
-import urllib
  
 import BaseHTTPServer
-try:
-  from urlparse import parse_qs, urlparse
-except Exception as e:
-  from cgi import parse_qs
-  from urlparse import urlparse
 
 
 class YamonRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
@@ -210,8 +206,7 @@ class YamonD(threading.Thread):
   def quit(self):
     if self.httpd:
       self.running = False
-      urllib.urlopen('http://%s:%s/exiting/' % self.sspec,
-                     proxies={}).readlines()
+      urlopen('http://%s:%s/exiting/' % self.sspec, proxies={}).readlines()
 
   def run(self):
     self.httpd = self.server(self, self.handler)

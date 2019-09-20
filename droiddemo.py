@@ -32,16 +32,12 @@ SOURCE='/sdcard/sl4a/scripts/droiddemo.py'
 #############################################################################
 #
 
+from six.moves.urllib import unquote
+from six.moves.urllib.parse import urlparse
+
 import android
 import pagekite
 import os
-from urllib import unquote
-try:
-  from urlparse import parse_qs, urlparse
-except Exception as e:
-  from cgi import parse_qs
-  from urlparse import urlparse
-
 
 
 class UiRequestHandler(pagekite.UiRequestHandler):

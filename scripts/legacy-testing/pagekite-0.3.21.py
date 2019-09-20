@@ -279,6 +279,8 @@ DYNDNS = {
 ##[ Standard imports ]########################################################
 
 from six.moves import range
+from six.moves.urllib.parse import parse_qs, urlencode, urlparse
+from six.moves.urllib.request import urlopen
 
 import base64
 from cgi import escape as escape_html
@@ -296,13 +298,17 @@ import sys
 import threading
 import time
 import traceback
-import urllib
 import zlib
 
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 
 
 ##[ Conditional imports & compatibility magic! ]###############################
+
+try:
+    import urllib.request as urllib_request  # Python 3
+except ImportError:
+    import urllib as urllib_request  # Python 2
 
 # System logging on Unix
 try:
@@ -467,13 +473,6 @@ def DisableSSLCompression():
     LogError('disableSSLCompression: Failed: %s' % e)
  
 
-# Different Python 2.x versions complain about deprecation depending on
-# where we pull these from.
-try:
-  from urlparse import parse_qs, urlparse
-except ImportError as e:
-  from cgi import parse_qs
-  from urlparse import urlparse
 try:
   import hashlib
   def sha1hex(data):
@@ -3481,7 +3480,7 @@ class PageKite(object):
           self.servers_new_only = True  # Disable initial DNS lookups (leaks)
           self.servers_no_ping = True   # Disable front-end pings
           self.crash_report_url = None  # Disable crash reports
-          socks.wrapmodule(urllib)      # Make DynDNS updates go via tor
+          socks.wrapmodule(urllib_request)      # Make DynDNS updates go via tor
 
       elif opt == '--ca_certs': self.ca_certs = arg
       elif opt == '--fe_certname': self.fe_certname.append(arg.lower())
@@ -3714,7 +3713,7 @@ class PageKite(object):
       for update in updates:
         if update not in last_updates:
           try:
-            result = ''.join(urllib.urlopen(updates[update]).readlines())
+            result = ''.join(urlopen(updates[update]).readlines())
             self.last_updates.append(update)
             if result.startswith('good') or result.startswith('nochg'):
               Log([('dyndns', result), ('data', update)])
@@ -3964,8 +3963,8 @@ def Main(pagekite, configure):
       if pk.crash_report_url:
         try:
           print('Submitting crash report to %s' % pk.crash_report_url)
-          LogDebug(''.join(urllib.urlopen(pk.crash_report_url, 
-                                          urllib.urlencode({ 
+          LogDebug(''.join(urlopen(pk.crash_report_url,
+                                          urlencode({
                                             'crash': traceback.format_exc() 
                                           })).readlines()))
         except Exception as e:

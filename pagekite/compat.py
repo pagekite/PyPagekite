@@ -23,6 +23,9 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+
+from six.moves.urllib.parse import parse_qs, urlparse
+
 from . import common
 from .common import *
 
@@ -75,11 +78,6 @@ except:
       s += v
     return s
 
-try:
-  from urlparse import parse_qs, urlparse
-except ImportError as e:
-  from cgi import parse_qs
-  from urlparse import urlparse
 try:
   import hashlib
   def sha1hex(data):

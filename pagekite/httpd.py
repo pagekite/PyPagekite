@@ -25,6 +25,8 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
 
+from six.moves.urllib.parse import parse_qs, quote, unquote, urlparse
+
 import base64
 import cgi
 from cgi import escape as escape_html
@@ -36,7 +38,6 @@ import tempfile
 import threading
 import time
 import traceback
-import urllib
 
 import SocketServer
 from CGIHTTPServer import CGIHTTPRequestHandler
@@ -68,13 +69,6 @@ except:
     return tmp
 
 
-# Different Python 2.x versions complain about deprecation depending on
-# where we pull these from.
-try:
-  from urlparse import parse_qs, urlparse
-except ImportError as e:
-  from cgi import parse_qs
-  from urlparse import urlparse
 try:
   import hashlib
   def sha1hex(data):
@@ -503,9 +497,9 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         if os.path.isdir(fpath):
           fclass = ['dir']
           if not fn.endswith('/'): fn += '/'
-          qfn = urllib.quote(fn)
+          qfn = quote(fn)
         else:
-          qfn = urllib.quote(fn)
+          qfn = quote(fn)
           fn = os.path.basename(fn)
           fclass = ['file']
           ops.append('download')
@@ -540,7 +534,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     return ''.join(fhtml)
 
   def convertPaths(self, path):
-    path = urllib.unquote(path)
+    path = unquote(path)
     if path.find('..') >= 0: raise IOError("Evil")
 
     paths = self.server.pkite.ui_paths
