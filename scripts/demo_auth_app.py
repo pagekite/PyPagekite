@@ -1,4 +1,7 @@
 #!/usr/bin/python2 -u
+
+from __future__ import absolute_import
+
 #
 # This is a trivial demo auth server, which just approves any requests
 # it sees, while printing debug information to STDERR.

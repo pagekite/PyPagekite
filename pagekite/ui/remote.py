@@ -2,6 +2,7 @@
 This is a user interface class which communicates over a pipe or socket.
 """
 
+from __future__ import absolute_import
 from __future__ import print_function
 
 ##############################################################################

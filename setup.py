@@ -1,4 +1,7 @@
 #!/usr/bin/python
+
+from __future__ import absolute_import
+
 import time
 from datetime import date
 from setuptools import setup

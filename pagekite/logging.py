@@ -1,6 +1,9 @@
 """
 Logging.
 """
+
+from __future__ import absolute_import
+
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.

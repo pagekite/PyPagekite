@@ -3,6 +3,7 @@ A basic tool for processing and parsing the Pagekite logs. This class
 doesn't actually do anything much, it's meant for subclassing.
 """
 
+from __future__ import absolute_import
 from __future__ import print_function
 
 ##############################################################################

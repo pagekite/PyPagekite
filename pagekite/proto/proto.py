@@ -2,6 +2,9 @@
 PageKite protocol and HTTP protocol related code and constants.
 """
 ##############################################################################
+
+from __future__ import absolute_import
+
 LICENSE = """\
 This file is part of pagekite.py.
 Copyright 2010-2019, the Beanstalks Project ehf. and Bjarni Runar Einarsson

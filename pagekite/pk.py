@@ -3,6 +3,7 @@ This is what is left of the original monolithic pagekite.py.
 This is slowly being refactored into smaller sub-modules.
 """
 
+from __future__ import absolute_import
 from __future__ import print_function
 
 ##############################################################################

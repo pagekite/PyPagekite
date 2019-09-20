@@ -1,4 +1,7 @@
 #!/usr/bin/python
+
+from __future__ import absolute_import
+
 #
 # WARNING: This file is a combination of multiple Python files.
 #          The source code lives here: http://pagekite.org/

@@ -2,6 +2,7 @@
 Selectables are low level base classes which cooperate with our select-loop.
 """
 
+from __future__ import absolute_import
 from __future__ import print_function
 
 ##############################################################################

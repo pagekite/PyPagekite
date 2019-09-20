@@ -3,6 +3,9 @@ These are filters placed at the end of a tunnel for watching or modifying
 the traffic.
 """
 ##############################################################################
+
+from __future__ import absolute_import
+
 LICENSE = """\
 This file is part of pagekite.py.
 Copyright 2010-2019, the Beanstalks Project ehf. and Bjarni Runar Einarsson

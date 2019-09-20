@@ -2,6 +2,9 @@
 This is the "basic" text-mode user interface class.
 """
 #############################################################################
+
+from __future__ import absolute_import
+
 LICENSE = """\
 This file is part of pagekite.py.
 Copyright 2010-2019, the Beanstalks Project ehf. and Bjarni Runar Einarsson

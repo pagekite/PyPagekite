@@ -3,6 +3,7 @@ These are the Connection classes, relatively high level classes that handle
 incoming or outgoing network connections.
 """
 
+from __future__ import absolute_import
 from __future__ import print_function
 
 ##############################################################################
