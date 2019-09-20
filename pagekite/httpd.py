@@ -27,6 +27,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 
 from six.moves.urllib.parse import parse_qs, quote, unquote, urlparse
 from six.moves import http_cookies
+from six.moves.xmlrpc_server import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 
 import base64
 import cgi
@@ -42,7 +43,6 @@ import traceback
 
 import SocketServer
 from CGIHTTPServer import CGIHTTPRequestHandler
-from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 
 from pagekite.common import *
 from pagekite.compat import *

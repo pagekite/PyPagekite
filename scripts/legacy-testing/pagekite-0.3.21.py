@@ -281,6 +281,7 @@ DYNDNS = {
 from six.moves import range
 from six.moves.urllib.parse import parse_qs, urlencode, urlparse
 from six.moves.urllib.request import urlopen
+from six.moves.xmlrpc_server import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 
 import base64
 from cgi import escape as escape_html
@@ -299,8 +300,6 @@ import threading
 import time
 import traceback
 import zlib
-
-from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 
 
 ##[ Conditional imports & compatibility magic! ]###############################

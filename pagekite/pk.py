@@ -29,6 +29,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 from six.moves import range
 from six.moves.urllib.request import URLopener, urlopen
 from six.moves.urllib.parse import urlencode
+from six.moves.xmlrpc_server import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 
 import base64
 import cgi
@@ -52,7 +53,6 @@ import zlib
 
 import SocketServer
 from CGIHTTPServer import CGIHTTPRequestHandler
-from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 
 from .compat import *
 from .common import *
