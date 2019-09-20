@@ -3144,7 +3144,7 @@ class PageKite(object):
       self.ping_cache[cid][0:0] = [(time.time(), (elapsed, uuid))]
 
     window = min(3, len(self.ping_cache[cid]))
-    pingval = sum([e[1][0] for e in self.ping_cache[cid][:window]])/window  # Float division
+    pingval = sum([elapsed[1][0] for elapsed in self.ping_cache[cid][:window]])/window  # Float division
     uuid = self.ping_cache[cid][0][1][1]
 
     biased = max(0.01, (bias is None) and pingval or bias(pingval))
