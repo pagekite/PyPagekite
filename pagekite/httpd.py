@@ -1,6 +1,9 @@
 """
 This is the pagekite.py built-in HTTP server.
 """
+
+from __future__ import print_function
+
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
@@ -20,6 +23,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+
 import base64
 import cgi
 from cgi import escape as escape_html
@@ -237,12 +241,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def sendChunk(self, chunk):
     if self.chunked:
-      if logging.DEBUG_IO: print '<== SENDING CHUNK ===\n%s\n' % chunk
+      if logging.DEBUG_IO: print('<== SENDING CHUNK ===\n%s\n' % chunk)
       self.wfile.write('%x\r\n' % len(chunk))
       self.wfile.write(chunk)
       self.wfile.write('\r\n')
     else:
-      if logging.DEBUG_IO: print '<== SENDING ===\n%s\n' % chunk
+      if logging.DEBUG_IO: print('<== SENDING ===\n%s\n' % chunk)
       self.wfile.write(chunk)
 
   def sendEof(self):
@@ -374,7 +378,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       pass
     except Exception as e:
       logging.Log([('err', 'GET error at %s: %s' % (path, e))])
-      if logging.DEBUG_IO: print '=== ERROR\n%s\n===' % format_exc()
+      if logging.DEBUG_IO: print('=== ERROR\n%s\n===' % format_exc())
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
   def do_HEAD(self):

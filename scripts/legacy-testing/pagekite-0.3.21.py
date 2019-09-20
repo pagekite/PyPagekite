@@ -1,4 +1,7 @@
 #!/usr/bin/python -u
+
+from __future__ import print_function
+
 #
 # pagekite.py, Copyright 2010, 2011, the Beanstalks Project ehf.
 #                                    and Bjarni Runar Einarsson
@@ -797,7 +800,7 @@ class AuthThread(threading.Thread):
       now = int(time.time())
       if self.jobs:
         (requests, conn, callback) = self.jobs.pop(0)
-        if DEBUG_IO: print '=== AUTH REQUESTS\n%s\n===' % requests
+        if DEBUG_IO: print('=== AUTH REQUESTS\n%s\n===' % requests)
         self.qc.release()
 
         quotas = []
@@ -858,7 +861,7 @@ class AuthThread(threading.Thread):
             else:
               conn.quota[2] = time.time()
 
-        if DEBUG_IO: print '=== AUTH RESULTS\n%s\n===' % results
+        if DEBUG_IO: print('=== AUTH RESULTS\n%s\n===' % results)
         callback(results)
         self.qc.acquire()
       else:
@@ -1499,10 +1502,10 @@ class Selectable(object):
       if self.peeking:
         data = self.fd.recv(maxread, socket.MSG_PEEK)
         self.peeked = len(data)
-        if DEBUG_IO: print '<== IN (peeked)\n%s\n===' % data
+        if DEBUG_IO: print('<== IN (peeked)\n%s\n===' % data)
       else:
         data = self.fd.recv(maxread)
-        if DEBUG_IO: print '<== IN\n%s\n===' % data
+        if DEBUG_IO: print('<== IN\n%s\n===' % data)
     except (SSL.WantReadError, SSL.WantWriteError) as err:
       return True
     except IOError as err:
@@ -1565,7 +1568,7 @@ class Selectable(object):
     if sending:
       try:
         sent_bytes = self.fd.send(sending[:(self.write_retry or SEND_MAX_BYTES)])
-        if DEBUG_IO: print '==> OUT\n%s\n===' % sending[:sent_bytes]
+        if DEBUG_IO: print('==> OUT\n%s\n===' % sending[:sent_bytes])
         self.wrote_bytes += sent_bytes
         self.write_retry = None
       except IOError as err:
@@ -2126,7 +2129,7 @@ class Tunnel(ChunkParser):
         return None
       data += buf
       self.read_bytes += len(buf)
-    if DEBUG_IO: print '<== IN (headers)\n%s\n===' % data
+    if DEBUG_IO: print('<== IN (headers)\n%s\n===' % data)
     return data
 
   def _Connect(self, server, conns, tokens=None):
@@ -3130,19 +3133,19 @@ class PageKite(object):
 
 
   def PrintSettings(self):
-    print '### Current settings for PageKite v%s. ###' % APPVER    
-    print
-    print '# HTTP control-panel settings:'
-    print (self.ui_sspec and 'httpd=%s:%d' % self.ui_sspec or '#httpd=host:port')
-    print (self.ui_password and 'httppass=%s' % self.ui_password or '#httppass=YOURSECRET')
-    print (self.ui_pemfile and 'pemfile=%s' % self.ui_pemfile or '#pemfile=/path/to/sslcert.pem')
-    print
-    print '# Back-end Options:'
-    print (self.servers_auto and 'frontends=%d:%s:%d' % self.servers_auto or '#frontends=1:frontends.b5p.us:443')
+    print('### Current settings for PageKite v%s. ###' % APPVER)
+    print()
+    print('# HTTP control-panel settings:')
+    print((self.ui_sspec and 'httpd=%s:%d' % self.ui_sspec or '#httpd=host:port'))
+    print((self.ui_password and 'httppass=%s' % self.ui_password or '#httppass=YOURSECRET'))
+    print((self.ui_pemfile and 'pemfile=%s' % self.ui_pemfile or '#pemfile=/path/to/sslcert.pem'))
+    print()
+    print('# Back-end Options:')
+    print((self.servers_auto and 'frontends=%d:%s:%d' % self.servers_auto or '#frontends=1:frontends.b5p.us:443'))
     for server in self.servers_manual:
-      print 'frontend=%s' % server
+      print('frontend=%s' % server)
     for server in self.fe_certname:
-      print 'fe_certname=%s' % server
+      print('fe_certname=%s' % server)
     if self.dyndns:
       provider, args = self.dyndns
       for prov in DYNDNS:
@@ -3151,78 +3154,78 @@ class PageKite(object):
       if 'prov' not in args:
         args['prov'] = provider
       if args['pass']:
-        print 'dyndns=%(user)s:%(pass)s@%(prov)s' % args
+        print('dyndns=%(user)s:%(pass)s@%(prov)s' % args)
       elif args['user']:
-        print 'dyndns=%(user)s@%(prov)s' % args
+        print('dyndns=%(user)s@%(prov)s' % args)
       else:
-        print 'dyndns=%(prov)s' % args
+        print('dyndns=%(prov)s' % args)
     else:
-      print '#dyndns=pagekite.net OR' 
-      print '#dyndns=user:pass@dyndns.org OR' 
-      print '#dyndns=user:pass@no-ip.com' 
+      print('#dyndns=pagekite.net OR')
+      print('#dyndns=user:pass@dyndns.org OR')
+      print('#dyndns=user:pass@no-ip.com')
     bprinted = 0
     for bid in self.backends:
       be = self.backends[bid]
       if be[BE_BACKEND]:
-        print 'backend=%s:%s:%s' % (bid, be[BE_BACKEND], be[BE_SECRET])
+        print('backend=%s:%s:%s' % (bid, be[BE_BACKEND], be[BE_SECRET]))
         bprinted += 1
     if bprinted == 0:
-      print '#backend=http:YOU.pagekite.me:localhost:80:SECRET'
-      print '#backend=https:YOU.pagekite.me:localhost:443:SECRET'
-      print '#backend=websocket:YOU.pagekite.me:localhost:8080:SECRET'
-    print (self.error_url and ('errorurl=%s' % self.error_url) or '#errorurl=http://host/page/')
-    print (self.servers_new_only and 'new' or '#new')
-    print (self.require_all and 'all' or '#all')
-    print (self.no_probes and 'noprobes' or '#noprobes')
-    print
+      print('#backend=http:YOU.pagekite.me:localhost:80:SECRET')
+      print('#backend=https:YOU.pagekite.me:localhost:443:SECRET')
+      print('#backend=websocket:YOU.pagekite.me:localhost:8080:SECRET')
+    print((self.error_url and ('errorurl=%s' % self.error_url) or '#errorurl=http://host/page/'))
+    print((self.servers_new_only and 'new' or '#new'))
+    print((self.require_all and 'all' or '#all'))
+    print((self.no_probes and 'noprobes' or '#noprobes'))
+    print()
     eprinted = 0
-    print '# Domains we terminate SSL/TLS for natively, with key/cert-files'
+    print('# Domains we terminate SSL/TLS for natively, with key/cert-files')
     for ep in self.tls_endpoints:
-      print 'tls_endpoint=%s:%s' % (ep, self.tls_endpoints[ep][0])
+      print('tls_endpoint=%s:%s' % (ep, self.tls_endpoints[ep][0]))
       eprinted += 1
     if eprinted == 0:
-      print '#tls_endpoint=DOMAIN:PEM_FILE'
-    print (self.tls_default and 'tls_default=%s' % self.tls_default or '#tls_default=DOMAIN')
-    print
-    print
-    print '### The following stuff can usually be ignored. ###'
-    print
-    print '# Includes (should usually be at the top of the file)'
-    print '#optfile=/path/to/common/settings'
-    print
-    print '# Front-end Options:'
-    print (self.isfrontend and 'isfrontend' or '#isfrontend')
+      print('#tls_endpoint=DOMAIN:PEM_FILE')
+    print((self.tls_default and 'tls_default=%s' % self.tls_default or '#tls_default=DOMAIN'))
+    print()
+    print()
+    print('### The following stuff can usually be ignored. ###')
+    print()
+    print('# Includes (should usually be at the top of the file)')
+    print('#optfile=/path/to/common/settings')
+    print()
+    print('# Front-end Options:')
+    print((self.isfrontend and 'isfrontend' or '#isfrontend'))
     comment = (self.isfrontend and '' or '#')
-    print (self.server_host and '%shost=%s' % (comment, self.server_host) or '#host=machine.domain.com')
-    print '%sports=%s' % (comment, ','.join(['%s' % x for x in self.server_ports] or []))
-    print '%sprotos=%s' % (comment, ','.join(['%s' % x for x in self.server_protos] or []))
+    print((self.server_host and '%shost=%s' % (comment, self.server_host) or '#host=machine.domain.com'))
+    print('%sports=%s' % (comment, ','.join(['%s' % x for x in self.server_ports] or [])))
+    print('%sprotos=%s' % (comment, ','.join(['%s' % x for x in self.server_protos] or [])))
     for pa in self.server_portalias:
-      print 'portalias=%s:%s' % (int(pa), int(self.server_portalias[pa]))
-    print '%srawports=%s' % (comment, ','.join(['%s' % x for x in self.server_raw_ports] or []))
-    print (self.auth_domain and '%sauthdomain=%s' % (comment, self.auth_domain) or '#authdomain=foo.com')
+      print('portalias=%s:%s' % (int(pa), int(self.server_portalias[pa])))
+    print('%srawports=%s' % (comment, ','.join(['%s' % x for x in self.server_raw_ports] or [])))
+    print((self.auth_domain and '%sauthdomain=%s' % (comment, self.auth_domain) or '#authdomain=foo.com'))
     for bid in self.backends:
       be = self.backends[bid]
       if not be[BE_BACKEND]:
-        print 'domain=%s:%s' % (bid, be[BE_SECRET])
-    print '#domain=http:*.pagekite.me:SECRET1'
-    print '#domain=http,https,websocket:THEM.pagekite.me:SECRET2'
+        print('domain=%s:%s' % (bid, be[BE_SECRET]))
+    print('#domain=http:*.pagekite.me:SECRET1')
+    print('#domain=http,https,websocket:THEM.pagekite.me:SECRET2')
 
-    print
-    print '# Systems administration settings:'
-    print (self.logfile and 'logfile=%s' % self.logfile or '#logfile=/path/file')
-    print (self.daemonize and 'daemonize' % self.logfile or '#daemonize')
+    print()
+    print('# Systems administration settings:')
+    print((self.logfile and 'logfile=%s' % self.logfile or '#logfile=/path/file'))
+    print((self.daemonize and 'daemonize' % self.logfile or '#daemonize'))
     if self.setuid and self.setgid:
-      print 'runas=%s:%s' % (self.setuid, self.setgid)
+      print('runas=%s:%s' % (self.setuid, self.setgid))
     elif self.setuid:
-      print 'runas=%s' % self.setuid
+      print('runas=%s' % self.setuid)
     else:
-      print '#runas=uid:gid'
-    print (self.pidfile and 'pidfile=%s' % self.pidfile or '#pidfile=/path/file')
+      print('#runas=uid:gid')
+    print((self.pidfile and 'pidfile=%s' % self.pidfile or '#pidfile=/path/file'))
     if self.ca_certs != self.ca_certs_default:
-      print 'ca_certs=%s' % self.ca_certs
+      print('ca_certs=%s' % self.ca_certs)
     else:
-      print '#ca_certs=%s' % self.ca_certs
-    print
+      print('#ca_certs=%s' % self.ca_certs)
+    print()
 
   def FallDown(self, message, help=True, noexit=False):
     if self.conns and self.conns.auth: self.conns.auth.quit()
@@ -3230,9 +3233,9 @@ class PageKite(object):
     if self.tunnel_manager: self.tunnel_manager.quit()
     self.conns = self.ui_httpd = self.tunnel_manager = None
     if help:
-      print DOC
-      print '*****'
-    if message: print 'Error: %s' % message
+      print(DOC)
+      print('*****')
+    if message: print('Error: %s' % message)
     if not noexit: sys.exit(1)
 
   def GetTlsEndpointCtx(self, domain):
@@ -3272,7 +3275,7 @@ class PageKite(object):
 
   def LookupDomainQuota(self, lookup):
     if not lookup.endswith('.'): lookup += '.'
-    if DEBUG_IO: print '=== AUTH LOOKUP\n%s\n===' % lookup
+    if DEBUG_IO: print('=== AUTH LOOKUP\n%s\n===' % lookup)
     (hn, al, ips) = socket.gethostbyname_ex(lookup)
 
     # Extract auth error hints from domain name, if we got a CNAME reply.
@@ -3366,7 +3369,7 @@ class PageKite(object):
     return self
 
   def HelpAndExit(self):
-    print DOC
+    print(DOC)
     sys.exit(0)
 
   def Configure(self, argv):
@@ -3957,13 +3960,13 @@ def Main(pagekite, configure):
 
       if pk.crash_report_url:
         try:
-          print 'Submitting crash report to %s' % pk.crash_report_url
+          print('Submitting crash report to %s' % pk.crash_report_url)
           LogDebug(''.join(urllib.urlopen(pk.crash_report_url, 
                                           urllib.urlencode({ 
                                             'crash': traceback.format_exc() 
                                           })).readlines()))
         except Exception as e:
-          print 'FAILED: %s' % e
+          print('FAILED: %s' % e)
 
       pk.FallDown(msg, help=False, noexit=pk.main_loop)
 
@@ -3979,7 +3982,7 @@ def Main(pagekite, configure):
 
 def Configure(pk):
   if '--appver' in sys.argv:
-    print '%s' % APPVER
+    print('%s' % APPVER)
     sys.exit(0)
 
   if '--clean' not in sys.argv:

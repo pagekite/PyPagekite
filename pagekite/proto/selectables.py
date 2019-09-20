@@ -1,6 +1,9 @@
 """
 Selectables are low level base classes which cooperate with our select-loop.
 """
+
+from __future__ import print_function
+
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
@@ -20,6 +23,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+
 import errno
 import re
 import struct
@@ -334,7 +338,7 @@ class Selectable(object):
         time.sleep(0.1)
 
     if logging.DEBUG_IO:
-      print '===[ ATE %d PEEKED BYTES ]===\n' % eat_bytes
+      print('===[ ATE %d PEEKED BYTES ]===\n' % eat_bytes)
     self.peeked -= eat_bytes
     self.peeking = keep_peeking
     return
@@ -363,12 +367,12 @@ class Selectable(object):
         data = self.fd.recv(maxread, socket.MSG_PEEK)
         self.peeked = len(data)
         if logging.DEBUG_IO:
-          print '<== PEEK =[%s]==(\n%s)==' % (self, data[:160])
+          print('<== PEEK =[%s]==(\n%s)==' % (self, data[:160]))
       else:
         data = self.fd.recv(maxread)
         if logging.DEBUG_IO:
-          print ('<== IN =[%s @ %dbps]==(\n%s)=='
-                 ) % (self, self.max_read_speed, data[:160])
+          print(('<== IN =[%s @ %dbps]==(\n%s)=='
+                 ) % (self, self.max_read_speed, data[:160]))
     except (SSL.WantReadError, SSL.WantWriteError) as err:
       return True
     except IOError as err:
@@ -395,7 +399,7 @@ class Selectable(object):
     if data is None or data == '':
       self.read_eof = True
       if logging.DEBUG_IO:
-        print '<== IN =[%s]==(EOF)==' % self
+        print('<== IN =[%s]==(EOF)==' % self)
       return self.ProcessData('')
     else:
       if not self.peeking:
@@ -470,14 +474,14 @@ class Selectable(object):
           try:
             sent_bytes = self.fd.send(sending[:want_send])
             if logging.DEBUG_IO:
-              print ('==> OUT =[%s: %d/%d bytes]==(\n%s)=='
-                     ) % (self, sent_bytes, want_send, sending[:min(160, sent_bytes)])
+              print(('==> OUT =[%s: %d/%d bytes]==(\n%s)=='
+                     ) % (self, sent_bytes, want_send, sending[:min(160, sent_bytes)]))
             self.wrote_bytes += sent_bytes
             self.write_retry = None
             break
           except (SSL.WantWriteError, SSL.WantReadError) as err:
             if logging.DEBUG_IO:
-              print '=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, want_send)
+              print('=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, want_send))
             if try_wait:
               time.sleep(try_wait)
         if sent_bytes is None:
@@ -493,7 +497,7 @@ class Selectable(object):
           return False
         else:
           if logging.DEBUG_IO:
-            print '=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send)
+            print('=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send))
           self.write_retry = want_send
       except socket.error as err:
         (errno, msg) = err.args
@@ -504,7 +508,7 @@ class Selectable(object):
           return False
         else:
           if logging.DEBUG_IO:
-            print '=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send)
+            print('=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send))
           self.write_retry = want_send
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError) as err:
         self.LogInfo('Error sending (SSL): %s' % err)

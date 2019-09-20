@@ -1,4 +1,7 @@
 #!/usr/bin/python -u
+
+from __future__ import print_function
+
 #
 # droiddemo.py, Copyright 2010-2013, The Beanstalks Project ehf.
 #                                    http://beanstalks-project.net/
@@ -27,6 +30,7 @@ SOURCE='/sdcard/sl4a/scripts/droiddemo.py'
 #
 #############################################################################
 #
+
 import android
 import pagekite
 import os
@@ -101,7 +105,7 @@ class UiRequestHandler(pagekite.UiRequestHandler):
         return
  
       except Exception as e:
-        print '%s' % e
+        print('%s' % e)
         pass 
 
     if path == '/latest-image.txt':

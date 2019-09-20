@@ -2,6 +2,9 @@
 This is what is left of the original monolithic pagekite.py.
 This is slowly being refactored into smaller sub-modules.
 """
+
+from __future__ import print_function
+
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
@@ -21,6 +24,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+
 import base64
 import cgi
 from cgi import escape as escape_html
@@ -208,7 +212,7 @@ class AuthThread(threading.Thread):
         self.qc.wait()
       else:
         (requests, conn, callback) = self.jobs.pop(0)
-        if logging.DEBUG_IO: print '=== AUTH REQUESTS\n%s\n===' % requests
+        if logging.DEBUG_IO: print('=== AUTH REQUESTS\n%s\n===' % requests)
         self.qc.release()
 
         quotas = []
@@ -316,7 +320,7 @@ class AuthThread(threading.Thread):
             else:
               conn.quota[2] = time.time()
 
-        if logging.DEBUG_IO: print '=== AUTH RESULTS\n%s\n===' % results
+        if logging.DEBUG_IO: print('=== AUTH RESULTS\n%s\n===' % results)
         callback(results, log_info)
         self.qc.acquire()
 
@@ -1567,7 +1571,7 @@ class PageKite(object):
     self.ui.Tell(message)
 
   def PrintSettings(self, safe=False):
-    print '\n'.join(self.GenerateConfig(safe=safe))
+    print('\n'.join(self.GenerateConfig(safe=safe)))
 
   def SaveUserConfig(self, quiet=False):
     self.savefile = self.savefile or self.rcfile
@@ -1608,15 +1612,15 @@ class PageKite(object):
       os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
     except:
       pass
-    print
+    print()
     if help or longhelp:
       import manual
-      print longhelp and manual.DOC() or manual.MINIDOC()
-      print '***'
+      print(longhelp and manual.DOC() or manual.MINIDOC())
+      print('***')
     elif not noexit:
       self.ui.Status('exiting', message=(message or 'Good-bye!'))
     if message:
-      print 'Error: %s' % message
+      print('Error: %s' % message)
 
     if logging.DEBUG_IO:
       traceback.print_exc(file=sys.stderr)
@@ -1703,14 +1707,14 @@ class PageKite(object):
 
     lookup = '.'.join([srand, token, sign, protoport, domain, adom])
     if not lookup.endswith('.'): lookup += '.'
-    if logging.DEBUG_IO: print '=== AUTH LOOKUP\n%s\n===' % lookup
+    if logging.DEBUG_IO: print('=== AUTH LOOKUP\n%s\n===' % lookup)
 
     if auth_app:
       (hn, al, iplist) = auth_app.zk_auth(lookup)
     else:
       (hn, al, iplist) = socket.gethostbyname_ex(lookup)
 
-    if logging.DEBUG_IO: print 'hn=%s\nal=%s\niplist=%s\n' % (hn, al, iplist)
+    if logging.DEBUG_IO: print('hn=%s\nal=%s\niplist=%s\n' % (hn, al, iplist))
 
     # Extract auth error and extended quota info from CNAME replies
     if al:
@@ -1941,7 +1945,7 @@ class PageKite(object):
 
   def HelpAndExit(self, longhelp=False):
     import manual
-    print longhelp and manual.DOC() or manual.MINIDOC()
+    print(longhelp and manual.DOC() or manual.MINIDOC())
     sys.exit(0)
 
   def AddNewKite(self, kitespec, status=BE_STATUS_UNKNOWN, secret=None):
@@ -2410,7 +2414,7 @@ class PageKite(object):
         sys.exit(0)
 
       elif opt == '--controlpass':
-        print self.ConfigSecret()
+        print(self.ConfigSecret())
         sys.exit(0)
 
       else:
@@ -2952,7 +2956,7 @@ class PageKite(object):
             Goto('service_signup', back_skips_current=True)
           else:
             self.ui.ExplainError(error, 'Unknown problem!')
-            print 'FIXME!  Error is %s' % error
+            print('FIXME!  Error is %s' % error)
             Goto('abort')
 
         elif 'choose_kite_account' in state:
@@ -3633,8 +3637,8 @@ class PageKite(object):
 
   def ProcessWritable(self, oready):
     if logging.DEBUG_IO:
-      print '\n=== Ready for Write: %s' % [o and o.fileno() or ''
-                                           for o in oready]
+      print('\n=== Ready for Write: %s' % [o and o.fileno() or ''
+                                           for o in oready])
     for osock in oready:
       if osock:
         conn = self.conns.Connection(osock)
@@ -3643,8 +3647,8 @@ class PageKite(object):
 
   def ProcessReadable(self, iready, throttle):
     if logging.DEBUG_IO:
-      print '\n=== Ready for Read: %s' % [i and i.fileno() or None
-                                          for i in iready]
+      print('\n=== Ready for Read: %s' % [i and i.fileno() or None
+                                          for i in iready])
     for isock in iready:
       if isock is not None:
         conn = self.conns.Connection(isock)
@@ -3991,7 +3995,7 @@ def Main(pagekite, configure, uiclass=NullUi,
       traceback.print_exc(file=sys.stderr)
       if pk.crash_report_url:
         try:
-          print 'Submitting crash report to %s' % pk.crash_report_url
+          print('Submitting crash report to %s' % pk.crash_report_url)
           logging.LogDebug(''.join(urllib.urlopen(pk.crash_report_url,
                                           urllib.urlencode({
                                             'platform': sys.platform,
@@ -3999,7 +4003,7 @@ def Main(pagekite, configure, uiclass=NullUi,
                                             'crash': format_exc()
                                           })).readlines()))
         except Exception as e:
-          print 'FAILED: %s' % e
+          print('FAILED: %s' % e)
 
       pk.FallDown(msg, help=False, noexit=pk.main_loop)
       crashes = min(9, crashes+1)
@@ -4011,7 +4015,7 @@ def Main(pagekite, configure, uiclass=NullUi,
         shell_mode = 'more'
       except (KeyboardInterrupt, IOError, OSError):
         ui.Status('quitting')
-        print
+        print()
         return
     elif not pk.main_loop:
       return
@@ -4053,12 +4057,12 @@ def Shell(pk, ui, shell_mode):
         return rv
   finally:
     ui.EndWizard(quietly=True)
-    print
+    print()
 
 
 def Configure(pk):
   if '--appver' in sys.argv:
-    print '%s' % APPVER
+    print('%s' % APPVER)
     sys.exit(0)
 
   if '--clean' not in sys.argv and '--help' not in sys.argv:

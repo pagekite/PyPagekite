@@ -2,6 +2,8 @@
 """
 The program manual!
 """
+from __future__ import print_function
+
 import os
 import re
 import time
@@ -610,10 +612,10 @@ if __name__ == '__main__':
     pname = None
 
   if '--man' in sys.argv:
-    print MAN(pname)
+    print(MAN(pname))
   elif '--markdown' in sys.argv:
-    print MARKDOWN(pname)
+    print(MARKDOWN(pname))
   elif '--minidoc' in sys.argv:
-    print MINIDOC()
+    print(MINIDOC())
   else:
-    print DOC()
+    print(DOC())

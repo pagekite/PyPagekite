@@ -2,6 +2,9 @@
 These are the Connection classes, relatively high level classes that handle
 incoming or outgoing network connections.
 """
+
+from __future__ import print_function
+
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
@@ -21,6 +24,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+
 import socket
 import sys
 import threading
@@ -394,7 +398,7 @@ class Tunnel(ChunkParser):
       data += buf
       self.read_bytes += len(buf)
     if logging.DEBUG_IO:
-      print '<== IN (headers) =[%s]==(\n%s)==' % (self, data)
+      print('<== IN (headers) =[%s]==(\n%s)==' % (self, data))
     return data
 
   def _Connect(self, server, conns, tokens=None):
@@ -1164,7 +1168,7 @@ class LoopbackTunnel(Tunnel):
     joined_data = ''.join(data)
     if try_flush or (len(joined_data) > 10240) or (self.buffer_count >= 100):
       if logging.DEBUG_IO:
-        print '|%s| %s \n|%s| %s' % (self.which, self, self.which, data)
+        print('|%s| %s \n|%s| %s' % (self.which, self, self.which, data))
       self.buffer_count = 0
       return self.other_end.ProcessData(joined_data)
     else:
@@ -1392,7 +1396,7 @@ class UserConn(Selectable):
 
         if fail:
           if logging.DEBUG_IO:
-            print '=== REQUEST\n%s\n===' % data
+            print('=== REQUEST\n%s\n===' % data)
           self.ui.Notify(('%s - %s://%s:%s (USER ACCESS DENIED)'
                           ) % (remote_ip or 'unknown', proto, host, on_port),
                          prefix='!', color=self.ui.YELLOW)

@@ -1,6 +1,9 @@
 """
 This is a user interface class which communicates over a pipe or socket.
 """
+
+from __future__ import print_function
+
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
@@ -20,6 +23,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+
 import re
 import sys
 import time
@@ -276,14 +280,14 @@ class PageKiteThread(threading.Thread):
       else:
         line = ''
       if self.debug:
-        print '>>PK>> %s' % line.strip()
+        print('>>PK>> %s' % line.strip())
       return line
     finally:
       self.pk_readlock.release()
 
   def write(self, data):
     if self.debug:
-      print '>>GUI>> %s' % data.strip()
+      print('>>GUI>> %s' % data.strip())
     try:
       self.gui_readlock.acquire()
       if data:
@@ -310,7 +314,7 @@ class PageKiteThread(threading.Thread):
     if not data.endswith('\n') and data != '':
       raise ValueError('Please always send whole lines')
     if self.debug:
-      print '<<PK<< %s' % data.strip()
+      print('<<PK<< %s' % data.strip())
     try:
       self.pk_readlock.acquire()
       if data:
