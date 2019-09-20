@@ -4,6 +4,7 @@ This is slowly being refactored into smaller sub-modules.
 """
 
 from __future__ import absolute_import
+from __future__ import division
 from __future__ import print_function
 
 ##############################################################################
@@ -245,7 +246,7 @@ class AuthThread(threading.Thread):
             # Note: These 15 seconds are a magic number which should be well
             #       below the timeout in proto.conns.Tunnel._Connect().
             if ((not self.conns.config.authfail_closed)
-                  and len(self.jobs) >= (15 / self.qtime)):
+                  and len(self.jobs) >= (15 / self.qtime)):  # Float division
               logging.LogError('Quota lookup skipped, over 15s worth of jobs queued')
               (quota, days, conns, ipc, ips, reason) = (
                 -2, None, None, None, None, None)
@@ -287,7 +288,7 @@ class AuthThread(threading.Thread):
                 except ValueError:
                   pass
               if ipc and ips:
-                ip_limits.append((float(ipc)/ips, ipc, ips))
+                ip_limits.append((float(ipc)/ips, ipc, ips))  # Float division
               if (proto.startswith('http') and
                   self.conns.config.GetTlsEndpointCtx(domain)):
                 results.append(('%s-SSL-OK' % prefix, what))
@@ -361,7 +362,7 @@ class Connections(object):
       common.gYamon.vset('auth_threads', len(self.auth_pool))
       common.gYamon.vset('auth_thread_qtime',
                          sum([at.qtime for at in self.auth_pool]
-                             ) / len(self.auth_pool))
+                             ) / len(self.auth_pool))  # Float division
       common.gYamon.vset('auth_thread_jobs',
                          sum([len(at.jobs) for at in self.auth_pool]))
     return self.auth_pool[random.randint(0, len(self.auth_pool)-1)]
@@ -704,7 +705,7 @@ class TunnelManager(threading.Thread):
         if tunnel.server_info[tunnel.S_IS_MOBILE]:
           pings = common.PING_INTERVAL_MOBILE
         grace = max(PING_GRACE_DEFAULT,
-                    len(tunnel.write_blocked)/(tunnel.write_speed or 0.001))
+                    len(tunnel.write_blocked)/(tunnel.write_speed or 0.001))  # Float division
         if tunnel.last_activity == 0:
           pass
         elif tunnel.last_ping < now - PING_GRACE_MIN:
@@ -1881,12 +1882,12 @@ class PageKite(object):
 
       # Calculate the implied unit cost of every live connection
       memtotal = float(meminfo['memtotal'] - self.overload_membase)
-      munit = max(75, float(memtotal - memfree) / cload)  # 75KB/conn=optimism!
-      lunit = loadavg / cload
+      munit = max(75, float(memtotal - memfree) / cload)  # 75KB/conn=optimism!  # Float division
+      lunit = loadavg / cload  # Float division
 
       # Calculate overload factors based on the unit costs
-      moverload = int(self.overload_mem * float(memtotal) / munit)
-      loverload = int(self.overload_cpu / lunit)
+      moverload = int(self.overload_mem * float(memtotal) / munit)  # Integer division
+      loverload = int(self.overload_cpu / lunit)  # Integer division
 
       # Choose a new overload value.
       new_overload = int(max(
@@ -1918,7 +1919,7 @@ class PageKite(object):
     if yamon is not None:
       yamon.vset('overload_threshold', self.overload_current)
       yamon.vset('overload_headroom', max(0, self.overload_current - cload))
-      yamon.vset('overload', float(cload) / self.overload_current)
+      yamon.vset('overload', float(cload) / self.overload_current)  # Float division
     return (cload >= self.overload_current)
 
   def ConfigureFromFile(self, filename=None, data=None):
@@ -3143,7 +3144,7 @@ class PageKite(object):
       self.ping_cache[cid][0:0] = [(time.time(), (elapsed, uuid))]
 
     window = min(3, len(self.ping_cache[cid]))
-    pingval = sum([e[1][0] for e in self.ping_cache[cid][:window]])/window
+    pingval = sum([e[1][0] for e in self.ping_cache[cid][:window]])/window  # Float division
     uuid = self.ping_cache[cid][0][1][1]
 
     biased = max(0.01, (bias is None) and pingval or bias(pingval))
@@ -3220,7 +3221,7 @@ class PageKite(object):
       # servers that are live, in case we've detected the tunnel is just
       # really slow.
       seconds_since_error = (now - self.servers_errored.get(server, 0))
-      error_penalty = max(0, (1800 - seconds_since_error) / 1800)
+      error_penalty = max(0, (1800 - seconds_since_error) / 1800)  # Float division
       return lambda p: (p + base + error_penalty)
 
     # Increase our ping interval slightly unless it has been reduced
@@ -3677,7 +3678,7 @@ class PageKite(object):
         iready, oready, eready = select.select(isocks, osocks, [], waittime)
       else:
         # Windoes does not seem to like empty selects, so we do this instead.
-        time.sleep(waittime/2)
+        time.sleep(waittime/2)  # Float division
     except KeyboardInterrupt:
       raise
     except:

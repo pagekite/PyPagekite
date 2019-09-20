@@ -4,6 +4,7 @@ PageKite protocol and HTTP protocol related code and constants.
 ##############################################################################
 
 from __future__ import absolute_import
+from __future__ import division
 
 LICENSE = """\
 This file is part of pagekite.py.
@@ -76,7 +77,7 @@ def signToken(token=None, secret=None, payload='', timestamp=None,
                                              random.randint(0, 0x7FFFFFFD)+1))
   if timestamp:
     tok = 't' + token[1:]
-    ts = '%x' % int(timestamp/600)
+    ts = '%x' % int(timestamp/600)  # Integer division
     return tok[0:8] + sha1hex(secret + payload + ts + tok[0:8])[0:length-8]
   else:
     return token[0:8] + sha1hex(secret + payload + token[0:8])[0:length-8]

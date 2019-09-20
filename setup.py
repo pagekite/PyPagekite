@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 from __future__ import absolute_import
+from __future__ import division
 
 import time
 from datetime import date
@@ -18,7 +19,7 @@ setup(
     name="pagekite",
     version=os.getenv(
         'PAGEKITE_VERSION',
-        APPVER.replace('github', 'dev%d' % (120*int(time.time()/120)))),
+        APPVER.replace('github', 'dev%d' % (120*int(time.time()/120)))),  # Integer division
     license="AGPLv3+",
     author="Bjarni R. Einarsson",
     author_email="bre@pagekite.net",

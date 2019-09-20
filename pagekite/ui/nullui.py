@@ -4,6 +4,7 @@ This is a basic "Null" user interface which does nothing at all.
 ##############################################################################
 
 from __future__ import absolute_import
+from __future__ import division
 
 LICENSE = """\
 This file is part of pagekite.py.
@@ -173,7 +174,7 @@ class NullUi(object):
       color=self.GREY)
 
   def NotifyQuota(self, quota, q_days, q_conns):
-    q, qMB = [], float(quota) / 1024
+    q, qMB = [], float(quota) / 1024  # Float division
     if qMB < 1024:
       q.append('%.2f MB' % qMB)
     if q_days is not None and q_days < 400:

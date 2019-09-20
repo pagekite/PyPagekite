@@ -3,6 +3,7 @@ Selectables are low level base classes which cooperate with our select-loop.
 """
 
 from __future__ import absolute_import
+from __future__ import division
 from __future__ import print_function
 
 ##############################################################################
@@ -434,7 +435,7 @@ class Selectable(object):
 
     flooded = max(-1, self.Flooded())
     if self.max_read_speed:
-      delay = min(10, max(0.1, flooded/self.max_read_speed))
+      delay = min(10, max(0.1, flooded/self.max_read_speed))  # Float division
       if flooded < 0: delay = 0
 
     if delay:
@@ -454,7 +455,7 @@ class Selectable(object):
   def Send(self, data, try_flush=False, activity=False,
                        just_buffer=False, allow_blocking=False):
     self.write_speed = int((self.wrote_bytes + self.all_out)
-                           / max(1, (time.time() - self.created)))
+                           / max(1, (time.time() - self.created)))  # Integer division
 
     # If we're already blocked, just buffer unless explicitly asked to flush.
     if ((just_buffer) or

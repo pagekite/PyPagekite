@@ -1,6 +1,7 @@
 #!/usr/bin/python -u
 
 from __future__ import absolute_import
+from __future__ import division
 from __future__ import print_function
 
 #
@@ -553,7 +554,7 @@ def signToken(token=None, secret=None, payload='', timestamp=None,
                                              random.randint(0, 0x7FFFFFFD)+1))
   if timestamp:
     tok = 't' + token[1:]
-    ts = '%x' % int(timestamp/600)
+    ts = '%x' % int(timestamp/600)  # Integer division
     return tok[0:8] + sha1hex(secret + payload + ts + tok[0:8])[0:length-8]
   else:
     return token[0:8] + sha1hex(secret + payload + token[0:8])[0:length-8]
@@ -1540,7 +1541,7 @@ class Selectable(object):
       self.throttle_until = time.time()
       flooded = self.read_bytes + self.all_in
       flooded -= max_speed * (time.time() - self.created)
-      delay = min(15, max(0.2, flooded/max_speed))
+      delay = min(15, max(0.2, flooded/max_speed))  # Float division
       if flooded < 0: delay = 15
     else:
       if self.throttle_until < time.time(): self.throttle_until = time.time()
@@ -1561,7 +1562,7 @@ class Selectable(object):
       buffered_bytes += len(self.write_blocked)
       return True
 
-    self.write_speed = int((self.wrote_bytes + self.all_out) / (0.1 + time.time() - self.created))
+    self.write_speed = int((self.wrote_bytes + self.all_out) / (0.1 + time.time() - self.created))  # Integer division
 
     sending = self.write_blocked+(''.join(data))
     self.write_blocked = ''
@@ -2993,7 +2994,7 @@ class TunnelManager(threading.Thread):
     dead = {}
     for tid in self.conns.tunnels:
       for tunnel in self.conns.tunnels[tid]:
-        grace = max(40, len(tunnel.write_blocked)/(tunnel.write_speed or 0.001))
+        grace = max(40, len(tunnel.write_blocked)/(tunnel.write_speed or 0.001))  # Float division
         if tunnel.last_activity < tunnel.last_ping-(5+grace):
           dead['%s' % tunnel] = tunnel
         elif tunnel.last_activity < now-30 and tunnel.last_ping < now-2:

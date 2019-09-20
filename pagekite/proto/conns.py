@@ -4,6 +4,7 @@ incoming or outgoing network connections.
 """
 
 from __future__ import absolute_import
+from __future__ import division
 from __future__ import print_function
 
 ##############################################################################
@@ -483,8 +484,8 @@ class Tunnel(ChunkParser):
 
   def UpdateIP_Limits(self, ips, seconds, force=False):
     if self.ip_limits and len(self.ip_limits) > 2 and not force:
-      new_rate = float(ips)/(seconds or 1)
-      old_rate = float(self.ip_limits[1] or 9999)/(self.ip_limits[0] or 1)
+      new_rate = float(ips)/(seconds or 1)  # Float division
+      old_rate = float(self.ip_limits[1] or 9999)/(self.ip_limits[0] or 1)  # Float division
       if new_rate < old_rate:
         self.ip_limits[0] = seconds
         self.ip_limits[1] = ips
