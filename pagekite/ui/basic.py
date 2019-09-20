@@ -24,7 +24,7 @@ import re
 import sys
 import time
 
-from nullui import NullUi
+from .nullui import NullUi
 from pagekite.common import *
 
 

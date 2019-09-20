@@ -8,8 +8,8 @@ import os
 import re
 import time
 
-from common import *
-from compat import ts_to_iso
+from .common import *
+from .compat import ts_to_iso
 
 MAN_NAME = ("""\
     pagekite.py - Make localhost servers publicly visible

@@ -23,9 +23,9 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 import time
 import sys
 
-import compat, common
-from compat import *
-from common import *
+from . import compat, common
+from .compat import *
+from .common import *
 
 syslog = compat.syslog
 org_stdout = sys.stdout

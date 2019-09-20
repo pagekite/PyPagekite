@@ -51,11 +51,11 @@ from CGIHTTPServer import CGIHTTPRequestHandler
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 import Cookie
 
-from compat import *
-from common import *
-import compat
-import common
-import logging
+from .compat import *
+from .common import *
+from . import compat
+from . import common
+from . import logging
 
 # This allows us to run, degraded, on Python < 2.6.
 try:
@@ -117,12 +117,12 @@ else:
 
 ##[ PageKite.py code starts here! ]############################################
 
-from proto.proto import *
-from proto.parsers import *
-from proto.selectables import *
-from proto.filters import *
-from proto.conns import *
-from ui.nullui import NullUi
+from .proto.proto import *
+from .proto.parsers import *
+from .proto.selectables import *
+from .proto.filters import *
+from .proto.conns import *
+from .ui.nullui import NullUi
 
 
 class AuthApp(object):
@@ -1614,7 +1614,7 @@ class PageKite(object):
       pass
     print()
     if help or longhelp:
-      import manual
+      from . import manual
       print(longhelp and manual.DOC() or manual.MINIDOC())
       print('***')
     elif not noexit:
@@ -1944,7 +1944,7 @@ class PageKite(object):
         self.ConfigureFromFile(os.path.join(dirname, fn))
 
   def HelpAndExit(self, longhelp=False):
-    import manual
+    from . import manual
     print(longhelp and manual.DOC() or manual.MINIDOC())
     sys.exit(0)
 
@@ -4026,7 +4026,7 @@ def Main(pagekite, configure, uiclass=NullUi,
 
 
 def Shell(pk, ui, shell_mode):
-  import manual
+  from . import manual
   try:
     ui.Reset()
     if shell_mode != 'more':

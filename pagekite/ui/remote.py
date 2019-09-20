@@ -33,7 +33,7 @@ from pagekite.compat import *
 from pagekite.common import *
 from pagekite.proto.conns import Tunnel
 
-from nullui import NullUi
+from .nullui import NullUi
 
 class RemoteUi(NullUi):
   """Stdio based user interface for interacting with other processes."""

@@ -36,10 +36,10 @@ from pagekite.common import *
 import pagekite.common as common
 import pagekite.logging as logging
 
-from filters import HttpSecurityFilter
-from selectables import *
-from parsers import *
-from proto import *
+from .filters import HttpSecurityFilter
+from .selectables import *
+from .parsers import *
+from .proto import *
 
 
 class Tunnel(ChunkParser):
