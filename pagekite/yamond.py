@@ -26,6 +26,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 ##############################################################################
 
 from six.moves import range
+from six.moves import BaseHTTPServer
 from six.moves.urllib.request import urlopen
 from six.moves.urllib.parse import parse_qs, urlparse
 
@@ -41,8 +42,6 @@ import threading
 import time
 import traceback
  
-import BaseHTTPServer
-
 
 class YamonRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def do_yamon_vars(self):
