@@ -95,9 +95,9 @@ try:
   from traceback import format_exc
 except ImportError:
   import traceback
-  import StringIO
+  from six import StringIO
   def format_exc():
-    sio = StringIO.StringIO()
+    sio = StringIO()
     traceback.print_exc(file=sio)
     return sio.getvalue()
 

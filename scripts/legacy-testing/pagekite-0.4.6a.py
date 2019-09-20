@@ -6,7 +6,9 @@ from __future__ import absolute_import
 # NOTE: This is a compilation of multiple Python files.
 #       See below for details on individual segments.
 #
-import base64, imp, os, sys, StringIO, zlib
+from six import StringIO
+
+import base64, imp, os, sys, zlib
 
 __FILES = {}
 __os_path_exists = os.path.exists
@@ -14,7 +16,7 @@ __builtin_open = open
 
 def __comb_open(filename, *args, **kwargs):
   if filename in __FILES:
-    return StringIO.StringIO(__FILES[filename])
+    return StringIO(__FILES[filename])
   else:
     return __builtin_open(filename, *args, **kwargs)
 

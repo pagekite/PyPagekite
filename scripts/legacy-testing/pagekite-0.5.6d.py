@@ -21,14 +21,16 @@ from __future__ import absolute_import
 #
 ##[ Combined with Breeder: http://pagekite.net/wiki/Floss/PyBreeder/ ]#########
 
-import base64, imp, os, sys, StringIO, zlib
+from six import StringIO
+
+import base64, imp, os, sys, zlib
 __FILES = {}
 __os_path_exists = os.path.exists
 __os_path_getsize = os.path.getsize
 __builtin_open = open
 def __comb_open(filename, *args, **kwargs):
   if filename in __FILES:
-    return StringIO.StringIO(__FILES[filename])
+    return StringIO(__FILES[filename])
   else:
     return __builtin_open(filename, *args, **kwargs)
 def __comb_exists(filename, *args, **kwargs):
