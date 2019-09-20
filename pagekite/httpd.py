@@ -26,6 +26,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 ##############################################################################
 
 from six.moves.urllib.parse import parse_qs, quote, unquote, urlparse
+from six.moves import http_cookies
 
 import base64
 import cgi
@@ -42,7 +43,6 @@ import traceback
 import SocketServer
 from CGIHTTPServer import CGIHTTPRequestHandler
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
-import Cookie
 
 from pagekite.common import *
 from pagekite.compat import *
@@ -846,7 +846,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     data['method'] = data.get('http_x-pagekite-proto', 'http').lower()
 
     if 'http_cookie' in data:
-      cookies = Cookie.SimpleCookie(data['http_cookie'])
+      cookies = http_cookies.SimpleCookie(data['http_cookie'])
     else:
       cookies = {}
 

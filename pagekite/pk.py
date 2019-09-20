@@ -53,7 +53,6 @@ import zlib
 import SocketServer
 from CGIHTTPServer import CGIHTTPRequestHandler
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
-import Cookie
 
 from .compat import *
 from .common import *
