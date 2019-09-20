@@ -51,7 +51,6 @@ import traceback
 import zlib
 
 import SocketServer
-from CGIHTTPServer import CGIHTTPRequestHandler
 
 from .compat import *
 from .common import *
