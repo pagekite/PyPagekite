@@ -27,6 +27,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 ##############################################################################
 
 from six.moves import range
+from six.moves import xmlrpc_client
 from six.moves.urllib.request import URLopener, urlopen
 from six.moves.urllib.parse import urlencode
 from six.moves.xmlrpc_server import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
@@ -48,7 +49,6 @@ import tempfile
 import threading
 import time
 import traceback
-import xmlrpclib
 import zlib
 
 import SocketServer
@@ -2658,7 +2658,7 @@ class PageKite(object):
 
   def GetServiceXmlRpc(self):
     service = self.service_xmlrpc
-    return xmlrpclib.ServerProxy(self.service_xmlrpc, None, None, False)
+    return xmlrpc_client.ServerProxy(self.service_xmlrpc, None, None, False)
 
   def _KiteInfo(self, kitename):
     is_service_domain = kitename and SERVICE_DOMAIN_RE.search(kitename)
