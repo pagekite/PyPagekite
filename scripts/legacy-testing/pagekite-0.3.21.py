@@ -874,11 +874,11 @@ class AuthThread(threading.Thread):
 
 def fmt_size(count):
   if count > 2*(1024*1024*1024):
-    return '%dGB' % (count / (1024*1024*1024))
+    return '%dGB' % (count // (1024*1024*1024))
   if count > 2*(1024*1024):
-    return '%dMB' % (count / (1024*1024))
+    return '%dMB' % (count // (1024*1024))
   if count > 2*(1024):
-    return '%dKB' % (count / 1024)
+    return '%dKB' % (count // 1024)
   return '%dB' % count
 
 
@@ -1055,7 +1055,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       if not authenticated:
         self.begin_headers(401, 'text/html')
         self.send_header('WWW-Authenticate',
-                         'Basic realm=PK%d' % (time.time()/3600))
+                         'Basic realm=PK%d' % (time.time()//3600))
         self.end_headers()
         data['title'] = data['body'] = 'Authentication required.'
         self.wfile.write(self.TEMPLATE_HTML % data)
@@ -1654,7 +1654,7 @@ class Connections(object):
     if alt_id: self.conns_by_id[alt_id] = conn
 
   def TrackIP(self, ip, domain):
-    tick = '%d' % (time.time()/12)
+    tick = '%d' % (time.time()//12)
     if tick not in self.ip_tracker:
       deadline = int(tick)-10
       for ot in self.ip_tracker.keys():
@@ -2739,7 +2739,7 @@ class UserConn(Selectable):
 
     # Back off if tunnel is stuffed.
     if self.tunnel and len(self.tunnel.write_blocked) > 1024000:
-      self.Throttle(delay=(len(self.tunnel.write_blocked)-204800)/max(50000, self.tunnel.write_speed))
+      self.Throttle(delay=(len(self.tunnel.write_blocked)-204800)//max(50000, self.tunnel.write_speed))
 
     if self.read_eof: return self.ProcessEofRead()
     return True

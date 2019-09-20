@@ -377,7 +377,7 @@ class Connections(object):
     self.idle.append((time.time() + seconds, conn.last_activity, conn))
 
   def TrackIP(self, ip, domain):
-    tick = '%d' % (time.time()/12)
+    tick = '%d' % (time.time()//12)
     if tick not in self.ip_tracker:
       deadline = int(tick)-10
       for ot in self.ip_tracker.keys():
@@ -876,10 +876,10 @@ class TunnelManager(threading.Thread):
       self.ListBackEnds()
       self.UpdateUiStatus(problem, connecting)
 
-      for i in range(0, (self.check_interval / 5)):
+      for i in range(0, (self.check_interval // 5)):
         if self.keep_running:
-          time.sleep(self.check_interval / 5)
-          if i > (self.check_interval / 5):
+          time.sleep(self.check_interval // 5)
+          if i > (self.check_interval // 5):
             break
           if self.pkite.isfrontend:
             self.conns.CheckIdleConns(time.time())
@@ -1892,7 +1892,7 @@ class PageKite(object):
       new_overload = int(max(
          # Dynamic load scaling can reduce our overload from the baseline
          # as well as raise it, but only up to a point.
-         self.overload / 2,
+         self.overload // 2,
          # This hack lets us disable memory or CPU overload checks
          # with --overload_cpu=0 or --overload_mem=0.
          min(moverload or loverload, loverload or moverload)))
@@ -3424,7 +3424,7 @@ class PageKite(object):
     # We re-evaluate our choices more frequently, if we have many
     # tunnel connections open. This speeds up the process of dropping
     # old conns, hopefully reducing the load on the relays.
-    fec_interval = max(900, FE_PING_INTERVAL / max(1, len(live_servers)))
+    fec_interval = max(900, FE_PING_INTERVAL // max(1, len(live_servers)))
 
     if len(self.GetActiveBackends(include_loopback=True)) > 0:
       if (not self.servers) or len(self.servers) > len(live_servers):

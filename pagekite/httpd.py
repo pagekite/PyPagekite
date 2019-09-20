@@ -89,11 +89,11 @@ class AuthError(Exception):
 
 def fmt_size(count):
   if count > 2*(1024*1024*1024):
-    return '%dGB' % (count / (1024*1024*1024))
+    return '%dGB' % (count // (1024*1024*1024))
   if count > 2*(1024*1024):
-    return '%dMB' % (count / (1024*1024))
+    return '%dMB' % (count // (1024*1024))
   if count > 2*(1024):
-    return '%dKB' % (count / 1024)
+    return '%dKB' % (count // 1024)
   return '%dB' % count
 
 
@@ -252,7 +252,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     self.wfile.write('HTTP/1.1 %s %s\r\n' % (code, msg))
     if code == 401:
       self.send_header('WWW-Authenticate',
-                       'Basic realm=PK%d' % (time.time()/3600))
+                       'Basic realm=PK%d' % (time.time()//3600))
 
     self.chunked = chunked
     if chunked:

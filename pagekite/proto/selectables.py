@@ -406,7 +406,7 @@ class Selectable(object):
       if not self.peeking:
         self.read_bytes += len(data)
         if self.acked_kb_delta:
-          self.acked_kb_delta += (len(data)/1024)
+          self.acked_kb_delta += (len(data)//1024)
         if self.read_bytes > logging.LOG_THRESHOLD: self.LogTraffic()
       return self.ProcessData(data)
 
@@ -421,7 +421,7 @@ class Selectable(object):
 
   def RecordProgress(self, skb, bps):
     if skb >= 0:
-      all_read = (self.all_in + self.read_bytes) / 1024
+      all_read = (self.all_in + self.read_bytes) // 1024
       if self.acked_kb_delta:
         self.acked_kb_delta = max(1, all_read - skb)
         self.LogDebug('Delta is: %d' % self.acked_kb_delta)

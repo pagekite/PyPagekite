@@ -824,7 +824,7 @@ class Tunnel(ChunkParser):
     # FIXME: Optimize this away unless meaningful progress has been made?
     msg = ('NOOP: 1\r\n'
            'SID: %s\r\n'
-           'SKB: %d\r\n') % (sid, (conn.all_out + conn.wrote_bytes)/1024)
+           'SKB: %d\r\n') % (sid, (conn.all_out + conn.wrote_bytes)//1024)
     throttle = throttle and ('SPD: %d\r\n' % conn.write_speed) or ''
     return self.SendChunked('%s%s\r\n!' % (msg, throttle),
                             compress=False, just_buffer=True)
@@ -1518,7 +1518,7 @@ class UserConn(Selectable):
     # Back off if tunnel is stuffed.
     if self.tunnel and len(self.tunnel.write_blocked) > 1024000:
       # FIXME: think about this...
-      self.Throttle(delay=(len(self.tunnel.write_blocked)-204800)/max(50000,
+      self.Throttle(delay=(len(self.tunnel.write_blocked)-204800)//max(50000,
                     self.tunnel.write_speed))
 
     if self.read_eof:
