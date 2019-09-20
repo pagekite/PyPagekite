@@ -887,7 +887,7 @@ class TunnelManager(threading.Thread):
 def SecureCreate(path):
   fd = open(path, 'w')
   try:
-    os.chmod(path, 0600)
+    os.chmod(path, 0o600)
   except OSError:
     pass
   return fd

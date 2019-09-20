@@ -1769,7 +1769,7 @@ class LineParser(Selectable):
     return False
 
 
-TLS_CLIENTHELLO = '%c' % 026
+TLS_CLIENTHELLO = '%c' % 0o26
 SSL_CLIENTHELLO = '\x80'
 
 # FIXME: XMPP support

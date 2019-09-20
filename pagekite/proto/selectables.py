@@ -656,7 +656,7 @@ class LineParser(Selectable):
     return False
 
 
-TLS_CLIENTHELLO = '%c' % 026
+TLS_CLIENTHELLO = '%c' % 0o26
 SSL_CLIENTHELLO = '\x80'
 MINECRAFT_HANDSHAKE = '%c' % (0x02, )
 FLASH_POLICY_REQ = '<policy-file-request/>'
