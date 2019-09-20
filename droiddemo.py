@@ -75,7 +75,7 @@ class UiRequestHandler(pagekite.UiRequestHandler):
         mtimes[iname] = os.path.getmtime(iname)
 
     files = mtimes.keys()
-    files.sort(lambda x,y: cmp(mtimes[x], mtimes[y]))
+    files.sort(key=lambda iname: mtimes[iname])
     return files
 
   def do_GET(self):
