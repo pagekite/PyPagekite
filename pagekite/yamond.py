@@ -25,6 +25,8 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
 
+from six.moves import range
+
 import getopt
 import os
 import random
@@ -168,7 +170,7 @@ class YamonD(threading.Thread):
   def lcreate(self, listn, elems):
     try:
       self.lock.acquire()
-      self.lists[listn] = [elems, 0, ['' for x in xrange(0, elems)]]
+      self.lists[listn] = [elems, 0, ['' for x in range(0, elems)]]
     finally:
       self.lock.release()
 

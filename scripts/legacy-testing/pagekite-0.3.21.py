@@ -278,6 +278,8 @@ DYNDNS = {
 
 ##[ Standard imports ]########################################################
 
+from six.moves import range
+
 import base64
 from cgi import escape as escape_html
 import errno
@@ -3034,7 +3036,7 @@ class TunnelManager(threading.Thread):
         else:
           self.PingTunnels(time.time())
 
-      for i in xrange(0, check_interval):
+      for i in range(0, check_interval):
         if self.keep_running: time.sleep(1)
 
 

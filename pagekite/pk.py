@@ -26,6 +26,8 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
 
+from six.moves import range
+
 import base64
 import cgi
 from cgi import escape as escape_html
@@ -873,7 +875,7 @@ class TunnelManager(threading.Thread):
       self.ListBackEnds()
       self.UpdateUiStatus(problem, connecting)
 
-      for i in xrange(0, (self.check_interval / 5)):
+      for i in range(0, (self.check_interval / 5)):
         if self.keep_running:
           time.sleep(self.check_interval / 5)
           if i > (self.check_interval / 5):
