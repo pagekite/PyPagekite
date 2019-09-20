@@ -443,7 +443,7 @@ class Selectable(object):
       if ((self.throttle_until - ot) > 30 or
           (int(ot) != int(self.throttle_until) and delay > 8)):
         self.LogInfo('Throttled %.1fs until %x (flood=%d, bps=%s, %s)' % (
-                     delay, self.throttle_until, flooded,
+                     delay, int(self.throttle_until), flooded,
                      self.max_read_speed, remote and 'remote' or 'local'))
 
     return True

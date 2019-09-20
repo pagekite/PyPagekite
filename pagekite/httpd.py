@@ -580,7 +580,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         name_policy = self.host_config.get('ul_filenames', 'keep')
         if name_policy not in ('keep', 'overwrite'):
           ext = ('.' in fn and fn.split('.')[-1] or 'dat')
-          fn = 'upload-%x.%s' % (time.time(), ext)
+          fn = 'upload-%x.%s' % (int(time.time()), ext)
 
         if subdir:
           full_path = os.path.join(full_path, subdir)
@@ -1070,7 +1070,7 @@ class RemoteControlInterface(object):
   def append_channel(self, auth_token, channel, values):
     data = self.get_channel(auth_token, channel)
     global LOG_LINE
-    values.update({'ts': '%x' % time.time(), 'll': '%x' % LOG_LINE})
+    values.update({'ts': '%x' % int(time.time()), 'll': '%x' % LOG_LINE})
     LOG_LINE += 1
     data.append(values)
     return values

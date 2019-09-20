@@ -2551,7 +2551,7 @@ class PageKite(object):
         host_paths = just_these_webpaths.get(http_host, {})
         host_config = just_these_be_configs.get(http_host, {})
         rand_seed = '%s:%x' % (specs[specs.keys()[0]][BE_SECRET],
-                               time.time()/3600)
+                               time.time()//3600)
 
         first = (len(host_paths.keys()) == 0) or be_path_prefix
         paranoid = host_config.get('hide', False)
