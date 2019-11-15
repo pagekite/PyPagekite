@@ -246,13 +246,8 @@ class AuthThread(threading.Thread):
             # Note: These 15 seconds are a magic number which should be well
             #       below the timeout in proto.conns.Tunnel._Connect().
             if ((not self.conns.config.authfail_closed)
-<<<<<<< HEAD
-                  and len(self.jobs) >= (15 / self.qtime)):
-              logging.LogWarning('Quota lookup skipped, over 15s worth of jobs queued')
-=======
                   and len(self.jobs) >= (15 / self.qtime)):  # Float division
-              logging.LogError('Quota lookup skipped, over 15s worth of jobs queued')
->>>>>>> 0accfff545c4eed0a834d8ec120ed1aafa56e13b
+              logging.LogWarning('Quota lookup skipped, over 15s worth of jobs queued')
               (quota, days, conns, ipc, ips, reason) = (
                 -2, None, None, None, None, None)
             else:
@@ -4052,12 +4047,7 @@ def Main(pagekite, configure, uiclass=NullUi,
         if shell_mode:
           shell_mode = 'more'
 
-<<<<<<< HEAD
-      except KeyboardInterrupt, msg:
-=======
       except KeyboardInterrupt as msg:
-        pk.FallDown(None, help=False, noexit=True)
->>>>>>> 0accfff545c4eed0a834d8ec120ed1aafa56e13b
         if shell_mode:
           pk.FallDown(None, help=False, noexit=True)
           shell_mode = 'auto'
@@ -4071,17 +4061,11 @@ def Main(pagekite, configure, uiclass=NullUi,
       else:
         sys.exit(status)
 
-<<<<<<< HEAD
-    except Exception, msg:
+    except Exception as msg:
       crash_msg = format_exc()
       logging.LogDebug('Crashed: %s' % crash_msg)
       sys.stderr.write('Crashed: %s\n' % crash_msg)
       if pk.crash_report_url and not shell_mode:
-=======
-    except Exception as msg:
-      traceback.print_exc(file=sys.stderr)
-      if pk.crash_report_url:
->>>>>>> 0accfff545c4eed0a834d8ec120ed1aafa56e13b
         try:
           print('Submitting crash report to %s' % pk.crash_report_url)
           logging.LogDebug(''.join(urlopen(pk.crash_report_url,
@@ -4091,11 +4075,7 @@ def Main(pagekite, configure, uiclass=NullUi,
                                             'crash': crash_msg
                                           })).readlines()))
         except Exception as e:
-<<<<<<< HEAD
-          print 'FAILED: %s' % e
-=======
           print('FAILED: %s' % e)
->>>>>>> 0accfff545c4eed0a834d8ec120ed1aafa56e13b
 
       pk.FallDown(msg, help=False, noexit=pk.main_loop)
       crashes = min(9, crashes+1)

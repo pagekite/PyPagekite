@@ -839,7 +839,7 @@ class ChunkParser(Selectable):
       try:
         ws_frame, data = ABNF.parse(self.header)
         more = data and (len(data) > 0)
-      except ValueError, err:
+      except ValueError as err:
         self.LogError('ChunkParser::ProcessData: %s' % err)
         self.Log([('bad_data', data)])
         return False
