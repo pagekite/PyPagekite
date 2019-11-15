@@ -23,6 +23,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+import sys
 from six.moves.urllib.parse import parse_qs, urlparse
 
 from . import common
@@ -46,56 +47,37 @@ except ImportError:
 # Backwards compatibility for old Pythons.
 import socket
 rawsocket = socket.socket
-if not 'SHUT_RD' in dir(socket):
-  socket.SHUT_RD = 0
-  socket.SHUT_WR = 1
-  socket.SHUT_RDWR = 2
 
-try:
-  import datetime
-  ts_to_date = datetime.datetime.fromtimestamp
-  def ts_to_iso(ts=None):
-    return datetime.datetime.utcfromtimestamp(ts).isoformat()
-except ImportError:
-  ts_to_date = str
-  ts_to_iso = str
 
-try:
-  sorted([1, 2, 3])
-except:
-  def sorted(l):
-    tmp = l[:]
-    tmp.sort()
-    return tmp
+import datetime
+ts_to_date = datetime.datetime.fromtimestamp
+def ts_to_iso(ts=None):
+  return datetime.datetime.utcfromtimestamp(ts).isoformat()
 
-try:
-  sum([1, 2, 3])
-except:
-  def sum(l):
-    s = 0
-    for v in l:
-      s += v
-    return s
 
-try:
-  import hashlib
-  def sha1hex(data):
-    hl = hashlib.sha1()
-    hl.update(data)
-    return hl.hexdigest().lower()
-except ImportError:
-  import sha
-  def sha1hex(data):
-    return sha.new(data).hexdigest().lower()
+if sys.version_info < (3,):
+  def b(data):
+    return data
+else:
+  # We are using the latin-1 encoding here, on the assumption that
+  # the string contains binary data we do not want to modify.
+  import codecs
+  def b(data):
+    return codecs.latin_1_encode(data)[0]
+
 
 import base64
 import hashlib
+
 def sha1hex(data):
-  return hashlib.sha1(data).hexdigest().lower()
+  return hashlib.sha1(b(data)).hexdigest().lower()
+
 def sha1b64(data):
-  return base64.b64encode(hashlib.sha1(data).digest())
+  return base64.b64encode(hashlib.sha1(b(data)).digest())
+
 def sha256b64(data):
-  return base64.b64encode(hashlib.sha256(data).digest())
+  return base64.b64encode(hashlib.sha256(b(data)).digest())
+
 
 try:
   from traceback import format_exc
@@ -107,14 +89,6 @@ except ImportError:
     traceback.print_exc(file=sio)
     return sio.getvalue()
 
-# Old Pythons lack rsplit
-def rsplit(ch, data):
-  parts = data.split(ch)
-  if (len(parts) > 2):
-    tail = parts.pop(-1)
-    return (ch.join(parts), tail)
-  else:
-    return parts
 
 # SSL/TLS strategy: prefer pyOpenSSL, as it comes with built-in Context
 # objects. If that fails, look for Python 2.6+ native ssl support and
@@ -156,3 +130,7 @@ else:
 class WithableStub(object):
     def __enter__(self): pass
     def __exit__(self, et, ev, tb): pass
+
+
+# Only calculate this just once
+MAGIC_UUID_SHA1 = sha1hex(MAGIC_UUID)

@@ -189,7 +189,9 @@ def HTTP_Response(code, title, body,
     headers = headers or []
 
   if trackable:  # Put this first...
-    headers = [HTTP_Header('X-PageKite-UUID', MAGIC_UUID)] + headers
+    headers = [
+      HTTP_Header('X-PageKite-UUID', MAGIC_UUID_SHA1)
+      ] + headers
 
   if overloaded:  # No, put this first!
     headers = [HTTP_Header('X-PageKite-Overloaded', 'Sorry')] + headers
