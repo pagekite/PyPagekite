@@ -3,6 +3,9 @@ These are filters placed at the end of a tunnel for watching or modifying
 the traffic.
 """
 ##############################################################################
+
+from __future__ import absolute_import
+
 LICENSE = """\
 This file is part of pagekite.py.
 Copyright 2010-2019, the Beanstalks Project ehf. and Bjarni Runar Einarsson
@@ -21,6 +24,9 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+
+import six
+
 import re
 import time
 import pagekite.logging as logging
@@ -38,7 +44,7 @@ class TunnelFilter:
 
   def clean_idle_sids(self, now=None):
     now = now or time.time()
-    for sid in self.sid.keys():
+    for sid in list(six.iterkeys(self.sid)):
       if self.sid[sid]['_ts'] < now - self.IDLE_TIMEOUT:
         del self.sid[sid]
 

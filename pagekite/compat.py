@@ -2,6 +2,9 @@
 Compatibility hacks to work around differences between Python versions.
 """
 ##############################################################################
+
+from __future__ import absolute_import
+
 LICENSE = """\
 This file is part of pagekite.py.
 Copyright 2010-2019, the Beanstalks Project ehf. and Bjarni Runar Einarsson
@@ -20,9 +23,10 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
-import common
-from common import *
-from traceback import format_exc
+from six.moves.urllib.parse import parse_qs, urlparse
+
+from . import common
+from .common import *
 
 
 # System logging on Unix
@@ -74,10 +78,15 @@ except:
     return s
 
 try:
-  from urlparse import parse_qs, urlparse
-except ImportError, e:
-  from cgi import parse_qs
-  from urlparse import urlparse
+  import hashlib
+  def sha1hex(data):
+    hl = hashlib.sha1()
+    hl.update(data)
+    return hl.hexdigest().lower()
+except ImportError:
+  import sha
+  def sha1hex(data):
+    return sha.new(data).hexdigest().lower()
 
 import base64
 import hashlib
@@ -88,7 +97,24 @@ def sha1b64(data):
 def sha256b64(data):
   return base64.b64encode(hashlib.sha256(data).digest())
 
-common.MAGIC_UUID = sha1hex(common.MAGIC_UUID)
+try:
+  from traceback import format_exc
+except ImportError:
+  import traceback
+  from six import StringIO
+  def format_exc():
+    sio = StringIO()
+    traceback.print_exc(file=sio)
+    return sio.getvalue()
+
+# Old Pythons lack rsplit
+def rsplit(ch, data):
+  parts = data.split(ch)
+  if (len(parts) > 2):
+    tail = parts.pop(-1)
+    return (ch.join(parts), tail)
+  else:
+    return parts
 
 # SSL/TLS strategy: prefer pyOpenSSL, as it comes with built-in Context
 # objects. If that fails, look for Python 2.6+ native ssl support and

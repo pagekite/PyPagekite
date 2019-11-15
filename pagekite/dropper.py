@@ -3,6 +3,9 @@ This is a "dropper template".  A dropper is a single-purpose PageKite
 back-end connector which embeds its own configuration.
 """
 ##############################################################################
+
+from __future__ import absolute_import
+
 LICENSE = """\
 This file is part of pagekite.py.
 Copyright 2010-2019, the Beanstalks Project ehf. and Bjarni Runar Einarsson

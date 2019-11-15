@@ -1,6 +1,9 @@
 """
 Logging.
 """
+
+from __future__ import absolute_import
+
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
@@ -23,9 +26,9 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 import time
 import sys
 
-import compat, common
-from compat import *
-from common import *
+from . import compat, common
+from .compat import *
+from .common import *
 
 syslog = compat.syslog
 org_stdout = sys.stdout
@@ -83,7 +86,7 @@ def LogValues(values, testtime=None):
   LOG_LINE += 1
   LOG.append(wdict)
   while len(LOG) > LOG_LENGTH:
-    LOG[0:(LOG_LENGTH/10)] = []
+    LOG[0:(LOG_LENGTH//10)] = []
 
   return (words, wdict)
 

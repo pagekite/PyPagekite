@@ -1,6 +1,11 @@
 """
 Selectables are low level base classes which cooperate with our select-loop.
 """
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
@@ -20,6 +25,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+
 import errno
 import os
 import re
@@ -344,13 +350,14 @@ class Selectable(object):
     while len(discard) < eat_bytes:
       try:
         discard += self.fd.recv(eat_bytes - len(discard))
-      except socket.error, (errno, msg):
+      except socket.error as err:
+        (errno, msg) = err.args
         self.LogInfo('Error reading (%d/%d) socket: %s (errno=%s)' % (
                        eat_bytes, self.peeked, msg, errno))
         time.sleep(0.1)
 
     if logging.DEBUG_IO:
-      print '===[ ATE %d PEEKED BYTES ]===\n' % eat_bytes
+      print('===[ ATE %d PEEKED BYTES ]===\n' % eat_bytes)
     self.peeked -= eat_bytes
     self.peeking = keep_peeking
     return
@@ -379,26 +386,27 @@ class Selectable(object):
         data = self.fd.recv(maxread, socket.MSG_PEEK)
         self.peeked = len(data)
         if logging.DEBUG_IO:
-          print '<== PEEK =[%s]==(\n%s)==' % (self, data[:320])
+          print('<== PEEK =[%s]==(\n%s)==' % (self, data[:320]))
       else:
         data = self.fd.recv(maxread)
         if logging.DEBUG_IO:
-          print ('<== IN =[%s @ %dbps]==(\n%s)=='
-                 ) % (self, self.max_read_speed, data[:320])
-    except (SSL.WantReadError, SSL.WantWriteError), err:
+          print(('<== IN =[%s @ %dbps]==(\n%s)=='
+                 ) % (self, self.max_read_speed, data[:320]))
+    except (SSL.WantReadError, SSL.WantWriteError) as err:
       return True
-    except IOError, err:
+    except IOError as err:
       if err.errno not in self.HARMLESS_ERRNOS:
         self.LogDebug('Error reading socket: %s (%s)' % (err, err.errno))
         common.DISCONNECT_COUNT += 1
         return False
       else:
         return True
-    except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
+    except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError) as err:
       self.LogDebug('Error reading socket (SSL): %s' % err)
       common.DISCONNECT_COUNT += 1
       return False
-    except socket.error, (errno, msg):
+    except socket.error as err:
+      (errno, msg) = err.args
       if errno in self.HARMLESS_ERRNOS:
         return True
       else:
@@ -410,13 +418,13 @@ class Selectable(object):
     if data is None or data == '':
       self.read_eof = True
       if logging.DEBUG_IO:
-        print '<== IN =[%s]==(EOF)==' % self
+        print('<== IN =[%s]==(EOF)==' % self)
       return self.ProcessData('')
     else:
       if not self.peeking:
         self.read_bytes += len(data)
         if self.acked_kb_delta:
-          self.acked_kb_delta += (len(data)/1024)
+          self.acked_kb_delta += (len(data)//1024)
         if self.read_bytes > logging.LOG_THRESHOLD: self.LogTraffic()
       return self.ProcessData(data)
 
@@ -431,7 +439,7 @@ class Selectable(object):
 
   def RecordProgress(self, skb, bps):
     if skb >= 0:
-      all_read = (self.all_in + self.read_bytes) / 1024
+      all_read = (self.all_in + self.read_bytes) // 1024
       if self.acked_kb_delta:
         self.acked_kb_delta = max(1, all_read - skb)
         self.LogDebug('Delta is: %d' % self.acked_kb_delta)
@@ -444,7 +452,7 @@ class Selectable(object):
 
     flooded = max(-1, self.Flooded())
     if self.max_read_speed:
-      delay = min(10, max(0.1, flooded/self.max_read_speed))
+      delay = min(10, max(0.1, flooded/self.max_read_speed))  # Float division
       if flooded < 0: delay = 0
 
     if delay:
@@ -453,7 +461,7 @@ class Selectable(object):
       if ((self.throttle_until - ot) > 30 or
           (int(ot) != int(self.throttle_until) and delay > 8)):
         self.LogInfo('Throttled %.1fs until %x (flood=%d, bps=%s, %s)' % (
-                     delay, self.throttle_until, flooded,
+                     delay, int(self.throttle_until), flooded,
                      self.max_read_speed, remote and 'remote' or 'local'))
 
     return True
@@ -464,7 +472,7 @@ class Selectable(object):
   def Send(self, data, try_flush=False, activity=False,
                        just_buffer=False, allow_blocking=False):
     self.write_speed = int((self.wrote_bytes + self.all_out)
-                           / max(1, (time.time() - self.created)))
+                           / max(1, (time.time() - self.created)))  # Integer division
 
     # If we're already blocked, just buffer unless explicitly asked to flush.
     if ((just_buffer) or
@@ -485,14 +493,14 @@ class Selectable(object):
           try:
             sent_bytes = self.fd.send(sending[:want_send])
             if logging.DEBUG_IO:
-              print ('==> OUT =[%s: %d/%d bytes]==(\n%s)=='
-                     ) % (self, sent_bytes, want_send, sending[:min(320, sent_bytes)])
+              print(('==> OUT =[%s: %d/%d bytes]==(\n%s)=='
+                     ) % (self, sent_bytes, want_send, sending[:min(320, sent_bytes)]))
             self.wrote_bytes += sent_bytes
             self.write_retry = None
             break
-          except (SSL.WantWriteError, SSL.WantReadError), err:
+          except (SSL.WantWriteError, SSL.WantReadError) as err:
             if logging.DEBUG_IO:
-              print '=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, want_send)
+              print('=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, want_send))
             if try_wait:
               time.sleep(try_wait)
         if sent_bytes is None:
@@ -500,7 +508,7 @@ class Selectable(object):
           self.ProcessEofWrite()
           common.DISCONNECT_COUNT += 1
           return False
-      except IOError, err:
+      except IOError as err:
         if err.errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s' % err)
           self.ProcessEofWrite()
@@ -508,9 +516,10 @@ class Selectable(object):
           return False
         else:
           if logging.DEBUG_IO:
-            print '=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send)
+            print('=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send))
           self.write_retry = want_send
-      except socket.error, (errno, msg):
+      except socket.error as err:
+        (errno, msg) = err.args
         if errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s (errno=%s)' % (msg, errno))
           self.ProcessEofWrite()
@@ -518,9 +527,9 @@ class Selectable(object):
           return False
         else:
           if logging.DEBUG_IO:
-            print '=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send)
+            print('=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send))
           self.write_retry = want_send
-      except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
+      except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError) as err:
         self.LogInfo('Error sending (SSL): %s' % err)
         self.ProcessEofWrite()
         common.DISCONNECT_COUNT += 1
@@ -668,7 +677,7 @@ class LineParser(Selectable):
     return False
 
 
-TLS_CLIENTHELLO = '%c' % 026
+TLS_CLIENTHELLO = '%c' % 0o26
 SSL_CLIENTHELLO = '\x80'
 MINECRAFT_HANDSHAKE = '%c' % (0x02, )
 FLASH_POLICY_REQ = '<policy-file-request/>'
@@ -891,7 +900,7 @@ class ChunkParser(Selectable):
             self.compressed = False
             self.want_bytes = int(size, 16)
 
-        except ValueError, err:
+        except ValueError as err:
           self.LogError('ChunkParser::ProcessData: %s' % err)
           self.Log([('bad_data', data)])
           return False

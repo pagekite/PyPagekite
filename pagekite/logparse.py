@@ -2,6 +2,10 @@
 A basic tool for processing and parsing the Pagekite logs. This class
 doesn't actually do anything much, it's meant for subclassing.
 """
+
+from __future__ import absolute_import
+from __future__ import print_function
+
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
@@ -21,6 +25,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+
 import os
 import sys
 import time
@@ -41,7 +46,7 @@ class PageKiteLogParser(object):
       return {'raw': '%s' % line}
 
   def ProcessData(self, data):
-    print '%s' % data
+    print('%s' % data)
 
   def ProcessLine(self, line, data=None):
     self.ProcessData(self.ParseLine(line, data))
@@ -56,7 +61,7 @@ class PageKiteLogParser(object):
         new_fd = open(filename, 'r')
         fd.close()
         return new_fd
-    except (OSError, IOError), e:
+    except (OSError, IOError) as e:
       # Failed to stat or open new file, just try again later.
       pass
 
@@ -98,7 +103,7 @@ class PageKiteLogParser(object):
               data = self.ParseLine(parts[3].strip())
               if after is None or int(data['ts'], 16) > after:
                 self.ProcessData(data)
-          except ValueError, e:
+          except ValueError as e:
             pass
         else:
           fd.seek(fd.tell() - len(line))
@@ -157,27 +162,27 @@ class DebugPKLT(PageKiteLogTracker):
 
   def ProcessRestart(self, data):
     PageKiteLogTracker.ProcessRestart(self, data)
-    print 'RESTARTED %s' % data
+    print('RESTARTED %s' % data)
 
   def ProcessNewStream(self, stream, data):
     PageKiteLogTracker.ProcessNewStream(self, stream, data)
-    print '[%s] NEW %s' % (stream['id'], data)
+    print('[%s] NEW %s' % (stream['id'], data))
 
   def ProcessBandwidthRead(self, stream, data):
     PageKiteLogTracker.ProcessBandwidthRead(self, stream, data)
-    print '[%s] BWR  %s' % (stream['id'], data)
+    print('[%s] BWR  %s' % (stream['id'], data))
 
   def ProcessBandwidthWrote(self, stream, data):
     PageKiteLogTracker.ProcessBandwidthWrote(self, stream, data)
-    print '[%s] BWW %s' % (stream['id'], data)
+    print('[%s] BWW %s' % (stream['id'], data))
 
   def ProcessError(self, stream, data):
     PageKiteLogTracker.ProcessError(self, stream, data)
-    print '[%s] ERR %s' % (stream['id'], data)
+    print('[%s] ERR %s' % (stream['id'], data))
 
   def ProcessEof(self, stream, data):
     PageKiteLogTracker.ProcessEof(self, stream, data)
-    print '[%s] EOF %s' % (stream['id'], data)
+    print('[%s] EOF %s' % (stream['id'], data))
 
 
 if __name__ == '__main__':

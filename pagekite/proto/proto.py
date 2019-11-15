@@ -2,6 +2,10 @@
 PageKite protocol and HTTP protocol related code and constants.
 """
 ##############################################################################
+
+from __future__ import absolute_import
+from __future__ import division
+
 LICENSE = """\
 This file is part of pagekite.py.
 Copyright 2010-2019, the Beanstalks Project ehf. and Bjarni Runar Einarsson
@@ -20,6 +24,9 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+
+import six
+
 import base64
 import os
 import random
@@ -73,7 +80,7 @@ def signToken(token=None, secret=None, payload='', timestamp=None,
                                              random.randint(0, 0x7FFFFFFD)+1))
   if timestamp:
     tok = 't' + token[1:]
-    ts = '%x' % int(timestamp/600)
+    ts = '%x' % int(timestamp/600)  # Integer division
     return tok[0:8] + sha1hex(secret + payload + ts + tok[0:8])[0:length-8]
   else:
     return token[0:8] + sha1hex(secret + payload + token[0:8])[0:length-8]
@@ -99,7 +106,7 @@ def PageKiteRequestHeaders(server, backends, tokens=None, testtoken=None, replac
   if replace:
     req.append('X-PageKite-Replace: %s\r\n' % replace)
   tokens = tokens or {}
-  for d in backends.keys():
+  for d in list(six.iterkeys(backends)):
     if (backends[d][BE_BHOST] and
         backends[d][BE_SECRET] and
         backends[d][BE_STATUS] not in BE_INACTIVE):

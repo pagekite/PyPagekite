@@ -86,7 +86,8 @@ rpm_el6-fc13:
 	@python setup.py bdist_rpm --install=rpm/rpm-install.sh \
 	                           --post-install=rpm/rpm-post.sh \
 	                           --pre-uninstall=rpm/rpm-preun.sh \
-	                           --requires=python-SocksipyChain
+	                           --requires=python-SocksipyChain \
+	                           --requires=python-six
 
 VERSION=`python setup.py --version`
 DEB_VERSION=`head -n1 debian/changelog | sed -e "s+.*(\(.*\)).*+\1+"`

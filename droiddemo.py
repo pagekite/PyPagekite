@@ -1,4 +1,8 @@
 #!/usr/bin/python -u
+
+from __future__ import absolute_import
+from __future__ import print_function
+
 #
 # droiddemo.py, Copyright 2010-2013, The Beanstalks Project ehf.
 #                                    http://beanstalks-project.net/
@@ -27,16 +31,14 @@ SOURCE='/sdcard/sl4a/scripts/droiddemo.py'
 #
 #############################################################################
 #
+
+import six
+from six.moves.urllib import unquote
+from six.moves.urllib.parse import urlparse
+
 import android
 import pagekite
 import os
-from urllib import unquote
-try:
-  from urlparse import parse_qs, urlparse
-except Exception, e:
-  from cgi import parse_qs
-  from urlparse import urlparse
-
 
 
 class UiRequestHandler(pagekite.UiRequestHandler):
@@ -73,8 +75,8 @@ class UiRequestHandler(pagekite.UiRequestHandler):
       if iname.endswith('.jpg'):
         mtimes[iname] = os.path.getmtime(iname)
 
-    files = mtimes.keys()
-    files.sort(lambda x,y: cmp(mtimes[x], mtimes[y]))
+    files = list(six.iterkeys(mtimes))
+    files.sort(key=lambda iname: mtimes[iname])
     return files
 
   def do_GET(self):
@@ -100,8 +102,8 @@ class UiRequestHandler(pagekite.UiRequestHandler):
             pass
         return
  
-      except Exception, e:
-        print '%s' % e
+      except Exception as e:
+        print('%s' % e)
         pass 
 
     if path == '/latest-image.txt':
@@ -116,7 +118,7 @@ class UiRequestHandler(pagekite.UiRequestHandler):
         self.begin_headers(200, 'text/plain')
         self.end_headers()
         self.wfile.write(pyfile.read().replace(SECRET, 'mysecret'))
-      except IOError, e:
+      except IOError as e:
         self.begin_headers(404, 'text/plain')
         self.end_headers()
         self.wfile.write('Could not read %s: %s' % (SOURCE, e))

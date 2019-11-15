@@ -2,6 +2,9 @@
 Constants and global program state.
 """
 ##############################################################################
+
+from __future__ import absolute_import
+
 LICENSE = """\
 This file is part of pagekite.py.
 Copyright 2010-2019, the Beanstalks Project ehf. and Bjarni Runar Einarsson
@@ -32,7 +35,7 @@ LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
 MAGIC_PREFIX = '/~:PageKite:~/'
 MAGIC_PATH = '%sv%s' % (MAGIC_PREFIX, PROTOVER)
 MAGIC_PATHS = (MAGIC_PATH, '/Beanstalk~Magic~Beans/0.2')
-MAGIC_UUID = '%x-%x-%s' % (random.randint(0, 0xfffffff), time.time(), APPVER)
+MAGIC_UUID = '%x-%x-%s' % (random.randint(0, 0xfffffff), int(time.time()), APPVER)
 
 SERVICE_PROVIDER = 'PageKite.net'
 SERVICE_DOMAINS = ('pagekite.me', '302.is', 'testing.is', 'kazz.am')

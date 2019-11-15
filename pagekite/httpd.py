@@ -1,6 +1,10 @@
 """
 This is the pagekite.py built-in HTTP server.
 """
+
+from __future__ import absolute_import
+from __future__ import print_function
+
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
@@ -20,6 +24,13 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+
+from six.moves import socketserver
+from six.moves.CGIHTTPServer import CGIHTTPRequestHandler
+from six.moves.urllib.parse import parse_qs, quote, unquote, urlparse
+from six.moves import http_cookies
+from six.moves.xmlrpc_server import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
+
 import base64
 import cgi
 from cgi import escape as escape_html
@@ -31,12 +42,6 @@ import tempfile
 import threading
 import time
 import traceback
-import urllib
-
-import SocketServer
-from CGIHTTPServer import CGIHTTPRequestHandler
-from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
-import Cookie
 
 from pagekite.common import *
 from pagekite.compat import *
@@ -63,13 +68,6 @@ except:
     return tmp
 
 
-# Different Python 2.x versions complain about deprecation depending on
-# where we pull these from.
-try:
-  from urlparse import parse_qs, urlparse
-except ImportError, e:
-  from cgi import parse_qs
-  from urlparse import urlparse
 try:
   import hashlib
   def sha1hex(data):
@@ -91,11 +89,11 @@ class AuthError(Exception):
 
 def fmt_size(count):
   if count > 2*(1024*1024*1024):
-    return '%dGB' % (count / (1024*1024*1024))
+    return '%dGB' % (count // (1024*1024*1024))
   if count > 2*(1024*1024):
-    return '%dMB' % (count / (1024*1024))
+    return '%dMB' % (count // (1024*1024))
   if count > 2*(1024):
-    return '%dKB' % (count / 1024)
+    return '%dKB' % (count // 1024)
   return '%dB' % count
 
 
@@ -237,12 +235,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def sendChunk(self, chunk):
     if self.chunked:
-      if logging.DEBUG_IO: print '<== SENDING CHUNK ===\n%s\n' % chunk
+      if logging.DEBUG_IO: print('<== SENDING CHUNK ===\n%s\n' % chunk)
       self.wfile.write('%x\r\n' % len(chunk))
       self.wfile.write(chunk)
       self.wfile.write('\r\n')
     else:
-      if logging.DEBUG_IO: print '<== SENDING ===\n%s\n' % chunk
+      if logging.DEBUG_IO: print('<== SENDING ===\n%s\n' % chunk)
       self.wfile.write(chunk)
 
   def sendEof(self):
@@ -254,7 +252,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     self.wfile.write('HTTP/1.1 %s %s\r\n' % (code, msg))
     if code == 401:
       self.send_header('WWW-Authenticate',
-                       'Basic realm=PK%d' % (time.time()/3600))
+                       'Basic realm=PK%d' % (time.time()//3600))
 
     self.chunked = chunked
     if chunked:
@@ -312,7 +310,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       self.checkRequestAuth(scheme, netloc, path, qs)
       return True
 
-    except (ValueError, KeyError, AuthError), e:
+    except (ValueError, KeyError, AuthError) as e:
       logging.LogDebug('HTTP Auth failed: %s' % e)
     else:
       logging.LogDebug('HTTP Auth failed: Unauthorized')
@@ -372,9 +370,9 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                                     qs, None)
     except socket.error:
       pass
-    except Exception, e:
+    except Exception as e:
       logging.Log([('err', 'GET error at %s: %s' % (path, e))])
-      if logging.DEBUG_IO: print '=== ERROR\n%s\n===' % format_exc()
+      if logging.DEBUG_IO: print('=== ERROR\n%s\n===' % format_exc())
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
   def do_HEAD(self):
@@ -427,7 +425,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       self.post_data.seek(0)
     except socket.error:
       pass
-    except Exception, e:
+    except Exception as e:
       logging.Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
       self.rfile = self.old_rfile
@@ -440,7 +438,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                                     qs, posted)
     except socket.error:
       pass
-    except Exception, e:
+    except Exception as e:
       logging.Log([('err', 'Error handling POST at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
@@ -500,9 +498,9 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         if os.path.isdir(fpath):
           fclass = ['dir']
           if not fn.endswith('/'): fn += '/'
-          qfn = urllib.quote(fn)
+          qfn = quote(fn)
         else:
-          qfn = urllib.quote(fn)
+          qfn = quote(fn)
           fn = os.path.basename(fn)
           fclass = ['file']
           ops.append('download')
@@ -537,7 +535,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     return ''.join(fhtml)
 
   def convertPaths(self, path):
-    path = urllib.unquote(path)
+    path = unquote(path)
     if path.find('..') >= 0: raise IOError("Evil")
 
     paths = self.server.pkite.ui_paths
@@ -584,7 +582,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         name_policy = self.host_config.get('ul_filenames', 'keep')
         if name_policy not in ('keep', 'overwrite'):
           ext = ('.' in fn and fn.split('.')[-1] or 'dat')
-          fn = 'upload-%x.%s' % (time.time(), ext)
+          fn = 'upload-%x.%s' % (int(time.time()), ext)
 
         if subdir:
           full_path = os.path.join(full_path, subdir)
@@ -747,7 +745,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
             rf_size = rf_stat.st_size
           except:
             self.chunked = True
-    except (IOError, OSError), e:
+    except (IOError, OSError) as e:
       return False
 
     headers = [ ]
@@ -849,7 +847,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     data['method'] = data.get('http_x-pagekite-proto', 'http').lower()
 
     if 'http_cookie' in data:
-      cookies = Cookie.SimpleCookie(data['http_cookie'])
+      cookies = http_cookies.SimpleCookie(data['http_cookie'])
     else:
       cookies = {}
 
@@ -1074,7 +1072,7 @@ class RemoteControlInterface(object):
   def append_channel(self, auth_token, channel, values):
     data = self.get_channel(auth_token, channel)
     global LOG_LINE
-    values.update({'ts': '%x' % time.time(), 'll': '%x' % LOG_LINE})
+    values.update({'ts': '%x' % int(time.time()), 'll': '%x' % LOG_LINE})
     LOG_LINE += 1
     data.append(values)
     return values
@@ -1103,7 +1101,7 @@ class RemoteControlInterface(object):
     return [ll for ll in data if int(ll['ll'], 16) > last_seen]
 
 
-class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
+class UiHttpServer(socketserver.ThreadingMixIn, SimpleXMLRPCServer):
   def __init__(self, sspec, pkite, conns,
                handler=UiRequestHandler,
                ssl_pem_filename=None):

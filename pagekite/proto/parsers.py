@@ -2,6 +2,9 @@
 Protocol parsers for classifying incoming network connections.
 """
 ##############################################################################
+
+from __future__ import absolute_import
+
 LICENSE = """\
 This file is part of pagekite.py.
 Copyright 2010-2019, the Beanstalks Project ehf. and Bjarni Runar Einarsson
@@ -182,7 +185,7 @@ class HttpLineParser(BaseLineParser):
       elif (self.state == self.IN_BODY):
         return self.ParseBody(line)
 
-    except ValueError, err:
+    except ValueError as err:
       logging.LogDebug('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
 
     self.state = BaseLineParser.PARSE_FAILED
@@ -264,7 +267,7 @@ class IrcLineParser(BaseLineParser):
             self.lines[-1] = '%s %s %s\n' % (ocmd, arg0, ' '.join(args[1:]))
         else:
           self.state = BaseLineParser.PARSE_FAILED
-      except Exception, err:
+      except Exception as err:
         logging.LogDebug('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
         self.state = BaseLineParser.PARSE_FAILED
 

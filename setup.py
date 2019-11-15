@@ -1,4 +1,8 @@
 #!/usr/bin/python
+
+from __future__ import absolute_import
+from __future__ import division
+
 import time
 from datetime import date
 from setuptools import setup
@@ -15,7 +19,7 @@ setup(
     name="pagekite",
     version=os.getenv(
         'PAGEKITE_VERSION',
-        APPVER.replace('github', 'dev%d' % (120*int(time.time()/120)))),
+        APPVER.replace('github', 'dev%d' % (120*int(time.time()/120)))),  # Integer division
     license="AGPLv3+",
     author="Bjarni R. Einarsson",
     author_email="bre@pagekite.net",
@@ -35,5 +39,5 @@ as well to clients supporting HTTP Proxies.
 """,
    packages=['pagekite', 'pagekite.ui', 'pagekite.proto'],
    scripts=['scripts/pagekite', 'scripts/lapcat', 'scripts/vipagekite'],
-   install_requires=['SocksipyChain >= 2.0.15']
+   install_requires=['six', 'SocksipyChain >= 2.0.15']
 )

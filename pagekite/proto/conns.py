@@ -2,6 +2,11 @@
 These are the Connection classes, relatively high level classes that handle
 incoming or outgoing network connections.
 """
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
@@ -21,6 +26,9 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+
+import six
+
 import socket
 import sys
 import threading
@@ -32,10 +40,10 @@ from pagekite.common import *
 import pagekite.common as common
 import pagekite.logging as logging
 
-from filters import HttpSecurityFilter
-from selectables import *
-from parsers import *
-from proto import *
+from .filters import HttpSecurityFilter
+from .selectables import *
+from .parsers import *
+from .proto import *
 
 
 class Tunnel(ChunkParser):
@@ -76,7 +84,7 @@ class Tunnel(ChunkParser):
 
   def Cleanup(self, close=True):
     if self.users:
-      for sid in self.users.keys():
+      for sid in list(six.iterkeys(self.users)):
         self.CloseStream(sid)
     ChunkParser.Cleanup(self, close=close)
     self.Init(None)
@@ -151,15 +159,15 @@ class Tunnel(ChunkParser):
         seen[client] = now
         return False
 
-      for seen_ip in seen.keys():
+      for seen_ip in list(six.iterkeys(seen)):
         if seen[seen_ip] < now - delta:
           del seen[seen_ip]
 
-      if len(seen.keys()) >= maxips:
-        self.LogWarning('Rejecting connection from new client',
-                        [('client', client[:12]),
-                         ('ips_per_sec', '%d/%ds' % (maxips, delta)),
-                         ('domain', host)] + log_info)
+      if len(seen) >= maxips:
+        self.LogError('Rejecting connection from new client',
+                      [('client', client[:12]),
+                       ('ips_per_sec', '%d/%ds' % (maxips, delta)),
+                       ('domain', host)] + log_info)
         return 'ips_per_sec'
       else:
         seen[client] = now
@@ -205,12 +213,12 @@ class Tunnel(ChunkParser):
       self.ProcessPageKiteHeaders(conn.parser)
       requests = self.GetKiteRequests(conn.parser)
 
-    except Exception, err:
+    except Exception as err:
       self.LogError('Discarding connection: %s' % err)
       self.Cleanup()
       return None
 
-    except socket.error, err:
+    except socket.error as err:
       self.LogInfo('Discarding connection: %s' % err)
       self.Cleanup()
       return None
@@ -423,7 +431,7 @@ class Tunnel(ChunkParser):
       data += buf
       self.read_bytes += len(buf)
     if logging.DEBUG_IO:
-      print '<== IN (headers) =[%s]==(\n%s)==' % (self, data)
+      print('<== IN (headers) =[%s]==(\n%s)==' % (self, data))
     return data
 
   def _Connect(self, server, conns, tokens=None):
@@ -509,8 +517,8 @@ class Tunnel(ChunkParser):
 
   def UpdateIP_Limits(self, ips, seconds, force=False):
     if self.ip_limits and len(self.ip_limits) > 2 and not force:
-      new_rate = float(ips)/(seconds or 1)
-      old_rate = float(self.ip_limits[1] or 9999)/(self.ip_limits[0] or 1)
+      new_rate = float(ips)/(seconds or 1)  # Float division
+      old_rate = float(self.ip_limits[1] or 9999)/(self.ip_limits[0] or 1)  # Float division
       if new_rate < old_rate:
         self.ip_limits[0] = seconds
         self.ip_limits[1] = ips
@@ -677,7 +685,7 @@ class Tunnel(ChunkParser):
       self.Cleanup()
       return None
 
-    except Exception, e:
+    except Exception as e:
       self.LogError('Connect failed: %s' % e)
       self.Cleanup()
       return None
@@ -860,7 +868,7 @@ class Tunnel(ChunkParser):
     # FIXME: Optimize this away unless meaningful progress has been made?
     msg = ('NOOP: 1\r\n'
            'SID: %s\r\n'
-           'SKB: %d\r\n') % (sid, (conn.all_out + conn.wrote_bytes)/1024)
+           'SKB: %d\r\n') % (sid, (conn.all_out + conn.wrote_bytes)//1024)
     throttle = throttle and ('SPD: %d\r\n' % conn.write_speed) or ''
     return self.SendChunked('%s%s\r\n!' % (msg, throttle),
                             compress=False, just_buffer=True)
@@ -1032,7 +1040,7 @@ class Tunnel(ChunkParser):
                 'X-Forwarded-For: %s\r\n'
                 'Connection: close\r\n'
                 'Host: %s\r\n\r\n%s') % args
-      except Exception, e:
+      except Exception as e:
         self.LogError('Error formatting HTTP-Finger: %s' % e)
         conn.Die()
         conn = None
@@ -1168,7 +1176,7 @@ class LoopbackTunnel(Tunnel):
     self.buffer_count = 0
     self.CountAs('loopbacks_live')
     if which == 'FE':
-      for d in backends.keys():
+      for d in list(six.iterkeys(backends)):
         if backends[d][BE_BHOST]:
           proto, domain = d.split(':')
           self.conns.Tunnel(proto, domain, self)
@@ -1212,7 +1220,7 @@ class LoopbackTunnel(Tunnel):
     joined_data = ''.join(data)
     if try_flush or (len(joined_data) > 10240) or (self.buffer_count >= 100):
       if logging.DEBUG_IO:
-        print '|%s| %s \n|%s| %s' % (self.which, self, self.which, data)
+        print('|%s| %s \n|%s| %s' % (self.which, self, self.which, data))
       self.buffer_count = 0
       return self.other_end.ProcessData(joined_data)
     else:
@@ -1454,7 +1462,7 @@ class UserConn(Selectable):
 
         if fail:
           if logging.DEBUG_IO:
-            print '=== REQUEST\n%s\n===' % data
+            print('=== REQUEST\n%s\n===' % data)
           self.ui.Notify(('%s - %s://%s:%s (USER ACCESS DENIED)'
                           ) % (remote_ip or 'unknown', proto, host, on_port),
                          prefix='!', color=self.ui.YELLOW)
@@ -1483,7 +1491,7 @@ class UserConn(Selectable):
 
       self.fd.setblocking(0)
 
-    except socket.error, err:
+    except socket.error as err:
       logInfo.append(('socket_error', '%s' % err))
       self.ui.Notify(('%s - %s://%s:%s (FAIL: %s:%s is down)'
                       ) % (remote_ip or 'unknown', proto, host, on_port,
@@ -1516,7 +1524,7 @@ class UserConn(Selectable):
             self.fd.sock_shutdown(direction)
         else:
           self.fd.shutdown(direction)
-    except Exception, e:
+    except Exception as e:
       pass
 
   def ProcessTunnelEof(self, read_eof=False, write_eof=False):
@@ -1575,7 +1583,7 @@ class UserConn(Selectable):
     # Back off if tunnel is stuffed.
     if self.tunnel and len(self.tunnel.write_blocked) > 1024000:
       # FIXME: think about this...
-      self.Throttle(delay=(len(self.tunnel.write_blocked)-204800)/max(50000,
+      self.Throttle(delay=(len(self.tunnel.write_blocked)-204800)//max(50000,
                     self.tunnel.write_speed))
 
     if self.read_eof:
@@ -2057,13 +2065,14 @@ class Listener(Selectable):
         self.Log(log_info)
         return True
 
-    except IOError, err:
+    except IOError as err:
       self.LogDebug('Listener::ReadData: error: %s (%s)' % (err, err.errno))
 
-    except socket.error, (errno, msg):
+    except socket.error as err:
+      (errno, msg) = err.args
       self.LogInfo('Listener::ReadData: error: %s (errno=%s)' % (msg, errno))
 
-    except Exception, e:
+    except Exception as e:
       self.LogDebug('Listener::ReadData: %s' % e)
 
     return True

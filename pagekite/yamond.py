@@ -3,6 +3,9 @@ This is a class implementing a flexible metric-store and an HTTP
 thread for browsing the numbers.
 """
 ##############################################################################
+
+from __future__ import absolute_import
+
 LICENSE = """\
 This file is part of pagekite.py.
 Copyright 2010-2019, the Beanstalks Project ehf. and Bjarni Runar Einarsson
@@ -22,6 +25,11 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
 
+from six.moves import range
+from six.moves import BaseHTTPServer
+from six.moves.urllib.request import urlopen
+from six.moves.urllib.parse import parse_qs, urlparse
+
 import getopt
 import os
 import random
@@ -33,15 +41,7 @@ import sys
 import threading
 import time
 import traceback
-import urllib
  
-import BaseHTTPServer
-try:
-  from urlparse import parse_qs, urlparse
-except Exception, e:
-  from cgi import parse_qs
-  from urlparse import urlparse
-
 
 class YamonRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def do_yamon_vars(self):
@@ -166,7 +166,7 @@ class YamonD(threading.Thread):
   def lcreate(self, listn, elems):
     try:
       self.lock.acquire()
-      self.lists[listn] = [elems, 0, ['' for x in xrange(0, elems)]]
+      self.lists[listn] = [elems, 0, ['' for x in range(0, elems)]]
     finally:
       self.lock.release()
 
@@ -206,8 +206,7 @@ class YamonD(threading.Thread):
   def quit(self):
     if self.httpd:
       self.running = False
-      urllib.urlopen('http://%s:%s/exiting/' % self.sspec,
-                     proxies={}).readlines()
+      urlopen('http://%s:%s/exiting/' % self.sspec, proxies={}).readlines()
 
   def run(self):
     self.httpd = self.server(self, self.handler)
