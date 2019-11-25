@@ -1,9 +1,16 @@
 *.pyc
+*.pyo
+*.orig
+*-tmp.py
 build/
 dist/
 pagekite.egg-info
 doc/pagekite.1
 .pybuild
+.header
+.SELF
+sockschain
+scripts/breeder.py
 deb/*.log
 deb/*.debhelper
 deb/*.substvars
