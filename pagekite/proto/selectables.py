@@ -349,7 +349,7 @@ class Selectable(object):
     discard = ''
     while len(discard) < eat_bytes:
       try:
-        discard += self.fd.recv(eat_bytes - len(discard))
+        discard += s(self.fd.recv(eat_bytes - len(discard)))
       except socket.error as err:
         (errno, msg) = err.args
         self.LogInfo('Error reading (%d/%d) socket: %s (errno=%s)' % (
@@ -383,12 +383,12 @@ class Selectable(object):
 
     try:
       if self.peeking:
-        data = self.fd.recv(maxread, socket.MSG_PEEK)
+        data = s(self.fd.recv(maxread, socket.MSG_PEEK))
         self.peeked = len(data)
         if logging.DEBUG_IO:
           print('<== PEEK =[%s]==(\n%s)==' % (self, data[:320]))
       else:
-        data = self.fd.recv(maxread)
+        data = s(self.fd.recv(maxread))
         if logging.DEBUG_IO:
           print(('<== IN =[%s @ %dbps]==(\n%s)=='
                  ) % (self, self.max_read_speed, data[:320]))
@@ -491,7 +491,7 @@ class Selectable(object):
         # Try to write for up to 5 seconds before giving up
         for try_wait in (0, 0, 0.1, 0.2, 0.2, 0.2, 0.3, 0.5, 0.5, 1, 1, 1, 0):
           try:
-            sent_bytes = self.fd.send(sending[:want_send])
+            sent_bytes = self.fd.send(b(sending[:want_send]))
             if logging.DEBUG_IO:
               print(('==> OUT =[%s: %d/%d bytes]==(\n%s)=='
                      ) % (self, sent_bytes, want_send, sending[:min(320, sent_bytes)]))

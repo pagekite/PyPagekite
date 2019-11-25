@@ -58,12 +58,22 @@ def ts_to_iso(ts=None):
 if sys.version_info < (3,):
   def b(data):
     return data
+  def s(data):
+    if isinstance(data, unicode):
+      return data.encode('utf-8')
+    return str(data)
 else:
   # We are using the latin-1 encoding here, on the assumption that
   # the string contains binary data we do not want to modify.
   import codecs
   def b(data):
+    if isinstance(data, bytes):
+      return data
     return codecs.latin_1_encode(data)[0]
+  def s(data):
+    if isinstance(data, str):
+      return data
+    return str(data, 'iso-8859-1')
 
 
 import base64

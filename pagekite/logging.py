@@ -111,6 +111,7 @@ def LogToFile(values, wdict=None, words=None, level=LOG_LEVEL_INFO):
     global LogFile
     LogFile.write('; '.join(['='.join(x) for x in words]))
     LogFile.write('\n')
+    LogFile.flush()
   except (OSError, IOError):
     # Avoid crashing if the disk fills up or something lame like that
     pass

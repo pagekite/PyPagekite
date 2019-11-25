@@ -420,7 +420,7 @@ class Tunnel(ChunkParser):
     fd = fd or self.fd
     while not data.endswith('\r\n\r\n') and not data.endswith('\n\n'):
       try:
-        buf = fd.recv(1)
+        buf = s(fd.recv(1))
       except:
         # This is sloppy, but the back-end will just connect somewhere else
         # instead, so laziness here should be fine.

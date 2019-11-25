@@ -1553,7 +1553,6 @@ class PageKite(object):
       return sha256b64(globalSecret())[:24]
     else:
       config = [username or getpass.getuser()] + self.GenerateConfig()
-      sys.stderr.write('%s\n' % config)
       return sha256b64('\n'.join(config))[:24]
 
   def LoginPath(self, goto):
@@ -3670,12 +3669,12 @@ class PageKite(object):
 
     if filename in ('stdio', 'stdout'):
       try:
-        logging.LogFile = os.fdopen(sys.stdout.fileno(), 'w', 0)
+        logging.LogFile = os.fdopen(sys.stdout.fileno(), 'w')
       except:
         logging.LogFile = sys.stdout
     else:
       try:
-        logging.LogFile = fd = open(filename, "a", 0)
+        logging.LogFile = fd = open(filename, "a")
         os.dup2(fd.fileno(), sys.stdout.fileno())
         if not self.ui.WANTS_STDERR:
           os.dup2(fd.fileno(), sys.stdin.fileno())
