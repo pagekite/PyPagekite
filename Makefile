@@ -143,9 +143,8 @@ distclean: clean
 	@rm -rvf dist/*.*
 
 clean:
-	@rm -vf sockschain *.pyc */*.pyc */*/*.pyc scripts/breeder.py .SELF
+	[ -e debian ] && debuild clean || true
+	@rm -vf sockschain *.py[co] */*.py[co] */*/*.py[co] scripts/breeder.py .SELF
 	@rm -vf .appver pagekite-tmp.py MANIFEST setup.cfg pagekite_gtk.py
-	@rm -vrf *.egg-info .header doc/pagekite.1 build/
-	-debuild clean
-	@-rm debian
+	@rm -vrf debian *.egg-info .header doc/pagekite.1 build/
 
