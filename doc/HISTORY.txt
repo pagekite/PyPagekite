@@ -1,10 +1,12 @@
 Version history - highlights
 ============================
 
-v1.1.0.??????
+v1.5.0.191126
 -------------
+   - FIRST RELEASE which supports Python 3; default is still 2.7 though.
    - Bump versions: New Dev Is Happening! Also, breaking compatibility...
    - Dropped protocols: finger, httpfinger, minecraft
+   - Dropped support: Python 2.6 and below probably no longer work.
    - Fix a few minor buglets
    - Added experimental support for relay connections over websockets
    - Debian: improve .deb config samples
