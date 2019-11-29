@@ -54,10 +54,10 @@ class RemoteUi(NullUi):
     self.BLUE = self.RED = self.MAGENTA = self.CYAN = ''
 
   def StartListingBackEnds(self):
-    self.wfile.write('begin_be_list\n')
+    self.write('begin_be_list\n')
 
   def EndListingBackEnds(self):
-    self.wfile.write('end_be_list\n')
+    self.write('end_be_list\n')
 
   def NotifyBE(self, bid, be, has_ssl, dpaths,
                is_builtin=False, fingerprint=None, now=None):
@@ -76,36 +76,36 @@ class RemoteUi(NullUi):
                         has_ssl and '; ssl=1' or '',
                         is_builtin and '; builtin=1' or '',
                         fingerprint and ('; fingerprint=%s' % fingerprint) or '')
-    self.wfile.write(message)
+    self.write(message)
 
     for path in dpaths:
       message = (' be_path: domain=%s; port=%s; path=%s; policy=%s; src=%s\n'
                  ) % (domain, port or 80, path,
                       dpaths[path][0], dpaths[path][1])
-      self.wfile.write(message)
+      self.write(message)
 
   def Notify(self, message, prefix=' ',
              popup=False, color=None, now=None, alignright=''):
     message = '%s' % message
-    self.wfile.write('notify: %s\n' % message)
+    self.write('notify: %s\n' % message)
 
   def NotifyMOTD(self, frontend, message):
-    self.wfile.write('motd: %s %s\n' % (frontend,
+    self.write('motd: %s %s\n' % (frontend,
                                         message.replace('\n', '  ')))
 
   def Status(self, tag, message=None, color=None):
     self.status_tag = tag
     self.status_msg = '%s' % (message or self.status_msg)
     if message:
-      self.wfile.write('status_msg: %s\n' % message)
+      self.write('status_msg: %s\n' % message)
     if tag:
-      self.wfile.write('status_tag: %s\n' % tag)
+      self.write('status_tag: %s\n' % tag)
 
   def Welcome(self, pre=None):
-    self.wfile.write('welcome: %s\n' % (pre or '').replace('\n', '  '))
+    self.write('welcome: %s\n' % (pre or '').replace('\n', '  '))
 
   def StartWizard(self, title):
-    self.wfile.write('start_wizard: %s\n' % title)
+    self.write('start_wizard: %s\n' % title)
 
   def Retry(self):
     self.tries -= 1
@@ -114,7 +114,7 @@ class RemoteUi(NullUi):
     return self.tries
 
   def EndWizard(self, quietly=False):
-    self.wfile.write('end_wizard: %s\n' % (quietly and 'quietly' or 'done'))
+    self.write('end_wizard: %s\n' % (quietly and 'quietly' or 'done'))
 
   def Spacer(self):
     pass
@@ -122,14 +122,14 @@ class RemoteUi(NullUi):
   def AskEmail(self, question, default=None, pre=[],
                wizard_hint=False, image=None, back=None, welcome=True):
     while self.Retry():
-      self.wfile.write('begin_ask_email\n')
+      self.write('begin_ask_email\n')
       if pre:
-        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
+        self.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       if default:
-        self.wfile.write(' default: %s\n' % default)
-      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
-      self.wfile.write(' expect: email\n')
-      self.wfile.write('end_ask_email\n')
+        self.write(' default: %s\n' % default)
+      self.write(' question: %s\n' % (question or '').replace('\n', '  '))
+      self.write(' expect: email\n')
+      self.write('end_ask_email\n')
 
       answer = self.rfile.readline().strip()
       if self.EMAIL_RE.match(answer): return answer
@@ -138,15 +138,15 @@ class RemoteUi(NullUi):
   def AskLogin(self, question, default=None, email=None, pre=None,
                wizard_hint=False, image=None, back=None):
     while self.Retry():
-      self.wfile.write('begin_ask_login\n')
+      self.write('begin_ask_login\n')
       if pre:
-        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
+        self.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       if email:
-        self.wfile.write(' default: %s\n' % email)
-      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
-      self.wfile.write(' expect: email\n')
-      self.wfile.write(' expect: password\n')
-      self.wfile.write('end_ask_login\n')
+        self.write(' default: %s\n' % email)
+      self.write(' question: %s\n' % (question or '').replace('\n', '  '))
+      self.write(' expect: email\n')
+      self.write(' expect: password\n')
+      self.write('end_ask_login\n')
 
       answer_email = self.rfile.readline().strip()
       if back is not None and answer_email == 'back': return back
@@ -160,18 +160,18 @@ class RemoteUi(NullUi):
   def AskYesNo(self, question, default=None, pre=[], yes='Yes', no='No',
                wizard_hint=False, image=None, back=None):
     while self.Retry():
-      self.wfile.write('begin_ask_yesno\n')
+      self.write('begin_ask_yesno\n')
       if yes:
-        self.wfile.write(' yes: %s\n' % yes)
+        self.write(' yes: %s\n' % yes)
       if no:
-        self.wfile.write(' no: %s\n' % no)
+        self.write(' no: %s\n' % no)
       if pre:
-        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
+        self.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       if default:
-        self.wfile.write(' default: %s\n' % default)
-      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
-      self.wfile.write(' expect: yesno\n')
-      self.wfile.write('end_ask_yesno\n')
+        self.write(' default: %s\n' % default)
+      self.write(' question: %s\n' % (question or '').replace('\n', '  '))
+      self.write(' expect: yesno\n')
+      self.write('end_ask_yesno\n')
 
       answer = self.rfile.readline().strip().lower()
       if back is not None and answer == 'back': return back
@@ -181,16 +181,16 @@ class RemoteUi(NullUi):
   def AskKiteName(self, domains, question, pre=[], default=None,
                   wizard_hint=False, image=None, back=None):
     while self.Retry():
-      self.wfile.write('begin_ask_kitename\n')
+      self.write('begin_ask_kitename\n')
       if pre:
-        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
+        self.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       for domain in domains:
-        self.wfile.write(' domain: %s\n' % domain)
+        self.write(' domain: %s\n' % domain)
       if default:
-        self.wfile.write(' default: %s\n' % default)
-      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
-      self.wfile.write(' expect: kitename\n')
-      self.wfile.write('end_ask_kitename\n')
+        self.write(' default: %s\n' % default)
+      self.write(' question: %s\n' % (question or '').replace('\n', '  '))
+      self.write(' expect: kitename\n')
+      self.write('end_ask_kitename\n')
 
       answer = self.rfile.readline().strip().lower()
       if back is not None and answer == 'back': return back
@@ -202,23 +202,23 @@ class RemoteUi(NullUi):
   def AskBackends(self, kitename, protos, ports, rawports, question, pre=[],
                   default=None, wizard_hint=False, image=None, back=None):
     while self.Retry():
-      self.wfile.write('begin_ask_backends\n')
+      self.write('begin_ask_backends\n')
       if pre:
-        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
+        self.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       count = 0
       if self.server_info:
         protos = self.server_info[Tunnel.S_PROTOS]
         ports = self.server_info[Tunnel.S_PORTS]
         rawports = self.server_info[Tunnel.S_RAW_PORTS]
-      self.wfile.write(' kitename: %s\n' % kitename)
-      self.wfile.write(' protos: %s\n' % ', '.join(protos))
-      self.wfile.write(' ports: %s\n' % ', '.join(ports))
-      self.wfile.write(' rawports: %s\n' % ', '.join(rawports))
+      self.write(' kitename: %s\n' % kitename)
+      self.write(' protos: %s\n' % ', '.join(protos))
+      self.write(' ports: %s\n' % ', '.join(ports))
+      self.write(' rawports: %s\n' % ', '.join(rawports))
       if default:
-        self.wfile.write(' default: %s\n' % default)
-      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
-      self.wfile.write(' expect: backends\n')
-      self.wfile.write('end_ask_backends\n')
+        self.write(' default: %s\n' % default)
+      self.write(' question: %s\n' % (question or '').replace('\n', '  '))
+      self.write(' expect: backends\n')
+      self.write('end_ask_backends\n')
 
       answer = self.rfile.readline().strip().lower()
       if back is not None and answer == 'back': return back
@@ -227,18 +227,18 @@ class RemoteUi(NullUi):
   def AskMultipleChoice(self, choices, question, pre=[], default=None,
                         wizard_hint=False, image=None, back=None):
     while self.Retry():
-      self.wfile.write('begin_ask_multiplechoice\n')
+      self.write('begin_ask_multiplechoice\n')
       if pre:
-        self.wfile.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
+        self.write(' preamble: %s\n' % '\n'.join(pre).replace('\n', '  '))
       count = 0
       for choice in choices:
         count += 1
-        self.wfile.write(' choice_%d: %s\n' % (count, choice))
+        self.write(' choice_%d: %s\n' % (count, choice))
       if default:
-        self.wfile.write(' default: %s\n' % default)
-      self.wfile.write(' question: %s\n' % (question or '').replace('\n', '  '))
-      self.wfile.write(' expect: choice_index\n')
-      self.wfile.write('end_ask_multiplechoice\n')
+        self.write(' default: %s\n' % default)
+      self.write(' question: %s\n' % (question or '').replace('\n', '  '))
+      self.write(' expect: choice_index\n')
+      self.write('end_ask_multiplechoice\n')
 
       answer = self.rfile.readline().strip().lower()
       try:
@@ -250,10 +250,10 @@ class RemoteUi(NullUi):
 
   def Tell(self, lines, error=False, back=None):
     dialog = error and 'error' or 'message'
-    self.wfile.write('tell_%s: %s\n' % (dialog, '  '.join(lines)))
+    self.write('tell_%s: %s\n' % (dialog, '  '.join(lines)))
 
   def Working(self, message):
-    self.wfile.write('working: %s\n' % message)
+    self.write('working: %s\n' % message)
 
 
 class PageKiteThread(threading.Thread):

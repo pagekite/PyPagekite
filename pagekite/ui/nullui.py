@@ -64,9 +64,15 @@ class NullUi(object):
     self.wfile = wfile
     self.rfile = rfile
     self.welcome = welcome
+    if hasattr(self.wfile, 'buffer'):
+        self.wfile = self.wfile.buffer
 
     self.Reset()
     self.Splash()
+
+  def write(self, data):
+    self.wfile.write(b(data))
+    self.wfile.flush()
 
   def Reset(self):
     self.in_wizard = False
