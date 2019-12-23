@@ -39,5 +39,5 @@ as well to clients supporting HTTP Proxies.
 """,
    packages=['pagekite', 'pagekite.ui', 'pagekite.proto'],
    scripts=['scripts/pagekite', 'scripts/lapcat', 'scripts/vipagekite'],
-   install_requires=['six', 'SocksipyChain >= 2.1.0']
+   install_requires=['six', 'SocksipyChain >= 2.1.1']
 )

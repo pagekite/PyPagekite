@@ -2434,6 +2434,7 @@ class PageKite(object):
       elif opt == '--overload_mem':
         self.overload_mem = max(0, min(float(arg), 1.5))
       elif opt == '--debugio':
+        NullUi.CLEAR = self.ui.CLEAR = ''
         logging.DEBUG_IO = True
       elif opt == '--buffers': self.buffer_max = int(arg)
       elif opt == '--nocrashreport': self.crash_report_url = None
@@ -2698,6 +2699,11 @@ class PageKite(object):
 
   def GetServiceXmlRpc(self):
     service = self.service_xmlrpc
+    try:
+      import http.client
+      socks.wrapmodule(http.client)
+    except ImportError:
+      pass
     return xmlrpc_client.ServerProxy(self.service_xmlrpc, None, None, False)
 
   def _KiteInfo(self, kitename):
@@ -2984,7 +2990,7 @@ class PageKite(object):
           except IOError:
             error = 'network'
           except:
-            error = '%s' % (sys.exc_info(), )
+            error = '%s at %s' % (sys.exc_info(), format_exc())
 
           if error == 'pleaselogin':
             self.ui.ExplainError(error, 'Signup failed!',
@@ -3607,7 +3613,7 @@ class PageKite(object):
             self.ui.Status('dyndns', color=self.ui.YELLOW,
                                      message='Updating DNS for %s...' % domain)
             # FIXME: If the network misbehaves, can this stall forever?
-            result = ''.join(urlopen(updates[update]).readlines())
+            result = ''.join(s(l) for l in urlopen(updates[update]).readlines())
             if result.startswith('good') or result.startswith('nochg'):
               logging.Log([('dyndns', result), ('data', update)])
               self.SetBackendStatus(domain, sub=BE_STATUS_ERR_DNS)
@@ -4067,7 +4073,7 @@ def Main(pagekite, configure, uiclass=NullUi,
       if pk.crash_report_url and not shell_mode:
         try:
           print('Submitting crash report to %s' % pk.crash_report_url)
-          logging.LogDebug(''.join(urlopen(pk.crash_report_url,
+          logging.LogDebug(''.join(s(l) for l in urlopen(pk.crash_report_url,
                                           urlencode({
                                             'platform': sys.platform,
                                             'appver': APPVER,
@@ -4142,7 +4148,7 @@ def Configure(pk):
 
   friendly_mode = (('--friendly' in sys.argv) or
                    (sys.platform[:3] in ('win', 'os2', 'dar')))
-  if friendly_mode and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
+  if friendly_mode and hasattr(sys.stdin, 'isatty') and sys.stdin.isatty():
     pk.shell = (len(sys.argv) < 2) and 'auto'
 
   pk.Configure(sys.argv[1:])
