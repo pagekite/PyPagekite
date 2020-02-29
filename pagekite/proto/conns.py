@@ -1261,7 +1261,7 @@ class UserConn(Selectable):
   def __html__(self):
     return ('<b>Tunnel</b>: <a href="/conn/%s">%s</a><br>'
             '%s') % (self.tunnel and self.tunnel.sid or '',
-                     escape_html('%s' % (self.tunnel or ''), quote=False),
+                     escape_html('%s' % (self.tunnel or ''), quote=False) if PY3 else escape_html('%s' % (self.tunnel or '')),
                      Selectable.__html__(self))
 
   def IsReadable(self, now):

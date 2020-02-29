@@ -36,7 +36,10 @@ from six.moves.xmlrpc_server import SimpleXMLRPCServer, SimpleXMLRPCRequestHandl
 
 import base64
 import cgi
-from html import escape as escape_html
+try:
+  from html import escape as escape_html
+except ImportError:
+  from cgi import escape as escape_html
 import errno
 import gc
 import getopt
