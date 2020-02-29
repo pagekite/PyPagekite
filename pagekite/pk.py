@@ -3160,8 +3160,8 @@ class PageKite(object):
           fd.setblocking(1)
 
         fd.connect((host, port))
-        fd.send('HEAD /ping HTTP/1.1\r\nHost: ping.pagekite\r\n\r\n')
-        data = fd.recv(1024)
+        fd.send(b('HEAD /ping HTTP/1.1\r\nHost: ping.pagekite\r\n\r\n'))
+        data = s(fd.recv(1024))
         fd.close()
         if not data.startswith('HTTP/1.1 503 Unavailable'):
           raise Exception()

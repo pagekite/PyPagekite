@@ -573,7 +573,7 @@ class Selectable(object):
         sdata = ''.join(data)
         if self.zw and compress and len(sdata) > 64:
           try:
-            zdata = self.zw.compress(sdata) + self.zw.flush(zlib.Z_SYNC_FLUSH)
+            zdata = s(self.zw.compress(b(sdata)) + self.zw.flush(zlib.Z_SYNC_FLUSH))
             if zhistory:
               zhistory[0] = len(sdata)
               zhistory[1] = len(zdata)
@@ -919,7 +919,7 @@ class ChunkParser(Selectable):
           try:
             if not self.zr:
               self.zr = zlib.decompressobj()
-            cchunk = self.zr.decompress(self.chunk)
+            cchunk = s(self.zr.decompress(b(self.chunk)))
           except zlib.error:
             cchunk = ''
 
