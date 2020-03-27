@@ -1,6 +1,11 @@
 Version history - highlights
 ============================
 
+v1.5.0.??????
+-------------
+   - Python 3 bugfix: Fixed text wizard UI
+
+
 v1.5.0.191126
 -------------
    - FIRST RELEASE which supports Python 3; default is still 2.7 though.
