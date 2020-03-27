@@ -1,6 +1,12 @@
 Version history - highlights
 ============================
 
+v1.0.0.200327
+-------------
+   - Allow loading frontend IP list from a file instead of using DNS
+   - Avoid crash if getsockname() fails
+
+
 v1.0.0.190721
 -------------
    - Debian: improve .deb config samples

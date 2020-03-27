@@ -182,6 +182,10 @@ MAN_OPT_BACKEND = ("""\
             name, using the given port number. Default behavior is to probe
             all addresses and use the fastest one.
 
+    --frontends</b>=<a>num</a>:<a>@/path/to/file</a>:<a>port</a> __
+            Same as above, except the IP address list will be loaded from
+            a file (and reloaded periodically), instead of using DNS.
+
     --nofrontend</b>=<a>ip</a>:<a>port</a> __
             Never connect to the named front-end server. This can be used to
             exclude some front-ends from auto-configuration.

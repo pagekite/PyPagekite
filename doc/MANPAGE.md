@@ -210,6 +210,10 @@ time the program defaults will Just Work.
      name, using the given port number. Default behavior is to probe
      all addresses and use the fastest one.
 
+   * <b>--frontends</b>=`num`:`@/path/to/file`:`port` <br />
+     Same as above, except the IP address list will be loaded from
+     a file (and reloaded periodically), instead of using DNS.
+
    * <b>--nofrontend</b>=`ip`:`port` <br />
      Never connect to the named front-end server. This can be used to
      exclude some front-ends from auto-configuration.

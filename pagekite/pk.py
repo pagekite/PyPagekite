@@ -3166,11 +3166,21 @@ class PageKite(object):
 
   def GetHostIpAddrs(self, host):
     rv = []
-    try:
-      info = socket.getaddrinfo(host, 0, socket.AF_UNSPEC, socket.SOCK_STREAM)
-      rv = [i[4][0] for i in info]
-    except AttributeError:
-      rv = socket.gethostbyname_ex(host)[2]
+    if host[:1] == '@':
+      try:
+        for line in (l.strip() for l in open(host[1:], 'r')):
+          if line and line[:1] not in ('#', ';'):
+            rv.append(line)
+        logging.LogDebug('Loaded %d IPs from %s' % (len(rv), host[1:]))
+      except:
+        logging.LogDebug('Failed to load IPs from %s' % host[1:])
+        raise
+    else:
+      try:
+        info = socket.getaddrinfo(host, 0, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        rv = [i[4][0] for i in info]
+      except AttributeError:
+        rv = socket.gethostbyname_ex(host)[2]
     return rv
 
   def CachedGetHostIpAddrs(self, host):
