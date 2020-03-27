@@ -904,7 +904,7 @@ the authors as it may be possible to negotiate alternate terms.
 
 #### This document ####
 
-This document is (C) Copyright 2010-2019, Bjarni Rúnar Einarsson and The
+This document is (C) Copyright 2010-2020, Bjarni Rúnar Einarsson and The
 Beanstalks Project ehf.
 
 This work is licensed under the Creative Commons Attribution-ShareAlike
@@ -916,7 +916,7 @@ California, 94105, USA.
 
 #### pagekite.py ####
 
-Pagekite.py is (C) Copyright 2010-2019, Bjarni Rúnar Einarsson and The
+Pagekite.py is (C) Copyright 2010-2020, Bjarni Rúnar Einarsson and The
 Beanstalks Project ehf.
 
 This program is free software: you can redistribute it and/or modify
