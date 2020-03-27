@@ -425,7 +425,7 @@ MAN_TUNNEL_AUTH = ("""\
     `demo_auth_app.py` which implements this protocol.
 """)
 MAN_LICENSE = ("""\
-    Copyright 2010-2019, the Beanstalks Project ehf. and Bjarni R. Einarsson.
+    Copyright 2010-2020, the Beanstalks Project ehf. and Bjarni R. Einarsson.
 
     This program is free software: you can redistribute it and/or modify it
     under the terms of the GNU Affero General Public License as published by
