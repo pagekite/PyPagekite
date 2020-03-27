@@ -3,6 +3,8 @@ Version history - highlights
 
 v1.5.0.??????
 -------------
+   - Allow loading frontend IP list from a file instead of using DNS
+   - Avoid crash if getsockname() fails
    - Python 3 bugfix: Fixed text wizard UI
 
 
