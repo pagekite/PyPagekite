@@ -1,6 +1,11 @@
 Version history - highlights
 ============================
 
+v1.5.0.200412
+-------------
+   - Create ping.pagekite fast-path in dedicated thread
+
+
 v1.5.0.200327
 -------------
    - Allow loading frontend IP list from a file instead of using DNS

@@ -99,6 +99,11 @@ except ImportError:
     traceback.print_exc(file=sio)
     return sio.getvalue()
 
+try:
+  from Queue import Queue
+except ImportError:
+  from queue import Queue
+
 
 # SSL/TLS strategy: prefer pyOpenSSL, as it comes with built-in Context
 # objects. If that fails, look for Python 2.6+ native ssl support and

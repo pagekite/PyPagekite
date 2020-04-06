@@ -33,7 +33,6 @@ import socket
 import sys
 import threading
 import time
-import traceback
 
 from pagekite.compat import *
 from pagekite.common import *
@@ -44,6 +43,8 @@ from .filters import HttpSecurityFilter
 from .selectables import *
 from .parsers import *
 from .proto import *
+
+SMTP_PORTS = (25, 465, 587, 2525)
 
 
 class Tunnel(ChunkParser):
@@ -1626,8 +1627,7 @@ class UnknownConn(MagicProtocolParser):
       return False
     else:
       self.said_hello = True
-    if self.on_port in (25, 125, 2525):
-      # FIXME: We don't actually support SMTP yet and 125 is bogus.
+    if self.on_port in SMTP_PORTS:
       self.Send(['220 ready ESMTP PageKite Magic Proxy\n'], try_flush=True)
     return True
 
@@ -1996,6 +1996,109 @@ class RawConn(Selectable):
       self.Cleanup()
 
 
+class FastPingHelper(threading.Thread):
+  def __init__(self, conns):
+    threading.Thread.__init__(self)
+    self.daemon = True
+    self.lock = threading.Lock()
+    self.conns = conns
+    self.config = conns.config
+    self.clients = []
+    self.rejection = None
+    self.overloaded = False
+    self.processing = 0
+    self.sleeptime = 0.03
+    self.fast_pinged = []
+    self.next_pinglog = time.time() + 1
+    self.wq = Queue()
+    self.up_rejection()
+
+  def up_rejection(self):
+    self.overloaded = self.config.Overloaded()
+    self.rejection = HTTP_Unavailable('fe', 'http', 'ping.pagekite',
+                                      overloaded=self.overloaded,
+                                      advertise=False)
+
+  def add_client(self, client, addr, handler):
+    with self.lock:
+      if self.processing < 1 and not self.clients:
+        ping_queue = True
+      else:
+        ping_queue = False
+
+      client.setblocking(0)
+      self.clients.append((time.time(), client, addr, handler))
+    if ping_queue:
+      self.wq.put(1)
+
+  def run_once(self):
+    now = time.time()
+    self.processing = len(self.clients)
+    with self.lock:
+      _clients, self.clients = self.clients, []
+    for ts, client, addr, handler in _clients:
+      try:
+        data = client.recv(64, socket.MSG_PEEK)
+      except:
+        data = None
+      try:
+        if data:
+          if '\nHost: ping.pagekite' in data:
+            client.send(self.rejection)
+            client.close()
+            self.fast_pinged.append(obfuIp(addr[0]))
+          else:
+            handler(client, addr)
+        elif ts > (now-5):
+          with self.lock:
+            self.clients.append((ts, client, addr, handler))
+        else:
+          logging.LogDebug('Timeout, dropping ' + obfuIp(addr[0]))
+          client.close()
+      except IOError:
+        logging.LogDebug('IOError, dropping ' + obfuIp(addr[0]))
+        # No action: just let the client get garbage collected
+      except:
+        pass
+      self.processing -= 1
+
+    if now > self.next_pinglog:
+      if self.fast_pinged:
+        logging.LogDebug('Fast ping %s %d clients: %s' % (
+          'discouraged' if self.overloaded else 'welcomed',
+          len(self.fast_pinged),
+          ', '.join(self.fast_pinged)))
+        self.fast_pinged = []
+      self.up_rejection()
+      self.next_pinglog = now + 1
+
+    self.sleeptime = max(0, (now + 0.015) - time.time())
+
+  def run_until(self, deadline):
+    try:
+      self.sleeptime = 0.03
+      while (time.time() + self.sleeptime) < deadline and self.clients:
+        while not self.wq.empty():
+          self.wq.get()
+        time.sleep(self.sleeptime)
+        self.run_once()
+    except:
+      logging.LogError('FastPingHelper crashed: ' + format_exc())
+
+  def run(self):
+    while True:
+      try:
+        while True:
+          while not self.clients or not self.wq.empty():
+            self.wq.get()
+            self.sleeptime = 0.03
+          time.sleep(self.sleeptime)
+          self.run_once()
+      except:
+        logging.LogError('FastPingHelper crashed: ' + format_exc())
+        time.sleep(1)
+
+
 class Listener(Selectable):
   """This class listens for incoming connections and accepts them."""
 
@@ -2022,7 +2125,7 @@ class Listener(Selectable):
     return '<p>Listening on port %s for %s</p>' % (self.port, self.connclass)
 
   def check_acl(self, ipaddr, default=True):
-    if self.acl:
+    if self.acl and os.path.exists(self.acl):
       try:
         ipaddr = '%s' % ipaddr
         lc = 0
@@ -2044,19 +2147,33 @@ class Listener(Selectable):
           except IndexError:
             self.LogDebug('Invalid line %d in ACL %s' % (lc, self.acl))
       except:
-        self.LogDebug('Failed to read/parse %s' % self.acl)
+        self.LogDebug(
+          'Failed to read/parse %s: %s' % (self.acl, format_exc()))
     self.acl_match = (0, '.*', default and 'allow' or 'reject', 'Default')
     return default
+
+  def HandleClient(self, client, address):
+    if self.check_acl(address[0]):
+      log_info = [('accept', '%s:%s' % (obfuIp(address[0]), address[1]))]
+      uc = self.connclass(client, address, self.port, self.conns)
+    else:
+      log_info = [('reject', '%s:%s' % (obfuIp(address[0]), address[1]))]
+      client.close()
+    if self.acl:
+      log_info.extend([('acl_line', '%s' % self.acl_match[0]),
+                       ('reason', self.acl_match[3])])
+    self.Log(log_info)
+    return True
 
   def ReadData(self, maxread=None):
     try:
       self.last_activity = time.time()
       client, address = self.fd.accept()
       if client:
-        if self.check_acl(address[0]):
-          log_info = [('accept', '%s:%s' % (obfuIp(address[0]), address[1]))]
-          uc = self.connclass(client, address, self.port, self.conns)
+        if self.port not in SMTP_PORTS:
+          self.conns.ping_helper.add_client(client, address, self.HandleClient)
         else:
+<<<<<<< HEAD
           log_info = [('reject', '%s:%s' % (obfuIp(address[0]), address[1]))]
           client.close()
         if self.acl:
@@ -2066,6 +2183,11 @@ class Listener(Selectable):
         return True
 
     except IOError as err:
+=======
+          self.HandleClient(client, address)
+      return True
+    except IOError, err:
+>>>>>>> 7c04593... Create an efficient fast-path for PageKite ping traffic
       self.LogDebug('Listener::ReadData: error: %s (%s)' % (err, err.errno))
 
     except socket.error as err:
