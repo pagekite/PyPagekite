@@ -183,7 +183,7 @@ class HttpLineParser(BaseLineParser):
         return self.ParseBody(line)
 
     except ValueError, err:
-      logging.LogDebug('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
+      logging.LogDebug('HTTP parse failed: %s, %s, %s' % (self.state, err, self.lines))
 
     self.state = BaseLineParser.PARSE_FAILED
     return False
@@ -265,7 +265,7 @@ class IrcLineParser(BaseLineParser):
         else:
           self.state = BaseLineParser.PARSE_FAILED
       except Exception, err:
-        logging.LogDebug('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
+        logging.LogDebug('IRC parse failed: %s, %s, %s' % (self.state, err, self.lines))
         self.state = BaseLineParser.PARSE_FAILED
 
     return (self.state != BaseLineParser.PARSE_FAILED)

@@ -100,6 +100,11 @@ except ImportError:
     traceback.print_exc(file=sio)
     return sio.getvalue()
 
+try:
+  from Queue import Queue
+except ImportError:
+  from queue import Queue
+
 # Old Pythons lack rsplit
 def rsplit(ch, data):
   parts = data.split(ch)

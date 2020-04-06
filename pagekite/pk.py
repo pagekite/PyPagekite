@@ -339,6 +339,8 @@ class Connections(object):
     self.conns_by_id = {}
     self.tunnels = {}
     self.auth_pool = []
+    self.ping_helper = FastPingHelper(self)
+    self.ping_helper.start()
 
   def start(self, auth_threads=None, auth_thread_count=1):
     self.auth_pool = auth_threads or []
