@@ -188,9 +188,12 @@ class Selectable(object):
   def __html__(self):
     try:
       peer = self.fd.getpeername()
-      sock = self.fd.getsockname()
     except:
       peer = ('x.x.x.x', 'x')
+
+    try:
+      sock = self.fd.getsockname()
+    except:
       sock = ('x.x.x.x', 'x')
 
     return ('<b>Outgoing ZChunks</b>: %s<br>'

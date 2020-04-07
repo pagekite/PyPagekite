@@ -23,6 +23,7 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 ##############################################################################
 import base64
 import cgi
+import copy
 from cgi import escape as escape_html
 import errno
 import getopt
@@ -332,6 +333,7 @@ class Connections(object):
   def __init__(self, config):
     self.config = config
     self.ip_tracker = {}
+    self.lock = threading.Lock()
     self.idle = []
     self.conns = []
     self.conns_by_id = {}
@@ -346,67 +348,74 @@ class Connections(object):
       th.start()
 
   def Add(self, conn):
-    self.conns.append(conn)
+    with self.lock:
+      self.conns.append(conn)
 
   def auth(self):
     if common.gYamon:
       common.gYamon.vset('auth_threads', len(self.auth_pool))
       common.gYamon.vset('auth_thread_qtime',
                          sum([at.qtime for at in self.auth_pool]
-                             ) / len(self.auth_pool))
+                             ) / (len(self.auth_pool) or 1))
       common.gYamon.vset('auth_thread_jobs',
                          sum([len(at.jobs) for at in self.auth_pool]))
     return self.auth_pool[random.randint(0, len(self.auth_pool)-1)]
 
   def SetAltId(self, conn, new_id):
-    if conn.alt_id and conn.alt_id in self.conns_by_id:
-      del self.conns_by_id[conn.alt_id]
-    if new_id:
-      self.conns_by_id[new_id] = conn
-    conn.alt_id = new_id
+    with self.lock:
+      if conn.alt_id and conn.alt_id in self.conns_by_id:
+        del self.conns_by_id[conn.alt_id]
+      if new_id:
+        self.conns_by_id[new_id] = conn
+      conn.alt_id = new_id
 
   def SetIdle(self, conn, seconds):
-    self.idle.append((time.time() + seconds, conn.last_activity, conn))
+    with self.lock:
+      self.idle.append((time.time() + seconds, conn.last_activity, conn))
 
   def TrackIP(self, ip, domain):
     tick = '%d' % (time.time()/12)
-    if tick not in self.ip_tracker:
-      deadline = int(tick)-10
-      for ot in self.ip_tracker.keys():
-        if int(ot) < deadline:
-          del self.ip_tracker[ot]
-      self.ip_tracker[tick] = {}
+    with self.lock:
+      if tick not in self.ip_tracker:
+        deadline = int(tick)-10
+        for ot in self.ip_tracker.keys():
+          if int(ot) < deadline:
+            del self.ip_tracker[ot]
+        self.ip_tracker[tick] = {}
 
-    if ip not in self.ip_tracker[tick]:
-      self.ip_tracker[tick][ip] = [1, domain]
-    else:
-      self.ip_tracker[tick][ip][0] += 1
-      self.ip_tracker[tick][ip][1] = domain
+      if ip not in self.ip_tracker[tick]:
+        self.ip_tracker[tick][ip] = [1, domain]
+      else:
+        self.ip_tracker[tick][ip][0] += 1
+        self.ip_tracker[tick][ip][1] = domain
 
   def LastIpDomain(self, ip):
     domain = None
-    for tick in sorted(self.ip_tracker.keys()):
+    with self.lock:
+      _keys = sorted(self.ip_tracker.keys())
+    for tick in _keys:
       if ip in self.ip_tracker[tick]:
         domain = self.ip_tracker[tick][ip][1]
     return domain
 
   def Remove(self, conn, retry=True):
     try:
-      if conn.alt_id and conn.alt_id in self.conns_by_id:
-        del self.conns_by_id[conn.alt_id]
-      if conn in self.conns:
-        self.conns.remove(conn)
-      rmp = []
-      for elc in self.idle:
-        if elc[-1] == conn:
-          rmp.append(elc)
-      for elc in rmp:
-        self.idle.remove(elc)
-      for tid, tunnels in self.tunnels.items():
-        if conn in tunnels:
-          tunnels.remove(conn)
-          if not tunnels:
-            del self.tunnels[tid]
+      with self.lock:
+        if conn.alt_id and conn.alt_id in self.conns_by_id:
+          del self.conns_by_id[conn.alt_id]
+        if conn in self.conns:
+          self.conns.remove(conn)
+        rmp = []
+        for elc in self.idle:
+          if elc[-1] == conn:
+            rmp.append(elc)
+        for elc in rmp:
+          self.idle.remove(elc)
+        for tid, tunnels in self.tunnels.items():
+          if conn in tunnels:
+            tunnels.remove(conn)
+            if not tunnels:
+              del self.tunnels[tid]
     except (ValueError, KeyError):
       # Let's not asplode if another thread races us for this.
       logging.LogError('Failed to remove %s: %s' % (conn, format_exc()))
@@ -414,64 +423,75 @@ class Connections(object):
         return self.Remove(conn, retry=False)
 
   def IdleConns(self):
-    return [p[-1] for p in self.idle]
+    with self.lock:
+      return [p[-1] for p in self.idle]
 
   def Sockets(self):
-    return [s.fd for s in self.conns]
+    with self.lock:
+      return [s.fd for s in self.conns]
 
   def Readable(self):
     # FIXME: This is O(n)
     now = time.time()
-    return [s.fd for s in self.conns if s.IsReadable(now)]
+    with self.lock:
+      return [s.fd for s in self.conns if s.IsReadable(now)]
 
   def Blocked(self):
     # FIXME: This is O(n)
     # Magic side-effect: update buffered byte counter
-    blocked = [s for s in self.conns if s.IsBlocked()]
-    common.buffered_bytes[0] = sum([len(s.write_blocked) for s in blocked])
-    return [s.fd for s in blocked]
+    with self.lock:
+      blocked = [s for s in self.conns if s.IsBlocked()]
+      common.buffered_bytes[0] = sum([len(s.write_blocked) for s in blocked])
+      return [s.fd for s in blocked]
 
   def DeadConns(self):
-    return [s for s in self.conns if s.IsDead()]
+    with self.lock:
+      return [s for s in self.conns if s.IsDead()]
 
   def CleanFds(self):
     evil = []
-    for s in self.conns:
-      try:
-        i, o, e = select.select([s.fd], [s.fd], [s.fd], 0)
-      except:
-        evil.append(s)
+    with self.lock:
+      for s in self.conns:
+        try:
+          i, o, e = select.select([s.fd], [s.fd], [s.fd], 0)
+        except:
+          evil.append(s)
     for s in evil:
       logging.LogDebug('Removing broken Selectable: %s' % s)
       s.Cleanup()
       self.Remove(s)
 
   def Connection(self, fd):
-    for conn in self.conns:
-      if conn.fd == fd:
-        return conn
+    with self.lock:
+      for conn in self.conns:
+        if conn.fd == fd:
+          return conn
     return None
 
   def TunnelServers(self):
     servers = {}
-    for tid in self.tunnels:
-      for tunnel in self.tunnels[tid]:
-        server = tunnel.server_info[tunnel.S_NAME]
-        if server is not None:
-          servers[server] = 1
+    with self.lock:
+      for tid in self.tunnels:
+        for tunnel in self.tunnels[tid]:
+          server = tunnel.server_info[tunnel.S_NAME]
+          if server is not None:
+            servers[server] = 1
     return servers.keys()
 
   def CloseTunnel(self, proto, domain, conn):
-    tid = '%s:%s' % (proto, domain)
-    if tid in self.tunnels:
-      if conn in self.tunnels[tid]:
-        self.tunnels[tid].remove(conn)
-      if not self.tunnels[tid]:
-        del self.tunnels[tid]
+    with self.lock:
+      tid = '%s:%s' % (proto, domain)
+      if tid in self.tunnels:
+        if conn in self.tunnels[tid]:
+          self.tunnels[tid].remove(conn)
+        if not self.tunnels[tid]:
+          del self.tunnels[tid]
 
   def CheckIdleConns(self, now):
     active = []
-    for elc in self.idle:
+    with self.lock:
+      _idle = copy.copy(self.idle)
+    for elc in _idle:
       expire, last_activity, conn = elc
       if conn.last_activity > last_activity:
         active.append(elc)
@@ -480,30 +500,33 @@ class Connections(object):
         conn.Die(discard_buffer=True)
       elif conn.created < now - 1:
         conn.SayHello()
-    for pair in active:
-      self.idle.remove(pair)
+    with self.lock:
+      for pair in active:
+        if pair in self.idle:
+          self.idle.remove(pair)
 
   def Tunnel(self, proto, domain, conn=None):
-    tid = '%s:%s' % (proto, domain)
-    if conn is not None:
-      if tid not in self.tunnels:
-        self.tunnels[tid] = []
-      self.tunnels[tid].append(conn)
+    with self.lock:
+      tid = '%s:%s' % (proto, domain)
+      if conn is not None:
+        if tid not in self.tunnels:
+          self.tunnels[tid] = []
+        self.tunnels[tid].append(conn)
 
-    if tid in self.tunnels:
-      return self.tunnels[tid]
-    else:
-      try:
-        dparts = domain.split('.')[1:]
-        while len(dparts) > 1:
-          wild_tid = '%s:*.%s' % (proto, '.'.join(dparts))
-          if wild_tid in self.tunnels:
-            return self.tunnels[wild_tid]
-          dparts = dparts[1:]
-      except:
-        pass
+      if tid in self.tunnels:
+        return self.tunnels[tid]
+      else:
+        try:
+          dparts = domain.split('.')[1:]
+          while len(dparts) > 1:
+            wild_tid = '%s:*.%s' % (proto, '.'.join(dparts))
+            if wild_tid in self.tunnels:
+              return self.tunnels[wild_tid]
+            dparts = dparts[1:]
+        except:
+          pass
 
-      return []
+        return []
 
 
 class HttpUiThread(threading.Thread):
@@ -3724,41 +3747,42 @@ class PageKite(object):
     broken = False
     try:
       bbc = 0
-      for c in self.conns.conns:
-        fd, mask = c.fd, 0
-        if not c.IsDead():
-          if c.IsBlocked():
-            bbc += len(c.write_blocked)
-            mask |= select.EPOLLOUT
-          if c.IsReadable(now):
-            mask |= select.EPOLLIN
+      with self.conns.lock:
+        for c in self.conns.conns:
+          fd, mask = c.fd, 0
+          if not c.IsDead():
+            if c.IsBlocked():
+              bbc += len(c.write_blocked)
+              mask |= select.EPOLLOUT
+            if c.IsReadable(now):
+              mask |= select.EPOLLIN
 
-        if mask:
-          try:
-            fdc[fd.fileno()] = fd
-          except socket.error:
-            # If this fails, then the socket has HUPed, however we need to
-            # bypass epoll to make sure that's reflected in iready below.
-            bid = 'dead-%d' % len(evs)
-            fdc[bid] = fd
-            evs.append((bid, select.EPOLLHUP))
-            # Trigger removal of c.fd, if it was still in the epoll.
-            fd, mask = None, 0
-
-        if mask:
-          try:
-            epoll.modify(fd, mask)
-          except IOError:
+          if mask:
             try:
-              epoll.register(fd, mask)
+              fdc[fd.fileno()] = fd
+            except socket.error:
+              # If this fails, then the socket has HUPed, however we need to
+              # bypass epoll to make sure that's reflected in iready below.
+              bid = 'dead-%d' % len(evs)
+              fdc[bid] = fd
+              evs.append((bid, select.EPOLLHUP))
+              # Trigger removal of c.fd, if it was still in the epoll.
+              fd, mask = None, 0
+
+          if mask:
+            try:
+              epoll.modify(fd, mask)
+            except IOError:
+              try:
+                epoll.register(fd, mask)
+              except (IOError, TypeError):
+                evs.append((fd, select.EPOLLHUP))  # Error == HUP
+          else:
+            try:
+              epoll.unregister(c.fd)  # Important: Use c.fd, not fd!
             except (IOError, TypeError):
-              evs.append((fd, select.EPOLLHUP))  # Error == HUP
-        else:
-          try:
-            epoll.unregister(c.fd)  # Important: Use c.fd, not fd!
-          except (IOError, TypeError):
-            # Failing to unregister is OK, ignore
-            pass
+              # Failing to unregister is OK, ignore
+              pass
 
       common.buffered_bytes[0] = bbc
       evs.extend(epoll.poll(waittime))
