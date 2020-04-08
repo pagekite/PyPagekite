@@ -2089,15 +2089,16 @@ class Listener(Selectable):
     return default
 
   def HandleClient(self, client, address):
+    log_info = [('port', self.port)]
     if self.check_acl(address[0]):
-      log_info = [('accept', '%s:%s' % (obfuIp(address[0]), address[1]))]
+      log_info += [('accept', '%s:%s' % (obfuIp(address[0]), address[1]))]
       uc = self.connclass(client, address, self.port, self.conns)
     else:
-      log_info = [('reject', '%s:%s' % (obfuIp(address[0]), address[1]))]
+      log_info += [('reject', '%s:%s' % (obfuIp(address[0]), address[1]))]
       client.close()
     if self.acl:
-      log_info.extend([('acl_line', '%s' % self.acl_match[0]),
-                       ('reason', self.acl_match[3])])
+      log_info += [('acl_line', '%s' % self.acl_match[0]),
+                   ('reason', self.acl_match[3])]
     self.Log(log_info)
     return True
 
