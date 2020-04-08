@@ -1942,7 +1942,7 @@ class FastPingHelper(threading.Thread):
     self.clients = []
     self.rejection = None
     self.overloaded = False
-    self.processing = 0
+    self.waiting = True
     self.sleeptime = 0.03
     self.fast_pinged = []
     self.next_pinglog = time.time() + 1
@@ -1956,20 +1956,14 @@ class FastPingHelper(threading.Thread):
                                       advertise=False)
 
   def add_client(self, client, addr, handler):
+    client.setblocking(0)
     with self.lock:
-      if self.processing < 1 and not self.clients:
-        ping_queue = True
-      else:
-        ping_queue = False
-
-      client.setblocking(0)
       self.clients.append((time.time(), client, addr, handler))
-    if ping_queue:
-      self.wq.put(1)
+      if self.waiting:
+        self.wq.put(1)
 
   def run_once(self):
     now = time.time()
-    self.processing = len(self.clients)
     with self.lock:
       _clients, self.clients = self.clients, []
     for ts, client, addr, handler in _clients:
@@ -1995,16 +1989,14 @@ class FastPingHelper(threading.Thread):
         logging.LogDebug('IOError, dropping ' + obfuIp(addr[0]))
         # No action: just let the client get garbage collected
       except:
-        pass
-      self.processing -= 1
+        logging.LogDebug('Error in FastPing: ' + format_exc())
 
     if now > self.next_pinglog:
-      if self.fast_pinged:
-        logging.LogDebug('Fast ping %s %d clients: %s' % (
-          'discouraged' if self.overloaded else 'welcomed',
-          len(self.fast_pinged),
-          ', '.join(self.fast_pinged)))
-        self.fast_pinged = []
+      logging.LogDebug('Fast ping %s %d clients: %s' % (
+        'discouraged' if self.overloaded else 'welcomed',
+        len(self.fast_pinged),
+        ', '.join(self.fast_pinged)))
+      self.fast_pinged = []
       self.up_rejection()
       self.next_pinglog = now + 1
 
@@ -2012,10 +2004,12 @@ class FastPingHelper(threading.Thread):
 
   def run_until(self, deadline):
     try:
-      self.sleeptime = 0.03
       while (time.time() + self.sleeptime) < deadline and self.clients:
+        with self.lock:
+          self.waiting = True
         while not self.wq.empty():
           self.wq.get()
+        self.waiting = False
         time.sleep(self.sleeptime)
         self.run_once()
     except:
@@ -2025,9 +2019,11 @@ class FastPingHelper(threading.Thread):
     while True:
       try:
         while True:
+          with self.lock:
+            self.waiting = True
           while not self.clients or not self.wq.empty():
             self.wq.get()
-            self.sleeptime = 0.03
+          self.waiting = False
           time.sleep(self.sleeptime)
           self.run_once()
       except:
@@ -2106,11 +2102,15 @@ class Listener(Selectable):
     try:
       self.last_activity = time.time()
       client, address = self.fd.accept()
-      if client:
-        if self.port not in SMTP_PORTS:
-          self.conns.ping_helper.add_client(client, address, self.HandleClient)
-        else:
-          self.HandleClient(client, address)
+      if self.port not in SMTP_PORTS:
+        while client:
+          try:
+            self.conns.ping_helper.add_client(client, address, self.HandleClient)
+            client, address = self.fd.accept()
+          except IOError:
+            client = None
+      elif client:
+        self.HandleClient(client, address)
       return True
     except IOError, err:
       self.LogDebug('Listener::ReadData: error: %s (%s)' % (err, err.errno))
