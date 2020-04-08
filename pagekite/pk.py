@@ -80,7 +80,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'fe_certname=', 'fe_nocertcheck', 'ca_certs=',
             'kitename=', 'kitesecret=', 'fingerpath=',
             'backend=', 'define_backend=', 'be_config=',
-            'insecure', 'ratelimit_ips=',
+            'insecure', 'ratelimit_ips=', 'max_read_bytes=', 'select_loop_min_ms=',
             'service_on=', 'service_off=', 'service_cfg=',
             'tunnel_acl=', 'client_acl=', 'accept_acl_file=',
             'frontend=', 'nofrontend=', 'frontends=', 'keepalive=',
@@ -1479,7 +1479,6 @@ class PageKite(object):
         com + ('overload_mem = %-5s # 0=fixed' % self.overload_cpu),
         com + ('overload_cpu = %-5s # 0=fixed' % self.overload_mem)
       ])
-
     config.extend([
       '',
       '##[ Front-end access controls (default=deny, if configured) ]##',
@@ -1511,8 +1510,13 @@ class PageKite(object):
       (self.no_probes and 'noprobes' or '# noprobes'),
       (self.crash_report_url and '# nocrashreport' or 'nocrashreport'),
       p('savefile = %s', safe and self.savefile, '/path/to/savefile'),
-      '',
     ])
+    if common.MAX_READ_BYTES != 16*1024:
+      config.append('max_read_bytes = %sx%.3f'
+        % (common.MAX_READ_BYTES, common.MAX_READ_TUNNEL_X))
+    if common.SELECT_LOOP_MIN_MS != 5:
+      config.append('select_loop_min_ms = %s' % common.SELECT_LOOP_MIN_MS)
+    config.append('')
 
     if self.daemonize or self.setuid or self.setgid or self.pidfile or new:
       config.extend([
@@ -2303,6 +2307,15 @@ class PageKite(object):
           which, limit = '*', arg
         self.GetDefaultIPsPerSecond(None, limit.strip())  # ValueErrors if bad
         self.ratelimit_ips[which.strip()] = limit.strip()
+      elif opt == '--max_read_bytes':
+        if 'x' in arg:
+          base, tmul = arg.split('x')
+          common.MAX_READ_BYTES = max(1024, int(base))
+          common.MAX_READ_TUNNEL_X = max(1, float(tmul))
+        else:
+          common.MAX_READ_BYTES = max(1024, int(arg))
+      elif opt == '--select_loop_min_ms':
+        common.SELECT_LOOP_MIN_MS = max(0, min(int(arg), 100))
       elif opt == '--accept_acl_file':
         self.accept_acl_file = arg
       elif opt == '--client_acl':
@@ -3851,8 +3864,24 @@ class PageKite(object):
       self.last_loop = now
       loop_count += 1
 
-      snooze = 0 if oready else max(0, (now + 0.010) - time.time())
+      # This delay does things!
+      # Pro:
+      #   - Reduce overhead by batching IO events together
+      # Mixed:
+      #   - Along with Tunnel.maxread, this caps the per-stream/tunnel
+      #     bandwidth. The default SELECT_LOOP_MIN_MS=5, combined with
+      #     a MAX_READ_BYTES=16 (doubled for tunnels) lets us read from
+      #     the socket 200x/second: 200 * 32kB =~ 6MB/s. This is the
+      #     MAXIMUM outgoing bandwidth of any live tunnel, limiting
+      #     how much load any single connection can generate. Total
+      #     incoming bandwidth per-conn is half that.
+      # Con:
+      #   - Adds latency
+      #
+      snooze = max(0, (now + common.SELECT_LOOP_MIN_MS/1000.0) - time.time())
       if snooze:
+        if oready:
+          snooze /= 2
         time.sleep(snooze)
 
       if now - self.last_barf > (logging.DEBUG_IO and 15 or 600):
@@ -3861,7 +3890,7 @@ class PageKite(object):
           epoll.close()
         epoll, mypoll = self.CreatePollObject()
         logging.LogDebug('Loop #%d, selectable map: %s' % (loop_count, SELECTABLES))
-      if 0 == (loop_count % (5 if logging.DEBUG_IO else 100)):
+      if 0 == (loop_count % (5 if logging.DEBUG_IO else 250)):
         logging.LogDebug('Loop #%d (i=%d, o=%d, e=%d, s=%.3fs) v%s'
           % (loop_count, len(iready), len(oready), len(eready), snooze, APPVER))
 

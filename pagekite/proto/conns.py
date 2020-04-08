@@ -54,10 +54,6 @@ class Tunnel(ChunkParser):
     ChunkParser.__init__(self, ui=conns.config.ui)
     self.server_info = ['x.x.x.x:x', [], [], [], False, False, None]
     self.Init(conns)
-    # We want to be sure to read the entire chunk at once, including
-    # headers to save cycles, so we double the size we're willing to
-    # read here.
-    self.maxread *= 2
 
   def Init(self, conns):
     self.conns = conns
@@ -70,6 +66,7 @@ class Tunnel(ChunkParser):
     self.using_tls = False
     self.filters = []
     self.ip_limits = None
+    self.maxread = int(common.MAX_READ_BYTES * common.MAX_READ_TUNNEL_X)
 
   def Cleanup(self, close=True):
     if self.users:

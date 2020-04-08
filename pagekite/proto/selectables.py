@@ -69,7 +69,7 @@ class Selectable(object):
                      errno.EDEADLK, errno.EWOULDBLOCK, errno.ENOBUFS,
                      errno.EALREADY)
 
-  def __init__(self, fd=None, address=None, on_port=None, maxread=16*1024,
+  def __init__(self, fd=None, address=None, on_port=None, maxread=None,
                      ui=None, tracked=True, bind=None, backlog=100):
     self.fd = None
 
@@ -103,7 +103,7 @@ class Selectable(object):
     self.q_days = None
 
     # Read-related variables
-    self.maxread = maxread
+    self.maxread = maxread or common.MAX_READ_BYTES
     self.read_bytes = self.all_in = 0
     self.read_eof = False
     self.peeking = False

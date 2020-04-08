@@ -72,8 +72,17 @@ LOOPBACK_FE = LOOPBACK_HN + ':1'
 LOOPBACK_BE = LOOPBACK_HN + ':2'
 LOOPBACK = {'FE': LOOPBACK_FE, 'BE': LOOPBACK_BE}
 
+# This is how many bytes we are willing to read per cycle.
+MAX_READ_BYTES = 16 * 1024
+MAX_READ_TUNNEL_X = 3.1     # 3x above, + fudge factor
+
+# Higher values save CPU and prevent individual tunnels
+# from hogging all our resources, but hurt latency and
+# reduce per-tunnel throughput.
+SELECT_LOOP_MIN_MS = 5
+
 # Re-evaluate our choice of frontends every 45-60 minutes.
-FE_PING_INTERVAL     = (45 * 60) + random.randint(0, 900)
+FE_PING_INTERVAL = (45 * 60) + random.randint(0, 900)
 
 # This is a global count of disconnect errors; we use this
 # to adjust the ping interval over time.

@@ -5,6 +5,7 @@ Version history - highlights
 v1.0.0.200406
 -------------
    - Create ping.pagekite fast-path in dedicated thread
+   - Make select loop timing and read sizes configurable
 
 
 v1.0.0.200327
