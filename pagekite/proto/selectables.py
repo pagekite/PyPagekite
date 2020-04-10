@@ -116,9 +116,6 @@ class Selectable(object):
     self.write_eof = False
     self.write_retry = None
 
-    # Flow control v1
-    self.throttle_until = (time.time() - 1)
-    self.max_read_speed = 96*1024
     # Flow control v2
     self.acked_kb_delta = 0
 
@@ -280,15 +277,14 @@ class Selectable(object):
         common.gYamon.vadd("bytes_all", self.wrote_bytes
                                         + self.read_bytes, wrap=1000000000)
 
+      log_info = [('wrote', '%d' % self.wrote_bytes),
+                  ('wbps', '%d' % self.write_speed),
+                  ('read', '%d' % self.read_bytes)]
+      if self.acked_kb_delta:
+        log_info.append(('delta', '%d' % self.acked_kb_delta))
       if final:
-        self.Log([('wrote', '%d' % self.wrote_bytes),
-                  ('wbps', '%d' % self.write_speed),
-                  ('read', '%d' % self.read_bytes),
-                  ('eof', '1')])
-      else:
-        self.Log([('wrote', '%d' % self.wrote_bytes),
-                  ('wbps', '%d' % self.write_speed),
-                  ('read', '%d' % self.read_bytes)])
+        log_info.append(('eof', '1'))
+      self.Log(log_info)
 
       self.bytes_logged = now
       self.wrote_bytes = self.read_bytes = 0
@@ -347,19 +343,6 @@ class Selectable(object):
 
     now = time.time()
     maxread = maxread or self.maxread
-    flooded = self.Flooded(now)
-    if flooded > self.max_read_speed and not self.acked_kb_delta:
-      # FIXME: This is v1 flow control, kill it when 0.4.7 is "everywhere"
-      last = self.throttle_until
-      # Disable local throttling for really slow connections; remote
-      # throttles (trigged by blocked sockets) still work.
-      if self.max_read_speed > 1024:
-        self.AutoThrottle()
-        maxread = 1024
-      if now > last and self.all_in > 2*self.max_read_speed:
-        self.max_read_speed *= 1.25
-        self.max_read_speed += maxread
-
     try:
       if self.peeking:
         data = self.fd.recv(maxread, socket.MSG_PEEK)
@@ -369,8 +352,7 @@ class Selectable(object):
       else:
         data = self.fd.recv(maxread)
         if logging.DEBUG_IO:
-          print ('<== IN =[%s @ %dbps]==(\n%s)=='
-                 ) % (self, self.max_read_speed, data[:160])
+          print('<== IN =[%s]==(\n%s)==' % (self, data[:160]))
     except (SSL.WantReadError, SSL.WantWriteError), err:
       return True
     except IOError, err:
@@ -406,46 +388,10 @@ class Selectable(object):
         if self.read_bytes > logging.LOG_THRESHOLD: self.LogTraffic()
       return self.ProcessData(data)
 
-  def Flooded(self, now=None):
-    delta = ((now or time.time()) - self.created)
-    if delta >= 1:
-      flooded = self.read_bytes + self.all_in
-      flooded -= self.max_read_speed * 0.95 * delta
-      return flooded
-    else:
-      return 0
-
-  def RecordProgress(self, skb, bps):
+  def RecordProgress(self, skb):
     if skb >= 0:
       all_read = (self.all_in + self.read_bytes) / 1024
-      if self.acked_kb_delta:
-        self.acked_kb_delta = max(1, all_read - skb)
-        self.LogDebug('Delta is: %d' % self.acked_kb_delta)
-    elif bps >= 0:
-      self.Throttle(max_speed=bps, remote=True)
-
-  def Throttle(self, max_speed=None, remote=False, delay=0.2):
-    if max_speed:
-      self.max_read_speed = max_speed
-
-    flooded = max(-1, self.Flooded())
-    if self.max_read_speed:
-      delay = min(10, max(0.1, flooded/self.max_read_speed))
-      if flooded < 0: delay = 0
-
-    if delay:
-      ot = self.throttle_until
-      self.throttle_until = time.time() + delay
-      if ((self.throttle_until - ot) > 30 or
-          (int(ot) != int(self.throttle_until) and delay > 8)):
-        self.LogInfo('Throttled %.1fs until %x (flood=%d, bps=%s, %s)' % (
-                     delay, self.throttle_until, flooded,
-                     self.max_read_speed, remote and 'remote' or 'local'))
-
-    return True
-
-  def AutoThrottle(self, max_speed=None, remote=False, delay=0.2):
-    return self.Throttle(max_speed, remote, delay)
+      self.acked_kb_delta = max(1, all_read - skb)
 
   def Send(self, data, try_flush=False, activity=False,
                        just_buffer=False, allow_blocking=False):
@@ -581,8 +527,7 @@ class Selectable(object):
 
   def IsReadable(s, now):
     return (s.fd and (not s.read_eof)
-                 and (s.acked_kb_delta < 64)  # FIXME
-                 and (s.throttle_until <= now))
+                 and (s.acked_kb_delta < (3 * s.maxread/1024)))
 
   def IsBlocked(s):
     return (s.fd and (len(s.write_blocked) > 0))

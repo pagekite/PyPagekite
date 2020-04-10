@@ -704,11 +704,14 @@ class Tunnel(ChunkParser):
       sending.append(data)
       return self.SendChunked(sending, zhistory=self.zhistory.get(sid))
 
-    # Larger amounts we break into fragments to work around bugs in
-    # some of our small-buffered embedded clients. We aim for roughly
-    # one fragment per packet, assuming an MTU of 1500 bytes.
+    # Larger amounts we break into fragments at the FE, to work around bugs
+    # in some of our small-buffered embedded clients. We aim for roughly
+    # one fragment per packet, assuming an MTU of 1500 bytes. We use
+    # much larger fragments at the back-end, relays can be assumed to
+    # be up-to-date and larger chunks saves CPU and improves throughput.
+    frag_size = self.conns.config.isfrontend and 1024 or (self.maxread+1024)
     sending.append('')
-    frag_size = max(1024, 1400-len(''.join(sending)))
+    frag_size = max(frag_size, 1400-len(''.join(sending)))
     first = True
     while data or first:
       sending[-1] = data[:frag_size]
@@ -717,7 +720,7 @@ class Tunnel(ChunkParser):
       data = data[frag_size:]
       if first:
         sending = ['SID: %s\r\n' % sid, '\r\n', '']
-        frag_size = max(1024, 1400-len(''.join(sending)))
+        frag_size = max(frag_size, 1400-len(''.join(sending)))
         first = False
 
     return True
@@ -813,14 +816,11 @@ class Tunnel(ChunkParser):
                                ) % (pong, self.quota[0]),
                               compress=False, just_buffer=True)
 
-  def SendProgress(self, sid, conn, throttle=False):
-    # FIXME: Optimize this away unless meaningful progress has been made?
+  def SendProgress(self, sid, conn):
     msg = ('NOOP: 1\r\n'
            'SID: %s\r\n'
-           'SKB: %d\r\n') % (sid, (conn.all_out + conn.wrote_bytes)/1024)
-    throttle = throttle and ('SPD: %d\r\n' % conn.write_speed) or ''
-    return self.SendChunked('%s%s\r\n!' % (msg, throttle),
-                            compress=False, just_buffer=True)
+           'SKB: %d\r\n\r\n') % (sid, (conn.all_out + conn.wrote_bytes)/1024)
+    return self.SendChunked(msg, compress=False, just_buffer=True)
 
   def ProcessCorruptChunk(self, data):
     self.ResetRemoteZChunks()
@@ -836,17 +836,12 @@ class Tunnel(ChunkParser):
           return False
     return True
 
-  def AutoThrottle(self, max_speed=None, remote=False, delay=0.2):
-    # Never throttle tunnels.
-    return True
-
   def ProgressTo(self, parse):
     try:
       sid = int(parse.Header('SID')[0])
-      bps = int((parse.Header('SPD') or [-1])[0])
       skb = int((parse.Header('SKB') or [-1])[0])
       if sid in self.users:
-        self.users[sid].RecordProgress(skb, bps)
+        self.users[sid].RecordProgress(skb)
     except:
       logging.LogError(('Tunnel::ProgressTo: That made no sense! %s'
                         ) % format_exc())
@@ -1088,9 +1083,6 @@ class Tunnel(ChunkParser):
         # If that failed something is wrong, but we'll let the outer
         # select/epoll loop catch and handle it.
         pass
-
-      if len(conn.write_blocked) > 0 and conn.created < time.time()-3:
-        return self.SendProgress(sid, conn, throttle=True)
 
     else:
       # No connection?  Close this stream.
@@ -1516,12 +1508,6 @@ class UserConn(Selectable):
     if not self.tunnel.SendData(self, data):
       self.LogDebug('Send to tunnel failed')
       return False
-
-    # Back off if tunnel is stuffed.
-    if self.tunnel and len(self.tunnel.write_blocked) > 1024000:
-      # FIXME: think about this...
-      self.Throttle(delay=(len(self.tunnel.write_blocked)-204800)/max(50000,
-                    self.tunnel.write_speed))
 
     if self.read_eof:
       return self.ProcessEofRead()
