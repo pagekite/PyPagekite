@@ -1520,6 +1520,12 @@ class UnknownConn(MagicProtocolParser):
   def __init__(self, fd, address, on_port, conns):
     MagicProtocolParser.__init__(self, fd, address, on_port, ui=conns.config.ui)
     self.peeking = True
+    self.sid = -1
+    self.host = None
+    self.proto = None
+    self.said_hello = False
+    self.bad_loops = 0
+    self.error_details = {}
 
     # Set up our parser chain.
     self.parsers = [HttpLineParser]
@@ -1532,13 +1538,6 @@ class UnknownConn(MagicProtocolParser):
     self.conns = conns
     self.conns.Add(self)
     self.conns.SetIdle(self, 10)
-
-    self.sid = -1
-    self.host = None
-    self.proto = None
-    self.said_hello = False
-    self.bad_loops = 0
-    self.error_details = {}
 
   def Cleanup(self, close=True):
     MagicProtocolParser.Cleanup(self, close=close)
