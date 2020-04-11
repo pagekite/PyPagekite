@@ -101,7 +101,7 @@ class YamonD(threading.Thread):
                server=YamonHttpServer,
                handler=YamonRequestHandler):
     threading.Thread.__init__(self)
-    self.lock = threading.Lock()
+    self.lock = threading.RLock()  # threading.Lock() will deadlock pypy
     self.server = server
     self.handler = handler
     self.sspec = sspec
@@ -166,16 +166,15 @@ class YamonD(threading.Thread):
     else:
       values, lists = self.values, self.lists
 
-    with self.lock:
-      data = []
-      for var in values:
-        data.append('%s: %s\n' % (var, values[var]))
+    data = []
+    for var in values:
+      data.append('%s: %s\n' % (var, values[var]))
 
-      for lname in lists:
-        (elems, offset, lst) = lists[lname]
-        l = lst[offset:]
-        l.extend(lst[:offset])
-        data.append('%s: %s\n' % (lname, ' '.join(['%s' % (x, ) for x in l])))
+    for lname in lists:
+      (elems, offset, lst) = lists[lname]
+      l = lst[offset:]
+      l.extend(lst[:offset])
+      data.append('%s: %s\n' % (lname, ' '.join(['%s' % (x, ) for x in l])))
 
     data.sort()
     return ''.join(data)

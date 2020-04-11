@@ -1101,7 +1101,6 @@ class LoopbackTunnel(Tunnel):
     if self.fd:
       self.fd = None
     self.weighted_rtt = -1000
-    self.lock = None
     self.backends = backends
     self.require_all = True
     self.server_info[self.S_NAME] = LOOPBACK[which]

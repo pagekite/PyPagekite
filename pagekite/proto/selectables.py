@@ -40,7 +40,7 @@ def obfuIp(ip):
   return '~%s' % '.'.join([q for q in quads[-2:]])
 
 
-SELECTABLE_LOCK = threading.Lock()
+SELECTABLE_LOCK = threading.RLock()  # threading.Lock() will deadlock on pypy!
 SELECTABLE_ID = 0
 SELECTABLES = {}
 def getSelectableId(what):
@@ -117,7 +117,7 @@ class Selectable(object):
     self.acked_kb_delta = 0
 
     # Compression stuff
-    self.lock = threading.Lock()
+    self.lock = threading.RLock()
     self.zw = None
     self.zlevel = 1
     self.zreset = False
@@ -142,8 +142,9 @@ class Selectable(object):
       common.gYamon.vadd(self.countas, -1)
       common.gYamon.vadd(what, 1)
     self.countas = what
-    global SELECTABLES
-    SELECTABLES[self.gsid] = '%s %s' % (self.countas, self)
+    global SELECTABLES, SELECTABLE_LOCK
+    with SELECTABLE_LOCK:
+      SELECTABLES[self.gsid] = '%s %s' % (self.countas, self)
 
   def Cleanup(self, close=True):
     self.peeked = self.zw = ''
@@ -161,6 +162,8 @@ class Selectable(object):
         self.LogTraffic(final=True)
 
   def __del__(self):
+    # Important: This can run at random times, especially under pypy, so all
+    #            locks must be re-entrant (RLock), otherwise we deadlock.
     try:
       if common.gYamon:
         common.gYamon.vadd(self.countas, -1)
@@ -168,8 +171,9 @@ class Selectable(object):
     except AttributeError:
       pass
     try:
-      global SELECTABLES
-      del SELECTABLES[self.gsid]
+      global SELECTABLES, SELECTABLE_LOCK
+      with SELECTABLE_LOCK:
+        del SELECTABLES[self.gsid]
     except (KeyError, TypeError):
       pass
 
@@ -288,8 +292,9 @@ class Selectable(object):
     elif final:
       self.Log([('eof', '1')])
 
-    global SELECTABLES
-    SELECTABLES[self.gsid] = '%s %s' % (self.countas, self)
+    global SELECTABLES, SELECTABLE_LOCK
+    with SELECTABLE_LOCK:
+      SELECTABLES[self.gsid] = '%s %s' % (self.countas, self)
 
   def SayHello(self):
     pass
@@ -299,8 +304,9 @@ class Selectable(object):
     return False
 
   def ProcessEof(self):
-    global SELECTABLES
-    SELECTABLES[self.gsid] = '%s %s' % (self.countas, self)
+    global SELECTABLES, SELECTABLE_LOCK
+    with SELECTABLE_LOCK:
+      SELECTABLES[self.gsid] = '%s %s' % (self.countas, self)
     if self.read_eof and self.write_eof and not self.write_blocked:
       self.Cleanup()
       return False
