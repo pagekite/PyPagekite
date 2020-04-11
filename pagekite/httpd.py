@@ -857,8 +857,9 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
     if path == self.host_config.get('yamon', False):
       if common.gYamon:
-        self.server.pkite.Overloaded(yamon=common.gYamon)
-        data['body'] = common.gYamon.render_vars_text(qs.get('view', [None])[0])
+        with selectables.SELECTABLE_LOCK:
+          self.server.pkite.Overloaded(yamon=common.gYamon)
+          data['body'] = common.gYamon.render_vars_text(qs.get('view', [None])[0])
       else:
         data['body'] = ''
 
@@ -958,7 +959,7 @@ class RemoteControlInterface(object):
     self.conns = conns
     self.modified = False
 
-    self.lock = threading.Lock()
+    self.lock = threading.RLock()
     self.request = None
 
     # For now, nobody gets ACL_WRITE

@@ -327,7 +327,7 @@ class Connections(object):
   def __init__(self, config):
     self.config = config
     self.ip_tracker = {}
-    self.lock = threading.Lock()
+    self.lock = threading.RLock()
     self.idle = []
     self.conns = []
     self.conns_by_id = {}
@@ -3883,7 +3883,8 @@ class PageKite(object):
         if epoll:
           epoll.close()
         epoll, mypoll = self.CreatePollObject()
-        logging.LogDebug('Loop #%d, selectable map: %s' % (loop_count, SELECTABLES))
+        with SELECTABLE_LOCK:
+          logging.LogDebug('Loop #%d, selectable map: %s' % (loop_count, SELECTABLES))
       if 0 == (loop_count % (5 if logging.DEBUG_IO else 250)):
         logging.LogDebug('Loop #%d (i=%d, o=%d, e=%d, s=%.3fs) v%s'
           % (loop_count, len(iready), len(oready), len(eready), snooze, APPVER))
