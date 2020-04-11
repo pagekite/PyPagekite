@@ -417,10 +417,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                            "string (%s bytes).") % clength)
         posted = cgi.parse_qs(self.rfile.read(clength), 1)
       elif self.host_config.get('xmlrpc', False):
-        # We wrap the XMLRPC request handler in _BEGIN/_END in order to
-        # expose the request environment to the RPC functions.
-        RCI = self.server.RCI
-        return RCI._END(SimpleXMLRPCRequestHandler.do_POST(RCI._BEGIN(self)))
+        with self.server.RCI.lock:
+          return SimpleXMLRPCRequestHandler.do_POST(self)
 
       self.post_data.seek(0)
     except socket.error:
@@ -971,17 +969,6 @@ class RemoteControlInterface(object):
     self.channels = {'LOG': {'access': self.ACL_READ,
                              'tokens': self.auth_tokens,
                              'data': logging.LOG}}
-
-  def _BEGIN(self, request_object):
-    self.lock.acquire()
-    self.request = request_object
-    return request_object
-
-  def _END(self, rv=None):
-    if self.request:
-      self.request = None
-      self.lock.release()
-    return rv
 
   def connections(self, auth_token):
     if (not self.request.host_config.get('console', False) or

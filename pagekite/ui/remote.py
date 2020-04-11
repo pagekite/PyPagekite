@@ -270,9 +270,9 @@ class PageKiteThread(threading.Thread):
 
   # These routines are used by the PageKite UI, to communicate with us...
   def readline(self):
-    try:
-      self.pk_readlock.acquire()
-      while (not self.pk_incoming) and (not self.pk_eof): self.pk_readlock.wait()
+    with self.pk_readlock:
+      while (not self.pk_incoming) and (not self.pk_eof):
+        self.pk_readlock.wait()
       if self.pk_incoming:
         line = self.pk_incoming.pop(0)
       else:
@@ -280,48 +280,37 @@ class PageKiteThread(threading.Thread):
       if self.debug:
         print '>>PK>> %s' % line.strip()
       return line
-    finally:
-      self.pk_readlock.release()
 
   def write(self, data):
     if self.debug:
       print '>>GUI>> %s' % data.strip()
-    try:
-      self.gui_readlock.acquire()
+    with self.gui_readlock:
       if data:
         self.gui_incoming += data
       else:
         self.gui_eof = True
       self.gui_readlock.notify()
-    finally:
-      self.gui_readlock.release()
 
   # And these are used by the GUI, to communicate with PageKite.
   def recv(self, bytecount):
-    try:
-      self.gui_readlock.acquire()
+    with self.gui_readlock:
       while (len(self.gui_incoming) < bytecount) and (not self.gui_eof):
         self.gui_readlock.wait()
       data = self.gui_incoming[0:bytecount]
       self.gui_incoming = self.gui_incoming[bytecount:]
       return data
-    finally:
-      self.gui_readlock.release()
 
   def send(self, data):
     if not data.endswith('\n') and data != '':
       raise ValueError('Please always send whole lines')
     if self.debug:
       print '<<PK<< %s' % data.strip()
-    try:
-      self.pk_readlock.acquire()
+    with self.pk_readlock:
       if data:
         self.pk_incoming.append(data)
       else:
         self.pk_eof = True
       self.pk_readlock.notify()
-    finally:
-      self.pk_readlock.release()
 
   def sendall(self, data):
     return self.send(data)
