@@ -139,13 +139,10 @@ class AuthApp(object):
 
   def _q(self, args):
     if self.server is not None:
-      try:
-        self.lock.acquire()
+      with self.lock:
         self.server.stdin.write(' '.join(args) + '\n')
         self.server.stdin.flush()
         return self.server.stdout.readline().strip()
-      finally:
-        self.lock.release()
     else:
       return subprocess.check_output([self.app_path] + args).strip()
 
@@ -175,16 +172,14 @@ class AuthThread(threading.Thread):
     self.qtime = 0.250  # A decent initial estimate
 
   def check(self, requests, conn, callback):
-    self.qc.acquire()
-    self.jobs.append((requests, conn, callback))
-    self.qc.notify()
-    self.qc.release()
+    with self.qc:
+      self.jobs.append((requests, conn, callback))
+      self.qc.notify()
 
   def quit(self):
-    self.qc.acquire()
-    self.keep_running = False
-    self.qc.notify()
-    self.qc.release()
+    with self.qc:
+      self.keep_running = False
+      self.qc.notify()
     try:
       self.join()
     except RuntimeError:
@@ -201,128 +196,127 @@ class AuthThread(threading.Thread):
     logging.LogDebug('AuthThread: done')
 
   def _run(self):
-    self.qc.acquire()
-    while self.keep_running:
-      now = int(time.time())
-      if not self.jobs:
-        (requests, conn, callback) = None, None, None
-        self.qc.wait()
-      else:
-        (requests, conn, callback) = self.jobs.pop(0)
-        if logging.DEBUG_IO: print '=== AUTH REQUESTS\n%s\n===' % requests
-        self.qc.release()
+    with self.qc:
+      while self.keep_running:
+        now = int(time.time())
+        if not self.jobs:
+          (requests, conn, callback) = None, None, None
+          self.qc.wait()
+        else:
+          (requests, conn, callback) = self.jobs.pop(0)
+          if logging.DEBUG_IO: print '=== AUTH REQUESTS\n%s\n===' % requests
+          self.qc.release()
 
-        quotas = []
-        q_conns = []
-        q_days = []
-        ip_limits = []
-        results = []
-        log_info = []
-        session = '%x:%s:' % (now, globalSecret())
-        for request in requests:
-          try:
-            proto, domain, srand, token, sign, prefix = request
-          except:
-            logging.LogError('Invalid request: %s' % (request, ))
-            continue
+          quotas = []
+          q_conns = []
+          q_days = []
+          ip_limits = []
+          results = []
+          log_info = []
+          session = '%x:%s:' % (now, globalSecret())
+          for request in requests:
+            try:
+              proto, domain, srand, token, sign, prefix = request
+            except:
+              logging.LogError('Invalid request: %s' % (request, ))
+              continue
 
-          what = '%s:%s:%s' % (proto, domain, srand)
-          session += what
-          if not token or not sign:
-            # Send a challenge. Our challenges are time-stamped, so we can
-            # put stict bounds on possible replay attacks (20 minutes atm).
-            results.append(('%s-SignThis' % prefix,
-                            '%s:%s' % (what, signToken(payload=what,
-                                                       timestamp=now))))
-          else:
-            # Note: These 15 seconds are a magic number which should be well
-            #       below the timeout in proto.conns.Tunnel._Connect().
-            if ((not self.conns.config.authfail_closed)
-                  and len(self.jobs) >= (15 / self.qtime)):
-              logging.LogError('Quota lookup skipped, over 15s worth of jobs queued')
-              (quota, days, conns, ipc, ips, reason) = (
-                -2, None, None, None, None, None)
+            what = '%s:%s:%s' % (proto, domain, srand)
+            session += what
+            if not token or not sign:
+              # Send a challenge. Our challenges are time-stamped, so we can
+              # put stict bounds on possible replay attacks (20 minutes atm).
+              results.append(('%s-SignThis' % prefix,
+                              '%s:%s' % (what, signToken(payload=what,
+                                                         timestamp=now))))
             else:
-              # This is a bit lame, but we only check the token if the quota
-              # for this connection has never been verified.
-              t0 = time.time()
-              (quota, days, conns, ipc, ips, reason) = (
-                self.conns.config.GetDomainQuota(
-                  proto, domain, srand, token, sign,
-                  check_token=(conn.quota is None)))
-              elapsed = (time.time() - t0)
-              self.qtime = max(0.2, (0.9 * self.qtime) + (0.1 * elapsed))
+              # Note: These 15 seconds are a magic number which should be well
+              #       below the timeout in proto.conns.Tunnel._Connect().
+              if ((not self.conns.config.authfail_closed)
+                    and len(self.jobs) >= (15 / self.qtime)):
+                logging.LogError('Quota lookup skipped, over 15s worth of jobs queued')
+                (quota, days, conns, ipc, ips, reason) = (
+                  -2, None, None, None, None, None)
+              else:
+                # This is a bit lame, but we only check the token if the quota
+                # for this connection has never been verified.
+                t0 = time.time()
+                (quota, days, conns, ipc, ips, reason) = (
+                  self.conns.config.GetDomainQuota(
+                    proto, domain, srand, token, sign,
+                    check_token=(conn.quota is None)))
+                elapsed = (time.time() - t0)
+                self.qtime = max(0.2, (0.9 * self.qtime) + (0.1 * elapsed))
 
-            duplicates = self.conns.Tunnel(proto, domain)
-            if not quota:
-              if not reason: reason = 'quota'
-              results.append(('%s-Invalid' % prefix, what))
-              results.append(('%s-Invalid-Why' % prefix,
-                              '%s;%s' % (what, reason)))
-              log_info.extend([('rejected', domain),
-                               ('quota', quota),
-                               ('reason', reason)])
-            elif duplicates:
-              # Duplicates... is the old one dead?  Trigger a ping.
-              for conn in duplicates:
-                conn.TriggerPing()
-              results.append(('%s-Duplicate' % prefix, what))
-              log_info.extend([('rejected', domain),
-                               ('duplicate', 'yes')])
-            else:
-              results.append(('%s-OK' % prefix, what))
-              quotas.append((quota, request))
-              if conns: q_conns.append(conns)
-              if days: q_days.append(days)
-              if not ipc:
-                try:
-                  ipc, ips = self.conns.config.GetDefaultIPsPerSecond(domain)
-                except ValueError:
-                  pass
-              if ipc and ips:
-                ip_limits.append((float(ipc)/ips, ipc, ips))
-              if (proto.startswith('http') and
-                  self.conns.config.GetTlsEndpointCtx(domain)):
-                results.append(('%s-SSL-OK' % prefix, what))
+              duplicates = self.conns.Tunnel(proto, domain)
+              if not quota:
+                if not reason: reason = 'quota'
+                results.append(('%s-Invalid' % prefix, what))
+                results.append(('%s-Invalid-Why' % prefix,
+                                '%s;%s' % (what, reason)))
+                log_info.extend([('rejected', domain),
+                                 ('quota', quota),
+                                 ('reason', reason)])
+              elif duplicates:
+                # Duplicates... is the old one dead?  Trigger a ping.
+                for conn in duplicates:
+                  conn.TriggerPing()
+                results.append(('%s-Duplicate' % prefix, what))
+                log_info.extend([('rejected', domain),
+                                 ('duplicate', 'yes')])
+              else:
+                results.append(('%s-OK' % prefix, what))
+                quotas.append((quota, request))
+                if conns: q_conns.append(conns)
+                if days: q_days.append(days)
+                if not ipc:
+                  try:
+                    ipc, ips = self.conns.config.GetDefaultIPsPerSecond(domain)
+                  except ValueError:
+                    pass
+                if ipc and ips:
+                  ip_limits.append((float(ipc)/ips, ipc, ips))
+                if (proto.startswith('http') and
+                    self.conns.config.GetTlsEndpointCtx(domain)):
+                  results.append(('%s-SSL-OK' % prefix, what))
 
-        results.append(('%s-SessionID' % prefix,
-                        '%x:%s' % (now, sha1hex(session))))
-        results.append(('%s-Misc' % prefix, urllib.urlencode({
-                          'motd': (self.conns.config.motd_message or ''),
-                        })))
-        for upgrade in self.conns.config.upgrade_info:
-          results.append(('%s-Upgrade' % prefix, ';'.join(upgrade)))
+          results.append(('%s-SessionID' % prefix,
+                          '%x:%s' % (now, sha1hex(session))))
+          results.append(('%s-Misc' % prefix, urllib.urlencode({
+                            'motd': (self.conns.config.motd_message or ''),
+                          })))
+          for upgrade in self.conns.config.upgrade_info:
+            results.append(('%s-Upgrade' % prefix, ';'.join(upgrade)))
 
-        if quotas:
-          min_qconns = min(q_conns or [0])
-          if q_conns and min_qconns:
-            results.append(('%s-QConns' % prefix, min_qconns))
+          if quotas:
+            min_qconns = min(q_conns or [0])
+            if q_conns and min_qconns:
+              results.append(('%s-QConns' % prefix, min_qconns))
 
-          min_qdays = min(q_days or [0])
-          if q_days and min_qdays:
-            results.append(('%s-QDays' % prefix, min_qdays))
+            min_qdays = min(q_days or [0])
+            if q_days and min_qdays:
+              results.append(('%s-QDays' % prefix, min_qdays))
 
-          min_ip_limits = min(ip_limits or [(0, None, None)])[1:]
-          if ip_limits and min_ip_limits[0]:
-            results.append(('%s-IPsPerSec' % prefix, '%s/%s' % min_ip_limits))
+            min_ip_limits = min(ip_limits or [(0, None, None)])[1:]
+            if ip_limits and min_ip_limits[0]:
+              results.append(('%s-IPsPerSec' % prefix, '%s/%s' % min_ip_limits))
 
-          nz_quotas = [qp for qp in quotas if qp[0] and qp[0] > 0]
-          if nz_quotas:
-            quota = min(nz_quotas)[0]
-            conn.quota = [quota, [qp[1] for qp in nz_quotas], time.time()]
-            results.append(('%s-Quota' % prefix, quota))
-          elif requests:
-            if not conn.quota:
-              conn.quota = [None, requests, time.time()]
-            else:
-              conn.quota[2] = time.time()
+            nz_quotas = [qp for qp in quotas if qp[0] and qp[0] > 0]
+            if nz_quotas:
+              quota = min(nz_quotas)[0]
+              conn.quota = [quota, [qp[1] for qp in nz_quotas], time.time()]
+              results.append(('%s-Quota' % prefix, quota))
+            elif requests:
+              if not conn.quota:
+                conn.quota = [None, requests, time.time()]
+              else:
+                conn.quota[2] = time.time()
 
-        if logging.DEBUG_IO: print '=== AUTH RESULTS\n%s\n===' % results
-        callback(results, log_info)
-        self.qc.acquire()
+          if logging.DEBUG_IO: print '=== AUTH RESULTS\n%s\n===' % results
+          callback(results, log_info)
+          self.qc.acquire()
 
     self.buffering = 0
-    self.qc.release()
 
 
 ##[ Selectables ]##############################################################

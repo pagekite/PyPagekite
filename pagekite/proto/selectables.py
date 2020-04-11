@@ -45,8 +45,7 @@ SELECTABLE_ID = 0
 SELECTABLES = {}
 def getSelectableId(what):
   global SELECTABLES, SELECTABLE_ID, SELECTABLE_LOCK
-  try:
-    SELECTABLE_LOCK.acquire()
+  with SELECTABLE_LOCK:
     count = 0
     while SELECTABLE_ID in SELECTABLES:
       SELECTABLE_ID += 1
@@ -58,8 +57,6 @@ def getSelectableId(what):
         raise ValueError('Too many conns!')
     SELECTABLES[SELECTABLE_ID] = what
     return SELECTABLE_ID
-  finally:
-    SELECTABLE_LOCK.release()
 
 
 class Selectable(object):
@@ -484,10 +481,8 @@ class Selectable(object):
 
     # Stop compressing streams that just get bigger.
     if zhistory and (zhistory[0] < zhistory[1]): compress = False
-    try:
+    with self.lock:
       try:
-        if self.lock:
-          self.lock.acquire()
         sdata = ''.join(data)
         if self.zw and compress and len(sdata) > 64:
           try:
@@ -508,9 +503,6 @@ class Selectable(object):
       except UnicodeDecodeError:
         logging.LogError('UnicodeDecodeError in SendChunked, wtf?')
         return False
-    finally:
-      if self.lock:
-        self.lock.release()
 
   def Flush(self, loops=50, wait=False, allow_blocking=False):
     while (loops != 0 and

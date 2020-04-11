@@ -112,73 +112,49 @@ class YamonD(threading.Thread):
     self.views = {}
 
   def vmax(self, var, value):
-    try:
-      self.lock.acquire()
+    with self.lock:
       if value > self.values[var]:
         self.values[var] = value
-    finally:
-      self.lock.release()
 
   def vscale(self, var, ratio, add=0):
-    try:
-      self.lock.acquire()
+    with self.lock:
       if var not in self.values:
         self.values[var] = 0
       self.values[var] *= ratio
       self.values[var] += add
-    finally:
-      self.lock.release()
 
   def vset(self, var, value):
-    try:
-      self.lock.acquire()
+    with self.lock:
       self.values[var] = value
-    finally:
-      self.lock.release()
 
   def vadd(self, var, value, wrap=None):
-    try:
-      self.lock.acquire()
+    with self.lock:
       if var not in self.values:
         self.values[var] = 0
       self.values[var] += value
       if wrap is not None and self.values[var] >= wrap:
         self.values[var] -= wrap
-    finally:
-      self.lock.release()
 
   def vmin(self, var, value):
-    try:
-      self.lock.acquire()
+    with self.lock:
       if value < self.values[var]:
         self.values[var] = value
-    finally:
-      self.lock.release()
 
   def vdel(self, var):
-    try:
-      self.lock.acquire()
+    with self.lock:
       if var in self.values:
         del self.values[var]
-    finally:
-      self.lock.release()
 
   def lcreate(self, listn, elems):
-    try:
-      self.lock.acquire()
+    with self.lock:
       self.lists[listn] = [elems, 0, ['' for x in xrange(0, elems)]]
-    finally:
-      self.lock.release()
 
   def ladd(self, listn, value):
-    try:
-      self.lock.acquire()
+    with self.lock:
       lst = self.lists[listn]
       lst[2][lst[1]] = value
       lst[1] += 1
       lst[1] %= lst[0]
-    finally:
-      self.lock.release()
 
   def render_vars_text(self, view=None):
     if view:
@@ -190,15 +166,16 @@ class YamonD(threading.Thread):
     else:
       values, lists = self.values, self.lists
 
-    data = []
-    for var in values:
-      data.append('%s: %s\n' % (var, values[var]))
+    with self.lock:
+      data = []
+      for var in values:
+        data.append('%s: %s\n' % (var, values[var]))
 
-    for lname in lists:
-      (elems, offset, lst) = lists[lname]
-      l = lst[offset:]
-      l.extend(lst[:offset])
-      data.append('%s: %s\n' % (lname, ' '.join(['%s' % (x, ) for x in l])))
+      for lname in lists:
+        (elems, offset, lst) = lists[lname]
+        l = lst[offset:]
+        l.extend(lst[:offset])
+        data.append('%s: %s\n' % (lname, ' '.join(['%s' % (x, ) for x in l])))
 
     data.sort()
     return ''.join(data)
@@ -213,7 +190,8 @@ class YamonD(threading.Thread):
     self.httpd = self.server(self, self.handler)
     self.sspec = self.httpd.server_address
     self.running = True
-    while self.running: self.httpd.handle_request()
+    while self.running:
+      self.httpd.handle_request()
 
 
 if __name__ == '__main__':

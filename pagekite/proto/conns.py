@@ -1854,10 +1854,10 @@ class UiConn(LineParser):
     self.Send('PageKite? %s\r\n' % self.challenge)
 
   def readline(self):
-    self.qc.acquire()
-    while not self.lines: self.qc.wait()
-    line = self.lines.pop(0)
-    self.qc.release()
+    with self.qc:
+      while not self.lines:
+        self.qc.wait()
+      line = self.lines.pop(0)
     return line
 
   def write(self, data):
@@ -1877,10 +1877,9 @@ class UiConn(LineParser):
 
   def ProcessLine(self, line, lines):
     if self.state == self.STATE_LIVE:
-      self.qc.acquire()
-      self.lines.append(line)
-      self.qc.notify()
-      self.qc.release()
+      with self.qc:
+        self.lines.append(line)
+        self.qc.notify()
       return True
     elif self.state == self.STATE_PASSWORD:
       if line.strip() == self.expect:
