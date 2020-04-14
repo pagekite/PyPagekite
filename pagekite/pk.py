@@ -1877,7 +1877,7 @@ class PageKite(object):
     try:
       # Check internal load, abort if load is low anyway.
       cload = cload or self._get_overload_factor()
-      if ((cload <= (self.overload // 2)) and
+      if ((cload <= (self.overload // 3)) and
           (self.overload == self.overload_current)):
         return
 
