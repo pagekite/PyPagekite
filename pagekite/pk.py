@@ -3833,7 +3833,7 @@ class PageKite(object):
     if self.ui_comm: self.ui_comm.start()
 
     epoll, mypoll = self.CreatePollObject()
-    self.last_barf = self.last_loop = time.time()
+    self.last_loop = time.time()
 
     logging.LogDebug('Entering main %s loop' % (epoll and 'epoll' or 'select'))
     loop_count = 0
@@ -3878,13 +3878,6 @@ class PageKite(object):
           snooze /= 2
         time.sleep(snooze)
 
-      if now - self.last_barf > (logging.DEBUG_IO and 15 or 600):
-        self.last_barf = now
-        if epoll:
-          epoll.close()
-        epoll, mypoll = self.CreatePollObject()
-        with SELECTABLE_LOCK:
-          logging.LogDebug('Loop #%d, selectable map: %s' % (loop_count, SELECTABLES))
       if 0 == (loop_count % (5 if logging.DEBUG_IO else 250)):
         logging.LogDebug('Loop #%d (i=%d, o=%d, e=%d, s=%.3fs) v%s'
           % (loop_count, len(iready), len(oready), len(eready), snooze, APPVER))

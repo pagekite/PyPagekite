@@ -857,9 +857,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
     if path == self.host_config.get('yamon', False):
       if common.gYamon:
-        with selectables.SELECTABLE_LOCK:
-          self.server.pkite.Overloaded(yamon=common.gYamon)
-          data['body'] = common.gYamon.render_vars_text(qs.get('view', [None])[0])
+        self.server.pkite.Overloaded(yamon=common.gYamon)
+        data['body'] = common.gYamon.render_vars_text(qs.get('view', [None])[0])
       else:
         data['body'] = ''
 
@@ -1125,10 +1124,6 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
       gYamon.lcreate("tunnel_rtt", 100)
       gYamon.lcreate("tunnel_wrtt", 100)
       gYamon.lists['buffered_bytes'] = [1, 0, common.buffered_bytes]
-      gYamon.views['selectables'] = (selectables.SELECTABLES, {
-        'idle': [0, 0, self.conns.idle],
-        'conns': [0, 0, self.conns.conns]
-      })
     except:
       pass
 

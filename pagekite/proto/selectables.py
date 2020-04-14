@@ -42,20 +42,18 @@ def obfuIp(ip):
 
 SELECTABLE_LOCK = threading.RLock()  # threading.Lock() will deadlock on pypy!
 SELECTABLE_ID = 0
-SELECTABLES = {}
+SELECTABLES = set([])
 def getSelectableId(what):
   global SELECTABLES, SELECTABLE_ID, SELECTABLE_LOCK
   with SELECTABLE_LOCK:
     count = 0
     while SELECTABLE_ID in SELECTABLES:
       SELECTABLE_ID += 1
-      SELECTABLE_ID %= 0x10000
-      if (SELECTABLE_ID % 0x00800) == 0:
-        logging.LogDebug('Selectable map: %s' % (SELECTABLES, ))
+      SELECTABLE_ID %= 0x20000
       count += 1
-      if count > 0x10001:
+      if count > 0x20000:
         raise ValueError('Too many conns!')
-    SELECTABLES[SELECTABLE_ID] = what
+    SELECTABLES.add(SELECTABLE_ID)
     return SELECTABLE_ID
 
 
@@ -142,9 +140,6 @@ class Selectable(object):
       common.gYamon.vadd(self.countas, -1)
       common.gYamon.vadd(what, 1)
     self.countas = what
-    global SELECTABLES, SELECTABLE_LOCK
-    with SELECTABLE_LOCK:
-      SELECTABLES[self.gsid] = '%s %s' % (self.countas, self)
 
   def Cleanup(self, close=True):
     self.peeked = self.zw = ''
@@ -173,8 +168,8 @@ class Selectable(object):
     try:
       global SELECTABLES, SELECTABLE_LOCK
       with SELECTABLE_LOCK:
-        del SELECTABLES[self.gsid]
-    except (KeyError, TypeError):
+        SELECTABLES.remove(self.gsid)
+    except KeyError:
       pass
 
   def __str__(self):
@@ -292,10 +287,6 @@ class Selectable(object):
     elif final:
       self.Log([('eof', '1')])
 
-    global SELECTABLES, SELECTABLE_LOCK
-    with SELECTABLE_LOCK:
-      SELECTABLES[self.gsid] = '%s %s' % (self.countas, self)
-
   def SayHello(self):
     pass
 
@@ -304,9 +295,6 @@ class Selectable(object):
     return False
 
   def ProcessEof(self):
-    global SELECTABLES, SELECTABLE_LOCK
-    with SELECTABLE_LOCK:
-      SELECTABLES[self.gsid] = '%s %s' % (self.countas, self)
     if self.read_eof and self.write_eof and not self.write_blocked:
       self.Cleanup()
       return False
