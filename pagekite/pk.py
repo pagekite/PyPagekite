@@ -86,7 +86,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'frontend=', 'nofrontend=', 'frontends=', 'keepalive=',
             'torify=', 'socksify=', 'proxy=', 'noproxy',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
-            'buffers=', 'noprobes', 'debugio', 'watch=',
+            'buffers=', 'noprobes', 'debugio', 'watch=', 'watchdog=',
             'overload=', 'overload_cpu=', 'overload_mem=', 'overload_file=',
             # DEPRECATED:
             'reloadfile=', 'autosave', 'noautosave', 'webroot=',
@@ -158,6 +158,52 @@ class AuthApp(object):
 
   def supports_auth(self):
     return ('AUTH' in self.capabilities)
+
+
+class WatchdogThread(threading.Thread):
+  """Kill the app if it locks up."""
+  daemon = True
+
+  def __init__(self, timeout):
+    threading.Thread.__init__(self)
+    self.pid = os.getpid()
+    self.conns = []
+    self.timeout = timeout
+    self.updated = time.time()
+    self.locks = {}
+
+  def patpatpat(self):
+    self.updated = time.time()
+
+  def run(self):
+    import signal
+    last_update = 0
+    if common.gYamon and self.timeout:
+      common.gYamon.vset('watchdog', self.timeout)
+
+    while self.timeout and (self.updated != last_update):
+      last_update = self.updated
+      logging.LogDebug('Watchdog is happy, snoozing %ds' % self.timeout)
+      time.sleep(self.timeout)
+
+    if self.timeout:
+      try:
+        for lock_name, lock in self.locks.iteritems():
+          logging.LogDebug('Lock %s %s' % (
+            lock_name,
+            lock.acquire(blocking=False) and 'is free' or 'is LOCKED'))
+        for conn in copy.copy(self.conns):
+          try:
+            logging.LogError('Watchdog is sad: closing %s' % conn)
+            conn.fd.close()
+          except:
+            pass
+      finally:
+        logging.LogError('Watchdog is sad: kill -INT %s' % self.pid)
+        os.kill(self.pid, signal.SIGINT)
+        time.sleep(2)
+        logging.LogError('Watchdog is sad: kill -9 %s' % self.pid)
+        os.kill(self.pid, 9)
 
 
 class AuthThread(threading.Thread):
@@ -1036,6 +1082,8 @@ class PageKite(object):
     self.keep_looping = True
     self.main_loop = True
     self.watch_level = [None]
+
+    self.watchdog = None
 
     self.overload = None
     self.overload_cpu = 0.75
@@ -2425,6 +2473,8 @@ class PageKite(object):
       elif opt == '--sslzlib': self.enable_sslzlib = True
       elif opt == '--watch':
         self.watch_level[0] = int(arg)
+      elif opt == '--watchdog':
+        self.watchdog = WatchdogThread(int(arg))
       elif opt == '--overload':
         self.overload_current = self.overload = int(arg)
       elif opt == '--overload_file':
@@ -3832,6 +3882,23 @@ class PageKite(object):
     if self.tunnel_manager: self.tunnel_manager.start()
     if self.ui_comm: self.ui_comm.start()
 
+    if self.watchdog:
+      self.watchdog.conns = self.conns.conns
+      try:
+        self.watchdog.locks['httpd.RCI.lock'] = self.ui_httpd.httpd.RCI.lock
+      except AttributeError:
+        pass
+      if common.gYamon:
+        self.watchdog.locks['YamonD.lock'] = common.gYamon.lock
+      # FIXME: Add the AuthApp locks?
+      for i in range(0, len(self.conns.auth_pool)):
+        lock_name = 'conns.auth_pool[%d].qc' % i
+        self.watchdog.locks[lock_name] = self.conns.auth_pool[i].qc
+      self.watchdog.locks.update({
+        'Connections.lock': self.conns.lock,
+        'SELECTABLE_LOCK': SELECTABLE_LOCK})
+      self.watchdog.start()
+
     epoll, mypoll = self.CreatePollObject()
     self.last_loop = time.time()
 
@@ -3881,6 +3948,9 @@ class PageKite(object):
       if 0 == (loop_count % (5 if logging.DEBUG_IO else 250)):
         logging.LogDebug('Loop #%d (i=%d, o=%d, e=%d, s=%.3fs) v%s'
           % (loop_count, len(iready), len(oready), len(eready), snooze, APPVER))
+
+      if self.watchdog:
+        self.watchdog.patpatpat()
 
     if epoll:
       epoll.close()
