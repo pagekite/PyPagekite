@@ -6,8 +6,10 @@ v1.0.0.200411
 -------------
    - This release is all about performance and efficiency improvements
    - Create ping.pagekite fast-path in dedicated thread
-   - Make select loop timing and read sizes configurable
-   - Remove 0.4.x flow-control, fix bugs in current flow control code
+   - Make select loop timing and read sizes configurable, tweak defaults
+   - Remove 0.4.x flow-control, fix major bugs in current flow control code
+   - Fix deadlocks under pypy
+   - Added --watchdog=N, to self-reap locked up processes
 
 
 v1.0.0.200327
