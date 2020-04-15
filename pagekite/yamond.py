@@ -101,7 +101,6 @@ class YamonD(threading.Thread):
                server=YamonHttpServer,
                handler=YamonRequestHandler):
     threading.Thread.__init__(self)
-    self.lock = threading.RLock()  # threading.Lock() will deadlock pypy
     self.server = server
     self.handler = handler
     self.sspec = sspec
@@ -111,38 +110,47 @@ class YamonD(threading.Thread):
     self.lists = {}
     self.views = {}
 
+    # Important: threading.Lock() will deadlock pypy and generally we want
+    #            to avoid locking. The methods below only hold this lock
+    #            if they are adding/removing elements from our dicts and
+    #            lists. For mutating existing values we either just accept
+    #            things getting overwritten or rely on the GIL.
+    self.lock = threading.RLock()
+
   def vmax(self, var, value):
-    with self.lock:
-      if value > self.values[var]:
-        self.values[var] = value
+    # Unlocked, since we don't change the size of self.values
+    if value > self.values[var]:
+      self.values[var] = value
+
+  def vmin(self, var, value):
+    # Unlocked, since we don't change the size of self.values
+    if value < self.values[var]:
+      self.values[var] = value
 
   def vscale(self, var, ratio, add=0):
-    with self.lock:
-      if var not in self.values:
-        self.values[var] = 0
-      self.values[var] *= ratio
-      self.values[var] += add
+    if var not in self.values:
+      with self.lock:
+        self.values[var] = self.values.get(var, 0)
+    # Unlocked, since we don't change the size of self.values
+    self.values[var] *= ratio
+    self.values[var] += add
 
   def vset(self, var, value):
     with self.lock:
       self.values[var] = value
 
   def vadd(self, var, value, wrap=None):
-    with self.lock:
-      if var not in self.values:
-        self.values[var] = 0
-      self.values[var] += value
-      if wrap is not None and self.values[var] >= wrap:
-        self.values[var] -= wrap
-
-  def vmin(self, var, value):
-    with self.lock:
-      if value < self.values[var]:
-        self.values[var] = value
+    if var not in self.values:
+      with self.lock:
+        self.values[var] = self.values.get(var, 0)
+    # We assume the GIL will guarantee these do sane things
+    self.values[var] += value
+    if wrap:
+      self.values[var] %= wrap
 
   def vdel(self, var):
-    with self.lock:
-      if var in self.values:
+    if var in self.values:
+      with self.lock:
         del self.values[var]
 
   def lcreate(self, listn, elems):

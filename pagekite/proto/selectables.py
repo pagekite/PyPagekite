@@ -88,6 +88,7 @@ class Selectable(object):
     self.address = address
     self.on_port = on_port
     self.created = self.bytes_logged = time.time()
+    self.lock = threading.RLock()
     self.last_activity = 0
     self.dead = False
     self.ui = ui
@@ -115,7 +116,6 @@ class Selectable(object):
     self.acked_kb_delta = 0
 
     # Compression stuff
-    self.lock = threading.RLock()
     self.zw = None
     self.zlevel = 1
     self.zreset = False
@@ -136,10 +136,11 @@ class Selectable(object):
       common.gYamon.vadd('selectables', 1)
 
   def CountAs(self, what):
-    if common.gYamon:
-      common.gYamon.vadd(self.countas, -1)
-      common.gYamon.vadd(what, 1)
-    self.countas = what
+    with self.lock:
+      if common.gYamon:
+        common.gYamon.vadd(self.countas, -1)
+        common.gYamon.vadd(what, 1)
+      self.countas = what
 
   def Cleanup(self, close=True):
     self.peeked = self.zw = ''
@@ -155,21 +156,23 @@ class Selectable(object):
       self.CountAs('selectables_dead')
       if close:
         self.LogTraffic(final=True)
-
-  def __del__(self):
-    # Important: This can run at random times, especially under pypy, so all
-    #            locks must be re-entrant (RLock), otherwise we deadlock.
-    try:
-      if common.gYamon:
-        common.gYamon.vadd(self.countas, -1)
-        common.gYamon.vadd('selectables', -1)
-    except AttributeError:
-      pass
     try:
       global SELECTABLES, SELECTABLE_LOCK
       with SELECTABLE_LOCK:
         SELECTABLES.remove(self.gsid)
     except KeyError:
+      pass
+
+  def __del__(self):
+    # Important: This can run at random times, especially under pypy, so all
+    #            locks must be re-entrant (RLock), otherwise we deadlock.
+    try:
+      with self.lock:
+        if common.gYamon and self.countas:
+          common.gYamon.vadd(self.countas, -1)
+          common.gYamon.vadd('selectables', -1)
+          self.countas = None
+    except AttributeError:
       pass
 
   def __str__(self):

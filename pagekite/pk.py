@@ -3805,43 +3805,45 @@ class PageKite(object):
     evs = []
     broken = False
     try:
-      bbc = 0
       with self.conns.lock:
-        for c in self.conns.conns:
-          fd, mask = c.fd, 0
-          if not c.IsDead():
-            if c.IsBlocked():
-              bbc += len(c.write_blocked)
-              mask |= select.EPOLLOUT
-            if c.IsReadable(now):
-              mask |= select.EPOLLIN
+        clist = copy.copy(self.conns.conns)
 
-          if mask:
-            try:
-              fdc[fd.fileno()] = fd
-            except socket.error:
-              # If this fails, then the socket has HUPed, however we need to
-              # bypass epoll to make sure that's reflected in iready below.
-              bid = 'dead-%d' % len(evs)
-              fdc[bid] = fd
-              evs.append((bid, select.EPOLLHUP))
-              # Trigger removal of c.fd, if it was still in the epoll.
-              fd, mask = None, 0
+      bbc = 0
+      for c in clist:
+        fd, mask = c.fd, 0
+        if not c.IsDead():
+          if c.IsBlocked():
+            bbc += len(c.write_blocked)
+            mask |= select.EPOLLOUT
+          if c.IsReadable(now):
+            mask |= select.EPOLLIN
 
-          if mask:
+        if mask:
+          try:
+            fdc[fd.fileno()] = fd
+          except socket.error:
+            # If this fails, then the socket has HUPed, however we need to
+            # bypass epoll to make sure that's reflected in iready below.
+            bid = 'dead-%d' % len(evs)
+            fdc[bid] = fd
+            evs.append((bid, select.EPOLLHUP))
+            # Trigger removal of c.fd, if it was still in the epoll.
+            fd, mask = None, 0
+
+        if mask:
+          try:
+            epoll.modify(fd, mask)
+          except IOError:
             try:
-              epoll.modify(fd, mask)
-            except IOError:
-              try:
-                epoll.register(fd, mask)
-              except (IOError, TypeError):
-                evs.append((fd, select.EPOLLHUP))  # Error == HUP
-          else:
-            try:
-              epoll.unregister(c.fd)  # Important: Use c.fd, not fd!
+              epoll.register(fd, mask)
             except (IOError, TypeError):
-              # Failing to unregister is OK, ignore
-              pass
+              evs.append((fd, select.EPOLLHUP))  # Error == HUP
+        else:
+          try:
+            epoll.unregister(c.fd)  # Important: Use c.fd, not fd!
+          except (IOError, TypeError):
+            # Failing to unregister is OK, ignore
+            pass
 
       common.buffered_bytes[0] = bbc
       evs.extend(epoll.poll(waittime))
