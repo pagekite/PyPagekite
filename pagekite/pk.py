@@ -811,7 +811,7 @@ class TunnelManager(threading.Thread):
 
     # Update our idea of what it means to be overloaded.
     if self.pkite.overload and (1 == loop_count % 20):
-      self.pkite.CalculateOverload()
+      self.pkite.CalculateOverload(yamon=common.gYamon)
 
     # FIXME: Front-ends should close dead back-end tunnels.
     for tid in self.conns.tunnels:
@@ -1903,10 +1903,10 @@ class PageKite(object):
     if common.gYamon is not None:
       return (
         common.gYamon.values.get('backends_live', 0) +
-        common.gYamon.values.get('selectables_live', 1))
+        common.gYamon.values.get('selectables_live', 1)) or 1
     return (len(self.conns.tunnels) or 1)
 
-  def CalculateOverload(self, cload=None):
+  def CalculateOverload(self, cload=None, yamon=None):
     # Check overload file first, it overrides everything
     if self.overload_file:
       try:
@@ -1923,12 +1923,6 @@ class PageKite(object):
     # FIXME: This is almost certainly linux specific.
     # FIXME: There are too many magic numbers in here.
     try:
-      # Check internal load, abort if load is low anyway.
-      cload = cload or self._get_overload_factor()
-      if ((cload <= (self.overload // 3)) and
-          (self.overload == self.overload_current)):
-        return
-
       # If both are disabled, just bail out.
       if not (self.overload_cpu or self.overload_mem):
         return
@@ -1952,14 +1946,19 @@ class PageKite(object):
       if not self.overload_membase:
         self.overload_membase = float(meminfo['memtotal']) - memfree
         # Sanity checks... are these really necessary?
-        self.overload_membase = max(75000, self.overload_membase)
+        self.overload_membase = max(50000, self.overload_membase)
         self.overload_membase = min(self.overload_membase,
                                     0.9 * meminfo['memtotal'])
 
+      # Check internal load, abort if load is low anyway.
+      cload = cload or self._get_overload_factor()
+      if cload < 50:
+        return
+
       # Calculate the implied unit cost of every live connection
       memtotal = float(meminfo['memtotal'] - self.overload_membase)
-      munit = max(75, float(memtotal - memfree) / cload)  # 75KB/conn=optimism!
-      lunit = loadavg / cload
+      munit = max(32, float(memtotal - memfree) / cload)  # 32KB/conn=optimism!
+      lunit = max(0.10, loadavg) / cload
 
       # Calculate overload factors based on the unit costs
       moverload = int(self.overload_mem * float(memtotal) / munit)
@@ -1985,6 +1984,9 @@ class PageKite(object):
               self.overload, moverload, loverload,
               cload, munit, lunit,
               memfree, memtotal, loadavg))
+      if yamon is not None:
+        yamon.vset('overload_unit_mem', munit)
+        yamon.vset('overload_unit_cpu', lunit)
     except (IOError, OSError, ValueError, KeyError, TypeError):
       pass
 
@@ -3941,11 +3943,14 @@ class PageKite(object):
       # Con:
       #   - Adds latency
       #
-      snooze = max(0, (now + common.SELECT_LOOP_MIN_MS/1000.0) - time.time())
-      if snooze:
-        if oready:
-          snooze /= 2
-        time.sleep(snooze)
+      if self.isfrontend:
+        snooze = max(0, (now + common.SELECT_LOOP_MIN_MS/1000.0) - time.time())
+        if snooze:
+          if oready:
+            snooze /= 2
+          time.sleep(snooze)
+      else:
+        snooze = 0
 
       if 0 == (loop_count % (5 if logging.DEBUG_IO else 250)):
         logging.LogDebug('Loop #%d (i=%d, o=%d, e=%d, s=%.3fs) v%s'
@@ -3974,6 +3979,7 @@ class PageKite(object):
                     alignright='[%s]' % howtoquit)
     config_report = [('started', self.pyfile), ('version', APPVER),
                      ('platform', sys.platform),
+                     ('python', sys.version.replace('\n', ' ')),
                      ('argv', ' '.join(sys.argv[1:])),
                      ('ca_certs', self.ca_certs)]
     for optf in self.rcfiles_loaded:

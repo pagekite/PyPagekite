@@ -1119,6 +1119,7 @@ class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
       gYamon = common.gYamon = yamond.YamonD(sspec)
       gYamon.vset('started', int(time.time()))
       gYamon.vset('version', APPVER)
+      gYamon.vset('version_python', sys.version.replace('\n', ' '))
       gYamon.vset('httpd_ssl_enabled', self.enable_ssl)
       gYamon.vset('errors', 0)
       gYamon.lcreate("tunnel_rtt", 100)

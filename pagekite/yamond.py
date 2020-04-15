@@ -177,12 +177,23 @@ class YamonD(threading.Thread):
     data = []
     for var in values:
       data.append('%s: %s\n' % (var, values[var]))
+      if var == 'started':
+        data.append(
+          'started_days_ago: %.3f\n' % ((time.time() - values[var]) / 86400))
 
     for lname in lists:
       (elems, offset, lst) = lists[lname]
       l = lst[offset:]
       l.extend(lst[:offset])
       data.append('%s: %s\n' % (lname, ' '.join(['%s' % (x, ) for x in l])))
+      try:
+        slist = sorted([float(i) for i in l if i])
+        if len(slist) >= 10:
+          data.append('%s_m50: %.2f\n' % (lname, slist[int(len(slist) * 0.5)]))
+          data.append('%s_m90: %.2f\n' % (lname, slist[int(len(slist) * 0.9)]))
+          data.append('%s_avg: %.2f\n' % (lname, sum(slist) / len(slist)))
+      except (ValueError, TypeError, IndexError, ZeroDivisionError):
+        pass
 
     data.sort()
     return ''.join(data)
