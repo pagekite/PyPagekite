@@ -1910,7 +1910,8 @@ class PageKite(object):
     # Check overload file first, it overrides everything
     if self.overload_file:
       try:
-        new_overload = int(open(self.overload_file, 'r').read().strip())
+        with open(self.overload_file, 'r') as fd:
+          new_overload = int(fd.read().strip())
         if new_overload != self.overload_current:
           self.overload_current = new_overload
           logging.LogInfo(
@@ -1928,14 +1929,16 @@ class PageKite(object):
         return
 
       # Check system load.
-      loadavg = float(open('/proc/loadavg', 'r').read().strip().split()[1])
+      with open('/proc/loadavg', 'r') as fd:
+        loadavg = float(fd.read().strip().split()[1])
       meminfo = {}
-      for line in open('/proc/meminfo', 'r'):
-        try:
-          key, val = line.lower().split(':')
-          meminfo[key] = int(val.strip().split()[0])
-        except ValueError:
-          pass
+      with open('/proc/meminfo', 'r') as fd:
+        for line in fd:
+          try:
+            key, val = line.lower().split(':')
+            meminfo[key] = int(val.strip().split()[0])
+          except ValueError:
+            pass
 
       # Figure out how much RAM is available
       memfree = meminfo.get('memavailable')
@@ -2158,9 +2161,8 @@ class PageKite(object):
   def LoadMOTD(self):
     if self.motd:
       try:
-        f = open(self.motd, 'r')
-        self.motd_message = ''.join(f.readlines()).strip()[:8192]
-        f.close()
+        with open(self.motd, 'r') as f:
+          self.motd_message = ''.join(f.readlines()).strip()[:8192]
       except (OSError, IOError):
         pass
 
@@ -3252,9 +3254,10 @@ class PageKite(object):
     rv = []
     if host[:1] == '@':
       try:
-        for line in (l.strip() for l in open(host[1:], 'r')):
-          if line and line[:1] not in ('#', ';'):
-            rv.append(line)
+        with open(host[1:], 'r') as fd:
+          for line in (l.strip() for l in fd):
+            if line and line[:1] not in ('#', ';'):
+              rv.append(line)
         logging.LogDebug('Loaded %d IPs from %s' % (len(rv), host[1:]))
       except:
         logging.LogDebug('Failed to load IPs from %s' % host[1:])
@@ -4062,9 +4065,8 @@ class PageKite(object):
 
     # Create PID file
     if self.pidfile:
-      pf = open(self.pidfile, 'w')
-      pf.write('%s\n' % os.getpid())
-      pf.close()
+      with open(self.pidfile, 'w') as pf:
+        pf.write('%s\n' % os.getpid())
 
     # Do this after creating the PID and log-files.
     if self.daemonize:
