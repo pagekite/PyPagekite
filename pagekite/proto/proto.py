@@ -42,9 +42,10 @@ def globalSecret():
 
     # Next, see if we can augment that with some real randomness.
     try:
-      newSecret = sha1hex(open('/dev/urandom').read(64) + gSecret)
-      gSecret = newSecret
-      logging.LogDebug('Seeded signatures using /dev/urandom, hooray!')
+      with open('/dev/urandom') as fd:
+        newSecret = sha1hex(fd.read(64) + gSecret)
+        gSecret = newSecret
+        logging.LogDebug('Seeded signatures using /dev/urandom, hooray!')
     except:
       try:
         newSecret = sha1hex(os.urandom(64) + gSecret)

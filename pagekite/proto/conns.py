@@ -2041,23 +2041,24 @@ class Listener(Selectable):
       try:
         ipaddr = '%s' % ipaddr
         lc = 0
-        for line in open(self.acl, 'r'):
-          line = line.lower().strip()
-          lc += 1
-          if line.startswith('#') or not line:
-            continue
-          try:
-            words = line.split()
-            pattern, rule = words[:2]
-            reason = ' '.join(words[2:])
-            if ipaddr == pattern:
-              self.acl_match = (lc, pattern, rule, reason)
-              return bool('allow' in rule)
-            elif re.compile(pattern).match(ipaddr):
-              self.acl_match = (lc, pattern, rule, reason)
-              return bool('allow' in rule)
-          except IndexError:
-            self.LogDebug('Invalid line %d in ACL %s' % (lc, self.acl))
+        with open(self.acl, 'r') as fd:
+          for line in fd:
+            line = line.lower().strip()
+            lc += 1
+            if line.startswith('#') or not line:
+              continue
+            try:
+              words = line.split()
+              pattern, rule = words[:2]
+              reason = ' '.join(words[2:])
+              if ipaddr == pattern:
+                self.acl_match = (lc, pattern, rule, reason)
+                return bool('allow' in rule)
+              elif re.compile(pattern).match(ipaddr):
+                self.acl_match = (lc, pattern, rule, reason)
+                return bool('allow' in rule)
+            except IndexError:
+              self.LogDebug('Invalid line %d in ACL %s' % (lc, self.acl))
       except:
         self.LogDebug(
           'Failed to read/parse %s: %s' % (self.acl, format_exc()))
