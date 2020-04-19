@@ -20,6 +20,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+import sys
 import common
 from common import *
 
@@ -121,7 +122,7 @@ def rsplit(ch, data):
 #
 import sockschain
 socks = sockschain
-if socks.HAVE_PYOPENSSL:
+if socks.HAVE_PYOPENSSL or tuple(sys.version_info) > (2, 7, 10):
   SSL = socks.SSL
   SEND_ALWAYS_BUFFERS = False
   SEND_MAX_BYTES = 16 * 1024
@@ -131,7 +132,7 @@ elif socks.HAVE_SSL:
   SSL = socks.SSL
   SEND_ALWAYS_BUFFERS = True
   SEND_MAX_BYTES = 4 * 1024
-  TUNNEL_SOCKET_BLOCKS = True # Workaround for http://bugs.python.org/issue8240
+  TUNNEL_SOCKET_BLOCKS = True  # Workaround for http://bugs.python.org/issue8240
 
 else:
   SEND_ALWAYS_BUFFERS = False
