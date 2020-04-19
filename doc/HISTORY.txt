@@ -10,6 +10,7 @@ v1.0.0.200411
    - Remove 0.4.x flow-control, fix major bugs in current flow control code
    - Fix deadlocks under pypy
    - Added --watchdog=N, to self-reap locked up processes
+   - Disabled old ssl workarounds on modern versions of Python
 
 
 v1.0.0.200327

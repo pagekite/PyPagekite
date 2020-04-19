@@ -3984,7 +3984,9 @@ class PageKite(object):
                      ('platform', sys.platform),
                      ('python', sys.version.replace('\n', ' ')),
                      ('argv', ' '.join(sys.argv[1:])),
-                     ('ca_certs', self.ca_certs)]
+                     ('ca_certs', self.ca_certs),
+                     ('send_always_buffers', SEND_ALWAYS_BUFFERS),
+                     ('tunnel_socket_blocks', TUNNEL_SOCKET_BLOCKS)]
     for optf in self.rcfiles_loaded:
       config_report.append(('optfile_%s' % optf, 'ok'))
     logging.Log(config_report)
