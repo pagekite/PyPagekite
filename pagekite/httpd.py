@@ -856,7 +856,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     photobackup = self.host_config.get('photobackup', False)
 
     if path == self.host_config.get('yamon', False):
-      if common.gYamon:
+      if qs.get('view', [None])[0] == 'conns':
+        from pagekite.pk import Watchdog
+        llines = []
+        Watchdog.DumpConnState(self.server.pkite.conns, logfunc=llines.append)
+        data['body'] = '\n'.join(llines) + '\n'
+      elif common.gYamon:
         self.server.pkite.Overloaded(yamon=common.gYamon)
         data['body'] = common.gYamon.render_vars_text(qs.get('view', [None])[0])
       else:

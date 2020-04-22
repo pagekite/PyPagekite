@@ -160,7 +160,7 @@ class AuthApp(object):
     return ('AUTH' in self.capabilities)
 
 
-class WatchdogThread(threading.Thread):
+class Watchdog(threading.Thread):
   """Kill the app if it locks up."""
   daemon = True
 
@@ -172,19 +172,57 @@ class WatchdogThread(threading.Thread):
     self.updated = time.time()
     self.locks = {}
 
+  @classmethod
+  def DumpConnState(cls, conns, close=False, logfunc=None):
+    for fpc in copy.copy(conns.ping_helper.clients):
+      try:
+        if close:
+          (logfunc or logging.LogError)('Closing FPC %s' % (fpc,))
+          fpc[1].close()
+        else:
+          (logfunc or logging.LogInfo)('FastPing: %s' % (fpc,))
+      except:
+        pass
+    for conn in copy.copy(conns.conns):
+      try:
+        if close:
+          (logfunc or logging.LogError)('Closing %s' % conn)
+          conn.fd.close()
+        else:
+          (logfunc or logging.LogInfo)('Conn %s' % conn)
+      except:
+        pass
+
   def patpatpat(self):
     self.updated = time.time()
 
   def run(self):
     import signal
-    last_update = 0
+    if self.timeout:
+      self.timeout = max(15, self.timeout)  # Lower than this won't work!
     if common.gYamon and self.timeout:
       common.gYamon.vset('watchdog', self.timeout)
 
-    while self.timeout and (self.updated != last_update):
-      last_update = self.updated
-      logging.LogDebug('Watchdog is happy, snoozing %ds' % self.timeout)
-      time.sleep(self.timeout)
+    failed = 5  # Log happy message after first sleep
+    worries = 0
+    last_update = self.updated
+    while self.timeout and (failed < 10) and (worries < self.timeout):
+      time.sleep(self.timeout / 10.0)
+      if self.updated == last_update:
+        failed += 1
+        worries += 1
+        logging.LogInfo('Watchdog is worried (timeout=%ds, failures=%d/10, worries=%.1f/%d)'
+                        % (self.timeout, failed, worries, self.timeout))
+        if common.gYamon:
+          common.gYamon.vadd('watchdog_worried', 1)
+        if failed in (1, 6):
+          os.kill(self.pid, signal.SIGUSR1)
+      else:
+        if failed:
+          logging.LogInfo('Watchdog is happy (timeout=%ds)' % self.timeout)
+        failed = 0
+        worries *= 0.9
+        last_update = self.updated
 
     if self.timeout:
       try:
@@ -192,12 +230,7 @@ class WatchdogThread(threading.Thread):
           logging.LogDebug('Lock %s %s' % (
             lock_name,
             lock.acquire(blocking=False) and 'is free' or 'is LOCKED'))
-        for conn in copy.copy(self.conns):
-          try:
-            logging.LogError('Watchdog is sad: closing %s' % conn)
-            conn.fd.close()
-          except:
-            pass
+        self.DumpConnState(self.conns, close=True)
       finally:
         logging.LogError('Watchdog is sad: kill -INT %s' % self.pid)
         os.kill(self.pid, signal.SIGINT)
@@ -2478,7 +2511,7 @@ class PageKite(object):
       elif opt == '--watch':
         self.watch_level[0] = int(arg)
       elif opt == '--watchdog':
-        self.watchdog = WatchdogThread(int(arg))
+        self.watchdog = Watchdog(int(arg))
       elif opt == '--overload':
         self.overload_current = self.overload = int(arg)
       elif opt == '--overload_file':
@@ -4052,10 +4085,20 @@ class PageKite(object):
         def reopen(x,y):
           if self.logfile:
             self.LogTo(self.logfile, close_all=False)
-            logging.LogDebug('SIGHUP received, reopening: %s' % self.logfile)
+            logging.LogInfo('SIGHUP received, reopening: %s' % self.logfile)
         signal.signal(signal.SIGHUP, reopen)
       except Exception:
         logging.LogError('Warning: signal handler unavailable, logrotate will not work.')
+
+    # Set up SIGUSR1 handler.
+    try:
+      import signal
+      def dumpconns(x,y):
+        logging.LogInfo('SIGUSR1 received, dumping conn state')
+        Watchdog.DumpConnState(self.conns)
+      signal.signal(signal.SIGUSR1, dumpconns)
+    except Exception:
+      logging.LogError('Warning: signal handler unavailable, kill -USR1 will not work.')
 
     # Disable compression in OpenSSL
     if socks.HAVE_SSL and not self.enable_sslzlib:
