@@ -47,6 +47,8 @@ def getSelectableId(what):
   global SELECTABLES, SELECTABLE_ID, SELECTABLE_LOCK
   with SELECTABLE_LOCK:
     count = 0
+    SELECTABLE_ID += 1
+    SELECTABLE_ID %= 0x20000
     while SELECTABLE_ID in SELECTABLES:
       SELECTABLE_ID += 1
       SELECTABLE_ID %= 0x20000
