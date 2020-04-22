@@ -2081,6 +2081,7 @@ class Listener(Selectable):
 
   def ReadData(self, maxread=None):
     try:
+      self.sstate = 'accept'
       self.last_activity = time.time()
       client, address = self.fd.accept()
       if self.port not in SMTP_PORTS:
@@ -2091,15 +2092,20 @@ class Listener(Selectable):
           except IOError:
             client = None
       elif client:
+        self.sstate = 'client'
         self.HandleClient(client, address)
+      self.sstate = (self.dead and 'dead' or 'idle')
       return True
     except IOError, err:
+      self.sstate += '/ioerr=%s' % (err.errno,)
       self.LogDebug('Listener::ReadData: error: %s (%s)' % (err, err.errno))
 
     except socket.error, (errno, msg):
+      self.sstate += '/sockerr=%s' % (errno,)
       self.LogInfo('Listener::ReadData: error: %s (errno=%s)' % (msg, errno))
 
     except Exception, e:
+      self.sstate += '/exc'
       self.LogDebug('Listener::ReadData: %s' % e)
 
     return True
