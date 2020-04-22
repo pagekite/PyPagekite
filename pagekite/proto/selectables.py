@@ -121,6 +121,7 @@ class Selectable(object):
     self.zreset = False
 
     # Logging
+    self.sstate = 'new'
     self.alt_id = None
     self.countas = 'selectables_live'
     self.sid = self.gsid = getSelectableId(self.countas)
@@ -153,6 +154,7 @@ class Selectable(object):
     self.fd = None
     if not self.dead:
       self.dead = True
+      self.sstate = 'dead'
       self.CountAs('selectables_dead')
       if close:
         self.LogTraffic(final=True)
@@ -176,10 +178,10 @@ class Selectable(object):
       pass
 
   def __str__(self):
-    return '%s: %s<%s%s%s>' % (self.log_id, self.__class__,
-                               self.read_eof and '-' or 'r',
-                               self.write_eof and '-' or 'w',
-                               len(self.write_blocked))
+    return '%s: %s<%s|%s%s%s>' % (self.log_id, self.__class__, self.sstate,
+                                  self.read_eof and '-' or 'r',
+                                  self.write_eof and '-' or 'w',
+                                  len(self.write_blocked))
 
   def __html__(self):
     try:
@@ -207,7 +209,7 @@ class Selectable(object):
                      self.all_out + self.wrote_bytes,
                      time.strftime('%Y-%m-%d %H:%M:%S',
                                    time.localtime(self.created)),
-                     self.dead and 'dead' or 'alive')
+                     self.sstate)
 
   def ResetZChunks(self):
     if self.zw:
@@ -242,22 +244,22 @@ class Selectable(object):
     self.wrote_bytes = conn.wrote_bytes
 
   def Log(self, values):
-    if self.log_id: values.append(('id', self.log_id))
+    if self.log_id: values.extend([('id', self.log_id)])
     logging.Log(values)
 
   def LogError(self, error, params=None):
     values = params or []
-    if self.log_id: values.append(('id', self.log_id))
+    if self.log_id: values.extend([('id', self.log_id), ('s', self.sstate)])
     logging.LogError(error, values)
 
   def LogDebug(self, message, params=None):
     values = params or []
-    if self.log_id: values.append(('id', self.log_id))
+    if self.log_id: values.extend([('id', self.log_id), ('s', self.sstate)])
     logging.LogDebug(message, values)
 
   def LogInfo(self, message, params=None):
     values = params or []
-    if self.log_id: values.append(('id', self.log_id))
+    if self.log_id: values.extend([('id', self.log_id), ('s', self.sstate)])
     logging.LogInfo(message, values)
 
   def LogTrafficStatus(self, final=False):
@@ -319,7 +321,9 @@ class Selectable(object):
     discard = ''
     while len(discard) < eat_bytes:
       try:
-        discard += self.fd.recv(eat_bytes - len(discard))
+        bytecount = eat_bytes - len(discard)
+        self.sstate = 'eat(%d)' % bytecount
+        discard += self.fd.recv(bytecount)
       except socket.error, (errno, msg):
         self.LogInfo('Error reading (%d/%d) socket: %s (errno=%s)' % (
                        eat_bytes, self.peeked, msg, errno))
@@ -327,6 +331,7 @@ class Selectable(object):
 
     if logging.DEBUG_IO:
       print '===[ ATE %d PEEKED BYTES ]===\n' % eat_bytes
+    self.sstate = 'ate(%d)' % eat_bytes
     self.peeked -= eat_bytes
     self.peeking = keep_peeking
     return
@@ -339,17 +344,22 @@ class Selectable(object):
     maxread = maxread or self.maxread
     try:
       if self.peeking:
+        self.sstate = 'peek(%d)' % maxread
         data = self.fd.recv(maxread, socket.MSG_PEEK)
         self.peeked = len(data)
         if logging.DEBUG_IO:
           print '<== PEEK =[%s]==(\n%s)==' % (self, data[:160])
       else:
+        self.sstate = 'read(%d)' % maxread
         data = self.fd.recv(maxread)
         if logging.DEBUG_IO:
           print('<== IN =[%s]==(\n%s)==' % (self, data[:160]))
+      self.sstate = 'data(%d)' % len(data)
     except (SSL.WantReadError, SSL.WantWriteError), err:
+      self.sstate += '/SSL.WRE'
       return True
     except IOError, err:
+      self.sstate += '/ioerr=%s' % (err.errno,)
       if err.errno not in self.HARMLESS_ERRNOS:
         self.LogDebug('Error reading socket: %s (%s)' % (err, err.errno))
         common.DISCONNECT_COUNT += 1
@@ -357,10 +367,12 @@ class Selectable(object):
       else:
         return True
     except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
+      self.sstate += '/SSL.Error'
       self.LogDebug('Error reading socket (SSL): %s' % err)
       common.DISCONNECT_COUNT += 1
       return False
     except socket.error, (errno, msg):
+      self.sstate += '/sockerr=%s' % (err.errno,)
       if errno in self.HARMLESS_ERRNOS:
         return True
       else:
@@ -368,19 +380,23 @@ class Selectable(object):
         common.DISCONNECT_COUNT += 1
         return False
 
-    self.last_activity = now
-    if data is None or data == '':
-      self.read_eof = True
-      if logging.DEBUG_IO:
-        print '<== IN =[%s]==(EOF)==' % self
-      return self.ProcessData('')
-    else:
-      if not self.peeking:
-        self.read_bytes += len(data)
-        if self.acked_kb_delta:
-          self.acked_kb_delta += (len(data)/1024)
-        if self.read_bytes > logging.LOG_THRESHOLD: self.LogTraffic()
-      return self.ProcessData(data)
+    try:
+      self.last_activity = now
+      if data is None or data == '':
+        self.sstate += '/EOF'
+        self.read_eof = True
+        if logging.DEBUG_IO:
+          print '<== IN =[%s]==(EOF)==' % self
+        return self.ProcessData('')
+      else:
+        if not self.peeking:
+          self.read_bytes += len(data)
+          if self.acked_kb_delta:
+            self.acked_kb_delta += (len(data)/1024)
+          if self.read_bytes > logging.LOG_THRESHOLD: self.LogTraffic()
+        return self.ProcessData(data)
+    finally:
+      self.sstate = (self.dead and 'dead' or 'idle')
 
   def RecordProgress(self, skb):
     if skb >= 0:
@@ -406,6 +422,7 @@ class Selectable(object):
       try:
         want_send = self.write_retry or min(len(sending), SEND_MAX_BYTES)
         sent_bytes = None
+        self.sstate = 'send(%d)' % (want_send)
         # Try to write for up to 5 seconds before giving up
         for try_wait in (0, 0, 0.1, 0.2, 0.2, 0.2, 0.3, 0.5, 0.5, 1, 1, 1, 0):
           try:
@@ -420,13 +437,16 @@ class Selectable(object):
             if logging.DEBUG_IO:
               print '=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, want_send)
             if try_wait:
+              self.sstate = 'send/SSL.WRE(%d,%.1f)' % (want_send, try_wait)
               time.sleep(try_wait)
         if sent_bytes is None:
+          self.sstate += '/retries'
           self.LogInfo('Error sending: Too many SSL write retries')
           self.ProcessEofWrite()
           common.DISCONNECT_COUNT += 1
           return False
       except IOError, err:
+        self.sstate += '/ioerr=%s' % (err.errno,)
         if err.errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s' % err)
           self.ProcessEofWrite()
@@ -437,6 +457,7 @@ class Selectable(object):
             print '=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send)
           self.write_retry = want_send
       except socket.error, (errno, msg):
+        self.sstate += '/sockerr=%s' % (errno,)
         if errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s (errno=%s)' % (msg, errno))
           self.ProcessEofWrite()
@@ -447,11 +468,13 @@ class Selectable(object):
             print '=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send)
           self.write_retry = want_send
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
+        self.sstate += '/SSL.Error'
         self.LogInfo('Error sending (SSL): %s' % err)
         self.ProcessEofWrite()
         common.DISCONNECT_COUNT += 1
         return False
       except AttributeError:
+        self.sstate += '/AttrError'
         # This has been seen in the wild, is most likely some sort of
         # race during shutdown. :-(
         self.LogInfo('AttributeError, self.fd=%s' % self.fd)
@@ -468,6 +491,8 @@ class Selectable(object):
 
     if self.write_eof and not self.write_blocked:
       self.ProcessEofWrite()
+
+    self.sstate = (self.dead and 'dead' or 'idle')
     return True
 
   def SendChunked(self, data, compress=True, zhistory=None, just_buffer=False):
