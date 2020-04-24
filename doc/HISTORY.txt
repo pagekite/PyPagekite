@@ -2,14 +2,15 @@ Version history - highlights
 ============================
 
 
-v1.0.0.200406
+v1.0.1.200424
 -------------
+   - This release (v1.0.1) is all about performance and efficiency!
    - Create ping.pagekite fast-path in dedicated thread
    - Make select loop timing and read sizes configurable, tweak defaults
    - Remove 0.4.x flow-control, fix major bugs in current flow control code
-   - Fix deadlocks under pypy
+   - Fix locking-related deadlocks under PyPy
    - Added --watchdog=N, to self-reap locked up processes
-   - Disabled old ssl workarounds on modern versions of Python
+   - Disabled old ssl workarounds on modern versions of Python (broke PyPy)
 
 
 v1.0.0.200327
