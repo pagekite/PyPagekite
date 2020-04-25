@@ -95,13 +95,13 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'fe_certname=', 'fe_nocertcheck', 'ca_certs=',
             'kitename=', 'kitesecret=', 'fingerpath=',
             'backend=', 'define_backend=', 'be_config=',
-            'insecure', 'ratelimit_ips=',
+            'insecure', 'ratelimit_ips=', 'max_read_bytes=', 'select_loop_min_ms=',
             'service_on=', 'service_off=', 'service_cfg=',
             'tunnel_acl=', 'client_acl=', 'accept_acl_file=',
             'frontend=', 'nofrontend=', 'frontends=', 'keepalive=',
             'torify=', 'socksify=', 'proxy=', 'noproxy',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib', 'wschunks',
-            'buffers=', 'noprobes', 'debugio', 'watch=', 'loglevel=',
+            'buffers=', 'noprobes', 'debugio', 'watch=', 'loglevel=', 'watchdog=',
             'overload=', 'overload_cpu=', 'overload_mem=', 'overload_file=',
             # DEPRECATED:
             'reloadfile=', 'autosave', 'noautosave', 'webroot=',
@@ -175,6 +175,85 @@ class AuthApp(object):
     return ('AUTH' in self.capabilities)
 
 
+class Watchdog(threading.Thread):
+  """Kill the app if it locks up."""
+  daemon = True
+
+  def __init__(self, timeout):
+    threading.Thread.__init__(self)
+    self.pid = os.getpid()
+    self.conns = []
+    self.timeout = timeout
+    self.updated = time.time()
+    self.locks = {}
+
+  @classmethod
+  def DumpConnState(cls, conns, close=False, logfunc=None):
+    for fpc in copy.copy(conns.ping_helper.clients):
+      try:
+        if close:
+          (logfunc or logging.LogError)('Closing FPC %s' % (fpc,))
+          fpc[1].close()
+        else:
+          (logfunc or logging.LogInfo)('FastPing: %s' % (fpc,))
+      except:
+        pass
+    for conn in copy.copy(conns.conns):
+      try:
+        if close:
+          (logfunc or logging.LogError)('Closing %s' % conn)
+          conn.fd.close()
+        else:
+          (logfunc or logging.LogInfo)('Conn %s' % conn)
+      except:
+        pass
+
+  def patpatpat(self):
+    self.updated = time.time()
+
+  def run(self):
+    import signal
+    if self.timeout:
+      self.timeout = max(15, self.timeout)  # Lower than this won't work!
+    if common.gYamon and self.timeout:
+      common.gYamon.vset('watchdog', self.timeout)
+
+    failed = 5  # Log happy message after first sleep
+    worries = 0
+    last_update = self.updated
+    while self.timeout and (failed < 10) and (worries < self.timeout):
+      time.sleep(self.timeout / 10.0)
+      if self.updated == last_update:
+        failed += 1
+        worries += 1
+        logging.LogInfo('Watchdog is worried (timeout=%ds, failures=%d/10, worries=%.1f/%d)'
+                        % (self.timeout, failed, worries, self.timeout))
+        if common.gYamon:
+          common.gYamon.vadd('watchdog_worried', 1)
+        if failed in (1, 6):
+          os.kill(self.pid, signal.SIGUSR1)
+      else:
+        if failed:
+          logging.LogInfo('Watchdog is happy (timeout=%ds)' % self.timeout)
+        failed = 0
+        worries *= 0.9
+        last_update = self.updated
+
+    if self.timeout:
+      try:
+        for lock_name, lock in self.locks.iteritems():
+          logging.LogDebug('Lock %s %s' % (
+            lock_name,
+            lock.acquire(blocking=False) and 'is free' or 'is LOCKED'))
+        self.DumpConnState(self.conns, close=True)
+      finally:
+        logging.LogError('Watchdog is sad: kill -INT %s' % self.pid)
+        os.kill(self.pid, signal.SIGINT)
+        time.sleep(2)
+        logging.LogError('Watchdog is sad: kill -9 %s' % self.pid)
+        os.kill(self.pid, 9)
+
+
 class AuthThread(threading.Thread):
   """Handle authentication work in a separate thread."""
   daemon = True
@@ -187,16 +266,14 @@ class AuthThread(threading.Thread):
     self.qtime = 0.250  # A decent initial estimate
 
   def check(self, requests, conn, callback):
-    self.qc.acquire()
-    self.jobs.append((requests, conn, callback))
-    self.qc.notify()
-    self.qc.release()
+    with self.qc:
+      self.jobs.append((requests, conn, callback))
+      self.qc.notify()
 
   def quit(self):
-    self.qc.acquire()
-    self.keep_running = False
-    self.qc.notify()
-    self.qc.release()
+    with self.qc:
+      self.keep_running = False
+      self.qc.notify()
     try:
       self.join()
     except RuntimeError:
@@ -213,128 +290,127 @@ class AuthThread(threading.Thread):
     logging.LogDebug('AuthThread: done')
 
   def _run(self):
-    self.qc.acquire()
-    while self.keep_running:
-      now = int(time.time())
-      if not self.jobs:
-        (requests, conn, callback) = None, None, None
-        self.qc.wait()
-      else:
-        (requests, conn, callback) = self.jobs.pop(0)
-        if logging.DEBUG_IO: print('=== AUTH REQUESTS\n%s\n===' % requests)
-        self.qc.release()
+    with self.qc:
+      while self.keep_running:
+        now = int(time.time())
+        if not self.jobs:
+          (requests, conn, callback) = None, None, None
+          self.qc.wait()
+        else:
+          (requests, conn, callback) = self.jobs.pop(0)
+          if logging.DEBUG_IO: print('=== AUTH REQUESTS\n%s\n===' % requests)
+          self.qc.release()
 
-        quotas = []
-        q_conns = []
-        q_days = []
-        ip_limits = []
-        results = []
-        log_info = []
-        session = '%x:%s:' % (now, globalSecret())
-        for request in requests:
-          try:
-            proto, domain, srand, token, sign, prefix = request
-          except:
-            logging.LogError('Invalid request: %s' % (request, ))
-            continue
+          quotas = []
+          q_conns = []
+          q_days = []
+          ip_limits = []
+          results = []
+          log_info = []
+          session = '%x:%s:' % (now, globalSecret())
+          for request in requests:
+            try:
+              proto, domain, srand, token, sign, prefix = request
+            except:
+              logging.LogError('Invalid request: %s' % (request, ))
+              continue
 
-          what = '%s:%s:%s' % (proto, domain, srand)
-          session += what
-          if not token or not sign:
-            # Send a challenge. Our challenges are time-stamped, so we can
-            # put stict bounds on possible replay attacks (20 minutes atm).
-            results.append(('%s-SignThis' % prefix,
-                            '%s:%s' % (what, signToken(payload=what,
-                                                       timestamp=now))))
-          else:
-            # Note: These 15 seconds are a magic number which should be well
-            #       below the timeout in proto.conns.Tunnel._Connect().
-            if ((not self.conns.config.authfail_closed)
-                  and len(self.jobs) >= (15 / self.qtime)):  # Float division
-              logging.LogWarning('Quota lookup skipped, over 15s worth of jobs queued')
-              (quota, days, conns, ipc, ips, reason) = (
-                -2, None, None, None, None, None)
+            what = '%s:%s:%s' % (proto, domain, srand)
+            session += what
+            if not token or not sign:
+              # Send a challenge. Our challenges are time-stamped, so we can
+              # put stict bounds on possible replay attacks (20 minutes atm).
+              results.append(('%s-SignThis' % prefix,
+                              '%s:%s' % (what, signToken(payload=what,
+                                                         timestamp=now))))
             else:
-              # This is a bit lame, but we only check the token if the quota
-              # for this connection has never been verified.
-              t0 = time.time()
-              (quota, days, conns, ipc, ips, reason) = (
-                self.conns.config.GetDomainQuota(
-                  proto, domain, srand, token, sign,
-                  check_token=(conn.quota is None)))
-              elapsed = (time.time() - t0)
-              self.qtime = max(0.2, (0.9 * self.qtime) + (0.1 * elapsed))
+              # Note: These 15 seconds are a magic number which should be well
+              #       below the timeout in proto.conns.Tunnel._Connect().
+              if ((not self.conns.config.authfail_closed)
+                    and len(self.jobs) >= (15 / self.qtime)):  # Float division
+                logging.LogWarning('Quota lookup skipped, over 15s worth of jobs queued')
+                (quota, days, conns, ipc, ips, reason) = (
+                  -2, None, None, None, None, None)
+              else:
+                # This is a bit lame, but we only check the token if the quota
+                # for this connection has never been verified.
+                t0 = time.time()
+                (quota, days, conns, ipc, ips, reason) = (
+                  self.conns.config.GetDomainQuota(
+                    proto, domain, srand, token, sign,
+                    check_token=(conn.quota is None)))
+                elapsed = (time.time() - t0)
+                self.qtime = max(0.2, (0.9 * self.qtime) + (0.1 * elapsed))
 
-            duplicates = self.conns.Tunnel(proto, domain)
-            if not quota:
-              if not reason: reason = 'quota'
-              results.append(('%s-Invalid' % prefix, what))
-              results.append(('%s-Invalid-Why' % prefix,
-                              '%s;%s' % (what, reason)))
-              log_info.extend([('rejected', domain),
-                               ('quota', quota),
-                               ('reason', reason)])
-            elif duplicates:
-              # Duplicates... is the old one dead?  Trigger a ping.
-              for conn in duplicates:
-                conn.TriggerPing()
-              results.append(('%s-Duplicate' % prefix, what))
-              log_info.extend([('rejected', domain),
-                               ('duplicate', 'yes')])
-            else:
-              results.append(('%s-OK' % prefix, what))
-              quotas.append((quota, request))
-              if conns: q_conns.append(conns)
-              if days: q_days.append(days)
-              if not ipc:
-                try:
-                  ipc, ips = self.conns.config.GetDefaultIPsPerSecond(domain)
-                except ValueError:
-                  pass
-              if ipc and ips:
-                ip_limits.append((float(ipc)/ips, ipc, ips))  # Float division
-              if (proto.startswith('http') and
-                  self.conns.config.GetTlsEndpointCtx(domain)):
-                results.append(('%s-SSL-OK' % prefix, what))
+              duplicates = self.conns.Tunnel(proto, domain)
+              if not quota:
+                if not reason: reason = 'quota'
+                results.append(('%s-Invalid' % prefix, what))
+                results.append(('%s-Invalid-Why' % prefix,
+                                '%s;%s' % (what, reason)))
+                log_info.extend([('rejected', domain),
+                                 ('quota', quota),
+                                 ('reason', reason)])
+              elif duplicates:
+                # Duplicates... is the old one dead?  Trigger a ping.
+                for conn in duplicates:
+                  conn.TriggerPing()
+                results.append(('%s-Duplicate' % prefix, what))
+                log_info.extend([('rejected', domain),
+                                 ('duplicate', 'yes')])
+              else:
+                results.append(('%s-OK' % prefix, what))
+                quotas.append((quota, request))
+                if conns: q_conns.append(conns)
+                if days: q_days.append(days)
+                if not ipc:
+                  try:
+                    ipc, ips = self.conns.config.GetDefaultIPsPerSecond(domain)
+                  except ValueError:
+                    pass
+                if ipc and ips:
+                  ip_limits.append((float(ipc)/ips, ipc, ips))  # Float division
+                if (proto.startswith('http') and
+                    self.conns.config.GetTlsEndpointCtx(domain)):
+                  results.append(('%s-SSL-OK' % prefix, what))
 
-        results.append(('%s-SessionID' % prefix,
-                        '%x:%s' % (now, sha1hex(session))))
-        results.append(('%s-Misc' % prefix, urlencode({
-                          'motd': (self.conns.config.motd_message or ''),
-                        })))
-        for upgrade in self.conns.config.upgrade_info:
-          results.append(('%s-Upgrade' % prefix, ';'.join(upgrade)))
+          results.append(('%s-SessionID' % prefix,
+                          '%x:%s' % (now, sha1hex(session))))
+          results.append(('%s-Misc' % prefix, urlencode({
+                            'motd': (self.conns.config.motd_message or ''),
+                          })))
+          for upgrade in self.conns.config.upgrade_info:
+            results.append(('%s-Upgrade' % prefix, ';'.join(upgrade)))
 
-        if quotas:
-          min_qconns = min(q_conns or [0])
-          if q_conns and min_qconns:
-            results.append(('%s-QConns' % prefix, min_qconns))
+          if quotas:
+            min_qconns = min(q_conns or [0])
+            if q_conns and min_qconns:
+              results.append(('%s-QConns' % prefix, min_qconns))
 
-          min_qdays = min(q_days or [0])
-          if q_days and min_qdays:
-            results.append(('%s-QDays' % prefix, min_qdays))
+            min_qdays = min(q_days or [0])
+            if q_days and min_qdays:
+              results.append(('%s-QDays' % prefix, min_qdays))
 
-          min_ip_limits = min(ip_limits or [(0, None, None)])[1:]
-          if ip_limits and min_ip_limits[0]:
-            results.append(('%s-IPsPerSec' % prefix, '%s/%s' % min_ip_limits))
+            min_ip_limits = min(ip_limits or [(0, None, None)])[1:]
+            if ip_limits and min_ip_limits[0]:
+              results.append(('%s-IPsPerSec' % prefix, '%s/%s' % min_ip_limits))
 
-          nz_quotas = [qp for qp in quotas if qp[0] and qp[0] > 0]
-          if nz_quotas:
-            quota = min(nz_quotas)[0]
-            conn.quota = [quota, [qp[1] for qp in nz_quotas], time.time()]
-            results.append(('%s-Quota' % prefix, quota))
-          elif requests:
-            if not conn.quota:
-              conn.quota = [None, requests, time.time()]
-            else:
-              conn.quota[2] = time.time()
+            nz_quotas = [qp for qp in quotas if qp[0] and qp[0] > 0]
+            if nz_quotas:
+              quota = min(nz_quotas)[0]
+              conn.quota = [quota, [qp[1] for qp in nz_quotas], time.time()]
+              results.append(('%s-Quota' % prefix, quota))
+            elif requests:
+              if not conn.quota:
+                conn.quota = [None, requests, time.time()]
+              else:
+                conn.quota[2] = time.time()
 
-        if logging.DEBUG_IO: print('=== AUTH RESULTS\n%s\n===' % results)
-        callback(results, log_info)
-        self.qc.acquire()
+          if logging.DEBUG_IO: print('=== AUTH RESULTS\n%s\n===' % results)
+          callback(results, log_info)
+          self.qc.acquire()
 
     self.buffering = 0
-    self.qc.release()
 
 
 ##[ Selectables ]##############################################################
@@ -345,7 +421,7 @@ class Connections(object):
   def __init__(self, config):
     self.config = config
     self.ip_tracker = {}
-    self.lock = threading.Lock()
+    self.lock = threading.RLock()
     self.idle = []
     self.conns = []
     self.conns_by_id = {}
@@ -388,7 +464,7 @@ class Connections(object):
       self.idle.append((time.time() + seconds, conn.last_activity, conn))
 
   def TrackIP(self, ip, domain):
-    tick = '%d' % (time.time()/12)
+    tick = '%d' % (time.time()//12)
     with self.lock:
       if tick not in self.ip_tracker:
         deadline = int(tick)-10
@@ -783,7 +859,7 @@ class TunnelManager(threading.Thread):
 
     # Update our idea of what it means to be overloaded.
     if self.pkite.overload and (1 == loop_count % 20):
-      self.pkite.CalculateOverload()
+      self.pkite.CalculateOverload(yamon=common.gYamon)
 
     # FIXME: Front-ends should close dead back-end tunnels.
     for tid in self.conns.tunnels:
@@ -1055,6 +1131,8 @@ class PageKite(object):
     self.keep_looping = True
     self.main_loop = True
     self.watch_level = [None]
+
+    self.watchdog = None
 
     self.overload = None
     self.overload_cpu = 0.75
@@ -1492,7 +1570,6 @@ class PageKite(object):
         com + ('overload_mem = %-5s # 0=fixed' % self.overload_cpu),
         com + ('overload_cpu = %-5s # 0=fixed' % self.overload_mem)
       ])
-
     config.extend([
       '',
       '##[ Front-end access controls (default=deny, if configured) ]##',
@@ -1527,8 +1604,13 @@ class PageKite(object):
       (self.no_probes and 'noprobes' or '# noprobes'),
       (self.crash_report_url and '# nocrashreport' or 'nocrashreport'),
       p('savefile = %s', safe and self.savefile, '/path/to/savefile'),
-      '',
     ])
+    if common.MAX_READ_BYTES != 16*1024:
+      config.append('max_read_bytes = %sx%.3f'
+        % (common.MAX_READ_BYTES, common.MAX_READ_TUNNEL_X))
+    if common.SELECT_LOOP_MIN_MS != 5:
+      config.append('select_loop_min_ms = %s' % common.SELECT_LOOP_MIN_MS)
+    config.append('')
 
     if self.daemonize or self.setuid or self.setgid or self.pidfile or new:
       config.extend([
@@ -1615,6 +1697,20 @@ class PageKite(object):
 
   def PrintSettings(self, safe=False):
     print('\n'.join(self.GenerateConfig(safe=safe)))
+
+  def CanSaveConfig(self, savefile=None, _raise=None):
+    savefile = savefile or self.savefile or self.rcfile
+    try:
+      if os.path.exists(savefile):
+        open(savefile, 'r+').close()
+      else:
+        open(savefile, 'w').close()  # FIXME: Python3.3 adds mode=x, use it!
+        os.remove(savefile)
+    except (IOError, OSError):
+      if _raise is not None:
+        raise _raise("Could not write to: %s" % savefile)
+      return False
+    return savefile
 
   def CanSaveConfig(self, savefile=None, _raise=None):
     savefile = savefile or self.savefile or self.rcfile
@@ -1880,14 +1976,15 @@ class PageKite(object):
     if common.gYamon is not None:
       return (
         common.gYamon.values.get('backends_live', 0) +
-        common.gYamon.values.get('selectables_live', 1))
+        common.gYamon.values.get('selectables_live', 1)) or 1
     return (len(self.conns.tunnels) or 1)
 
-  def CalculateOverload(self, cload=None):
+  def CalculateOverload(self, cload=None, yamon=None):
     # Check overload file first, it overrides everything
     if self.overload_file:
       try:
-        new_overload = int(open(self.overload_file, 'r').read().strip())
+        with open(self.overload_file, 'r') as fd:
+          new_overload = int(fd.read().strip())
         if new_overload != self.overload_current:
           self.overload_current = new_overload
           logging.LogInfo(
@@ -1900,25 +1997,21 @@ class PageKite(object):
     # FIXME: This is almost certainly linux specific.
     # FIXME: There are too many magic numbers in here.
     try:
-      # Check internal load, abort if load is low anyway.
-      cload = cload or self._get_overload_factor()
-      if ((cload <= (self.overload // 2)) and
-          (self.overload == self.overload_current)):
-        return
-
       # If both are disabled, just bail out.
       if not (self.overload_cpu or self.overload_mem):
         return
 
       # Check system load.
-      loadavg = float(open('/proc/loadavg', 'r').read().strip().split()[1])
+      with open('/proc/loadavg', 'r') as fd:
+        loadavg = float(fd.read().strip().split()[1])
       meminfo = {}
-      for line in open('/proc/meminfo', 'r'):
-        try:
-          key, val = line.lower().split(':')
-          meminfo[key] = int(val.strip().split()[0])
-        except ValueError:
-          pass
+      with open('/proc/meminfo', 'r') as fd:
+        for line in fd:
+          try:
+            key, val = line.lower().split(':')
+            meminfo[key] = int(val.strip().split()[0])
+          except ValueError:
+            pass
 
       # Figure out how much RAM is available
       memfree = meminfo.get('memavailable')
@@ -1929,14 +2022,19 @@ class PageKite(object):
       if not self.overload_membase:
         self.overload_membase = float(meminfo['memtotal']) - memfree
         # Sanity checks... are these really necessary?
-        self.overload_membase = max(75000, self.overload_membase)
+        self.overload_membase = max(50000, self.overload_membase)
         self.overload_membase = min(self.overload_membase,
                                     0.9 * meminfo['memtotal'])
 
+      # Check internal load, abort if load is low anyway.
+      cload = cload or self._get_overload_factor()
+      if cload < 50:
+        return
+
       # Calculate the implied unit cost of every live connection
       memtotal = float(meminfo['memtotal'] - self.overload_membase)
-      munit = max(75, float(memtotal - memfree) / cload)  # 75KB/conn=optimism!  # Float division
-      lunit = loadavg / cload  # Float division
+      munit = max(32, float(memtotal - memfree) / cload)  # 32KB/conn=optimism!  # Float division
+      lunit = max(0.10, loadavg) / cload
 
       # Calculate overload factors based on the unit costs
       moverload = int(self.overload_mem * float(memtotal) / munit)  # Integer division
@@ -1962,6 +2060,9 @@ class PageKite(object):
               self.overload, moverload, loverload,
               cload, munit, lunit,
               memfree, memtotal, loadavg))
+      if yamon is not None:
+        yamon.vset('overload_unit_mem', munit)
+        yamon.vset('overload_unit_cpu', lunit)
     except (IOError, OSError, ValueError, KeyError, TypeError):
       pass
 
@@ -2133,9 +2234,8 @@ class PageKite(object):
   def LoadMOTD(self):
     if self.motd:
       try:
-        f = open(self.motd, 'r')
-        self.motd_message = ''.join(f.readlines()).strip()[:8192]
-        f.close()
+        with open(self.motd, 'r') as f:
+          self.motd_message = ''.join(f.readlines()).strip()[:8192]
       except (OSError, IOError):
         pass
 
@@ -2337,6 +2437,15 @@ class PageKite(object):
           which, limit = '*', arg
         self.GetDefaultIPsPerSecond(None, limit.strip())  # ValueErrors if bad
         self.ratelimit_ips[which.strip()] = limit.strip()
+      elif opt == '--max_read_bytes':
+        if 'x' in arg:
+          base, tmul = arg.split('x')
+          common.MAX_READ_BYTES = max(1024, int(base))
+          common.MAX_READ_TUNNEL_X = max(1, float(tmul))
+        else:
+          common.MAX_READ_BYTES = max(1024, int(arg))
+      elif opt == '--select_loop_min_ms':
+        common.SELECT_LOOP_MIN_MS = max(0, min(int(arg), 100))
       elif opt == '--accept_acl_file':
         self.accept_acl_file = arg
       elif opt == '--client_acl':
@@ -2453,6 +2562,8 @@ class PageKite(object):
       elif opt == '--sslzlib': self.enable_sslzlib = True
       elif opt == '--watch':
         self.watch_level[0] = int(arg)
+      elif opt == '--watchdog':
+        self.watchdog = Watchdog(int(arg))
       elif opt == '--overload':
         self.overload_current = self.overload = int(arg)
       elif opt == '--overload_file':
@@ -3238,9 +3349,10 @@ class PageKite(object):
     rv = []
     if host[:1] == '@':
       try:
-        for line in (l.strip() for l in open(host[1:], 'r')):
-          if line and line[:1] not in ('#', ';'):
-            rv.append(line)
+        with open(host[1:], 'r') as fd:
+          for line in (l.strip() for l in fd):
+            if line and line[:1] not in ('#', ';'):
+              rv.append(line)
         logging.LogDebug('Loaded %d IPs from %s' % (len(rv), host[1:]))
       except:
         logging.LogDebug('Failed to load IPs from %s' % host[1:])
@@ -3795,28 +3907,30 @@ class PageKite(object):
     evs = []
     broken = False
     try:
-      bbc = 0
       with self.conns.lock:
-        for c in self.conns.conns:
-          fd, mask = c.fd, 0
-          if not c.IsDead():
-            if c.IsBlocked():
-              bbc += len(c.write_blocked)
-              mask |= select.EPOLLOUT
-            if c.IsReadable(now):
-              mask |= select.EPOLLIN
+        clist = copy.copy(self.conns.conns)
 
-          if mask:
-            try:
-              fdc[fd.fileno()] = fd
-            except socket.error:
-              # If this fails, then the socket has HUPed, however we need to
-              # bypass epoll to make sure that's reflected in iready below.
-              bid = 'dead-%d' % len(evs)
-              fdc[bid] = fd
-              evs.append((bid, select.EPOLLHUP))
-              # Trigger removal of c.fd, if it was still in the epoll.
-              fd, mask = None, 0
+      bbc = 0
+      for c in clist:
+        fd, mask = c.fd, 0
+        if not c.IsDead():
+          if c.IsBlocked():
+            bbc += len(c.write_blocked)
+            mask |= select.EPOLLOUT
+          if c.IsReadable(now):
+            mask |= select.EPOLLIN
+
+        if mask:
+          try:
+            fdc[fd.fileno()] = fd
+          except socket.error:
+            # If this fails, then the socket has HUPed, however we need to
+            # bypass epoll to make sure that's reflected in iready below.
+            bid = 'dead-%d' % len(evs)
+            fdc[bid] = fd
+            evs.append((bid, select.EPOLLHUP))
+            # Trigger removal of c.fd, if it was still in the epoll.
+            fd, mask = None, 0
 
           if mask:
             try:
@@ -3872,13 +3986,30 @@ class PageKite(object):
     if self.tunnel_manager: self.tunnel_manager.start()
     if self.ui_comm: self.ui_comm.start()
 
+    if self.watchdog:
+      self.watchdog.conns = self.conns.conns
+      try:
+        self.watchdog.locks['httpd.RCI.lock'] = self.ui_httpd.httpd.RCI.lock
+      except AttributeError:
+        pass
+      if common.gYamon:
+        self.watchdog.locks['YamonD.lock'] = common.gYamon.lock
+      # FIXME: Add the AuthApp locks?
+      for i in range(0, len(self.conns.auth_pool)):
+        lock_name = 'conns.auth_pool[%d].qc' % i
+        self.watchdog.locks[lock_name] = self.conns.auth_pool[i].qc
+      self.watchdog.locks.update({
+        'Connections.lock': self.conns.lock,
+        'SELECTABLE_LOCK': SELECTABLE_LOCK})
+      self.watchdog.start()
+
     epoll, mypoll = self.CreatePollObject()
-    self.last_barf = self.last_loop = time.time()
+    self.last_loop = time.time()
 
     logging.LogDebug('Entering main %s loop' % (epoll and 'epoll' or 'select'))
     loop_count = 0
     while self.keep_looping:
-      epoll, iready, oready, eready = mypoll(epoll, 1.1)
+      epoll, iready, oready, eready = mypoll(epoll, 1.10)
       now = time.time()
 
       if oready:
@@ -3898,24 +4029,35 @@ class PageKite(object):
       self.last_loop = now
       loop_count += 1
 
-      if now - self.last_barf > (logging.DEBUG_IO and 15 or 600):
-        self.last_barf = now
-        if epoll:
-          epoll.close()
-        epoll, mypoll = self.CreatePollObject()
-        with SELECTABLE_LOCK:
-          gc.collect()
-          log_info, lvl = [('main_loop', loop_count)], logging.LOG_LEVEL_INFO
-          if logging.LOG_LEVEL >= logging.LOG_LEVEL_DEBUG:
-            log_info.append(('selectable_map', '%s' % SELECTABLES))
-            lvl = logging.LOG_LEVEL_DEBUG
-          logging.Log(log_info, level=lvl)
-          if logging.DEBUG_IO:
-            for obj in gc.get_objects():
-              if isinstance(obj, Selectable):
-                if obj.dead:
-                  holders = gc.get_referrers(obj)
-                  logging.LogDebug('Dead: %s held by %s' % (obj, str(holders[-1])[:50]))
+      # This delay does things!
+      # Pro:
+      #   - Reduce overhead by batching IO events together
+      # Mixed:
+      #   - Along with Tunnel.maxread, this caps the per-stream/tunnel
+      #     bandwidth. The default SELECT_LOOP_MIN_MS=5, combined with
+      #     a MAX_READ_BYTES=16 (doubled for tunnels) lets us read from
+      #     the socket 200x/second: 200 * 32kB =~ 6MB/s. This is the
+      #     MAXIMUM outgoing bandwidth of any live tunnel, limiting
+      #     how much load any single connection can generate. Total
+      #     incoming bandwidth per-conn is half that.
+      # Con:
+      #   - Adds latency
+      #
+      if self.isfrontend:
+        snooze = max(0, (now + common.SELECT_LOOP_MIN_MS/1000.0) - time.time())
+        if snooze:
+          if oready:
+            snooze /= 2
+          time.sleep(snooze)
+      else:
+        snooze = 0
+
+      if 0 == (loop_count % (5 if logging.DEBUG_IO else 250)):
+        logging.LogDebug('Loop #%d (i=%d, o=%d, e=%d, s=%.3fs) v%s'
+          % (loop_count, len(iready), len(oready), len(eready), snooze, APPVER))
+
+      if self.watchdog:
+        self.watchdog.patpatpat()
 
     if epoll:
       epoll.close()
@@ -3937,8 +4079,11 @@ class PageKite(object):
                     alignright='[%s]' % howtoquit)
     config_report = [('started', self.pyfile), ('version', APPVER),
                      ('platform', sys.platform),
+                     ('python', sys.version.replace('\n', ' ')),
                      ('argv', ' '.join(sys.argv[1:])),
-                     ('ca_certs', self.ca_certs)]
+                     ('ca_certs', self.ca_certs),
+                     ('send_always_buffers', SEND_ALWAYS_BUFFERS),
+                     ('tunnel_socket_blocks', TUNNEL_SOCKET_BLOCKS)]
     for optf in self.rcfiles_loaded:
       config_report.append(('optfile_%s' % optf, 'ok'))
     logging.Log(config_report, level=logging.LOG_LEVEL)
@@ -4018,6 +4163,16 @@ class PageKite(object):
         logging.LogWarning(
           'Warning: signal handler unavailable, logrotate will not work.')
 
+    # Set up SIGUSR1 handler.
+    try:
+      import signal
+      def dumpconns(x,y):
+        logging.LogInfo('SIGUSR1 received, dumping conn state')
+        Watchdog.DumpConnState(self.conns)
+      signal.signal(signal.SIGUSR1, dumpconns)
+    except Exception:
+      logging.LogError('Warning: signal handler unavailable, kill -USR1 will not work.')
+
     # Disable compression in OpenSSL
     if socks.HAVE_SSL and not self.enable_sslzlib:
       socks.DisableSSLCompression()
@@ -4028,9 +4183,8 @@ class PageKite(object):
 
     # Create PID file
     if self.pidfile:
-      pf = open(self.pidfile, 'w')
-      pf.write('%s\n' % os.getpid())
-      pf.close()
+      with open(self.pidfile, 'w') as pf:
+        pf.write('%s\n' % os.getpid())
 
     # Do this after creating the PID and log-files.
     if self.daemonize:

@@ -104,7 +104,6 @@ try:
 except ImportError:
   from queue import Queue
 
-
 # SSL/TLS strategy: prefer pyOpenSSL, as it comes with built-in Context
 # objects. If that fails, look for Python 2.6+ native ssl support and
 # create a compatibility wrapper. If both fail, bomb with a ConfigError
@@ -112,7 +111,7 @@ except ImportError:
 #
 import sockschain
 socks = sockschain
-if socks.HAVE_PYOPENSSL:
+if socks.HAVE_PYOPENSSL or tuple(sys.version_info) > (2, 7, 10):
   SSL = socks.SSL
   SEND_ALWAYS_BUFFERS = False
   SEND_MAX_BYTES = 16 * 1024
@@ -122,7 +121,7 @@ elif socks.HAVE_SSL:
   SSL = socks.SSL
   SEND_ALWAYS_BUFFERS = True
   SEND_MAX_BYTES = 4 * 1024
-  TUNNEL_SOCKET_BLOCKS = True # Workaround for http://bugs.python.org/issue8240
+  TUNNEL_SOCKET_BLOCKS = True  # Workaround for http://bugs.python.org/issue8240
 
 else:
   SEND_ALWAYS_BUFFERS = False

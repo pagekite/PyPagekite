@@ -48,22 +48,22 @@ def obfuIp(ip):
   return '~%s' % '.'.join([q for q in quads[-2:]])
 
 
-SELECTABLE_LOCK = threading.Lock()
+SELECTABLE_LOCK = threading.RLock()  # threading.Lock() will deadlock on pypy!
 SELECTABLE_ID = 0
-SELECTABLES = {}
+SELECTABLES = set([])
 def getSelectableId(what):
   global SELECTABLES, SELECTABLE_ID, SELECTABLE_LOCK
   with SELECTABLE_LOCK:
     count = 0
+    SELECTABLE_ID += 1
+    SELECTABLE_ID %= 0x20000
     while SELECTABLE_ID in SELECTABLES:
       SELECTABLE_ID += 1
-      SELECTABLE_ID %= 0x40000
-      if (SELECTABLE_ID % 0x00800) == 0:
-        logging.LogDebug('Selectable map: %s' % (SELECTABLES, ))
+      SELECTABLE_ID %= 0x20000
       count += 1
-      if count > 0x40000:
+      if count > 0x20000:
         raise ValueError('Too many conns!')
-    SELECTABLES[SELECTABLE_ID] = what
+    SELECTABLES.add(SELECTABLE_ID)
     return SELECTABLE_ID
 
 
@@ -74,7 +74,7 @@ class Selectable(object):
                      errno.EDEADLK, errno.EWOULDBLOCK, errno.ENOBUFS,
                      errno.EALREADY)
 
-  def __init__(self, fd=None, address=None, on_port=None, maxread=16*1024,
+  def __init__(self, fd=None, address=None, on_port=None, maxread=None,
                      ui=None, tracked=True, bind=None, backlog=100):
     self.fd = None
 
@@ -98,6 +98,7 @@ class Selectable(object):
     self.address = address
     self.on_port = on_port
     self.created = self.bytes_logged = time.time()
+    self.lock = threading.RLock()
     self.last_activity = 0
     self.dead = False
     self.ui = ui
@@ -108,7 +109,7 @@ class Selectable(object):
     self.q_days = None
 
     # Read-related variables
-    self.maxread = maxread
+    self.maxread = maxread or common.MAX_READ_BYTES
     self.read_bytes = self.all_in = 0
     self.read_eof = False
     self.peeking = False
@@ -121,14 +122,10 @@ class Selectable(object):
     self.write_eof = False
     self.write_retry = None
 
-    # Flow control v1
-    self.throttle_until = (time.time() - 1)
-    self.max_read_speed = 96*1024
     # Flow control v2
     self.acked_kb_delta = 0
 
     # Compression stuff
-    self.lock = threading.Lock()
     self.zw = None
     self.zlevel = 1
     self.zreset = False
@@ -138,6 +135,7 @@ class Selectable(object):
     self.ws_zero_mask = False
 
     # Logging
+    self.sstate = 'new'
     self.alt_id = None
     self.countas = 'selectables_live'
     self.sid = self.gsid = getSelectableId(self.countas)
@@ -153,12 +151,11 @@ class Selectable(object):
       common.gYamon.vadd('selectables', 1)
 
   def CountAs(self, what):
-    if common.gYamon:
-      common.gYamon.vadd(self.countas, -1)
-      common.gYamon.vadd(what, 1)
-    self.countas = what
-    global SELECTABLES
-    SELECTABLES[self.gsid] = '%s %s' % (self.countas, self)
+    with self.lock:
+      if common.gYamon:
+        common.gYamon.vadd(self.countas, -1)
+        common.gYamon.vadd(what, 1)
+      self.countas = what
 
   def Cleanup(self, close=True):
     self.peeked = self.zw = ''
@@ -171,27 +168,34 @@ class Selectable(object):
     self.fd = None
     if not self.dead:
       self.dead = True
+      self.sstate = 'dead'
       self.CountAs('selectables_dead')
       if close:
         self.LogTraffic(final=True)
+    try:
+      global SELECTABLES, SELECTABLE_LOCK
+      with SELECTABLE_LOCK:
+        SELECTABLES.remove(self.gsid)
+    except KeyError:
+      pass
 
   def __del__(self):
+    # Important: This can run at random times, especially under pypy, so all
+    #            locks must be re-entrant (RLock), otherwise we deadlock.
     try:
-      if common.gYamon:
-        common.gYamon.vadd(self.countas, -1)
-        common.gYamon.vadd('selectables', -1)
+      with self.lock:
+        if common.gYamon and self.countas:
+          common.gYamon.vadd(self.countas, -1)
+          common.gYamon.vadd('selectables', -1)
+          self.countas = None
     except AttributeError:
       pass
-    with SELECTABLE_LOCK:
-      global SELECTABLES
-      if self.gsid in SELECTABLES:
-        del SELECTABLES[self.gsid]
 
   def __str__(self):
-    return '%s: %s<%s%s%s>' % (self.log_id, self.__class__,
-                               self.read_eof and '-' or 'r',
-                               self.write_eof and '-' or 'w',
-                               len(self.write_blocked))
+    return '%s: %s<%s|%s%s%s>' % (self.log_id, self.__class__, self.sstate,
+                                  self.read_eof and '-' or 'r',
+                                  self.write_eof and '-' or 'w',
+                                  len(self.write_blocked))
 
   def __html__(self):
     try:
@@ -219,7 +223,7 @@ class Selectable(object):
                      self.all_out + self.wrote_bytes,
                      time.strftime('%Y-%m-%d %H:%M:%S',
                                    time.localtime(self.created)),
-                     self.dead and 'dead' or 'alive')
+                     self.sstate)
 
   def ResetZChunks(self):
     with self.lock:
@@ -267,12 +271,12 @@ class Selectable(object):
 
   def LogError(self, error, params=None):
     values = params or []
-    if self.log_id: values.append(('id', self.log_id))
+    if self.log_id: values.extend([('id', self.log_id), ('s', self.sstate)])
     logging.LogError(error, values)
 
   def LogDebug(self, message, params=None):
     values = params or []
-    if self.log_id: values.append(('id', self.log_id))
+    if self.log_id: values.extend([('id', self.log_id), ('s', self.sstate)])
     logging.LogDebug(message, values)
 
   def LogWarning(self, warning, params=None):
@@ -282,7 +286,7 @@ class Selectable(object):
 
   def LogInfo(self, message, params=None):
     values = params or []
-    if self.log_id: values.append(('id', self.log_id))
+    if self.log_id: values.extend([('id', self.log_id), ('s', self.sstate)])
     logging.LogInfo(message, values)
 
   def LogTrafficStatus(self, final=False):
@@ -301,25 +305,19 @@ class Selectable(object):
         common.gYamon.vadd("bytes_all", self.wrote_bytes
                                         + self.read_bytes, wrap=1000000000)
 
+      log_info = [('wrote', '%d' % self.wrote_bytes),
+                  ('wbps', '%d' % self.write_speed),
+                  ('read', '%d' % self.read_bytes)]
+      if self.acked_kb_delta:
+        log_info.append(('delta', '%d' % self.acked_kb_delta))
       if final:
-        self.Log([('wrote', '%d' % self.wrote_bytes),
-                  ('wbps', '%d' % self.write_speed),
-                  ('read', '%d' % self.read_bytes),
-                  ('eof', '1')],
-                 level=logging.LOG_LEVEL_MACH)
-      else:
-        self.Log([('wrote', '%d' % self.wrote_bytes),
-                  ('wbps', '%d' % self.write_speed),
-                  ('read', '%d' % self.read_bytes)],
-                 level=logging.LOG_LEVEL_MACH)
+        log_info.append(('eof', '1'))
+      self.Log(log_info)
 
       self.bytes_logged = now
       self.wrote_bytes = self.read_bytes = 0
     elif final:
       self.Log([('eof', '1')], level=logging.LOG_LEVEL_MACH)
-
-    global SELECTABLES
-    SELECTABLES[self.gsid] = '%s %s' % (self.countas, self)
 
   def SayHello(self):
     pass
@@ -329,8 +327,6 @@ class Selectable(object):
     return False
 
   def ProcessEof(self):
-    global SELECTABLES
-    SELECTABLES[self.gsid] = '%s %s' % (self.countas, self)
     if self.read_eof and self.write_eof and not self.write_blocked:
       self.Cleanup()
       return False
@@ -352,7 +348,9 @@ class Selectable(object):
     discard = ''
     while len(discard) < eat_bytes:
       try:
-        discard += s(self.fd.recv(eat_bytes - len(discard)))
+        bytecount = eat_bytes - len(discard)
+        self.sstate = 'eat(%d)' % bytecount
+        discard += self.fd.recv(bytecount)
       except socket.error as err:
         (errno, msg) = err.args
         self.LogInfo('Error reading (%d/%d) socket: %s (errno=%s)' % (
@@ -361,6 +359,7 @@ class Selectable(object):
 
     if logging.DEBUG_IO:
       print('===[ ATE %d PEEKED BYTES ]===\n' % eat_bytes)
+    self.sstate = 'ate(%d)' % eat_bytes
     self.peeked -= eat_bytes
     self.peeking = keep_peeking
     return
@@ -371,33 +370,24 @@ class Selectable(object):
 
     now = time.time()
     maxread = maxread or self.maxread
-    flooded = self.Flooded(now)
-    if flooded > self.max_read_speed and not self.acked_kb_delta:
-      # FIXME: This is v1 flow control, kill it when 0.4.7 is "everywhere"
-      last = self.throttle_until
-      # Disable local throttling for really slow connections; remote
-      # throttles (trigged by blocked sockets) still work.
-      if self.max_read_speed > 1024:
-        self.AutoThrottle()
-        maxread = 1024
-      if now > last and self.all_in > 2*self.max_read_speed:
-        self.max_read_speed *= 1.25
-        self.max_read_speed += maxread
-
     try:
       if self.peeking:
+        self.sstate = 'peek(%d)' % maxread
         data = s(self.fd.recv(maxread, socket.MSG_PEEK))
         self.peeked = len(data)
         if logging.DEBUG_IO:
           print('<== PEEK =[%s]==(\n%s)==' % (self, data[:320]))
       else:
+        self.sstate = 'read(%d)' % maxread
         data = s(self.fd.recv(maxread))
         if logging.DEBUG_IO:
-          print(('<== IN =[%s @ %dbps]==(\n%s)=='
-                 ) % (self, self.max_read_speed, data[:320]))
-    except (SSL.WantReadError, SSL.WantWriteError) as err:
+          print('<== IN =[%s]==(\n%s)==' % (self, data[:160]))
+      self.sstate = 'data(%d)' % len(data)
+    except (SSL.WantReadError, SSL.WantWriteError):
+      self.sstate += '/SSL.WRE'
       return True
     except IOError as err:
+      self.sstate += '/ioerr=%s' % (err.errno,)
       if err.errno not in self.HARMLESS_ERRNOS:
         self.LogDebug('Error reading socket: %s (%s)' % (err, err.errno))
         common.DISCONNECT_COUNT += 1
@@ -405,11 +395,13 @@ class Selectable(object):
       else:
         return True
     except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError) as err:
+      self.sstate += '/SSL.Error'
       self.LogDebug('Error reading socket (SSL): %s' % err)
       common.DISCONNECT_COUNT += 1
       return False
     except socket.error as err:
       (errno, msg) = err.args
+      self.sstate += '/sockerr=%s' % (err.errno,)
       if errno in self.HARMLESS_ERRNOS:
         return True
       else:
@@ -417,60 +409,28 @@ class Selectable(object):
         common.DISCONNECT_COUNT += 1
         return False
 
-    self.last_activity = now
-    if data is None or data == '':
-      self.read_eof = True
-      if logging.DEBUG_IO:
-        print('<== IN =[%s]==(EOF)==' % self)
-      return self.ProcessData('')
-    else:
-      if not self.peeking:
-        self.read_bytes += len(data)
-        if self.acked_kb_delta:
-          self.acked_kb_delta += (len(data)//1024)
-        if self.read_bytes > logging.LOG_THRESHOLD: self.LogTraffic()
-      return self.ProcessData(data)
+    try:
+      self.last_activity = now
+      if data is None or data == '':
+        self.sstate += '/EOF'
+        self.read_eof = True
+        if logging.DEBUG_IO:
+          print('<== IN =[%s]==(EOF)==' % self)
+        return self.ProcessData('')
+      else:
+        if not self.peeking:
+          self.read_bytes += len(data)
+          if self.acked_kb_delta:
+            self.acked_kb_delta += (len(data)/1024)
+          if self.read_bytes > logging.LOG_THRESHOLD: self.LogTraffic()
+        return self.ProcessData(data)
+    finally:
+      self.sstate = (self.dead and 'dead' or 'idle')
 
-  def Flooded(self, now=None):
-    delta = ((now or time.time()) - self.created)
-    if delta >= 1:
-      flooded = self.read_bytes + self.all_in
-      flooded -= self.max_read_speed * 0.95 * delta
-      return flooded
-    else:
-      return 0
-
-  def RecordProgress(self, skb, bps):
+  def RecordProgress(self, skb):
     if skb >= 0:
       all_read = (self.all_in + self.read_bytes) // 1024
-      if self.acked_kb_delta:
-        self.acked_kb_delta = max(1, all_read - skb)
-        self.LogDebug('Delta is: %d' % self.acked_kb_delta)
-    elif bps >= 0:
-      self.Throttle(max_speed=bps, remote=True)
-
-  def Throttle(self, max_speed=None, remote=False, delay=0.2):
-    if max_speed:
-      self.max_read_speed = max_speed
-
-    flooded = max(-1, self.Flooded())
-    if self.max_read_speed:
-      delay = min(10, max(0.1, flooded/self.max_read_speed))  # Float division
-      if flooded < 0: delay = 0
-
-    if delay:
-      ot = self.throttle_until
-      self.throttle_until = time.time() + delay
-      if ((self.throttle_until - ot) > 30 or
-          (int(ot) != int(self.throttle_until) and delay > 8)):
-        self.LogInfo('Throttled %.1fs until %x (flood=%d, bps=%s, %s)' % (
-                     delay, int(self.throttle_until), flooded,
-                     self.max_read_speed, remote and 'remote' or 'local'))
-
-    return True
-
-  def AutoThrottle(self, max_speed=None, remote=False, delay=0.2):
-    return self.Throttle(max_speed, remote, delay)
+      self.acked_kb_delta = max(1, all_read - skb)
 
   def Send(self, data, try_flush=False, activity=False,
                        just_buffer=False, allow_blocking=False):
@@ -491,6 +451,7 @@ class Selectable(object):
       try:
         want_send = self.write_retry or min(len(sending), SEND_MAX_BYTES)
         sent_bytes = None
+        self.sstate = 'send(%d)' % (want_send)
         # Try to write for up to 5 seconds before giving up
         for try_wait in (0, 0, 0.1, 0.2, 0.2, 0.2, 0.3, 0.5, 0.5, 1, 1, 1, 0):
           try:
@@ -505,13 +466,16 @@ class Selectable(object):
             if logging.DEBUG_IO:
               print('=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, want_send))
             if try_wait:
+              self.sstate = 'send/SSL.WRE(%d,%.1f)' % (want_send, try_wait)
               time.sleep(try_wait)
         if sent_bytes is None:
+          self.sstate += '/retries'
           self.LogInfo('Error sending: Too many SSL write retries')
           self.ProcessEofWrite()
           common.DISCONNECT_COUNT += 1
           return False
       except IOError as err:
+        self.sstate += '/ioerr=%s' % (err.errno,)
         if err.errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s' % err)
           self.ProcessEofWrite()
@@ -523,6 +487,7 @@ class Selectable(object):
           self.write_retry = want_send
       except socket.error as err:
         (errno, msg) = err.args
+        self.sstate += '/sockerr=%s' % (errno,)
         if errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s (errno=%s)' % (msg, errno))
           self.ProcessEofWrite()
@@ -533,11 +498,13 @@ class Selectable(object):
             print('=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send))
           self.write_retry = want_send
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError) as err:
+        self.sstate += '/SSL.Error'
         self.LogInfo('Error sending (SSL): %s' % err)
         self.ProcessEofWrite()
         common.DISCONNECT_COUNT += 1
         return False
       except AttributeError:
+        self.sstate += '/AttrError'
         # This has been seen in the wild, is most likely some sort of
         # race during shutdown. :-(
         self.LogInfo('AttributeError, self.fd=%s' % self.fd)
@@ -554,6 +521,8 @@ class Selectable(object):
 
     if self.write_eof and not self.write_blocked:
       self.ProcessEofWrite()
+
+    self.sstate = (self.dead and 'dead' or 'idle')
     return True
 
   def SendChunked(self, data, compress=True, zhistory=None, just_buffer=False):
@@ -609,8 +578,7 @@ class Selectable(object):
 
   def IsReadable(s, now):
     return (s.fd and (not s.read_eof)
-                 and (s.acked_kb_delta < 64)  # FIXME
-                 and (s.throttle_until <= now))
+                 and (s.acked_kb_delta < (3 * s.maxread/1024)))
 
   def IsBlocked(s):
     return (s.fd and (len(s.write_blocked) > 0))

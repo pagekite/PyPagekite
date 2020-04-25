@@ -101,7 +101,6 @@ class YamonD(threading.Thread):
                server=YamonHttpServer,
                handler=YamonRequestHandler):
     threading.Thread.__init__(self)
-    self.lock = threading.Lock()
     self.server = server
     self.handler = handler
     self.sspec = sspec
@@ -111,74 +110,59 @@ class YamonD(threading.Thread):
     self.lists = {}
     self.views = {}
 
+    # Important: threading.Lock() will deadlock pypy and generally we want
+    #            to avoid locking. The methods below only hold this lock
+    #            if they are adding/removing elements from our dicts and
+    #            lists. For mutating existing values we either just accept
+    #            things getting overwritten or rely on the GIL.
+    self.lock = threading.RLock()
+
   def vmax(self, var, value):
-    try:
-      self.lock.acquire()
-      if value > self.values[var]:
-        self.values[var] = value
-    finally:
-      self.lock.release()
-
-  def vscale(self, var, ratio, add=0):
-    try:
-      self.lock.acquire()
-      if var not in self.values:
-        self.values[var] = 0
-      self.values[var] *= ratio
-      self.values[var] += add
-    finally:
-      self.lock.release()
-
-  def vset(self, var, value):
-    try:
-      self.lock.acquire()
+    # Unlocked, since we don't change the size of self.values
+    if value > self.values[var]:
       self.values[var] = value
-    finally:
-      self.lock.release()
-
-  def vadd(self, var, value, wrap=None):
-    try:
-      self.lock.acquire()
-      if var not in self.values:
-        self.values[var] = 0
-      self.values[var] += value
-      if wrap is not None and self.values[var] >= wrap:
-        self.values[var] -= wrap
-    finally:
-      self.lock.release()
 
   def vmin(self, var, value):
-    try:
-      self.lock.acquire()
-      if value < self.values[var]:
-        self.values[var] = value
-    finally:
-      self.lock.release()
+    # Unlocked, since we don't change the size of self.values
+    if value < self.values[var]:
+      self.values[var] = value
+
+  def vscale(self, var, ratio, add=0):
+    if var not in self.values:
+      with self.lock:
+        self.values[var] = self.values.get(var, 0)
+    # Unlocked, since we don't change the size of self.values
+    self.values[var] *= ratio
+    self.values[var] += add
+
+  def vset(self, var, value):
+    with self.lock:
+      self.values[var] = value
+
+  def vadd(self, var, value, wrap=None):
+    if var not in self.values:
+      with self.lock:
+        self.values[var] = self.values.get(var, 0)
+    # We assume the GIL will guarantee these do sane things
+    self.values[var] += value
+    if wrap:
+      self.values[var] %= wrap
 
   def vdel(self, var):
-    try:
-      self.lock.acquire()
-      if var in self.values:
+    if var in self.values:
+      with self.lock:
         del self.values[var]
-    finally:
-      self.lock.release()
 
   def lcreate(self, listn, elems):
-    try:
-      self.lock.acquire()
-      self.lists[listn] = [elems, 0, ['' for x in range(0, elems)]]
-    finally:
-      self.lock.release()
+    with self.lock:
+      self.lists[listn] = [elems, 0, ['' for x in xrange(0, elems)]]
 
   def ladd(self, listn, value):
-    try:
-      self.lock.acquire()
+    with self.lock:
       lst = self.lists[listn]
       lst[2][lst[1]] = value
       lst[1] += 1
       lst[1] %= lst[0]
-    finally:
-      self.lock.release()
 
   def render_vars_text(self, view=None):
     if view:
@@ -193,12 +177,23 @@ class YamonD(threading.Thread):
     data = []
     for var in values:
       data.append('%s: %s\n' % (var, values[var]))
+      if var == 'started':
+        data.append(
+          'started_days_ago: %.3f\n' % ((time.time() - values[var]) / 86400))
 
     for lname in lists:
       (elems, offset, lst) = lists[lname]
       l = lst[offset:]
       l.extend(lst[:offset])
       data.append('%s: %s\n' % (lname, ' '.join(['%s' % (x, ) for x in l])))
+      try:
+        slist = sorted([float(i) for i in l if i])
+        if len(slist) >= 10:
+          data.append('%s_m50: %.2f\n' % (lname, slist[int(len(slist) * 0.5)]))
+          data.append('%s_m90: %.2f\n' % (lname, slist[int(len(slist) * 0.9)]))
+          data.append('%s_avg: %.2f\n' % (lname, sum(slist) / len(slist)))
+      except (ValueError, TypeError, IndexError, ZeroDivisionError):
+        pass
 
     data.sort()
     return ''.join(data)
@@ -212,7 +207,8 @@ class YamonD(threading.Thread):
     self.httpd = self.server(self, self.handler)
     self.sspec = self.httpd.server_address
     self.running = True
-    while self.running: self.httpd.handle_request()
+    while self.running:
+      self.httpd.handle_request()
 
 
 if __name__ == '__main__':

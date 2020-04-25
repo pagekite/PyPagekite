@@ -49,9 +49,10 @@ def globalSecret():
 
     # Next, see if we can augment that with some real randomness.
     try:
-      newSecret = sha1hex(s(open('/dev/urandom', 'rb').read(64)) + gSecret)
-      gSecret = newSecret
-      logging.LogDebug('Seeded signatures using /dev/urandom, hooray!')
+      with open('/dev/urandom', 'rb') as fd:
+        newSecret = sha1hex(fd.read(64) + gSecret)
+        gSecret = newSecret
+        logging.LogDebug('Seeded signatures using /dev/urandom, hooray!')
     except:
       try:
         newSecret = sha1hex(s(os.urandom(64)) + gSecret)
@@ -61,6 +62,7 @@ def globalSecret():
         logging.LogInfo('WARNING: Seeding signatures with time.time() and random.randint()')
 
   return gSecret
+
 
 TOKEN_LENGTH=36
 def signToken(token=None, secret=None, payload='', timestamp=None,

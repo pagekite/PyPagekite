@@ -66,10 +66,6 @@ class Tunnel(ChunkParser):
 
     self.server_info = ['x.x.x.x:x', [], [], [], False, False, None, False]
     self.Init(conns)
-    # We want to be sure to read the entire chunk at once, including
-    # headers to save cycles, so we double the size we're willing to
-    # read here.
-    self.maxread *= 2
 
   def Init(self, conns):
     self.conns = conns
@@ -82,6 +78,7 @@ class Tunnel(ChunkParser):
     self.using_tls = False
     self.filters = []
     self.ip_limits = None
+    self.maxread = int(common.MAX_READ_BYTES * common.MAX_READ_TUNNEL_X)
 
   def Cleanup(self, close=True):
     if self.users:
@@ -751,11 +748,14 @@ class Tunnel(ChunkParser):
       sending.append(data)
       return self.SendChunked(sending, zhistory=self.zhistory.get(sid))
 
-    # Larger amounts we break into fragments to work around bugs in
-    # some of our small-buffered embedded clients. We aim for roughly
-    # one fragment per packet, assuming an MTU of 1500 bytes.
+    # Larger amounts we break into fragments at the FE, to work around bugs
+    # in some of our small-buffered embedded clients. We aim for roughly
+    # one fragment per packet, assuming an MTU of 1500 bytes. We use
+    # much larger fragments at the back-end, relays can be assumed to
+    # be up-to-date and larger chunks saves CPU and improves throughput.
+    frag_size = self.conns.config.isfrontend and 1024 or (self.maxread+1024)
     sending.append('')
-    frag_size = max(1024, 1400-len(''.join(sending)))
+    frag_size = max(frag_size, 1400-len(''.join(sending)))
     first = True
     while data or first:
       sending[-1] = data[:frag_size]
@@ -764,7 +764,7 @@ class Tunnel(ChunkParser):
       data = data[frag_size:]
       if first:
         sending = ['SID: %s\r\n' % sid, '\r\n', '']
-        frag_size = max(1024, 1400-len(''.join(sending)))
+        frag_size = max(frag_size, 1400-len(''.join(sending)))
         first = False
 
     return True
@@ -865,14 +865,11 @@ class Tunnel(ChunkParser):
                                ) % (pong, self.quota[0]),
                               compress=False, just_buffer=True)
 
-  def SendProgress(self, sid, conn, throttle=False):
-    # FIXME: Optimize this away unless meaningful progress has been made?
+  def SendProgress(self, sid, conn):
     msg = ('NOOP: 1\r\n'
            'SID: %s\r\n'
-           'SKB: %d\r\n') % (sid, (conn.all_out + conn.wrote_bytes)//1024)
-    throttle = throttle and ('SPD: %d\r\n' % conn.write_speed) or ''
-    return self.SendChunked('%s%s\r\n!' % (msg, throttle),
-                            compress=False, just_buffer=True)
+           'SKB: %d\r\n\r\n') % (sid, (conn.all_out + conn.wrote_bytes)/1024)
+    return self.SendChunked(msg, compress=False, just_buffer=True)
 
   def ProcessCorruptChunk(self, data):
     self.ResetRemoteZChunks()
@@ -888,17 +885,12 @@ class Tunnel(ChunkParser):
           return False
     return True
 
-  def AutoThrottle(self, max_speed=None, remote=False, delay=0.2):
-    # Never throttle tunnels.
-    return True
-
   def ProgressTo(self, parse):
     try:
       sid = int(parse.Header('SID')[0])
-      bps = int((parse.Header('SPD') or [-1])[0])
       skb = int((parse.Header('SKB') or [-1])[0])
       if sid in self.users:
-        self.users[sid].RecordProgress(skb, bps)
+        self.users[sid].RecordProgress(skb)
     except:
       logging.LogError(('Tunnel::ProgressTo: That made no sense! %s'
                         ) % format_exc())
@@ -1148,9 +1140,6 @@ class Tunnel(ChunkParser):
         # select/epoll loop catch and handle it.
         pass
 
-      if len(conn.write_blocked) > 0 and conn.created < time.time()-3:
-        return self.SendProgress(sid, conn, throttle=True)
-
     else:
       # No connection?  Close this stream.
       self.CloseStream(sid)
@@ -1168,7 +1157,6 @@ class LoopbackTunnel(Tunnel):
     if self.fd:
       self.fd = None
     self.weighted_rtt = -1000
-    self.lock = WithableStub()
     self.backends = backends
     self.require_all = True
     self.server_info[self.S_NAME] = LOOPBACK[which]
@@ -1581,12 +1569,6 @@ class UserConn(Selectable):
       self.LogDebug('Send to tunnel failed')
       return False
 
-    # Back off if tunnel is stuffed.
-    if self.tunnel and len(self.tunnel.write_blocked) > 1024000:
-      # FIXME: think about this...
-      self.Throttle(delay=(len(self.tunnel.write_blocked)-204800)//max(50000,
-                    self.tunnel.write_speed))
-
     if self.read_eof:
       return self.ProcessEofRead()
     return True
@@ -1598,6 +1580,12 @@ class UnknownConn(MagicProtocolParser):
   def __init__(self, fd, address, on_port, conns):
     MagicProtocolParser.__init__(self, fd, address, on_port, ui=conns.config.ui)
     self.peeking = True
+    self.sid = -1
+    self.host = None
+    self.proto = None
+    self.said_hello = False
+    self.bad_loops = 0
+    self.error_details = {}
 
     # Set up our parser chain.
     self.parsers = [HttpLineParser]
@@ -1610,13 +1598,6 @@ class UnknownConn(MagicProtocolParser):
     self.conns = conns
     self.conns.Add(self)
     self.conns.SetIdle(self, 10)
-
-    self.sid = -1
-    self.host = None
-    self.proto = None
-    self.said_hello = False
-    self.bad_loops = 0
-    self.error_details = {}
 
   def Cleanup(self, close=True):
     MagicProtocolParser.Cleanup(self, close=close)
@@ -1936,10 +1917,10 @@ class UiConn(LineParser):
     self.Send('PageKite? %s\r\n' % self.challenge)
 
   def readline(self):
-    self.qc.acquire()
-    while not self.lines: self.qc.wait()
-    line = self.lines.pop(0)
-    self.qc.release()
+    with self.qc:
+      while not self.lines:
+        self.qc.wait()
+      line = self.lines.pop(0)
     return line
 
   def write(self, data):
@@ -1959,10 +1940,9 @@ class UiConn(LineParser):
 
   def ProcessLine(self, line, lines):
     if self.state == self.STATE_LIVE:
-      self.qc.acquire()
-      self.lines.append(line)
-      self.qc.notify()
-      self.qc.release()
+      with self.qc:
+        self.lines.append(line)
+        self.qc.notify()
       return True
     elif self.state == self.STATE_PASSWORD:
       if line.strip() == self.expect:
@@ -2006,7 +1986,7 @@ class FastPingHelper(threading.Thread):
     self.clients = []
     self.rejection = None
     self.overloaded = False
-    self.processing = 0
+    self.waiting = True
     self.sleeptime = 0.03
     self.fast_pinged = []
     self.next_pinglog = time.time() + 1
@@ -2020,20 +2000,14 @@ class FastPingHelper(threading.Thread):
                                       advertise=False)
 
   def add_client(self, client, addr, handler):
+    client.setblocking(0)
     with self.lock:
-      if self.processing < 1 and not self.clients:
-        ping_queue = True
-      else:
-        ping_queue = False
-
-      client.setblocking(0)
       self.clients.append((time.time(), client, addr, handler))
-    if ping_queue:
-      self.wq.put(1)
+      if self.waiting:
+        self.wq.put(1)
 
   def run_once(self):
     now = time.time()
-    self.processing = len(self.clients)
     with self.lock:
       _clients, self.clients = self.clients, []
     for ts, client, addr, handler in _clients:
@@ -2059,16 +2033,14 @@ class FastPingHelper(threading.Thread):
         logging.LogDebug('IOError, dropping ' + obfuIp(addr[0]))
         # No action: just let the client get garbage collected
       except:
-        pass
-      self.processing -= 1
+        logging.LogDebug('Error in FastPing: ' + format_exc())
 
     if now > self.next_pinglog:
-      if self.fast_pinged:
-        logging.LogDebug('Fast ping %s %d clients: %s' % (
-          'discouraged' if self.overloaded else 'welcomed',
-          len(self.fast_pinged),
-          ', '.join(self.fast_pinged)))
-        self.fast_pinged = []
+      logging.LogDebug('Fast ping %s %d clients: %s' % (
+        'discouraged' if self.overloaded else 'welcomed',
+        len(self.fast_pinged),
+        ', '.join(self.fast_pinged)))
+      self.fast_pinged = []
       self.up_rejection()
       self.next_pinglog = now + 1
 
@@ -2076,10 +2048,12 @@ class FastPingHelper(threading.Thread):
 
   def run_until(self, deadline):
     try:
-      self.sleeptime = 0.03
       while (time.time() + self.sleeptime) < deadline and self.clients:
+        with self.lock:
+          self.waiting = True
         while not self.wq.empty():
           self.wq.get()
+        self.waiting = False
         time.sleep(self.sleeptime)
         self.run_once()
     except:
@@ -2089,9 +2063,11 @@ class FastPingHelper(threading.Thread):
     while True:
       try:
         while True:
+          with self.lock:
+            self.waiting = True
           while not self.clients or not self.wq.empty():
             self.wq.get()
-            self.sleeptime = 0.03
+          self.waiting = False
           time.sleep(self.sleeptime)
           self.run_once()
       except:
@@ -2129,23 +2105,24 @@ class Listener(Selectable):
       try:
         ipaddr = '%s' % ipaddr
         lc = 0
-        for line in open(self.acl, 'r'):
-          line = line.lower().strip()
-          lc += 1
-          if line.startswith('#') or not line:
-            continue
-          try:
-            words = line.split()
-            pattern, rule = words[:2]
-            reason = ' '.join(words[2:])
-            if ipaddr == pattern:
-              self.acl_match = (lc, pattern, rule, reason)
-              return bool('allow' in rule)
-            elif re.compile(pattern).match(ipaddr):
-              self.acl_match = (lc, pattern, rule, reason)
-              return bool('allow' in rule)
-          except IndexError:
-            self.LogDebug('Invalid line %d in ACL %s' % (lc, self.acl))
+        with open(self.acl, 'r') as fd:
+          for line in fd:
+            line = line.lower().strip()
+            lc += 1
+            if line.startswith('#') or not line:
+              continue
+            try:
+              words = line.split()
+              pattern, rule = words[:2]
+              reason = ' '.join(words[2:])
+              if ipaddr == pattern:
+                self.acl_match = (lc, pattern, rule, reason)
+                return bool('allow' in rule)
+              elif re.compile(pattern).match(ipaddr):
+                self.acl_match = (lc, pattern, rule, reason)
+                return bool('allow' in rule)
+            except IndexError:
+              self.LogDebug('Invalid line %d in ACL %s' % (lc, self.acl))
       except:
         self.LogDebug(
           'Failed to read/parse %s: %s' % (self.acl, format_exc()))
@@ -2153,48 +2130,46 @@ class Listener(Selectable):
     return default
 
   def HandleClient(self, client, address):
+    log_info = [('port', self.port)]
     if self.check_acl(address[0]):
-      log_info = [('accept', '%s:%s' % (obfuIp(address[0]), address[1]))]
+      log_info += [('accept', '%s:%s' % (obfuIp(address[0]), address[1]))]
       uc = self.connclass(client, address, self.port, self.conns)
     else:
-      log_info = [('reject', '%s:%s' % (obfuIp(address[0]), address[1]))]
+      log_info += [('reject', '%s:%s' % (obfuIp(address[0]), address[1]))]
       client.close()
     if self.acl:
-      log_info.extend([('acl_line', '%s' % self.acl_match[0]),
-                       ('reason', self.acl_match[3])])
+      log_info += [('acl_line', '%s' % self.acl_match[0]),
+                   ('reason', self.acl_match[3])]
     self.Log(log_info)
     return True
 
   def ReadData(self, maxread=None):
     try:
+      self.sstate = 'accept'
       self.last_activity = time.time()
       client, address = self.fd.accept()
-      if client:
-        if self.port not in SMTP_PORTS:
-          self.conns.ping_helper.add_client(client, address, self.HandleClient)
-        else:
-<<<<<<< HEAD
-          log_info = [('reject', '%s:%s' % (obfuIp(address[0]), address[1]))]
-          client.close()
-        if self.acl:
-          log_info.extend([('acl_line', '%s' % self.acl_match[0]),
-                           ('reason', self.acl_match[3])])
-        self.Log(log_info)
-        return True
-
-    except IOError as err:
-=======
-          self.HandleClient(client, address)
+      if self.port not in SMTP_PORTS:
+        while client:
+          try:
+            self.conns.ping_helper.add_client(client, address, self.HandleClient)
+            client, address = self.fd.accept()
+          except IOError:
+            client = None
+      elif client:
+        self.sstate = 'client'
+        self.HandleClient(client, address)
+      self.sstate = (self.dead and 'dead' or 'idle')
       return True
     except IOError, err:
->>>>>>> 7c04593... Create an efficient fast-path for PageKite ping traffic
+      self.sstate += '/ioerr=%s' % (err.errno,)
       self.LogDebug('Listener::ReadData: error: %s (%s)' % (err, err.errno))
 
-    except socket.error as err:
-      (errno, msg) = err.args
+    except socket.error, (errno, msg):
+      self.sstate += '/sockerr=%s' % (errno,)
       self.LogInfo('Listener::ReadData: error: %s (errno=%s)' % (msg, errno))
 
-    except Exception as e:
+    except Exception, e:
+      self.sstate += '/exc'
       self.LogDebug('Listener::ReadData: %s' % e)
 
     return True

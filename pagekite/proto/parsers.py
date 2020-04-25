@@ -185,13 +185,8 @@ class HttpLineParser(BaseLineParser):
       elif (self.state == self.IN_BODY):
         return self.ParseBody(line)
 
-<<<<<<< HEAD
     except ValueError as err:
-      logging.LogDebug('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
-=======
-    except ValueError, err:
       logging.LogDebug('HTTP parse failed: %s, %s, %s' % (self.state, err, self.lines))
->>>>>>> 7c04593... Create an efficient fast-path for PageKite ping traffic
 
     self.state = BaseLineParser.PARSE_FAILED
     return False
@@ -272,13 +267,8 @@ class IrcLineParser(BaseLineParser):
             self.lines[-1] = '%s %s %s\n' % (ocmd, arg0, ' '.join(args[1:]))
         else:
           self.state = BaseLineParser.PARSE_FAILED
-<<<<<<< HEAD
       except Exception as err:
-        logging.LogDebug('Parse failed: %s, %s, %s' % (self.state, err, self.lines))
-=======
-      except Exception, err:
         logging.LogDebug('IRC parse failed: %s, %s, %s' % (self.state, err, self.lines))
->>>>>>> 7c04593... Create an efficient fast-path for PageKite ping traffic
         self.state = BaseLineParser.PARSE_FAILED
 
     return (self.state != BaseLineParser.PARSE_FAILED)

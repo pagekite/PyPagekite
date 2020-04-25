@@ -2,7 +2,10 @@
 #
 # This is a file for use on frontend relays to restrict access. Note
 # that this effects both tunnels and client connections and is really
-# only intended for blacklisting abusive clients on a temporary basis.
+# only intended for blocking abusive clients on a temporary basis.
+#
+# WARNING: This is inefficient and slow. Every line added to this file
+#          has a cost.
 #
 # To enable these rules, rename the file and add the following to one
 # of the `/etc/pagekite.d/*.rc` files:
