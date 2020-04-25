@@ -248,8 +248,6 @@ time the program defaults will Just Work.
      Terminate early if any tunnels fail to register.
    * <b>--new</b>  
      Don't attempt to connect to any kites' old front-ends.
-   * <b>--fingerpath</b>=`P`  
-     Path recipe for the httpfinger back-end proxy.
    * <b>--noprobes</b>  
      Reject all probes for service state.
 

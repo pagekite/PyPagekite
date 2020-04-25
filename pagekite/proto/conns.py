@@ -1017,27 +1017,6 @@ class Tunnel(ChunkParser):
         else:
           conn = None
 
-    elif conn and proto == 'httpfinger':
-      # Rewrite a finger request to HTTP.
-      try:
-        firstline, rest = data.split('\n', 1)
-        if conn.config.get('rewritehost', False):
-          rewritehost = conn.backend[BE_BHOST]
-        else:
-          rewritehost = host
-        if '%s' in self.conns.config.finger_path:
-          args =  (firstline.strip(), rIp, rewritehost, rest)
-        else:
-          args =  (rIp, rewritehost, rest)
-        data = ('GET '+self.conns.config.finger_path+' HTTP/1.1\r\n'
-                'X-Forwarded-For: %s\r\n'
-                'Connection: close\r\n'
-                'Host: %s\r\n\r\n%s') % args
-      except Exception as e:
-        self.LogError('Error formatting HTTP-Finger: %s' % e)
-        conn.Die()
-        conn = None
-
     elif not conn and proto == 'https':
       if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
                               TLS_Unavailable(unavailable=True)),
@@ -1046,14 +1025,6 @@ class Tunnel(ChunkParser):
 
     if conn:
       self.users[sid] = conn
-      if proto == 'httpfinger':
-        conn.fd.setblocking(1)
-        conn.Send(data, try_flush=True,
-                        allow_blocking=False) or conn.Flush(wait=True,
-                                                            allow_blocking=False)
-        self._RecvHttpHeaders(fd=conn.fd)
-        conn.fd.setblocking(0)
-        data = ''
 
     return conn, data
 
@@ -1288,8 +1259,7 @@ class UserConn(Selectable):
     # then the just the proto. If the protocol is WebSocket and no tunnel is
     # found, look for a plain HTTP tunnel.
     if proto.startswith('probe'):
-      protos = ['http', 'https', 'websocket', 'raw', 'irc',
-                'finger', 'httpfinger']
+      protos = ['http', 'https', 'websocket', 'raw', 'irc']
       ports = conns.config.server_ports[:]
       ports.extend(conns.config.server_aliasport.keys())
       ports.extend([x for x in conns.config.server_raw_ports if x != VIRTUAL_PN])
@@ -1591,8 +1561,6 @@ class UnknownConn(MagicProtocolParser):
     self.parsers = [HttpLineParser]
     if IrcLineParser.PROTO in conns.config.server_protos:
       self.parsers.append(IrcLineParser)
-    if FingerLineParser.PROTO in conns.config.server_protos:
-      self.parsers.append(FingerLineParser)
     self.parser = MagicLineParser(parsers=self.parsers)
 
     self.conns = conns
@@ -1721,7 +1689,7 @@ class UnknownConn(MagicProtocolParser):
 
           if (cport in self.conns.config.server_raw_ports or
               VIRTUAL_PN in self.conns.config.server_raw_ports):
-            for raw in ('raw', 'finger'):
+            for raw in ('raw',):
               if ((raw+sid1) in tunnels) or ((raw+sid2) in tunnels):
                 (self.on_port, self.host) = (cport, chost)
                 self.parser = HttpLineParser()

@@ -1,6 +1,10 @@
 Version history - highlights
 ============================
 
+v1.5.1.??????
+-------------
+   - Remove finger and httpfinger protocols, nobody uses them
+
 v1.5.1.200424
 -------------
    - This merges release (v1.0.1): performance and efficiency!

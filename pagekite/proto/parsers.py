@@ -195,40 +195,6 @@ class HttpLineParser(BaseLineParser):
     return [h[1].strip() for h in self.headers if h[0] == header.lower()]
 
 
-class FingerLineParser(BaseLineParser):
-  """Parse an incoming Finger request, line-by-line."""
-
-  PROTO = 'finger'
-  PROTOS = ['finger', 'httpfinger']
-  WANT_FINGER = 71
-
-  def __init__(self, lines=None, state=WANT_FINGER):
-    BaseLineParser.__init__(self, lines, state, self.PROTO)
-
-  def ErrorReply(self, port=None):
-    if port == 79:
-      return ('PageKite wants to know, what domain?\n'
-              'Try: finger user+domain@domain\n')
-    else:
-      return ''
-
-  def Parse(self, line):
-    BaseLineParser.Parse(self, line)
-    if ' ' in line: return False
-    if '+' in line:
-      arg0, self.domain = line.strip().split('+', 1)
-    elif '@' in line:
-      arg0, self.domain = line.strip().split('@', 1)
-
-    if self.domain:
-      self.state = BaseLineParser.PARSE_OK
-      self.lines[-1] = '%s\n' % arg0
-      return True
-    else:
-      self.state = BaseLineParser.PARSE_FAILED
-      return False
-
-
 class IrcLineParser(BaseLineParser):
   """Parse an incoming IRC connection, line-by-line."""
 

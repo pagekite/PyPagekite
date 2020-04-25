@@ -221,7 +221,6 @@ MAN_OPT_BACKEND = ("""\
 
     --all           __Terminate early if any tunnels fail to register.
     --new           __Don't attempt to connect to any kites' old front-ends.
-    --fingerpath</b>=<a>P</a>  __Path recipe for the httpfinger back-end proxy.
     --noprobes      __Reject all probes for service state.
 """)
 MAN_OPT_FRONTEND = ("""\
