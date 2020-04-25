@@ -1,9 +1,9 @@
 Version history - highlights
 ============================
 
-v1.5.????????
+v1.5.1.200424
 -------------
-   - This release (v?) is all about performance and efficiency!
+   - This merges release (v1.0.1): performance and efficiency!
    - Create ping.pagekite fast-path in dedicated thread
    - Make select loop timing and read sizes configurable, tweak defaults
    - Remove 0.4.x flow-control, fix major bugs in current flow control code

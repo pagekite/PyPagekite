@@ -1712,20 +1712,6 @@ class PageKite(object):
       return False
     return savefile
 
-  def CanSaveConfig(self, savefile=None, _raise=None):
-    savefile = savefile or self.savefile or self.rcfile
-    try:
-      if os.path.exists(savefile):
-        open(savefile, 'r+').close()
-      else:
-        open(savefile, 'w').close()  # FIXME: Python3.3 adds mode=x, use it!
-        os.remove(savefile)
-    except (IOError, OSError):
-      if _raise is not None:
-        raise _raise("Could not write to: %s" % savefile)
-      return False
-    return savefile
-
   def SaveUserConfig(self, quiet=False):
     self.savefile = self.savefile or self.rcfile
     try:
