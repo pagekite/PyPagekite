@@ -655,8 +655,9 @@ TLS_CLIENTHELLO = '%c' % 0o26
 SSL_CLIENTHELLO = '\x80'
 MINECRAFT_HANDSHAKE = '%c' % (0x02, )
 FLASH_POLICY_REQ = '<policy-file-request/>'
+XML_PREAMBLE = '<?xml'
+XMPP_REGEXP = re.compile("<[^>]+\sto=([^\s>]+)[^>]*>")
 
-# FIXME: XMPP support
 class MagicProtocolParser(LineParser):
   """A Selectable which recognizes HTTP, TLS or XMPP preambles."""
 
@@ -669,14 +670,13 @@ class MagicProtocolParser(LineParser):
 
   def __html__(self):
     return ('<b>Detected TLS</b>: %s<br>'
-            '%s') % (self.is_tls,
-                     LineParser.__html__(self))
+            '%s') % (self.is_tls, LineParser.__html__(self))
 
   def ProcessData(self, data):
     # Uncomment when adding support for new protocols:
     #
-    #self.LogDebug(('DATA: >%s<'
-    #               ) % ' '.join(['%2.2x' % ord(d) for d in data]))
+    #print(('DATA: >%s<'
+    #       ) % ' '.join(['%2.2x' % ord(d) for d in data]))
 
     if self.might_be_tls:
       self.might_be_tls = False
@@ -684,12 +684,16 @@ class MagicProtocolParser(LineParser):
               data.startswith(SSL_CLIENTHELLO)):
         self.EatPeeked()
 
-        # FIXME: These only work if the full policy request or minecraft
-        #        handshake are present in the first data packet.
-        if data.startswith(FLASH_POLICY_REQ):
+        # Only works if the full request is in the first data packet.
+        if data.startswith(XML_PREAMBLE):
+          server = self.GetXMPPServer(data)
+          if server:
+            return self.ProcessProto(data, 'xmpp', server)
+
+        elif data.startswith(FLASH_POLICY_REQ):
           return self.ProcessFlashPolicyRequest(data)
 
-        if data.startswith(MINECRAFT_HANDSHAKE):
+        elif data.startswith(MINECRAFT_HANDSHAKE):
           user, server, port = self.GetMinecraftInfo(data)
           if user and server:
             return self.ProcessProto(data, 'minecraft', server)
@@ -743,6 +747,18 @@ class MagicProtocolParser(LineParser):
         # ClientHello!
         sni.extend(self.GetSniNames(self.GetClientHelloExtensions(msg)))
     return sni
+
+  def GetXMPPServer(self, data):
+    match = XMPP_REGEXP.search(data)
+    if match and match.group(1):
+      server = match.group(1)
+      if server[:1] in ('"', "'"):
+        server = server[1:-1]
+      if '@' in server:
+        server = server.split('@')[-1]
+      return server
+    else:
+      return None
 
   def GetMinecraftInfo(self, data):
     try:

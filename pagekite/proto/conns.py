@@ -1259,7 +1259,7 @@ class UserConn(Selectable):
     # then the just the proto. If the protocol is WebSocket and no tunnel is
     # found, look for a plain HTTP tunnel.
     if proto.startswith('probe'):
-      protos = ['http', 'https', 'websocket', 'raw', 'irc']
+      protos = ['http', 'https', 'websocket', 'raw', 'irc', 'xmpp']
       ports = conns.config.server_ports[:]
       ports.extend(conns.config.server_aliasport.keys())
       ports.extend([x for x in conns.config.server_raw_ports if x != VIRTUAL_PN])

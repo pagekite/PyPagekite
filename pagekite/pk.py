@@ -1058,7 +1058,7 @@ class PageKite(object):
     self.server_portalias = {}
     self.server_aliasport = {}
     self.server_protos = ['http', 'http2', 'http3', 'https', 'websocket',
-                          'irc', 'raw', 'minecraft']
+                          'irc', 'raw', 'minecraft', 'xmpp']
 
     self.accept_acl_file = None
     self.tunnel_acls = []
@@ -2181,6 +2181,7 @@ class PageKite(object):
         bhost = (bhost or 'localhost')
         bport = (bport or (proto in ('http', 'websocket') and 80)
                        or (proto == 'irc' and 6667)
+                       or (proto == 'xmpp' and 5222)
                        or (proto == 'https' and 443)
                        or (proto == 'minecraft' and 25565))
         if port:
@@ -2642,11 +2643,12 @@ class PageKite(object):
         be = None
       else:
         be = be_spec.replace('/', '').split(':')
-        if be[0].lower() in ('http', 'http2', 'http3', 'https', 'ssh', 'irc'):
+        if be[0].lower() in ('http', 'http2', 'http3', 'https',
+                             'ssh', 'irc', 'xmpp'):
           be_proto = be.pop(0)
           if len(be) < 2:
             be.append({'http': '80', 'http2': '80', 'http3': '80',
-                       'https': '443', 'irc': '6667',
+                       'https': '443', 'irc': '6667', 'xmpp': '5222',
                        'ssh': '22'}[be_proto])
         if len(be) > 2:
           raise ConfigError('Bad back-end definition: %s' % be_spec)
