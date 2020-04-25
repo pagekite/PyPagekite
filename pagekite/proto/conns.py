@@ -1837,15 +1837,6 @@ class UnknownConn(MagicProtocolParser):
     self.Send(TLS_Unavailable(unavailable=True), try_flush=True)
     return False
 
-  def ProcessFlashPolicyRequest(self, data):
-    # FIXME: Should this be configurable?
-    self.LogDebug('Sending friendly response to Flash Policy Request')
-    self.Send('<cross-domain-policy>\n'
-              ' <allow-access-from domain="*" to-ports="*" />\n'
-              '</cross-domain-policy>\n',
-              try_flush=True)
-    return False
-
   def ProcessProto(self, data, proto, domain):
     if (not self.conns or
         not self.conns.config.CheckClientAcls(self.address, conn=self)):

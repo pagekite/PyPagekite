@@ -653,8 +653,6 @@ class LineParser(Selectable):
 
 TLS_CLIENTHELLO = '%c' % 0o26
 SSL_CLIENTHELLO = '\x80'
-MINECRAFT_HANDSHAKE = '%c' % (0x02, )
-FLASH_POLICY_REQ = '<policy-file-request/>'
 XML_PREAMBLE = '<?xml'
 XMPP_REGEXP = re.compile("<[^>]+\sto=([^\s>]+)[^>]*>")
 
@@ -689,14 +687,6 @@ class MagicProtocolParser(LineParser):
           server = self.GetXMPPServer(data)
           if server:
             return self.ProcessProto(data, 'xmpp', server)
-
-        elif data.startswith(FLASH_POLICY_REQ):
-          return self.ProcessFlashPolicyRequest(data)
-
-        elif data.startswith(MINECRAFT_HANDSHAKE):
-          user, server, port = self.GetMinecraftInfo(data)
-          if user and server:
-            return self.ProcessProto(data, 'minecraft', server)
 
         return LineParser.ProcessData(self, data)
 
@@ -759,23 +749,6 @@ class MagicProtocolParser(LineParser):
       return server
     else:
       return None
-
-  def GetMinecraftInfo(self, data):
-    try:
-      (packet, version, unlen) = struct.unpack('>bbh', data[0:4])
-      unlen *= 2
-      (hnlen, ) = struct.unpack('>h', data[4+unlen:6+unlen])
-      hnlen *= 2
-      (port, ) = struct.unpack('>i', data[6+unlen+hnlen:10+unlen+hnlen])
-      uname = data[4:4+unlen].decode('utf_16_be').encode('utf-8')
-      sname = data[6+unlen:6+hnlen+unlen].decode('utf_16_be').encode('utf-8')
-      return uname, sname, port
-    except:
-      return None, None, None
-
-  def ProcessFlashPolicyRequest(self, data):
-    self.LogError('MagicProtocolParser::ProcessFlashPolicyRequest: Should be overridden!')
-    return False
 
   def ProcessTls(self, data, domain=None):
     self.LogError('MagicProtocolParser::ProcessTls: Should be overridden!')
