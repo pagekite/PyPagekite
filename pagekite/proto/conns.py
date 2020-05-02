@@ -2160,15 +2160,16 @@ class Listener(Selectable):
         self.HandleClient(client, address)
       self.sstate = (self.dead and 'dead' or 'idle')
       return True
-    except IOError, err:
+    except IOError as err:
       self.sstate += '/ioerr=%s' % (err.errno,)
       self.LogDebug('Listener::ReadData: error: %s (%s)' % (err, err.errno))
 
-    except socket.error, (errno, msg):
+    except socket.error as e:
+      (errno, msg) = e.args
       self.sstate += '/sockerr=%s' % (errno,)
       self.LogInfo('Listener::ReadData: error: %s (errno=%s)' % (msg, errno))
 
-    except Exception, e:
+    except Exception as e:
       self.sstate += '/exc'
       self.LogDebug('Listener::ReadData: %s' % e)
 
