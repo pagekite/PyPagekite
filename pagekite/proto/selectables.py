@@ -364,14 +364,14 @@ class Selectable(object):
       self.sstate += '/ioerr=%s' % (err.errno,)
       if err.errno not in self.HARMLESS_ERRNOS:
         self.LogDebug('Error reading socket: %s (%s)' % (err, err.errno))
-        common.DISCONNECT_COUNT += 1
+        common.DISCONNECTS.append(time.time())
         return False
       else:
         return True
     except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
       self.sstate += '/SSL.Error'
       self.LogDebug('Error reading socket (SSL): %s' % err)
-      common.DISCONNECT_COUNT += 1
+      common.DISCONNECTS.append(time.time())
       return False
     except socket.error, (errno, msg):
       self.sstate += '/sockerr=%s' % (err.errno,)
@@ -379,7 +379,7 @@ class Selectable(object):
         return True
       else:
         self.LogInfo('Error reading socket: %s (errno=%s)' % (msg, errno))
-        common.DISCONNECT_COUNT += 1
+        common.DISCONNECTS.append(time.time())
         return False
 
     try:
@@ -444,14 +444,14 @@ class Selectable(object):
           self.sstate += '/retries'
           self.LogInfo('Error sending: Too many SSL write retries')
           self.ProcessEofWrite()
-          common.DISCONNECT_COUNT += 1
+          common.DISCONNECTS.append(time.time())
           return False
       except IOError, err:
         self.sstate += '/ioerr=%s' % (err.errno,)
         if err.errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s' % err)
           self.ProcessEofWrite()
-          common.DISCONNECT_COUNT += 1
+          common.DISCONNECTS.append(time.time())
           return False
         else:
           if logging.DEBUG_IO:
@@ -462,7 +462,7 @@ class Selectable(object):
         if errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s (errno=%s)' % (msg, errno))
           self.ProcessEofWrite()
-          common.DISCONNECT_COUNT += 1
+          common.DISCONNECTS.append(time.time())
           return False
         else:
           if logging.DEBUG_IO:
@@ -472,7 +472,7 @@ class Selectable(object):
         self.sstate += '/SSL.Error'
         self.LogInfo('Error sending (SSL): %s' % err)
         self.ProcessEofWrite()
-        common.DISCONNECT_COUNT += 1
+        common.DISCONNECTS.append(time.time())
         return False
       except AttributeError:
         self.sstate += '/AttrError'

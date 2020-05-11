@@ -779,20 +779,27 @@ class TunnelManager(threading.Thread):
 
     # If we keep getting disconnected, maybe we have a nasty firewall
     # and should ping more frequently. Disabled at the frontend!
-    while (common.DISCONNECT_COUNT >= 2 and
+    cutoff = time.time() - (48 * 3600)
+    common.DISCONNECTS = [c for c in common.DISCONNECTS[-50:] if c > cutoff]
+    if (len(common.DISCONNECTS) >= 3 and
            not self.pkite.isfrontend and
            not self.pkite.keepalive):
-      common.DISCONNECT_COUNT -= 2
-      common.PING_INTERVAL = max(common.PING_INTERVAL_MIN,
-                                 0.5 * common.PING_INTERVAL)
-      logging.LogDebug('TunnelManager: adjusted ping interval, PI=%s'
-                       % common.PING_INTERVAL)
+      badness = (len(common.DISCONNECTS)-3)/10.0
+      new_interval = max(
+        (1-badness) * common.PING_INTERVAL_DEFAULT,
+        common.PING_INTERVAL_MIN)
+      if common.PING_INTERVAL != new_interval:
+        common.PING_INTERVAL = new_interval
+        logging.LogInfo('TunnelManager: adjusted ping interval, PI=%s, DC=%s'
+                        % (common.PING_INTERVAL, len(common.DISCONNECTS)))
 
     for tid in self.conns.tunnels:
       for tunnel in self.conns.tunnels[tid]:
-        pings = int(self.pkite.keepalive or common.PING_INTERVAL)
         if tunnel.server_info[tunnel.S_IS_MOBILE]:
-          pings = common.PING_INTERVAL_MOBILE
+          pings = int(self.pkite.keepalive
+            or min(common.PING_INTERVAL_MOBILE, common.PING_INTERVAL))
+        else:
+          pings = int(self.pkite.keepalive or common.PING_INTERVAL)
         grace = max(PING_GRACE_DEFAULT,
                     len(tunnel.write_blocked)/(tunnel.write_speed or 0.001))
         if tunnel.last_activity == 0:
@@ -808,6 +815,14 @@ class TunnelManager(threading.Thread):
     for tunnel in dead.values():
       logging.Log([('dead', tunnel.server_info[tunnel.S_NAME])])
       tunnel.Die(discard_buffer=True)
+
+    if (dead
+        and not self.pkite.isfrontend
+        and common.PING_INTERVAL > common.PING_INTERVAL_DEFAULT):
+      common.DISCONNECTS.append(time.time())
+      common.PING_INTERVAL = common.PING_INTERVAL_DEFAULT
+      logging.LogInfo('TunnelManager: adjusted ping interval, PI=%s, DC=%s'
+                      % (common.PING_INTERVAL, len(common.DISCONNECTS)))
 
   def CloseTunnels(self):
     close = []
@@ -936,8 +951,9 @@ class TunnelManager(threading.Thread):
       now = time.time()
       if (now - last_log) >= (60 * 15):
         # Report liveness/state roughly once every 15 minutes
-        logging.LogDebug('TunnelManager: loop #%d, interval=%s'
-                         % (loop_count, self.check_interval))
+        logging.LogDebug('TunnelManager: loop #%d, interval=%s, DC=%d, PI=%d'
+                         % (loop_count, self.check_interval,
+                            len(common.DISCONNECTS), common.PING_INTERVAL))
         last_log = now
 
       # Reconnect if necessary, randomized exponential fallback.
@@ -946,7 +962,7 @@ class TunnelManager(threading.Thread):
         logging.LogDebug(
           'TunnelManager: problem=%s, connecting=%s, DC=%s, PI=%d'
           % (problem, connecting,
-             common.DISCONNECT_COUNT,
+             len(common.DISCONNECTS),
              (self.pkite.keepalive or common.PING_INTERVAL)))
         incr = int(1+random.random()*self.check_interval)
         self.check_interval = min(60, self.check_interval + incr)
@@ -3372,10 +3388,11 @@ class PageKite(object):
     if (periodic
         and not self.keepalive
         and not self.isfrontend
-        and common.PING_INTERVAL > common.PING_INTERVAL_MIN):
-      common.DISCONNECT_COUNT = 0
-      common.PING_INTERVAL = min(common.PING_INTERVAL * 1.3,
-                                 common.PING_INTERVAL_MAX)
+        and not common.DISCONNECTS
+        and common.PING_INTERVAL >= common.PING_INTERVAL_DEFAULT
+        and common.PING_INTERVAL < common.PING_INTERVAL_MAX):
+      common.PING_INTERVAL = int(min(common.PING_INTERVAL + 15,
+                                     common.PING_INTERVAL_MAX))
       logging.LogDebug('TunnelManager: adjusted ping interval, PI=%s'
                        % common.PING_INTERVAL)
 
