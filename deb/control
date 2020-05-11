@@ -3,8 +3,8 @@ Section: net
 Priority: optional
 Maintainer: PageKite Packaging Team <packages@pagekite.net>
 Build-Depends: debhelper (>= 9),
-               python (>= 2.4)
-X-Python-Version: >= 2.3, << 3.0
+               python (>= 2.7)
+X-Python-Version: >= 2.7, << 3.0
 Standards-Version: 3.9.5
 Homepage: https://pagekite.net/
 
@@ -13,9 +13,9 @@ Section: net
 Architecture: all
 Depends: ${misc:Depends},
          daemon (>= 0.6),
-         python (>= 2.3),
+         python (>= 2.7),
          python (<< 3.0),
-         python-socksipychain (>= 2.0.15),
+         python-socksipychain (>= 2.0.16),
          python-openssl
 Description: Make localhost servers publicly visible.
  PageKite is a system for running publicly visible servers (generally
