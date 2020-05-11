@@ -89,14 +89,15 @@ FE_PING_INTERVAL = (45 * 60) + random.randint(0, 900)
 
 # This is a global count of disconnect errors; we use this
 # to adjust the ping interval over time.
-DISCONNECT_COUNT = 0
+DISCONNECTS = []
 
-PING_INTERVAL_MIN    = 20
-PING_INTERVAL        = 116  # Not quite 2 minutes... :-)
-PING_INTERVAL_MOBILE = 1800
-PING_INTERVAL_MAX    = 1800
-PING_GRACE_DEFAULT   = 40
-PING_GRACE_MIN       = 5
+PING_INTERVAL_MIN     = 20
+PING_INTERVAL         = 116  # Not quite 2 minutes... :-)
+PING_INTERVAL_DEFAULT = 116
+PING_INTERVAL_MOBILE  = 1800
+PING_INTERVAL_MAX     = 1800
+PING_GRACE_DEFAULT    = 40
+PING_GRACE_MIN        = 5
 
 WEB_POLICY_DEFAULT = 'default'
 WEB_POLICY_PUBLIC = 'public'
