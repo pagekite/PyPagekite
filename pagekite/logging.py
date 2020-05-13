@@ -23,6 +23,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
+import threading
 import time
 import sys
 
@@ -39,6 +40,7 @@ LOG = []
 LOG_LINE = 0
 LOG_LENGTH = 300
 LOG_THRESHOLD = 256 * 1024
+LOG_LOCK = threading.Lock()
 
 LOG_LEVEL_NONE = 1
 LOG_LEVEL_ERR = 2
@@ -109,9 +111,10 @@ def LogToFile(values, wdict=None, words=None, level=LOG_LEVEL_INFO):
     words, wdict = LogValues(values)
   try:
     global LogFile
-    LogFile.write('; '.join(['='.join(x) for x in words]))
-    LogFile.write('\n')
-    LogFile.flush()
+    with LOG_LOCK:
+      LogFile.write('; '.join(['='.join(x) for x in words]))
+      LogFile.write('\n')
+      LogFile.flush()
   except (OSError, IOError):
     # Avoid crashing if the disk fills up or something lame like that
     pass
@@ -119,7 +122,8 @@ def LogToFile(values, wdict=None, words=None, level=LOG_LEVEL_INFO):
 def LogToMemory(values, wdict=None, words=None, level=LOG_LEVEL_INFO):
   global LOG_LEVEL
   if values and (level <= LOG_LEVEL):
-    LogValues(values)
+    with LOG_LOCK:
+      LogValues(values)
 
 def FlushLogMemory():
   global LOG
