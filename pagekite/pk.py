@@ -3923,8 +3923,6 @@ class PageKite(object):
             mask |= select.EPOLLOUT
           if c.IsReadable(now):
             mask |= select.EPOLLIN
-
-        if mask:
           try:
             fdc[fd.fileno()] = fd
           except socket.error:
@@ -3936,20 +3934,20 @@ class PageKite(object):
             # Trigger removal of c.fd, if it was still in the epoll.
             fd, mask = None, 0
 
-          if mask:
+        if mask:
+          try:
+            epoll.modify(fd, mask)
+          except IOError:
             try:
-              epoll.modify(fd, mask)
-            except IOError:
-              try:
-                epoll.register(fd, mask)
-              except (IOError, TypeError):
-                evs.append((fd, select.EPOLLHUP))  # Error == HUP
-          else:
-            try:
-              epoll.unregister(c.fd)  # Important: Use c.fd, not fd!
+              epoll.register(fd, mask)
             except (IOError, TypeError):
-              # Failing to unregister is OK, ignore
-              pass
+              evs.append((fd, select.EPOLLHUP))  # Error == HUP
+        else:
+          try:
+            epoll.unregister(c.fd)  # Important: Use c.fd, not fd!
+          except (IOError, TypeError):
+            # Failing to unregister is OK, ignore
+            pass
 
       common.buffered_bytes[0] = bbc
       evs.extend(epoll.poll(waittime))
@@ -4108,7 +4106,6 @@ class PageKite(object):
     self.ui_comm = UiCommunicator(self, conns)
 
     try:
-
       # Set up our listeners if we are a server.
       if self.isfrontend:
         self.ui.Notify('This is a PageKite front-end server.')
