@@ -1,6 +1,10 @@
 Version history - highlights
 ============================
 
+v1.0.1.200513
+-------------
+   - Back-port 1.5.2 keepalive improvements
+
 
 v1.0.1.200424
 -------------
