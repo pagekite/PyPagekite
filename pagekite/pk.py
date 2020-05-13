@@ -3855,8 +3855,6 @@ class PageKite(object):
             mask |= select.EPOLLOUT
           if c.IsReadable(now):
             mask |= select.EPOLLIN
-
-        if mask:
           try:
             fdc[fd.fileno()] = fd
           except socket.error:
