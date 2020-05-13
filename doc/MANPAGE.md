@@ -194,6 +194,25 @@ time the program defaults will Just Work.
      Explicit configuration for a service kite.  Generally kites are
      created on the command-line using the service short-hand
      described above, but this syntax is used in the config file.
+     The kitename `unknown`, if allowed by the front-end, represents
+     a backend of last resort for requests with no other match.
+
+   * <b>--authdomain</b>=`DNS-suffix`, <b>--authdomain</b>=`/path/to/app`, <b>--authdomain</b>=`kite-domain`:`DNS-suffix`, <b>--authdomain</b>=`kite-domain`:`/path/to/app` <br />
+     Use `DNS-suffix` for remote DNS-based authentication of
+     incoming tunnel requests, or invoke an external application
+     for this purpose.  If no <i>kite-domain</i> is given, use
+     this as the default authentication method.  See the section
+     below on tunnel authentication for further details.  In order
+     for the app path to be recognized as such, it must contain at
+     least one / character.
+
+   * <b>--auththreads</b>=`N` <br />
+     Start N threads to process auth requests. Default is 1.
+
+   * <b>--authfail_closed</b> <br />
+     If authentication fails, reject tunnel requests. The default is
+     to fail open and allow tunnels if the auth checks are broken.
+
 
    * <b>--service_off</b>=`proto`:`kitename`:`host`:`port`:`secret` <br />
      Same as --service_on, except disabled by default.
@@ -261,6 +280,8 @@ time the program defaults will Just Work.
      domain, using the given secret.  A * may be used as a wildcard
      for subdomains or protocols. This is for static configurations,
      for dynamic access controls use the `--authdomain` mechanism.
+     The domain `unknown`, if configured, represents a backend of
+     last resort for incoming requests with no other match.
 
    * <b>--authdomain</b>=`DNS-suffix`, <b>--authdomain</b>=`/path/to/app`, <b>--authdomain</b>=`kite-domain`:`DNS-suffix`, <b>--authdomain</b>=`kite-domain`:`/path/to/app` <br />
      Use `DNS-suffix` for remote DNS-based authentication of

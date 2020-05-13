@@ -169,6 +169,28 @@ MAN_OPT_BACKEND = ("""\
             Explicit configuration for a service kite.  Generally kites are
             created on the command-line using the service short-hand
             described above, but this syntax is used in the config file.
+            The kitename `unknown`, if allowed by the front-end, represents
+            a backend of last resort for requests with no other match.
+
+    --authdomain</b>=<a>DNS-suffix</a>,\
+ <b>--authdomain</b>=<a>/path/to/app</a>,\
+ <b>--authdomain</b>=<a>kite-domain</a>:<a>DNS-suffix</a>,\
+ <b>--authdomain</b>=<a>kite-domain</a>:<a>/path/to/app</a> __
+            Use <a>DNS-suffix</a> for remote DNS-based authentication of
+            incoming tunnel requests, or invoke an external application
+            for this purpose.  If no <i>kite-domain</i> is given, use
+            this as the default authentication method.  See the section
+            below on tunnel authentication for further details.  In order
+            for the app path to be recognized as such, it must contain at
+            least one / character.
+
+    --auththreads</b>=<a>N</a> __
+            Start N threads to process auth requests. Default is 1.
+
+    --authfail_closed</b> __
+            If authentication fails, reject tunnel requests. The default is
+            to fail open and allow tunnels if the auth checks are broken.
+
 
     --service_off</b>=<a>proto</a>:<a>kitename</a>:<a>host</a>:<a>port</a>:<a>secret</a> __
             Same as --service_on, except disabled by default.
@@ -231,6 +253,8 @@ MAN_OPT_FRONTEND = ("""\
             domain, using the given secret.  A * may be used as a wildcard
             for subdomains or protocols. This is for static configurations,
             for dynamic access controls use the `--authdomain` mechanism.
+            The domain `unknown`, if configured, represents a backend of
+            last resort for incoming requests with no other match.
 
     --authdomain</b>=<a>DNS-suffix</a>,\
  <b>--authdomain</b>=<a>/path/to/app</a>,\

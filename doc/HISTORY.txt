@@ -1,9 +1,15 @@
 Version history - highlights
 ============================
 
-v1.5.1.??????
+v1.5.2.200513
 -------------
-   - Remove finger and httpfinger protocols, nobody uses them
+   - Remove obsolete finger, httpfinger and Minecraft protocols
+   - Add working front-end support for XMPP tunnels
+   - Make the auto-keepalive logic simpler and hopefully more robust
+   - Depend on pySocksipychain 2.1.2+, to pick up SSL fixes
+   - The single-file pagekite.py bundle now supports Python 2.7 and 3.x
+   - Document the forgotten `unknown` backend-of-last-resort feature
+
 
 v1.5.1.200424
 -------------

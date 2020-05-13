@@ -1,7 +1,8 @@
 # Makefile for building combined pagekite.py files.
 export PYTHONPATH := .
 
-BREED_PAGEKITE = pagekite/__init__.py \
+BREED_PAGEKITE = /usr/lib/python2.7/dist-packages/six.py \
+                 pagekite/__init__.py \
 	         pagekite/common.py \
 	         pagekite/compat.py \
 	         pagekite/logging.py \

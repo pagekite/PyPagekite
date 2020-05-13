@@ -282,6 +282,7 @@ Replace HOST with the DNS name or IP address of your front-end, and PORT
 with one of the ports it listens for connections on.  If your front-end
 supports TLS-encrypted tunnels, add the --fe_certname=HOST argument as well.
 
+
 [ [up](#toc) ]
 
 
@@ -396,9 +397,11 @@ way to get the two to coexist:
    2. Configure pagekite.py [as a front-end](#fe) on port 80
    3. Add `--service_on` specifications for your old web-server.
 
-As of 0.3.14, you can make pagekite.py use a local back-end as a catch-all
-for any unrecongized domains, by using the special hostname "unknown" in
-the `--service_on` line (remember to specify a protocol).
+As of 0.3.14, you can make pagekite.py use the "unknown" back-end as a
+catch-all for any unrecongized domains, by using the special hostname
+"unknown". This can either be a local back-end, using the `--service_on`
+line (remember to specify a protocol), or added as a domain using
+`--domain` and served over a tunnel like any other kite.
 
 For example:
 
