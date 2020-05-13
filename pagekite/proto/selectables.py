@@ -453,7 +453,7 @@ class Selectable(object):
         sent_bytes = None
         self.sstate = 'send(%d)' % (want_send)
         # Try to write for up to 5 seconds before giving up
-        for try_wait in (0, 0, 0.1, 0.2, 0.2, 0.2, 0.3, 0.5, 0.5, 1, 1, 1, 0):
+        for try_wait in (0.0, 0.02, 0.05, 0.08, 0.15, 0.2, 0.35, 0.5, 0.75, 0.9, 1, 1, 0):
           try:
             sent_bytes = self.fd.send(b(sending[:want_send]))
             if logging.DEBUG_IO:
@@ -465,9 +465,8 @@ class Selectable(object):
           except (SSL.WantWriteError, SSL.WantReadError) as err:
             if logging.DEBUG_IO:
               print('=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, want_send))
-            if try_wait:
-              self.sstate = 'send/SSL.WRE(%d,%.1f)' % (want_send, try_wait)
-              time.sleep(try_wait)
+            self.sstate = 'send/SSL.WRE(%d,%.1f)' % (want_send, try_wait)
+            time.sleep(try_wait)
         if sent_bytes is None:
           self.sstate += '/retries'
           self.LogInfo('Error sending: Too many SSL write retries')
