@@ -3267,7 +3267,7 @@ class PageKite(object):
     '2600:3c01::f03c:91ff:fe96:257:443': '173.230.155.164:443',
     '69.164.211.158:443': '50.116.52.206:443',
   }
-  def Ping(self, host, port, overload_ms=250, bias=None):
+  def Ping(self, host, port, overload_ms=250, bias=None, wanted_by=None):
     cid = uuid = '%s:%s' % (host, port)
 
     if cid in self.servers_never:
@@ -3329,16 +3329,21 @@ class PageKite(object):
       self.ping_cache[cid][0:0] = [(time.time(), (elapsed, uuid))]
 
     window = min(3, len(self.ping_cache[cid]))
-    pingval = sum([elapsed[1][0] for elapsed in self.ping_cache[cid][:window]])/window  # Float division
+    pingval = sum([elapsed[1][0] for elapsed in self.ping_cache[cid][:window]]
+                  )/window  # Float division
     uuid = self.ping_cache[cid][0][1][1]
 
     biased = max(0.01, (bias is None) and pingval or bias(pingval))
-    logging.Log([
+    info = [
       ('FE', '%s:%s' % (host, port)),
       ('http_ping_ms', '%d' % (1000 * biased)),
       ('win', window),
-      ('unbiased', '%.3f' % pingval),
-      ('uuid', uuid)])
+      ('uuid', uuid)]
+    if pingval != biased:
+      info.append(('unbiased_ms', '%d' % (1000 * pingval)))
+    if wanted_by:
+      info.append(('wanted_by', wanted_by))
+    logging.Log(info)
     return (biased, uuid)
 
   def GetHostIpAddrs(self, host):
@@ -3450,7 +3455,8 @@ class PageKite(object):
         server = '%s:%s' % (ipaddrs[0], port)
         pingtime, uuid = self.Ping(ipaddrs[0], int(port),
                                    overload_ms=125,
-                                   bias=server_bias(server))
+                                   bias=server_bias(server),
+                                   wanted_by='config')
         pinged[ipaddrs[0]] = (pingtime, uuid)
         if pingtime < 60:
           servers_all[uuid] = server
@@ -3481,7 +3487,8 @@ class PageKite(object):
                   server = '%s:%s' % (ip, port)
                   pingtime, uuid = self.Ping(ip, int(port),
                                              overload_ms=50,
-                                             bias=server_bias(server))
+                                             bias=server_bias(server),
+                                             wanted_by='DNS')
                   pinged[ip] = (pingtime, uuid)
                   servers_all[uuid] = server
                   if pingtime < 0.055 and len(servers_pref) < wanted_conns:
