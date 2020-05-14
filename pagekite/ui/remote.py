@@ -71,7 +71,7 @@ class RemoteUi(NullUi):
     message = (' be_status:'
                ' status=%x; bid=%s; domain=%s; port=%s; proto=%s;'
                ' bhost=%s; bport=%s%s%s%s'
-               '\n') % (be[BE_STATUS], bid, domain, port, proto,
+               '\n') % (int(be[BE_STATUS]), bid, domain, port, proto,
                         be[BE_BHOST], be[BE_BPORT],
                         has_ssl and '; ssl=1' or '',
                         is_builtin and '; builtin=1' or '',

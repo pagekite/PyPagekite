@@ -1800,7 +1800,7 @@ class PageKite(object):
         if add: self.backends[bid][BE_STATUS] |= add
         if sub and (status & sub): self.backends[bid][BE_STATUS] -= sub
         logging.Log([('bid', bid),
-             ('status', '0x%x' % self.backends[bid][BE_STATUS])],
+             ('status', '0x%x' % int(self.backends[bid][BE_STATUS]))],
              level=logging.LOG_LEVEL_MACH)
 
   def GetBackendData(self, proto, domain, recurse=True):
@@ -2731,7 +2731,7 @@ class PageKite(object):
         host_paths = just_these_webpaths.get(http_host, {})
         host_config = just_these_be_configs.get(http_host, {})
         rand_seed = '%s:%x' % (specs[list(six.iterkeys(specs))[0]][BE_SECRET],
-                               time.time()//3600)
+                               int(time.time()//3600))
 
         first = (len(list(six.iterkeys(host_paths))) == 0) or be_path_prefix
         paranoid = host_config.get('hide', False)
@@ -4149,7 +4149,7 @@ class PageKite(object):
       conf_secret = self.ConfigSecret()
       logging.Log([('builtin_httpd', httpd_sspec), ('secret', conf_secret)])
       self.ui.Notify(
-        'Built-in HTTPD is on %s, secret=%s' % (httpd_sspec, conf_secret))
+        'Built-in HTTPD is on %s, secret=%s' % (httpd_sspec, u(conf_secret)))
 
     # Set up SIGHUP handler.
     if self.logfile:

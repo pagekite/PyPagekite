@@ -62,6 +62,10 @@ if sys.version_info < (3,):
     if isinstance(data, unicode):
       return data.encode('utf-8')
     return str(data)
+  def u(data):
+    if isinstance(data, unicode):
+      return data
+    return data.decode('utf-8')
 else:
   # We are using the latin-1 encoding here, on the assumption that
   # the string contains binary data we do not want to modify.
@@ -74,6 +78,10 @@ else:
     if isinstance(data, str):
       return data
     return str(data, 'iso-8859-1')
+  def u(data):
+    if isinstance(data, str):
+      return data
+    return str(data, 'utf-8')
 
 
 import base64
