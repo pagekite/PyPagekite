@@ -3382,6 +3382,10 @@ class PageKite(object):
       self.dns_cache[host][now] = self.GetHostIpAddrs(host)
     except:
       logging.LogDebug('DNS lookup failed for %s' % host)
+      # If the network is down, don't count disconnects...
+      cutoff = now - 120
+      while common.DISCONNECTS and (common.DISCONNECTS[-1] > cutoff):
+        common.DISCONNECTS.pop(-1)
 
     ips = {}
     for ipaddrs in self.dns_cache[host].values():

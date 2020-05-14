@@ -898,7 +898,6 @@ class Tunnel(ChunkParser):
 
   # If a tunnel goes down, we just go down hard and kill all our connections.
   def ProcessEofRead(self):
-    common.DISCONNECTS.append(time.time())
     self.Die()
     return False
 
