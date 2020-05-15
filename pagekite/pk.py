@@ -1673,10 +1673,10 @@ class PageKite(object):
       return self.ui_httpd.httpd.secret
     elif not self.kitesecret and not self.ui_password and not self.backends:
       # Our config has no secrets, generate a completely random one
-      return sha256b64(globalSecret())[:24]
+      return u(sha256b64(globalSecret())[:24]).replace('/', '_')
     else:
       config = [username or getpass.getuser()] + self.GenerateConfig()
-      return sha256b64('\n'.join(config))[:24]
+      return u(sha256b64('\n'.join(config))[:24]).replace('/', '_')
 
   def LoginPath(self, goto):
     return '/_pagekite/login/%s/%s' % (self.ConfigSecret(), goto)

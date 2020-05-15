@@ -155,7 +155,7 @@ class YamonD(threading.Thread):
 
   def lcreate(self, listn, elems):
     with self.lock:
-      self.lists[listn] = [elems, 0, ['' for x in xrange(0, elems)]]
+      self.lists[listn] = [elems, 0, ['' for x in range(0, elems)]]
 
   def ladd(self, listn, value):
     with self.lock:

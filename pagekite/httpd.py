@@ -33,10 +33,12 @@ from six.moves.xmlrpc_server import SimpleXMLRPCServer, SimpleXMLRPCRequestHandl
 
 import base64
 import cgi
+import datetime
 try:
   from html import escape as escape_html
 except ImportError:
   from cgi import escape as escape_html
+import hashlib
 import os
 import re
 import socket
@@ -54,33 +56,11 @@ import pagekite.proto.selectables as selectables
 import sockschain as socks
 
 
-##[ Conditional imports & compatibility magic! ]###############################
-
-try:
-  import datetime
-  ts_to_date = datetime.datetime.fromtimestamp
-except ImportError:
-  ts_to_date = str
-
-try:
-  sorted([1, 2, 3])
-except:
-  def sorted(l):
-    tmp = l[:]
-    tmp.sort()
-    return tmp
+ts_to_date = datetime.datetime.fromtimestamp
 
 
-try:
-  import hashlib
-  def sha1hex(data):
-    hl = hashlib.sha1()
-    hl.update(data)
-    return hl.hexdigest().lower()
-except ImportError:
-  import sha
-  def sha1hex(data):
-    return sha.new(data).hexdigest().lower()
+def sha1hex(data):
+  return hashlib.sha1(b(data)).hexdigest().lower()
 
 
 ##[ PageKite HTTPD code starts here! ]#########################################
@@ -116,8 +96,8 @@ class CGIWrapper(CGIHTTPRequestHandler):
   def translate_path(self, path): return path
 
   def send_response(self, code, message):
-    self.wfile.write('X-Response-Code: %s\r\n' % code)
-    self.wfile.write('X-Response-Message: %s\r\n' % message)
+    self.wfile.write(b('X-Response-Code: %s\r\n' % code))
+    self.wfile.write(b('X-Response-Message: %s\r\n' % message))
 
   def send_error(self, code, message):
     return self.send_response(code, message)
@@ -221,15 +201,16 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     logging.Log([('uireq', format % args)])
 
   def send_header(self, header, value):
-    self.wfile.write('%s: %s\r\n' % (header, value))
+    self.wfile.write(b('%s: %s\r\n' % (header, value)))
 
   def end_headers(self):
-    self.wfile.write('\r\n')
+    self.wfile.write(b('\r\n'))
 
   def sendStdHdrs(self, header_list=[], cachectrl='private',
                                         mimetype='text/html'):
     if mimetype.startswith('text/') and ';' not in mimetype:
       mimetype += ('; charset=%s' % DEFAULT_CHARSET)
+    self.send_header('Connection', 'close')
     self.send_header('Cache-Control', cachectrl)
     self.send_header('Content-Type', mimetype)
     for header in header_list:
@@ -239,20 +220,20 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
   def sendChunk(self, chunk):
     if self.chunked:
       if logging.DEBUG_IO: print('<== SENDING CHUNK ===\n%s\n' % chunk)
-      self.wfile.write('%x\r\n' % len(chunk))
-      self.wfile.write(chunk)
-      self.wfile.write('\r\n')
+      self.wfile.write(b('%x\r\n' % len(chunk)))
+      self.wfile.write(b(chunk))
+      self.wfile.write(b('\r\n'))
     else:
       if logging.DEBUG_IO: print('<== SENDING ===\n%s\n' % chunk)
-      self.wfile.write(chunk)
+      self.wfile.write(b(chunk))
 
   def sendEof(self):
-    if self.chunked and not self.suppress_body: self.wfile.write('0\r\n\r\n')
+    if self.chunked and not self.suppress_body: self.wfile.write(b('0\r\n\r\n'))
 
   def sendResponse(self, message, code=200, msg='OK', mimetype='text/html',
                          header_list=[], chunked=False, length=None):
     self.log_request(code, message and len(message) or '-')
-    self.wfile.write('HTTP/1.1 %s %s\r\n' % (code, msg))
+    self.wfile.write(b('HTTP/1.1 %s %s\r\n' % (code, msg)))
     if code == 401:
       self.send_header('WWW-Authenticate',
                        'Basic realm=PK%d' % (time.time()//3600))
@@ -373,6 +354,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                                     qs, None)
     except socket.error:
       pass
+    except KeyboardInterrupt:
+      raise
     except Exception as e:
       logging.Log([('err', 'GET error at %s: %s' % (path, e))])
       if logging.DEBUG_IO: print('=== ERROR\n%s\n===' % format_exc())
@@ -426,6 +409,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       self.post_data.seek(0)
     except socket.error:
       pass
+    except KeyboardInterrupt:
+      raise
     except Exception as e:
       logging.Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
@@ -439,6 +424,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                                     qs, posted)
     except socket.error:
       pass
+    except KeyboardInterrupt:
+      raise
     except Exception as e:
       logging.Log([('err', 'Error handling POST at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
@@ -607,6 +594,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         fd.close()
 
       return True
+    except KeyboardInterrupt:
+      raise
     except:
       return False
 
@@ -617,7 +606,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     # This allows the user to store just the SHA512 in their PageKite
     # config file. Users with exactly 128 char passwords are screwed.
     if password and (len(password) != 128):
-      password = hashlib.sha512(password).hexdigest()
+      password = hashlib.sha512(b(password)).hexdigest()
 
     userpass = ('password' in posted and posted['password'])
     if isinstance(userpass, list):
@@ -744,6 +733,8 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
           try:
             rf_stat = os.fstat(rf.fileno())
             rf_size = rf_stat.st_size
+          except KeyboardInterrupt:
+            raise
           except:
             self.chunked = True
     except (IOError, OSError) as e:
@@ -782,7 +773,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         data = rf.read(chunk_size)
         if data == "": break
         if is_shtml and shtml_vars:
-          self.sendChunk(data % shtml_vars)
+          self.sendChunk(u(data) % shtml_vars)
         else:
           self.sendChunk(data)
       rf.close()
@@ -893,7 +884,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         return
       else:
         logging.LogDebug("Invalid token, %s != %s" % (token,
-                                                       self.server.secret))
+                                                      self.server.secret))
         data.update(self.E404)
 
     elif console and path.startswith('/_pagekite/'):
@@ -1133,6 +1124,8 @@ class UiHttpServer(socketserver.ThreadingMixIn, SimpleXMLRPCServer):
       gYamon.lcreate("tunnel_rtt", 100)
       gYamon.lcreate("tunnel_wrtt", 100)
       gYamon.lists['buffered_bytes'] = [1, 0, common.buffered_bytes]
+    except KeyboardInterrupt:
+      raise
     except:
       pass
 
