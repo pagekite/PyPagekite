@@ -847,9 +847,7 @@ class TunnelManager(threading.Thread):
       try:
         self._run()
       except Exception, e:
-        logging.LogError('TunnelManager died: %s' % e)
-        if logging.DEBUG_IO:
-          traceback.print_exc(file=sys.stderr)
+        logging.LogError('TunnelManager died: %s' % (format_exc(),))
         time.sleep(5)
     logging.LogDebug('TunnelManager: done')
 
@@ -3708,6 +3706,12 @@ class PageKite(object):
           if update in last_updates:
             self.last_updates.append(update)
 
+        def _dnsup(results, update_url):
+          try:
+            results.append(''.join(urllib.urlopen(update_url).readlines()))
+          except:
+            results.append('err: %s' % (format_exc(),))
+
         for update in updates:
           if update in last_updates:
             continue
@@ -3715,8 +3719,13 @@ class PageKite(object):
           try:
             self.ui.Status('dyndns', color=self.ui.YELLOW,
                                      message='Updating DNS for %s...' % domain)
-            # FIXME: If the network misbehaves, can this stall forever?
-            result = ''.join(urllib.urlopen(updates[update]).readlines())
+            r = []
+            _up = threading.Thread(target=_dnsup, args=(r, updates[update]))
+            _up.daemon = True
+            _up.start()
+            _up.join(timeout=5)
+            result = r[0] if r else 'timed out'
+
             if result.startswith('good') or result.startswith('nochg'):
               logging.Log([('dyndns', result), ('data', update)])
               self.SetBackendStatus(domain, sub=BE_STATUS_ERR_DNS)
