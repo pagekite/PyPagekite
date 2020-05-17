@@ -131,7 +131,6 @@ MAN_OPT_COMMON = ("""\
     --defaults      __Set defaults for use with pagekite.net service.
     --whitelabel=D  __Set defaults for pagekite.net white-labels.
     --whitelabels=D __Set defaults for pagekite.net white-labels (with TLS).
-    --nocrashreport __Don't send anonymous crash reports to pagekite.net.
 """)
 MAN_OPT_BACKEND = ("""\
     --shell         __Run PageKite in an interactive shell.

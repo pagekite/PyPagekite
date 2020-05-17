@@ -37,7 +37,6 @@ if __name__ == "__main__":
   sys.argv[1:1] = [
     '--clean',
     '--noloop',
-    '--nocrashreport',
     '--defaults',
     '--kitename=%s' % kn,
     '--kitesecret=%s' % ss,
