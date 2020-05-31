@@ -1,6 +1,14 @@
 Version history - highlights
 ============================
 
+v1.5.2.200531
+-------------
+   - Update bundled CA Root certs
+   - Avoid hanging TunnelManager if DNS updates never complete
+   - Remove automated crash reports, it is a privacy leak nobody uses
+   - Python3 fixes for built-in HTTPD
+   - Further narrow the disconnect/keepalive logic
+
 v1.5.2.200513
 -------------
    - Remove obsolete finger, httpfinger and Minecraft protocols
