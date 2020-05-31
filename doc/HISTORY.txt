@@ -1,9 +1,12 @@
 Version history - highlights
 ============================
 
-v1.0.1.200513
+v1.0.1.200531
 -------------
+   - Back-port 1.5.2 hanging dynamic DNS update bugfix
+   - Back-port 1.5.2 crash-report removal
    - Back-port 1.5.2 keepalive improvements
+   - Back-port 1.5.2 CA certificate bundle update
 
 
 v1.0.1.200424

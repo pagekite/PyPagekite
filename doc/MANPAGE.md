@@ -148,8 +148,6 @@ time the program defaults will Just Work.
      Set defaults for pagekite.net white-labels.
    * <b>--whitelabels=D</b>  
      Set defaults for pagekite.net white-labels (with TLS).
-   * <b>--nocrashreport</b>  
-     Don't send anonymous crash reports to pagekite.net.
 
 ### Back-end options ###
 
