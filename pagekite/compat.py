@@ -122,7 +122,7 @@ def rsplit(ch, data):
 #
 import sockschain
 socks = sockschain
-if socks.HAVE_PYOPENSSL or tuple(sys.version_info) > (2, 7, 10):
+if tuple(sys.version_info) >= (2, 7, 13):
   SSL = socks.SSL
   SEND_ALWAYS_BUFFERS = False
   SEND_MAX_BYTES = 16 * 1024
