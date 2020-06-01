@@ -3892,7 +3892,7 @@ class PageKite(object):
       self.conns.Remove(conn)
 
   def Select(self, epoll, waittime):
-    iready = oready = eready = None
+    iready = oready = eready = []
     isocks, osocks = self.conns.Readable(), self.conns.Blocked()
     try:
       if isocks or osocks:
