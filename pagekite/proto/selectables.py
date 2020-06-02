@@ -112,7 +112,6 @@ class Selectable(object):
     self.write_blocked = ''
     self.write_speed = 102400
     self.write_eof = False
-    self.write_retry = None
 
     # Flow control v2
     self.acked_kb_delta = 0
@@ -407,6 +406,7 @@ class Selectable(object):
 
   def Send(self, data, try_flush=False, activity=False,
                        just_buffer=False, allow_blocking=False):
+    global SEND_MAX_BYTES
     self.write_speed = int((self.wrote_bytes + self.all_out)
                            / max(1, (time.time() - self.created)))
 
@@ -417,32 +417,35 @@ class Selectable(object):
       self.write_blocked += str(''.join(data))
       return True
 
-    sending = ''.join([self.write_blocked, str(''.join(data))])
+    pending = ''.join([self.write_blocked, str(''.join(data))])
     self.write_blocked = ''
-    sent_bytes = 0
-    if sending:
+    if pending:
       try:
-        want_send = self.write_retry or min(len(sending), SEND_MAX_BYTES)
-        sent_bytes = None
-        self.sstate = 'send(%d)' % (want_send)
-        # Try to write for up to 5 seconds before giving up
-        for try_wait in (0.0, 0.02, 0.05, 0.08, 0.15, 0.2, 0.35, 0.5, 0.75, 0.9, 1, 1, 0):
+        sent = None
+        send_bytes = min(len(pending), SEND_MAX_BYTES)
+        send_buffer = pending[:send_bytes]
+        self.sstate = 'send(%d)' % (send_bytes)
+        # Try to write a few times, but give up quickly - this is usually not a state
+        # we recover from due to OpenSSL/Python wrapper limitations.
+        for try_wait in (0.0, 0.02, 0.05):
           try:
-            sent_bytes = self.fd.send(sending[:want_send])
+            sent = self.fd.send(send_buffer)
             if logging.DEBUG_IO:
-              print ('==> OUT =[%s: %d/%d bytes]==(\n%s)=='
-                     ) % (self, sent_bytes, want_send, sending[:min(160, sent_bytes)])
-            self.wrote_bytes += sent_bytes
-            self.write_retry = None
+              print(('==> OUT =[%s: %d/%d bytes]==(\n%s)=='
+                     ) % (self, sent, send_bytes, send_buffer[:min(320, sent)]))
+            self.wrote_bytes += sent
             break
           except (SSL.WantWriteError, SSL.WantReadError), err:
             if logging.DEBUG_IO:
-              print('=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, want_send))
-            self.sstate = 'send/SSL.WRE(%d,%.1f)' % (want_send, try_wait)
+              print('=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, send_bytes))
+            self.sstate = 'send/SSL.WRE(%d,%.1f)' % (send_bytes, try_wait)
             time.sleep(try_wait)
-        if sent_bytes is None:
+        if sent is None:
           self.sstate += '/retries'
-          self.LogInfo('Error sending: Too many SSL write retries')
+          self.LogInfo(
+              'Error sending: Too many SSL write retries (SEND_MAX_BYTES=%d)'
+              % SEND_MAX_BYTES)
+          SEND_MAX_BYTES = min(4096, SEND_MAX_BYTES)  # Maybe this will help?
           self.ProcessEofWrite()
           common.DISCONNECTS.append(time.time())
           return False
@@ -455,9 +458,9 @@ class Selectable(object):
           return False
         else:
           if logging.DEBUG_IO:
-            print '=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send)
-          self.write_retry = want_send
-      except socket.error, (errno, msg):
+            print('=== WRITE HICCUP: =[%s: %s bytes]==' % (self, send_bytes))
+      except socket.error, err:
+        (errno, msg) = err.args
         self.sstate += '/sockerr=%s' % (errno,)
         if errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s (errno=%s)' % (msg, errno))
@@ -466,11 +469,13 @@ class Selectable(object):
           return False
         else:
           if logging.DEBUG_IO:
-            print '=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send)
-          self.write_retry = want_send
+            print('=== WRITE HICCUP: =[%s: %s bytes]==' % (self, send_bytes))
       except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
         self.sstate += '/SSL.Error'
-        self.LogInfo('Error sending (SSL): %s' % err)
+        self.LogInfo(
+            'Error sending (SSL, SEND_MAX_BYTES=%d): %s'
+            % (SEND_MAX_BYTES, err))
+        SEND_MAX_BYTES = min(4096, SEND_MAX_BYTES)  # Maybe this will help?
         self.ProcessEofWrite()
         common.DISCONNECTS.append(time.time())
         return False
@@ -482,10 +487,10 @@ class Selectable(object):
         self.ProcessEofWrite()
         return False
 
+      self.write_blocked = pending[sent:]
+
     if activity:
       self.last_activity = time.time()
-
-    self.write_blocked = sending[sent_bytes:]
 
     if self.wrote_bytes >= logging.LOG_THRESHOLD:
       self.LogTraffic()
