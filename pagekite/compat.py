@@ -122,7 +122,7 @@ socks = sockschain
 if tuple(sys.version_info) >= (2, 7, 13):
   SSL = socks.SSL
   SEND_ALWAYS_BUFFERS = False
-  SEND_MAX_BYTES = 16 * 1024
+  SEND_MAX_BYTES = (16 * 1024) - 64  # Under 16kB to avoid WANT_WRITE errors
   TUNNEL_SOCKET_BLOCKS = False
 
 elif socks.HAVE_SSL:
