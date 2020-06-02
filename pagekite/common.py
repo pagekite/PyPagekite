@@ -73,8 +73,8 @@ LOOPBACK_BE = LOOPBACK_HN + ':2'
 LOOPBACK = {'FE': LOOPBACK_FE, 'BE': LOOPBACK_BE}
 
 # This is how many bytes we are willing to read per cycle.
-MAX_READ_BYTES = 16 * 1024
-MAX_READ_TUNNEL_X = 3.1     # 3x above, + fudge factor
+MAX_READ_BYTES = (16 * 1024) - 128  # Under 16kB, because OpenSSL
+MAX_READ_TUNNEL_X = 3.1             # 3x above, + fudge factor
 
 # Higher values save CPU and prevent individual tunnels
 # from hogging all our resources, but hurt latency and
