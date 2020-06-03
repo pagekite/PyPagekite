@@ -1,6 +1,12 @@
 Version history - highlights
 ============================
 
+v1.5.2.200603
+-------------
+   - Fix some TLS connection instability on old/embedded devices
+   - Fix bad select() behaviour (Windows)
+
+
 v1.5.2.200531
 -------------
    - Update bundled CA Root certs
