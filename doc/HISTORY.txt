@@ -1,6 +1,11 @@
 Version history - highlights
 ============================
 
+v1.0.1.200603
+-------------
+   - Back-port 1.5.2 embedded TLS stability fixes
+   - Back-port 1.5.2 Windows select() fix
+
 v1.0.1.200531
 -------------
    - Back-port 1.5.2 hanging dynamic DNS update bugfix
