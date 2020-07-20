@@ -79,6 +79,8 @@ class Tunnel(ChunkParser):
     self.filters = []
     self.ip_limits = None
     self.maxread = int(common.MAX_READ_BYTES * common.MAX_READ_TUNNEL_X)
+    if not self.conns.config.isfrontend:
+        self.ExtendSSLRetryDelays()
 
   def Cleanup(self, close=True):
     if self.users:

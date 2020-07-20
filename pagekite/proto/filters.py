@@ -118,7 +118,7 @@ class TunnelWatcher(TunnelFilter):
 
   def filter_data_in(self, tunnel, sid, data):
     if data and self.watch_level[0] > 0:
-      self.ui.Notify('===[ INCOMING @ %s ]===' % self.now(),
+      self.ui.Notify('===[ INCOMING @ %s / %s ]===' % (self.now(), sid),
                      color=self.ui.WHITE, prefix=' __')
       for line in self.format_data(data, self.watch_level[0]):
         self.ui.Notify(line, prefix=' <=', now=-1, color=self.ui.GREEN)
@@ -126,7 +126,7 @@ class TunnelWatcher(TunnelFilter):
 
   def filter_data_out(self, tunnel, sid, data):
     if data and self.watch_level[0] > 1:
-      self.ui.Notify('===[ OUTGOING @ %s ]===' % self.now(),
+      self.ui.Notify('===[ OUTGOING @ %s / %s ]===' % (self.now(), sid),
                      color=self.ui.WHITE, prefix=' __')
       for line in self.format_data(data, self.watch_level[0]):
         self.ui.Notify(line, prefix=' =>', now=-1, color=self.ui.BLUE)
