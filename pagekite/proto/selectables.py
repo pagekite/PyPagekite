@@ -106,6 +106,7 @@ class Selectable(object):
     self.read_eof = False
     self.peeking = False
     self.peeked = 0
+    self.retry_delays = [0.0, 0.02, 0.05]
 
     # Write-related variables
     self.wrote_bytes = self.all_out = 0
@@ -136,6 +137,10 @@ class Selectable(object):
     if common.gYamon:
       common.gYamon.vadd(self.countas, 1)
       common.gYamon.vadd('selectables', 1)
+
+  def ExtendSSLRetryDelays(self):
+    self.LogDebug('Extended SSL Write retries on %s' % self)
+    self.retry_delays = [0.0, 0.02, 0.05, 0.30, 0.70, 1.5, 2.0]
 
   def CountAs(self, what):
     with self.lock:
@@ -425,9 +430,7 @@ class Selectable(object):
         send_bytes = min(len(pending), SEND_MAX_BYTES)
         send_buffer = pending[:send_bytes]
         self.sstate = 'send(%d)' % (send_bytes)
-        # Try to write a few times, but give up quickly - this is usually not a state
-        # we recover from due to OpenSSL/Python wrapper limitations.
-        for try_wait in (0.0, 0.02, 0.05):
+        for try_wait in self.retry_delays:
           try:
             sent = self.fd.send(send_buffer)
             if logging.DEBUG_IO:
@@ -436,6 +439,7 @@ class Selectable(object):
             self.wrote_bytes += sent
             break
           except (SSL.WantWriteError, SSL.WantReadError), err:
+            SEND_MAX_BYTES = min(4096, SEND_MAX_BYTES)  # Maybe this will help?
             if logging.DEBUG_IO:
               print('=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, send_bytes))
             self.sstate = 'send/SSL.WRE(%d,%.1f)' % (send_bytes, try_wait)
@@ -445,7 +449,6 @@ class Selectable(object):
           self.LogInfo(
               'Error sending: Too many SSL write retries (SEND_MAX_BYTES=%d)'
               % SEND_MAX_BYTES)
-          SEND_MAX_BYTES = min(4096, SEND_MAX_BYTES)  # Maybe this will help?
           self.ProcessEofWrite()
           common.DISCONNECTS.append(time.time())
           return False
