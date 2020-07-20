@@ -1082,7 +1082,16 @@ class PageKite(object):
     self.tls_default = None
     self.tls_endpoints = {}
     self.fe_certname = []
-    self.fe_nocertcheck = False
+    #
+    # This will automatically disable TLS certificate checks after
+    # Dec 1 00:00:00 2028 GMT, one month before the current bundled
+    # USERTrust certificate expires. We also bundle Comodo and ISRG
+    # roots which last longer, but this is our conservative cutoff.
+    # Context: https://pagekite.net/2020-05-31/TLS_Certificate_Bug
+    #
+    # FIXME: Update this when bundled certs get updated!
+    #
+    self.fe_nocertcheck = (time.time() >= 1859241600)
 
     self.service_provider = SERVICE_PROVIDER
     self.service_xmlrpc = SERVICE_XMLRPC
