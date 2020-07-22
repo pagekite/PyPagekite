@@ -67,8 +67,6 @@ class Tunnel(ChunkParser):
     self.filters = []
     self.ip_limits = None
     self.maxread = int(common.MAX_READ_BYTES * common.MAX_READ_TUNNEL_X)
-    if not self.conns.config.isfrontend:
-        self.ExtendSSLRetryDelays()
 
   def Cleanup(self, close=True):
     if self.users:
@@ -599,6 +597,9 @@ class Tunnel(ChunkParser):
   def _BackEnd(server, backends, require_all, conns):
     """This is the back-end end of a tunnel."""
     self = Tunnel(conns)
+    if conns and not conns.config.isfrontend:
+        self.ExtendSSLRetryDelays()
+
     self.backends = backends
     self.require_all = require_all
     self.server_info[self.S_NAME] = server
