@@ -3613,7 +3613,6 @@ class PageKite(object):
       return tun  # False or None
 
   def DisconnectFrontend(self, conns, server):
-    logging.Log([('disconnect', server)])
     kill = []
     for bid in conns.tunnels:
       for tunnel in conns.tunnels[bid]:
@@ -3622,6 +3621,7 @@ class PageKite(object):
           kill.append(tunnel)
     for tunnel in kill:
       if len(list(six.iterkeys(tunnel.users))) < 1:
+        logging.Log([('disconnect', server)])
         tunnel.Die()
     return kill and True or False
 
@@ -3936,6 +3936,7 @@ class PageKite(object):
           if c.IsReadable(now):
             mask |= select.EPOLLIN
           try:
+            fdc[fd] = fd  # Our synthetic events need this
             fdc[fd.fileno()] = fd
           except socket.error:
             # If this fails, then the socket has HUPed, however we need to
@@ -3952,6 +3953,7 @@ class PageKite(object):
           except IOError:
             try:
               epoll.register(fd, mask)
+              evs.append((fd, select.EPOLLIN))   # We might have missed events
             except (IOError, TypeError):
               evs.append((fd, select.EPOLLHUP))  # Error == HUP
         else:
