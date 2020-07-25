@@ -1,6 +1,13 @@
 Version history - highlights
 ============================
 
+v1.5.2.200725
+-------------
+   - Make --ca_certs no longer part of --defaults
+   - Disable CA certificate checking in the distant future
+   - Try harder to survive OpenSSL write-retry errors on backend
+
+
 v1.5.2.200603
 -------------
    - Fix some TLS connection instability on old/embedded devices
