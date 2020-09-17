@@ -55,7 +55,8 @@ OS_CA_CERTS = (
   "/usr/local/share/certs/ca-root-nss.crt",  # FreeBSD/DragonFly
   "/usr/local/etc/openssl/cert.pem",         # OS X (Homebrew)
   "/opt/local/etc/openssl/cert.pem",         # OS X (Ports?)
-  "/system/etc/security/cacerts")            # Android
+#  "/system/etc/security/cacerts")            # Android # Shows IsADirectoryError
+  "/data/data/com.termux/files/usr/etc/tls/cert.pem")  # Android-Termux
 
 CURL_CA_CERTS = 'https://curl.haxx.se/ca/cacert.pem'
 
