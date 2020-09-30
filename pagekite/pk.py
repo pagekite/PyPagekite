@@ -4339,6 +4339,10 @@ def Configure(pk):
     sys.exit(0)
 
   if '--clean' not in sys.argv and '--help' not in sys.argv:
+    try:
+      pk.ConfigureFromFile('.SELF/defaults.cfg')
+    except (OSError, IOError):
+      pass
     if os.path.exists(pk.rcfile):
       pk.ConfigureFromFile()
 

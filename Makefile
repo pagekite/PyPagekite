@@ -23,9 +23,9 @@ BREED_PAGEKITE = /usr/lib/python2.7/dist-packages/six.py \
 	         pagekite/pk.py \
 
 
-combined: pagekite tools doc/MANPAGE.md dev .header
+combined: pagekite tools doc/MANPAGE.md dev .header defaults.cfg
 	@./scripts/breeder.py --compress --header .header \
-	             sockschain $(BREED_PAGEKITE) \
+	             defaults.cfg sockschain $(BREED_PAGEKITE) \
 	             pagekite/__main__.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
@@ -37,18 +37,27 @@ combined: pagekite tools doc/MANPAGE.md dev .header
 	@mv pagekite-tmp.py dist/pagekite-`python setup.py --version`.py
 	@ls -l dist/pagekite-*.py
 
-gtk: pagekite tools dev .header
+untested: pagekite tools doc/MANPAGE.md dev .header defaults.cfg
+	@./scripts/breeder.py --compress --header .header \
+	             defaults.cfg sockschain $(BREED_PAGEKITE) \
+	             pagekite/__main__.py \
+	             >pagekite-tmp.py
+	@chmod +x pagekite-tmp.py
+	@mv pagekite-tmp.py dist/pagekite-`python setup.py --version`.py
+	@ls -l dist/pagekite-*.py
+
+gtk: pagekite tools dev .header defaults.cfg
 	@./scripts/breeder.py --gtk-images --compress --header .header \
-	             sockschain $(BREED_PAGEKITE) gui \
+	             defaults.cfg sockschain $(BREED_PAGEKITE) gui \
 	             pagekite_gtk.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
 	@mv pagekite-tmp.py dist/pagekite-gtk-`python setup.py --version`.py
 	@ls -l dist/pagekite-*.py
 
-android: pagekite tools .header
+android: pagekite tools .header defaults.cfg
 	@./scripts/breeder.py --compress --header .header \
-	             sockschain $(BREED_PAGEKITE) \
+	             defaults.cfg sockschain $(BREED_PAGEKITE) \
 	             pagekite/android.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
