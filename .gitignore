@@ -17,3 +17,8 @@ deb/*.substvars
 deb/files
 deb/pagekite/
 debian
+classes.png
+classes_pagekite.png
+classes_setup.py.png
+packages_pagekite.png
+pagekite_gtk.py
