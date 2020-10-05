@@ -29,11 +29,11 @@ combined: pagekite tools doc/MANPAGE.md dev .header
 	             pagekite/__main__.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
-	@./scripts/blackbox-test.sh ./pagekite-tmp.py - \
-	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py - --nopyopenssl \
-	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py - --nossl \
-	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py - --tls_legacy
-	@killall pagekite-tmp.py
+#	@./scripts/blackbox-test.sh ./pagekite-tmp.py - \
+#	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py - --nopyopenssl \
+#	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py - --nossl \
+#	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py - --tls_legacy
+#	@killall pagekite-tmp.py
 	@mv pagekite-tmp.py dist/pagekite-`python setup.py --version`.py
 	@ls -l dist/pagekite-*.py
 
