@@ -1,6 +1,11 @@
 Version history - highlights
 ============================
 
+v1.5.2.201011
+-------------
+   - Fix the bundled CA certificate for Sectigo
+
+
 v1.5.2.200725
 -------------
    - Make --ca_certs no longer part of --defaults
