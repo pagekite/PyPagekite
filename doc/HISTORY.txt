@@ -1,6 +1,10 @@
 Version history - highlights
 ============================
 
+v1.0.1.201011
+-------------
+   - Fix bundled Sectigo CA root certificate
+
 v1.0.1.200725
 -------------
    - Back-port 1.5.2 upload and SSL retry fixes
