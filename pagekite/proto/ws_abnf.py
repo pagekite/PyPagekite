@@ -241,11 +241,11 @@ class ABNF(object):
         elif length < ABNF.LENGTH_16:
             frame_header += chr(self.mask << 7 | 0x7e)
             frame_header = six.b(frame_header)
-            frame_header += struct.pack("!H", length)
+            frame_header += six.b(struct.pack("!H", length))
         else:
             frame_header += chr(self.mask << 7 | 0x7f)
             frame_header = six.b(frame_header)
-            frame_header += struct.pack("!Q", length)
+            frame_header += six.b(struct.pack("!Q", length))
 
         if not self.mask:
             return frame_header + self.data
@@ -319,12 +319,12 @@ class ABNF(object):
         if length_bits == 0x7e:
             if len(data) < 2:
                 raise WebSocketNeedMoreDataException()
-            self.length = struct.unpack("!H", data[:2])[0]
+            self.length = struct.unpack("!H", b(data[:2]))[0]
             return data[2:]
         elif length_bits == 0x7f:
             if len(data) < 8:
                 raise WebSocketNeedMoreDataException()
-            self.length = struct.unpack("!Q", data[:8])[0]
+            self.length = struct.unpack("!Q", b(data[:8]))[0]
             return data[8:]
         else:
             self.length = length_bits

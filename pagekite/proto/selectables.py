@@ -354,7 +354,7 @@ class Selectable(object):
       try:
         bytecount = eat_bytes - len(discard)
         self.sstate = 'eat(%d)' % bytecount
-        discard += self.fd.recv(bytecount)
+        discard += s(self.fd.recv(bytecount))
       except socket.error as err:
         (errno, msg) = err.args
         self.LogInfo('Error reading (%d/%d) socket: %s (errno=%s)' % (
@@ -698,16 +698,16 @@ class MagicProtocolParser(LineParser):
       return LineParser.ProcessData(self, data)
 
   def GetMsg(self, data):
-    mtype, ml24, mlen = struct.unpack('>BBH', data[0:4])
+    mtype, ml24, mlen = struct.unpack('>BBH', b(data[0:4]))
     mlen += ml24 * 0x10000
     return mtype, data[4:4+mlen], data[4+mlen:]
 
   def GetClientHelloExtensions(self, msg):
     # Ugh, so many magic numbers! These are accumulated sizes of
     # the different fields we are ignoring in the TLS headers.
-    slen = struct.unpack('>B', msg[34])[0]
-    cslen = struct.unpack('>H', msg[35+slen:37+slen])[0]
-    cmlen = struct.unpack('>B', msg[37+slen+cslen])[0]
+    slen = struct.unpack('>B', b(msg[34]))[0]
+    cslen = struct.unpack('>H', b(msg[35+slen:37+slen]))[0]
+    cmlen = struct.unpack('>B', b(msg[37+slen+cslen]))[0]
     extofs = 34+1+2+1+2+slen+cslen+cmlen
     if extofs < len(msg): return msg[extofs:]
     return None
@@ -715,19 +715,19 @@ class MagicProtocolParser(LineParser):
   def GetSniNames(self, extensions):
     names = []
     while extensions:
-      etype, elen = struct.unpack('>HH', extensions[0:4])
+      etype, elen = struct.unpack('>HH', b(extensions[0:4]))
       if etype == 0:
         # OK, we found an SNI extension, get the list.
         namelist = extensions[6:4+elen]
         while namelist:
-          ntype, nlen = struct.unpack('>BH', namelist[0:3])
+          ntype, nlen = struct.unpack('>BH', b(namelist[0:3]))
           if ntype == 0: names.append(namelist[3:3+nlen].lower())
           namelist = namelist[3+nlen:]
       extensions = extensions[4+elen:]
     return names
 
   def GetSni(self, data):
-    hello, vmajor, vminor, mlen = struct.unpack('>BBBH', data[0:5])
+    hello, vmajor, vminor, mlen = struct.unpack('>BBBH', b(data[0:5]))
     data = data[5:]
     sni = []
     while data:
