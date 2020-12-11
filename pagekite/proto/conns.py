@@ -1833,6 +1833,7 @@ class UnknownConn(MagicProtocolParser):
           self.conns.SetIdle(self, 120)
           return True
         else:
+          self.LogInfo("TLS unknown SNI host %s" % domains[0])
           self.Send(TLS_Unavailable(unavailable=True), try_flush=True)
           return False
 
