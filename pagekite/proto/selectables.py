@@ -459,7 +459,7 @@ class Selectable(object):
             sent = self.fd.send(send_buffer)
             if logging.DEBUG_IO:
               print(('==> OUT =[%s: %d/%d bytes]==(\n%s)=='
-                     ) % (self, sent, send_bytes, send_buffer[:min(320, sent)]))
+                     ) % (self, sent, send_bytes, repr(send_buffer[:min(320, sent)])))
             self.wrote_bytes += sent
             break
           except (SSL.WantWriteError, SSL.WantReadError) as err:
