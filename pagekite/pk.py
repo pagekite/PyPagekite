@@ -3922,6 +3922,15 @@ class PageKite(object):
     now = time.time()
     evs = []
     broken = False
+
+    def unregister(c):
+      try:
+        c.cleanup_callback = None
+        epoll.unregister(c.fd)  # Important: Use c.fd, not fd!
+      except (IOError, TypeError):
+        # Failing to unregister is OK, ignore
+        pass
+
     try:
       with self.conns.lock:
         clist = copy.copy(self.conns.conns)
@@ -3954,14 +3963,11 @@ class PageKite(object):
             try:
               epoll.register(fd, mask)
               evs.append((fd, select.EPOLLIN))   # We might have missed events
+              c.cleanup_callback = unregister
             except (IOError, TypeError):
               evs.append((fd, select.EPOLLHUP))  # Error == HUP
         else:
-          try:
-            epoll.unregister(c.fd)  # Important: Use c.fd, not fd!
-          except (IOError, TypeError):
-            # Failing to unregister is OK, ignore
-            pass
+          unregister(c)
 
       common.buffered_bytes[0] = bbc
       evs.extend(epoll.poll(waittime))
