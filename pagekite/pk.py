@@ -88,6 +88,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings',
             'defaults', 'whitelabel=', 'whitelabels=', 'local=', 'domain=',
+            'publickeyauth=',
             'auththreads=', 'authdomain=', 'authfail_closed',
             'motd=', 'register=', 'host=', 'noupgradeinfo', 'upgradeinfo=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
@@ -1179,6 +1180,8 @@ class PageKite(object):
     self.kite_only = False
     self.kite_disable = False
     self.kite_remove = False
+
+    self.public_key_auth = None
 
     # Searching for our configuration file!  We prefer the documented
     # 'standard' locations, but if nothing is found there and something local
@@ -2577,6 +2580,7 @@ class PageKite(object):
       elif opt == '--defaults': self.SetServiceDefaults()
       elif opt == '--whitelabel': self.SetWhitelabelDefaults(arg, secure=False)
       elif opt == '--whitelabels': self.SetWhitelabelDefaults(arg, secure=True)
+      elif opt == '--publickeyauth': self.public_key_auth = arg
       elif opt in ('--clean', '--nopyopenssl', '--nossl', '--settings',
                    '--signup', '--friendly'):
         # These are handled outside the main loop, we just ignore them.
@@ -3566,7 +3570,9 @@ class PageKite(object):
   def ConnectFrontend(self, conns, server):
     self.ui.Status('connect', color=self.ui.YELLOW,
                    message='Front-end connect: %s' % server)
-    tun = Tunnel.BackEnd(server, self.backends, self.require_all, conns)
+
+    print("PUBLIC_KEY_AUTH: " + self.public_key_auth)
+    tun = Tunnel.BackEnd(server, self.backends, self.require_all, conns, self.public_key_auth)
     if tun:
       tun.filters.append(HaproxyProtocolFilter(self.ui))
       tun.filters.append(HttpHeaderFilter(self.ui))

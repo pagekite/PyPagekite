@@ -632,7 +632,7 @@ class Tunnel(ChunkParser):
 
     return have_kite_info and have_kites
 
-  def _BackEnd(server, backends, require_all, conns):
+  def _BackEnd(server, backends, require_all, conns, public_key_auth):
     """This is the back-end end of a tunnel."""
     self = Tunnel(conns)
     if conns and not conns.config.isfrontend:
@@ -666,7 +666,7 @@ class Tunnel(ChunkParser):
         if tryagain:
           if self.server_info[self.S_ADD_KITES]:
             request = PageKiteRequestHeaders(server, conns.config.backends,
-                                             tokens)
+                                             tokens, public_key_auth=public_key_auth)
             abort = not self.SendChunked(('NOOP: 1\r\n%s\r\n\r\n!'
                                           ) % ''.join(request),
                                          compress=False, just_buffer=True)

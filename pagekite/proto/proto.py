@@ -6,6 +6,7 @@ PageKite protocol and HTTP protocol related code and constants.
 from __future__ import absolute_import
 from __future__ import division
 
+
 LICENSE = """\
 This file is part of pagekite.py.
 Copyright 2010-2020, the Beanstalks Project ehf. and Bjarni Runar Einarsson
@@ -32,6 +33,11 @@ import os
 import random
 import struct
 import time
+
+try:
+    import subprocess
+except ImportError:
+    subprocess = None
 
 from pagekite.compat import *
 from pagekite.common import *
@@ -66,7 +72,8 @@ def globalSecret():
 
 TOKEN_LENGTH=36
 def signToken(token=None, secret=None, payload='', timestamp=None,
-              length=TOKEN_LENGTH):
+              length=TOKEN_LENGTH, public_key_auth=None):
+
   """
   This will generate a random token with a signature which could only have come
   from this server.  If a token is provided, it is re-signed so the original
@@ -75,17 +82,31 @@ def signToken(token=None, secret=None, payload='', timestamp=None,
   If a timestamp is provided it will be embedded in the signature to a
   resolution of 10 minutes, and the signature will begin with the letter 't'
 
+  If the path to a script is passed in public_key_auth, this script will be called
+  with payload + ts as parameter and the output of the script will be returned.
+
   Note: This is only as secure as random.randint() is random.
   """
   if not secret: secret = globalSecret()
-  if not token: token = sha1hex('%s%8.8x' % (globalSecret(),
-                                             random.randint(0, 0x7FFFFFFD)+1))
-  if timestamp:
-    tok = 't' + token[1:]
-    ts = '%x' % int(timestamp/600)  # Integer division
-    return tok[0:8] + sha1hex(secret + payload + ts + tok[0:8])[0:length-8]
+
+
+  if public_key_auth:
+    signText = payload
+    if timestamp:
+      ts = '%x' % int(timestamp / 600)  # Integer division
+      signText += ts
+    result = subprocess.check_output([public_key_auth, signText]).strip()
   else:
-    return token[0:8] + sha1hex(secret + payload + token[0:8])[0:length-8]
+    if not token: token = sha1hex('%s%8.8x' % (globalSecret(),
+                                               random.randint(0, 0x7FFFFFFD)+1))
+    if timestamp:
+      tok = 't' + token[1:]
+      ts = '%x' % int(timestamp/600)  # Integer division
+      result = tok[0:8] + sha1hex(secret + payload + ts + tok[0:8])[0:length-8]
+    else:
+      result = token[0:8] + sha1hex(secret + payload + token[0:8])[0:length-8]
+
+  return result
 
 def checkSignature(sign='', secret='', payload=''):
   """
@@ -103,7 +124,7 @@ def checkSignature(sign='', secret='', payload=''):
     valid = signToken(token=sign, secret=secret, payload=payload)
     return sign == valid
 
-def PageKiteRequestHeaders(server, backends, tokens=None, testtoken=None, replace=None):
+def PageKiteRequestHeaders(server, backends, tokens=None, testtoken=None, replace=None, public_key_auth=None):
   req = ['X-PageKite-Version: %s\r\n' % APPVER]
   if replace:
     req.append('X-PageKite-Replace: %s\r\n' % replace)
@@ -126,7 +147,8 @@ def PageKiteRequestHeaders(server, backends, tokens=None, testtoken=None, replac
       # Sign the payload with the shared secret (random salt).
       sign = signToken(secret=backends[d][BE_SECRET],
                        payload=data,
-                       token=testtoken)
+                       token=testtoken,
+                       public_key_auth=public_key_auth)
 
       req.append('X-PageKite: %s:%s\r\n' % (data, sign))
   return req

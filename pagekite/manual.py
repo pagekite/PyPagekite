@@ -244,6 +244,9 @@ MAN_OPT_BACKEND = ("""\
     --all           __Terminate early if any tunnels fail to register.
     --new           __Don't attempt to connect to any kites' old front-ends.
     --noprobes      __Reject all probes for service state.
+    --publickeyauth</b>=<a>/path/to/script</a> __
+             Use public key authentication with script 
+    
 """)
 MAN_OPT_FRONTEND = ("""\
     --isfrontend    __Enable front-end operation.
