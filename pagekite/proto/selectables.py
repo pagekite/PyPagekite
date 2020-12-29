@@ -105,6 +105,7 @@ class Selectable(object):
 
     # For Epoll
     self.cleanup_callback = None
+    self.mask = None
 
     # Quota-related stuff
     self.quota = None
