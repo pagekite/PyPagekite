@@ -516,6 +516,10 @@ class Connections(object):
     with self.lock:
       return [p[-1] for p in self.idle]
 
+  def NewConns(self):
+    with self.lock:
+      return [s for s in self.conns if s.sstate == 'new']
+
   def Sockets(self):
     with self.lock:
       return [s.fd for s in self.conns]

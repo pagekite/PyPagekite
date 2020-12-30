@@ -1968,6 +1968,10 @@ class FastPingHelper(threading.Thread):
       if self.waiting:
         self.wq.put(1)
 
+  def num_clients(self):
+    with self.lock:
+      return len(self.clients)
+
   def run_once(self):
     now = time.time()
     with self.lock:
@@ -2114,6 +2118,16 @@ class Listener(Selectable):
         while client:
           try:
             self.conns.ping_helper.add_client(client, address, self.HandleClient)
+            # If a lot of connections are in the 'new' state, stop accepting more of them.
+            # Note that since the epoll (or select) is level-triggered, we'll accept another
+            # connection in the next epoll iteration. However, this gives more opportunity to
+            # the other connections to mature.
+            num_newconns = len(self.conns.NewConns())
+            num_fastping = self.conns.ping_helper.num_clients()
+            if num_newconns + num_fastping > 10:
+              self.LogInfo('Listener::ReadData: stopping with %d new connections %d fastping' %
+                           (num_newconns, num_fastping))
+              return True
             client, address = self.fd.accept()
           except IOError:
             client = None
