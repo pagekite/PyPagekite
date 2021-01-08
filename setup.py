@@ -8,6 +8,7 @@ from datetime import date
 from setuptools import setup
 from pagekite.common import APPVER
 import os
+import subprocess
 
 try:
   # This borks sdist.
@@ -15,11 +16,25 @@ try:
 except:
   pass
 
+def git_describe():
+  try:
+    return (subprocess.check_output(['git', 'describe', '--tags', '--match', 'v[0-9]*'],
+                                    stderr=open('/dev/null', 'w'))
+            .decode('ascii')
+            .rstrip() # Trailing newline
+            .lstrip('v') # 'v' prefix
+            .replace('-', '.', 1) # vX.Y.Z-N-gSHA - first - becomes a .
+            .replace('-', '+', 1) # vX.Y.Z-N-gSHA - second - becomes a + for localversion
+            )
+  except subprocess.CalledProcessError:
+    return None
+
 setup(
     name="pagekite",
     version=os.getenv(
         'PAGEKITE_VERSION',
-        APPVER.replace('github', 'dev%d' % (120*int(time.time()/120)))),  # Integer division
+        git_describe() or
+          APPVER.replace('github', 'dev%d' % (120*int(time.time()/120)))),  # Integer division
     license="AGPLv3+",
     author="Bjarni R. Einarsson",
     author_email="bre@pagekite.net",
