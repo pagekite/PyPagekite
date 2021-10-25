@@ -1,7 +1,7 @@
 # Makefile for building combined pagekite.py files.
 export PYTHONPATH := .
 
-BREED_PAGEKITE = $(shell python -c 'import six; print(six.__file__)') \
+BREED_PAGEKITE = $(shell python -c 'import six; print(six.__file__.replace(".pyc", ".py"))') \
                  pagekite/__init__.py \
 	         pagekite/common.py \
 	         pagekite/compat.py \
