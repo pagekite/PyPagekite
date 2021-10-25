@@ -1833,6 +1833,7 @@ class UnknownConn(MagicProtocolParser):
           self.conns.SetIdle(self, 120)
           return True
         else:
+          self.LogInfo("TLS unknown SNI host %s" % domains[0])
           self.Send(TLS_Unavailable(unavailable=True), try_flush=True)
           return False
 
@@ -1974,13 +1975,13 @@ class FastPingHelper(threading.Thread):
       _clients, self.clients = self.clients, []
     for ts, client, addr, handler in _clients:
       try:
-        data = client.recv(64, socket.MSG_PEEK)
+        data = s(client.recv(64, socket.MSG_PEEK))
       except:
         data = None
       try:
         if data:
           if '\nHost: ping.pagekite' in data:
-            client.send(self.rejection)
+            client.send(b(self.rejection))
             client.close()
             self.fast_pinged.append(obfuIp(addr[0]))
           else:

@@ -312,4 +312,4 @@ def TLS_Unavailable(forbidden=False, unavailable=False):
   # Unfortunately, Chrome/ium only honors code 49, any other code will
   # cause it to transparently retry with SSLv3. So although this is a
   # bit misleading, this is what we send...
-  return struct.pack('>BBBBBBB', 0x15, 3, 3, 0, 2, 2, 49) # 49 = Access denied
+  return s(struct.pack('>BBBBBBB', 0x15, 3, 3, 0, 2, 2, 49)) # 49 = Access denied
