@@ -15,12 +15,7 @@ WARNING: You don't seem to have curl installed!
 
   You can manually download pagekite.py from these URLs instead:
 
-      Basic version:  https://pagekite.net/pk/pagekite.py
-
-      Alpha GTK GUI:  https://pagekite.net/pk/pagekite-gtk.py
-       Android/SL4A:  https://pagekite.net/pk/pagekite-android.py #Not working
-       Android/SL4A:  https://raw.githubusercontent.com/Deshdeepak1/pagekite-android/master/pagekite.py
-       Recommended to replace https://pagekite.net/pk/pagekite.py file with above file.
+      https://pagekite.net/pk/pagekite.py
 
   Remember to run 'chmod +x pagekite*.py' after downloading.
   There are also Debian and RPM packages on: https://pagekite.net/downloads/

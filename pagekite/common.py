@@ -47,15 +47,14 @@ SERVICE_CERTS = ['b5p.us', 'frontends.b5p.us', 'pagekite.net', 'pagekite.me',
 
 # Places to search for the CA Certificate bundle
 OS_CA_CERTS = (
-  "/etc/pki/tls/certs/ca-bundle.crt",        # Fedora/RHEL
-  "/etc/ssl/certs/ca-certificates.crt",      # Debian/Ubuntu/Gentoo etc.
-  "/etc/ssl/ca-bundle.pem",                  # OpenSUSE
-  "/etc/pki/tls/cacert.pem",                 # OpenELEC
-  "/etc/ssl/cert.pem",                       # OpenBSD
-  "/usr/local/share/certs/ca-root-nss.crt",  # FreeBSD/DragonFly
-  "/usr/local/etc/openssl/cert.pem",         # OS X (Homebrew)
-  "/opt/local/etc/openssl/cert.pem",         # OS X (Ports?)
-#  "/system/etc/security/cacerts")            # Android # Shows IsADirectoryError
+  "/etc/pki/tls/certs/ca-bundle.crt",                  # Fedora/RHEL
+  "/etc/ssl/certs/ca-certificates.crt",                # Debian/Ubuntu/Gentoo etc.
+  "/etc/ssl/ca-bundle.pem",                            # OpenSUSE
+  "/etc/pki/tls/cacert.pem",                           # OpenELEC
+  "/etc/ssl/cert.pem",                                 # OpenBSD
+  "/usr/local/share/certs/ca-root-nss.crt",            # FreeBSD/DragonFly
+  "/usr/local/etc/openssl/cert.pem",                   # OS X (Homebrew)
+  "/opt/local/etc/openssl/cert.pem",                   # OS X (Ports?)
   "/data/data/com.termux/files/usr/etc/tls/cert.pem")  # Android-Termux
 
 CURL_CA_CERTS = 'https://curl.haxx.se/ca/cacert.pem'
