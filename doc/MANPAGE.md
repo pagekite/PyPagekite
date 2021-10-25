@@ -364,6 +364,10 @@ time the program defaults will Just Work.
    * <b>--tls_endpoint</b>=`name`:`/path/to/file` <br />
      Terminate SSL/TLS for a name using key/cert from a file.
 
+   * <b>--dns_hints</b>=`domain`,`domain`,... <br />
+     Advertise DNS information for listed domains in the fast ping
+     response, to help upagekite connectors discover relays.
+
 ### System options ###
 
    * <b>--optfile</b>=`/path/to/file` <br />

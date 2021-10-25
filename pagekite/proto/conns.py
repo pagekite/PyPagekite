@@ -1958,7 +1958,8 @@ class FastPingHelper(threading.Thread):
     self.overloaded = self.config.Overloaded()
     self.rejection = HTTP_Unavailable('fe', 'http', 'ping.pagekite',
                                       overloaded=self.overloaded,
-                                      advertise=False)
+                                      advertise=False,
+                                      dns_hints=self.config.DNS_Hints())
 
   def add_client(self, client, addr, handler):
     client.setblocking(0)

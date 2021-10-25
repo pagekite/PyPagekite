@@ -86,7 +86,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'service_xmlrpc=', 'controlpanel', 'controlpass',
             'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'webpath=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
-            'isfrontend', 'noisfrontend', 'settings',
+            'isfrontend', 'noisfrontend', 'settings', 'dns_hints=',
             'defaults', 'whitelabel=', 'whitelabels=', 'local=', 'domain=',
             'auththreads=', 'authdomain=', 'authfail_closed',
             'motd=', 'register=', 'host=', 'noupgradeinfo', 'upgradeinfo=',
@@ -1117,6 +1117,7 @@ class PageKite(object):
     self.websocket_chunks = False
     self.enable_sslzlib = False
     self.buffer_max = DEFAULT_BUFFER_MAX
+    self.dns_hints = None
     self.error_url = None
     self.error_urls = {}
 
@@ -1522,8 +1523,10 @@ class PageKite(object):
         p('authdomain = %s', self.isfrontend and self.auth_domain, 'foo.com'),
         (self.authfail_closed and 'authfail_closed' or
          '# authfail_closed  # Tunnel auth fails OPEN without this'),
-        p('motd = %s', self.isfrontend and self.motd, '/path/to/motd.txt')
+        p('motd = %s', self.isfrontend and self.motd, '/path/to/motd.txt'),
       ])
+      if self.dns_hints:
+        config.append('dns_hints = %s' % ','.join(self.dns_hints))
       for d in sorted(self.auth_domains.keys()):
         config.append('authdomain=%s:%s' % (d, self.auth_domains[d]))
       dprinted = 0
@@ -2062,6 +2065,15 @@ class PageKite(object):
     except (IOError, OSError, ValueError, KeyError, TypeError):
       pass
 
+  def DNS_Hints(self):
+    hints = {}
+    for dom in (self.dns_hints or []):
+      try:
+        hints[dom] = socket.gethostbyname_ex(dom)[2]
+      except:
+        pass
+    return hints
+
   def Overloaded(self, yamon=None):
     if not self.overload_current or not self.conns:
       return False
@@ -2410,6 +2422,8 @@ class PageKite(object):
       elif opt == '--motd':
         self.motd = arg
         self.LoadMOTD()
+      elif opt == '--dns_hints':
+        self.dns_hints = [a.strip() for a in arg.split(',')]
       elif opt == '--noupgradeinfo': self.upgrade_info = []
       elif opt == '--upgradeinfo':
         version, tag, md5, human_url, file_url = arg.split(';')

@@ -339,6 +339,10 @@ MAN_OPT_FRONTEND = ("""\
 
     --tls_endpoint</b>=<a>name</a>:<a>/path/to/file</a> __
             Terminate SSL/TLS for a name using key/cert from a file.
+
+    --dns_hints</b>=<a>domain</a>,<a>domain</a>,... __
+            Advertise DNS information for listed domains in the fast ping
+            response, to help upagekite connectors discover relays.
 """)
 MAN_OPT_SYSTEM = ("""\
     --optfile</b>=<a>/path/to/file</a> __

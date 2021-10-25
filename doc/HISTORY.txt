@@ -1,6 +1,12 @@
 Version history - highlights
 ============================
 
+
+v1.5.2.2110??
+-------------
+   - Add --dns_hints, to help upagekite connectors
+
+
 v1.5.2.201011
 -------------
    - Fix the bundled CA certificate for Sectigo

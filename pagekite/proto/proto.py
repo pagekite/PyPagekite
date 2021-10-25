@@ -263,13 +263,19 @@ def HTTP_GoodBeConnection(proto):
 def HTTP_Unavailable(where, proto, domain, comment='', frame_url=None,
                      code=503, status='Unavailable', headers=None,
                      overloaded=False, advertise=True, relay_sockname=None,
-                     other_details=None):
+                     other_details=None, dns_hints=None):
   if advertise:
     label = "PageKite"
     whatis = ''.join(['<a href="', WWWHOME, '"><i>', label, '</i></a>'])
   else:
     label = "Connection"
     whatis = "connection"
+
+  if dns_hints:
+    headers = headers or []
+    for dom in dns_hints:
+      headers.append(HTTP_Header('X-DNS',
+        '%s %s' % (dom, ','.join(dns_hints[dom]))))
 
   if code == 401:
     headers = headers or []
