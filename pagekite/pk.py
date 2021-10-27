@@ -2169,6 +2169,8 @@ class PageKite(object):
     specs = []
     if protos:
       for proto in protos.replace('/', '-').lower().split(','):
+        if proto[:3] == 'tls':
+          proto = 'https' + proto[3:]
         if proto == 'ssh':
           specs.append(['raw', '22', fe_domain, be_host, be_port or '22', secret])
         else:
@@ -2668,12 +2670,12 @@ class PageKite(object):
       else:
         be = be_spec.replace('/', '').split(':')
         if be[0].lower() in ('http', 'http2', 'http3', 'https',
-                             'ssh', 'irc', 'xmpp'):
+                             'tls', 'ssh', 'irc', 'xmpp'):
           be_proto = be.pop(0)
           if len(be) < 2:
             be.append({'http': '80', 'http2': '80', 'http3': '80',
                        'https': '443', 'irc': '6667', 'xmpp': '5222',
-                       'ssh': '22'}[be_proto])
+                       'ssh': '22', 'tls': '443'}[be_proto])
         if len(be) > 2:
           raise ConfigError('Bad back-end definition: %s' % be_spec)
         if len(be) < 2:
