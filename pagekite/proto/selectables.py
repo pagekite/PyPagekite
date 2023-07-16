@@ -687,6 +687,11 @@ class MagicProtocolParser(LineParser):
           if server:
             return self.ProcessProto(data, 'xmpp', server)
 
+        elif data[1] == '\0':
+          version, server, port = self.GetMinecraftInfo(data)
+          if version and server and (port == self.on_port):
+            return self.ProcessProto(data, 'minecraft', server)
+
         return LineParser.ProcessData(self, data)
 
       self.is_tls = True
@@ -748,6 +753,32 @@ class MagicProtocolParser(LineParser):
       return server
     else:
       return None
+
+  def GetMinecraftInfo(self, data):
+    try:
+      bytelist = struct.unpack('>' + ('B' * len(data)), b(data))
+      def getVarInt(ofs):
+          vi, sh = 0, 0
+          for o in range(ofs, ofs+4):
+              nb = bytelist[o]
+              vi |= (nb & 0x7f) << sh
+              sh += 7
+              if not (nb & 0x80):
+                  return vi, (o+1)
+          raise ValueError('Invalid (too large) VarInt')
+      (plen, packet) = bytelist[:2]
+      if (plen & 0x80) or (plen > len(data)) or (packet != 0x00):
+          raise ValueError('Unexpected VarInt')
+      version, ofs = getVarInt(2)
+      snlen, ofs = getVarInt(ofs)
+      if plen != (ofs + snlen + 2 ):
+          raise ValueError('Packet length and hostname length do not match')
+      sname, ofs = (b(data[ofs:ofs+snlen])).decode('utf-8'), (ofs + snlen)
+      sport = struct.unpack('>h', b(data[ofs:ofs+2]))[0]
+      self.LogDebug('Minecraft conn: version=%s, wants %s:%s' % (version, sname, sport))
+      return version, sname, sport
+    except Exception as e:
+      return None, None, None
 
   def ProcessTls(self, data, domain=None):
     self.LogError('MagicProtocolParser::ProcessTls: Should be overridden!')

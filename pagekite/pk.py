@@ -1072,7 +1072,7 @@ class PageKite(object):
     self.server_portalias = {}
     self.server_aliasport = {}
     self.server_protos = ['http', 'http2', 'http3', 'https', 'websocket',
-                          'irc', 'raw', 'xmpp']
+                          'irc', 'raw', 'minecraft', 'xmpp']
 
     self.accept_acl_file = None
     self.tunnel_acls = []
@@ -1492,6 +1492,7 @@ class PageKite(object):
         '# service_on = http/8080:YOU.pagekite.me:localhost:8080:SECRET',
         '# service_on = https:YOU.pagekite.me:localhost:443:SECRET',
         '# service_on = websocket:YOU.pagekite.me:localhost:8080:SECRET',
+        '# service_on = minecraft:YOU.pagekite.me:localhost:25565:SECRET',
         '#',
         '# service_off = http:YOU.pagekite.me:localhost:4545:SECRET',
         ''
@@ -2208,7 +2209,8 @@ class PageKite(object):
         bport = (bport or (proto in ('http', 'websocket') and 80)
                        or (proto == 'irc' and 6667)
                        or (proto == 'xmpp' and 5222)
-                       or (proto == 'https' and 443))
+                       or (proto == 'https' and 443)
+                       or (proto == 'minecraft' and 25565))
         if port:
           bid = '%s-%d:%s' % (proto, int(port), fdom)
         else:
@@ -2670,12 +2672,13 @@ class PageKite(object):
       else:
         be = be_spec.replace('/', '').split(':')
         if be[0].lower() in ('http', 'http2', 'http3', 'https',
-                             'tls', 'ssh', 'irc', 'xmpp'):
+                             'tls', 'ssh', 'irc', 'xmpp', 'minecraft'):
           be_proto = be.pop(0)
           if len(be) < 2:
-            be.append({'http': '80', 'http2': '80', 'http3': '80',
-                       'https': '443', 'irc': '6667', 'xmpp': '5222',
-                       'ssh': '22', 'tls': '443'}[be_proto])
+            be.append({
+              'http': '80', 'http2': '80', 'http3': '80',
+              'https': '443', 'irc': '6667', 'xmpp': '5222',
+              'ssh': '22', 'tls': '443', 'minecraft': 25565}[be_proto])
         if len(be) > 2:
           raise ConfigError('Bad back-end definition: %s' % be_spec)
         if len(be) < 2:
