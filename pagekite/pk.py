@@ -90,7 +90,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'auththreads=', 'authdomain=', 'authfail_closed',
             'motd=', 'register=', 'host=', 'noupgradeinfo', 'upgradeinfo=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
-            'tls_legacy', 'tls_default=', 'tls_endpoint=', 'selfsign',
+            'tls_legacy', 'tls_ciphers=', 'tls_default=', 'tls_endpoint=', 'selfsign',
             'fe_certname=', 'fe_nocertcheck', 'ca_certs=',
             'kitename=', 'kitesecret=',
             'backend=', 'define_backend=', 'be_config=',
@@ -1079,6 +1079,7 @@ class PageKite(object):
 
     self.tls_legacy = False
     self.tls_default = None
+    self.tls_ciphers = None
     self.tls_endpoints = {}
     self.fe_certname = []
     #
@@ -1555,6 +1556,7 @@ class PageKite(object):
         config.append('# tls_endpoint = DOMAIN:PEM_FILE')
       config.extend([
         p('tls_default = %s', self.tls_default, 'DOMAIN'),
+        p('tls_ciphers = %s', self.tls_ciphers, ''),
         p('tls_legacy = %s', self.tls_legacy, False),
         '',
       ])
@@ -2374,10 +2376,11 @@ class PageKite(object):
         self.ui_paths[host] = hosti
 
       elif opt == '--tls_default': self.tls_default = arg
+      elif opt == '--tls_ciphers': self.tls_ciphers = arg
       elif opt == '--tls_legacy': self.tls_legacy = True
       elif opt == '--tls_endpoint':
         name, pemfile = arg.split(':', 1)
-        ctx = socks.MakeBestEffortSSLContext(legacy=self.tls_legacy)
+        ctx = socks.MakeBestEffortSSLContext(legacy=self.tls_legacy, ciphers=self.tls_ciphers)
         ctx.use_privatekey_file(pemfile)
         ctx.use_certificate_chain_file(pemfile)
         self.tls_endpoints[name] = (pemfile, ctx)
