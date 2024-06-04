@@ -1444,18 +1444,29 @@ class UserConn(Selectable):
       self.Cleanup(close=False)
       return failure
 
+    sspec = list(backend)
+    if len(sspec) == 1: sspec.append(80)
+
     try:
-      self.SetFD(rawsocket(socket.AF_INET, socket.SOCK_STREAM))
-      try:
-        self.fd.settimeout(2.0) # Missing in Python 2.2
-      except:
-        self.fd.setblocking(1)
-
-      sspec = list(backend)
-      if len(sspec) == 1: sspec.append(80)
-      self.fd.connect(tuple(sspec))
-
-      self.fd.setblocking(0)
+      addr_info = socket.getaddrinfo(sspec[0], sspec[1], socket.AF_UNSPEC, socket.SOCK_STREAM)
+      success = False
+      for family, type, p, canonname, sockaddr in addr_info:
+        self.SetFD(rawsocket(family, type, p))
+        try:
+          self.fd.settimeout(2.0) # Missing in Python 2.2
+        except:
+          self.fd.setblocking(1)
+      
+        try:
+          self.fd.connect(tuple(sspec))
+          success = True
+        except socket.error as err:
+          logInfo.append(('socket_error', '%s' % err))
+          continue
+        self.fd.setblocking(0)
+        break
+      if not success:
+        raise socket.error('Failed to connect to %s:%s' % (sspec[0], sspec[1]))
 
     except socket.error as err:
       logInfo.append(('socket_error', '%s' % err))
