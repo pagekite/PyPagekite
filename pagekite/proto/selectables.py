@@ -653,7 +653,7 @@ class LineParser(Selectable):
 TLS_CLIENTHELLO = '%c' % 0o26
 SSL_CLIENTHELLO = '\x80'
 XML_PREAMBLE = '<?xml'
-XMPP_REGEXP = re.compile("<[^>]+\sto=([^\s>]+)[^>]*>")
+XMPP_REGEXP = re.compile(r"<[^>]+\sto=([^\s>]+)[^>]*>")
 
 class MagicProtocolParser(LineParser):
   """A Selectable which recognizes HTTP, TLS or XMPP preambles."""
