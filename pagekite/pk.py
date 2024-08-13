@@ -1240,7 +1240,7 @@ class PageKite(object):
     return self.pyfile  # Fall back to distributed CA certs
 
   ACL_SHORTHAND = {
-    'localhost': '((::ffff:)?127\..*|::1)',
+    'localhost': r'((::ffff:)?127\..*|::1)',
     'any': '.*'
   }
   def CheckAcls(self, acls, address, which, conn=None):

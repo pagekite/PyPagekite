@@ -54,8 +54,8 @@ class BasicUi(NullUi):
   DAEMON_FRIENDLY = False
   WANTS_STDERR = True
   EMAIL_RE = re.compile(r'^[a-z0-9!#$%&\'\*\+\/=?^_`{|}~-]+'
-                         '(?:\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'
-                         '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
+                         '(?:\\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'
+                         r'(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
                          '(?:[a-zA-Z]{2,16})$')
   def Notify(self, message, prefix=' ',
              popup=False, color=None, now=None, alignright=''):

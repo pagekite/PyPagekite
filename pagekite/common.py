@@ -150,7 +150,7 @@ DYNDNS = {
 
 # Create our service-domain matching regexp
 import re
-SERVICE_DOMAIN_RE = re.compile('\.(' + '|'.join(SERVICE_DOMAINS) + ')$')
+SERVICE_DOMAIN_RE = re.compile(r'\.(' + '|'.join(SERVICE_DOMAINS) + ')$')
 SERVICE_SUBDOMAIN_RE = re.compile(r'^([A-Za-z0-9_-]+\.)*[A-Za-z0-9_-]+$')
 
 
