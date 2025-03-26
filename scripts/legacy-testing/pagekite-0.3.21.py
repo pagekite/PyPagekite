@@ -1,4 +1,4 @@
-#!/usr/bin/python -u
+#!/usr/bin/python2 -u
 #
 # pagekite.py, Copyright 2010, 2011, the Beanstalks Project ehf.
 #                                    and Bjarni Runar Einarsson

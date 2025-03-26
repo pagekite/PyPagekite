@@ -1,7 +1,7 @@
 # Makefile for building combined pagekite.py files.
 export PYTHONPATH := .
 
-BREED_PAGEKITE = $(shell python -c 'import six; print(six.__file__.replace(".pyc", ".py"))') \
+BREED_PAGEKITE = $(shell python3 -c 'import six; print(six.__file__.replace(".pyc", ".py"))') \
                  pagekite/__init__.py \
 	         pagekite/common.py \
 	         pagekite/compat.py \
@@ -33,8 +33,8 @@ combined: pagekite tools doc/MANPAGE.md dev .header defaults.cfg
 	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py - --nopyopenssl \
 	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py - --nossl \
 	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py - --tls_legacy
-	@killall pagekite-tmp.py
-	@mv pagekite-tmp.py dist/pagekite-`python setup.py --version`.py
+	@killall pagekite-tmp.py || true
+	@mv pagekite-tmp.py dist/pagekite-`python3 setup.py --version`.py
 	@ls -l dist/pagekite-*.py
 
 untested: pagekite tools doc/MANPAGE.md dev .header defaults.cfg
@@ -43,7 +43,7 @@ untested: pagekite tools doc/MANPAGE.md dev .header defaults.cfg
 	             pagekite/__main__.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
-	@mv pagekite-tmp.py dist/pagekite-`python setup.py --version`.py
+	@mv pagekite-tmp.py dist/pagekite-`python3 setup.py --version`.py
 	@ls -l dist/pagekite-*.py
 
 gtk: pagekite tools dev .header defaults.cfg
@@ -52,7 +52,7 @@ gtk: pagekite tools dev .header defaults.cfg
 	             pagekite_gtk.py \
 	             >pagekite-tmp.py
 	@chmod +x pagekite-tmp.py
-	@mv pagekite-tmp.py dist/pagekite-gtk-`python setup.py --version`.py
+	@mv pagekite-tmp.py dist/pagekite-gtk-`python3 setup.py --version`.py
 	@ls -l dist/pagekite-*.py
 
 android: pagekite tools .header defaults.cfg
@@ -65,10 +65,10 @@ android: pagekite tools .header defaults.cfg
 	@ls -l dist/pk-android-*.py
 
 doc/MANPAGE.md: pagekite pagekite/manual.py
-	@python -m pagekite.manual --nopy --markdown >doc/MANPAGE.md
+	@python3 -m pagekite.manual --nopy --markdown >doc/MANPAGE.md
 
 doc/pagekite.1: pagekite pagekite/manual.py
-	@python -m pagekite.manual --nopy --man >doc/pagekite.1
+	@python3 -m pagekite.manual --nopy --man >doc/pagekite.1
 
 dist: combined .deb gtk allrpm android
 
@@ -76,30 +76,7 @@ allrpm: rpm_el4 rpm_el5 rpm_el6-fc13 rpm_fc14-15-16
 
 alldeb: .deb
 
-rpm_fc14-15-16:
-	@./rpm/rpm-setup.sh 0pagekite_fc14fc15fc16 /usr/lib/python2.7/site-packages
-	@make .rpm
-
-rpm_el4:
-	@./rpm/rpm-setup.sh 0pagekite_el4 /usr/lib/python2.3/site-packages
-	@make .rpm
-
-rpm_el5:
-	@./rpm/rpm-setup.sh 0pagekite_el5 /usr/lib/python2.4/site-packages
-	@make .rpm
-
-rpm_el6-fc13:
-	@./rpm/rpm-setup.sh 0pagekite_el6fc13 /usr/lib/python2.6/site-packages
-	@make .rpm
-
-.rpm: doc/pagekite.1
-	@python setup.py bdist_rpm --install=rpm/rpm-install.sh \
-	                           --post-install=rpm/rpm-post.sh \
-	                           --pre-uninstall=rpm/rpm-preun.sh \
-	                           --requires=python-SocksipyChain \
-	                           --requires=python-six
-
-VERSION=`python setup.py --version`
+VERSION=`python3 setup.py --version`
 DEB_VERSION=`head -n1 debian/changelog | sed -e "s+.*(\(.*\)).*+\1+"`
 .debprep:
 	@ln -sf deb debian
@@ -110,7 +87,7 @@ DEB_VERSION=`head -n1 debian/changelog | sed -e "s+.*(\(.*\)).*+\1+"`
 	fi
 
 .targz:
-	@python setup.py sdist
+	@python3 setup.py sdist
 
 .deb: .debprep
 	@debuild -i -us -uc

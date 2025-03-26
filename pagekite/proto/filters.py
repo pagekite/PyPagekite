@@ -75,6 +75,16 @@ class TunnelFilter:
     return data
 
 
+
+def string_escape(data):
+  try:
+    return data.encode('string_escape')
+  except LookupError:
+    return data.encode('unicode-escape').decode('latin-1')
+  except AttributeError:
+    return str(data, 'latin-1').encode('unicode-escape').decode('latin-1')
+
+
 class TunnelWatcher(TunnelFilter):
   """Base class for watchers/filters for data going in/out of Tunnels."""
   FILTERS = ('data_in', 'data_out')
@@ -84,6 +94,7 @@ class TunnelWatcher(TunnelFilter):
     self.watch_level = watch_level
 
   def format_data(self, data, level):
+    data = data if isinstance(data, str) else str(data, 'latin-1')
     if '\r\n\r\n' in data:
       head, tail = data.split('\r\n\r\n', 1)
       output = self.format_data(head, level)
@@ -93,7 +104,7 @@ class TunnelWatcher(TunnelFilter):
         output.extend(self.format_data(tail, level))
       return output
     else:
-      output = data.encode('string_escape').replace('\\n', '\\n\n')
+      output = string_escape(data).replace('\\n', '\\n\n')
       if output.count('\\') > 0.15*len(output):
         if level > 2:
           output = [['', '']]

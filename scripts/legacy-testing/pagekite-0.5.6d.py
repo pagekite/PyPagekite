@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 #
 # WARNING: This file is a combination of multiple Python files.
 #          The source code lives here: http://pagekite.org/
