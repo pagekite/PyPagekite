@@ -46,33 +46,13 @@ untested: pagekite tools doc/MANPAGE.md dev .header defaults.cfg
 	@mv pagekite-tmp.py dist/pagekite-`python3 setup.py --version`.py
 	@ls -l dist/pagekite-*.py
 
-gtk: pagekite tools dev .header defaults.cfg
-	@./scripts/breeder.py --gtk-images --compress --header .header \
-	             defaults.cfg sockschain $(BREED_PAGEKITE) gui \
-	             pagekite_gtk.py \
-	             >pagekite-tmp.py
-	@chmod +x pagekite-tmp.py
-	@mv pagekite-tmp.py dist/pagekite-gtk-`python3 setup.py --version`.py
-	@ls -l dist/pagekite-*.py
-
-android: pagekite tools .header defaults.cfg
-	@./scripts/breeder.py --compress --header .header \
-	             defaults.cfg sockschain $(BREED_PAGEKITE) \
-	             pagekite/android.py \
-	             >pagekite-tmp.py
-	@chmod +x pagekite-tmp.py
-	@mv pagekite-tmp.py dist/pk-android-`./pagekite-tmp.py --appver`.py
-	@ls -l dist/pk-android-*.py
-
 doc/MANPAGE.md: pagekite pagekite/manual.py
 	@python3 -m pagekite.manual --nopy --markdown >doc/MANPAGE.md
 
 doc/pagekite.1: pagekite pagekite/manual.py
 	@python3 -m pagekite.manual --nopy --man >doc/pagekite.1
 
-dist: combined .deb gtk allrpm android
-
-allrpm: rpm_el4 rpm_el5 rpm_el6-fc13 rpm_fc14-15-16
+dist: combined .deb
 
 alldeb: .deb
 
@@ -113,7 +93,6 @@ pagekite: pagekite/__init__.py pagekite/httpd.py pagekite/__main__.py
 dev: sockschain
 	@rm -f .SELF
 	@ln -fs . .SELF
-	@ln -fs scripts/pagekite_gtk pagekite_gtk.py
 	@echo export PYTHONPATH=`pwd`
 	@echo export HTTP_PROXY=
 	@echo export http_proxy=
@@ -132,6 +111,6 @@ distclean: clean
 clean:
 	[ -e debian ] && debuild clean || true
 	@rm -vf sockschain *.py[co] */*.py[co] */*/*.py[co] scripts/breeder.py .SELF
-	@rm -vf .appver pagekite-tmp.py MANIFEST setup.cfg pagekite_gtk.py
+	@rm -vf .appver pagekite-tmp.py MANIFEST setup.cfg
 	@rm -vrf debian *.egg-info .header doc/pagekite.1 build/
 
