@@ -171,7 +171,7 @@ class HaproxyProtocolFilter(TunnelFilter):
 class HttpHeaderFilter(TunnelFilter):
   """Filter that adds X-Forwarded-For and X-Forwarded-Proto to requests."""
   FILTERS = ('data_in')
-  HTTP_HEADER = re.compile('(?ism)^(([A-Z]+) ([^\n]+) HTTP/\d+\.\d+\s*)$')
+  HTTP_HEADER = re.compile('(?ism)^(([A-Z]+) ([^\n]+) HTTP/\\d+\\.\\d+\\s*)$')
   DISABLE = 'rawheaders'
 
   def filter_data_in(self, tunnel, sid, data):
@@ -224,15 +224,15 @@ class HttpSecurityFilter(HttpHeaderFilter):
                            '((?:/+(?:xampp/|security/|licenses/|webalizer/|server-(?:status|info)|adm)'
                            '|[^\n]*/'
                              # WordPress admin pages
-                             '(?:wp-admin/(?!admin-ajax|css/)|wp-config\.php'
+                             '(?:wp-admin/(?!admin-ajax|css/)|wp-config\\.php'
                              # Hackzor tricks
-                             '|system32/|\.\.|\.ht(?:access|pass)'
+                             '|system32/|\\.\\.|\\.ht(?:access|pass)'
                              # phpMyAdmin and similar tools
                              '|(?:php|sql)?my(?:sql)?(?:adm|manager)'
                              # Setup pages for common PHP tools
-                             '|(?:adm[^\n]*|install[^\n]*|setup)\.php)'
+                             '|(?:adm[^\n]*|install[^\n]*|setup)\\.php)'
                            ')[^\n]*)'
-                           ' HTTP/\d+\.\d+\s*)$')
+                           ' HTTP/\\d+\\.\\d+\\s*)$')
   REJECT = 'PAGEKITE_REJECT_'
 
   def filter_header_data_in(self, http_hdr, data, info):
