@@ -43,14 +43,16 @@ def _maybe_open(archive, mode):
         yield archive
 
 
-def _write_file_prefix(f, interpreter):
+def _write_file_prefix(f, interpreter, preamble):
     """Write a shebang line."""
     if interpreter:
         shebang = b'#!' + interpreter.encode(shebang_encoding) + b'\n'
         f.write(shebang)
+    if preamble:
+        f.write(bytes(preamble, shebang_encoding))
 
 
-def _copy_archive(archive, new_archive, interpreter=None):
+def _copy_archive(archive, new_archive, interpreter=None, preamble=None):
     """Copy an application archive, modifying the shebang line."""
     with _maybe_open(archive, 'rb') as src:
         # Skip the shebang line from the source.
@@ -62,7 +64,7 @@ def _copy_archive(archive, new_archive, interpreter=None):
             src.readline()
 
         with _maybe_open(new_archive, 'wb') as dst:
-            _write_file_prefix(dst, interpreter)
+            _write_file_prefix(dst, interpreter, preamble)
             # If there was no shebang, "first_2" contains the first 2 bytes
             # of the source file, so write them before copying the rest
             # of the file.
@@ -74,7 +76,7 @@ def _copy_archive(archive, new_archive, interpreter=None):
 
 
 def create_archive(source, target=None, interpreter=None, main=None,
-                   filter=None, compressed=False):
+                   preamble=None, filter=None, compressed=False):
     """Create an application archive from SOURCE.
 
     The SOURCE can be the name of a directory, or a filename or a file-like
@@ -96,20 +98,21 @@ def create_archive(source, target=None, interpreter=None, main=None,
     # Are we copying an existing archive?
     source_is_file = False
     if hasattr(source, 'read') and hasattr(source, 'readline'):
+        source0 = source
         source_is_file = True
     else:
-        source = pathlib.Path(source)
-        if source.is_file():
+        source0 = pathlib.Path(source[0])
+        if source0.is_file() and (1 == len(source)):
             source_is_file = True
 
     if source_is_file:
-        _copy_archive(source, target, interpreter)
+        _copy_archive(source0, target, interpreter)
         return
 
     # We are creating a new archive from a directory.
-    if not source.exists():
+    if not source0.exists():
         raise ZipAppError("Source does not exist")
-    has_main = (source / '__main__.py').is_file()
+    has_main = (source0 / '__main__.py').is_file() and (len(source) == 1)
     if main and has_main:
         raise ZipAppError(
             "Cannot specify entry point if the source has __main__.py")
@@ -127,19 +130,30 @@ def create_archive(source, target=None, interpreter=None, main=None,
         main_py = MAIN_TEMPLATE.format(module=mod, fn=fn)
 
     if target is None:
-        target = source.with_suffix('.pyz')
+        target = source0.with_suffix('.pyz')
     elif not hasattr(target, 'write'):
         target = pathlib.Path(target)
 
+    def _files(path):
+        if path.is_dir():
+            return list(path.rglob('*'))
+        else:
+            return [path]
+
     with _maybe_open(target, 'wb') as fd:
-        _write_file_prefix(fd, interpreter)
+        _write_file_prefix(fd, interpreter, preamble)
         compression = (zipfile.ZIP_DEFLATED if compressed else
                        zipfile.ZIP_STORED)
         with zipfile.ZipFile(fd, 'w', compression=compression) as z:
-            for child in source.rglob('*'):
-                arcname = child.relative_to(source)
-                if filter is None or filter(arcname):
-                    z.write(child, arcname.as_posix())
+            for src in source:
+                src = pathlib.Path(src)
+                for child in _files(src):
+                    if len(source) == 1:
+                        arcname = child.relative_to(src)
+                    else:
+                        arcname = child.relative_to(src.parent)
+                    if filter is None or filter(arcname):
+                        z.write(child, arcname.as_posix())
             if main_py:
                 z.writestr('__main__.py', main_py.encode('utf-8'))
 
@@ -151,6 +165,15 @@ def get_interpreter(archive):
     with _maybe_open(archive, 'rb') as f:
         if f.read(2) == b'#!':
             return f.readline().strip().decode(shebang_encoding)
+
+
+def default_filter(fn):
+    pfn = fn.as_posix()
+    if pfn.endswith('.pyc') or pfn.endswith('.pyo'):
+        return False
+    if pfn.endswith('__pycache__') or pfn.endswith('/tmp'):
+        return False
+    return True
 
 
 def main(args=None):
@@ -169,6 +192,9 @@ def main(args=None):
     parser.add_argument('--python', '-p', default=None,
             help="The name of the Python interpreter to use "
                  "(default: no shebang line).")
+    parser.add_argument('--preamble', '-P', default=None,
+            help="File containing text to prefix before the ZIP "
+                 "data (default: none).")
     parser.add_argument('--main', '-m', default=None,
             help="The main function of the application "
                  "(default: use an existing __main__.py).")
@@ -178,28 +204,37 @@ def main(args=None):
     parser.add_argument('--info', default=False, action='store_true',
             help="Display the interpreter from the archive.")
     parser.add_argument('source',
+            nargs='+',
             help="Source directory (or existing archive).")
 
     args = parser.parse_args(args)
 
     # Handle `python -m zipapp archive.pyz --info`.
     if args.info:
-        if not os.path.isfile(args.source):
+        if not os.path.isfile(args.source[0]):
             raise SystemExit("Can only get info for an archive file")
-        interpreter = get_interpreter(args.source)
+        interpreter = get_interpreter(args.source[0])
         print("Interpreter: {}".format(interpreter or "<none>"))
         sys.exit(0)
 
-    if os.path.isfile(args.source):
+    preamble = None
+    if args.preamble:
+        with open(args.preamble, 'r') as pfd:
+            preamble = pfd.read()
+
+    if os.path.isfile(args.source[0]):
         if args.output is None or (os.path.exists(args.output) and
-                                   os.path.samefile(args.source, args.output)):
+                                   os.path.samefile(args.source[0], args.output)):
             raise SystemExit("In-place editing of archives is not supported")
         if args.main:
             raise SystemExit("Cannot change the main function when copying")
 
     create_archive(args.source, args.output,
-                   interpreter=args.python, main=args.main,
-                   compressed=args.compress)
+                   interpreter=args.python,
+                   preamble=preamble,
+                   main=args.main,
+                   compressed=args.compress,
+                   filter=default_filter)
 
 
 if __name__ == '__main__':
