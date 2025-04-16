@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 This is the pagekite.py Main() function.
 """
@@ -24,11 +23,11 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
-import sys
-from pagekite import pk
-from pagekite import httpd
+def main():
+  import sys
+  from pagekite import pk
+  from pagekite import httpd
 
-if __name__ == "__main__":
   if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
     import pagekite.ui.basic
     uiclass = pagekite.ui.basic.BasicUi
@@ -41,6 +40,8 @@ if __name__ == "__main__":
           http_handler=httpd.UiRequestHandler,
           http_server=httpd.UiHttpServer)
 
+if __name__ == "__main__":
+  main()
 
 ##############################################################################
 CERTS="""\

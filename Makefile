@@ -1,34 +1,21 @@
 # Makefile for building combined pagekite.py files.
 export PYTHONPATH := .
 
-BREED_PAGEKITE = $(shell python3 -c 'import six; print(six.__file__.replace(".pyc", ".py"))') \
-                 pagekite/__init__.py \
-	         pagekite/common.py \
-	         pagekite/compat.py \
-	         pagekite/logging.py \
-	         pagekite/manual.py \
-	         pagekite/proto/__init__.py \
-	         pagekite/proto/ws_abnf.py \
-	         pagekite/proto/proto.py \
-	         pagekite/proto/parsers.py \
-	         pagekite/proto/selectables.py \
-	         pagekite/proto/filters.py \
-	         pagekite/proto/conns.py \
-	         pagekite/ui/__init__.py \
-	         pagekite/ui/nullui.py \
-	         pagekite/ui/basic.py \
-	         pagekite/ui/remote.py \
-	         pagekite/yamond.py \
-	         pagekite/httpd.py \
-	         pagekite/pk.py \
+PATH_SIX = $(shell python3 -c 'import six; print(six.__file__.replace(".pyc", ".py"))')
 
 
-combined: pagekite tools doc/MANPAGE.md dev .header defaults.cfg
-	@./scripts/breeder.py --compress --header .header \
-	             defaults.cfg sockschain $(BREED_PAGEKITE) \
-	             pagekite/__main__.py \
-	             >pagekite-tmp.py
+zipapp:
+	python3 ./scripts/zipapp.py \
+                --python=/usr/bin/python3 \
+                --preamble=pagekite/__main__.py \
+                --main='pagekite.__main__:main' \
+                --compress \
+                --output=pagekite-tmp.py \
+                pagekite sockschain $(PATH_SIX)
 	@chmod +x pagekite-tmp.py
+	@mv -v pagekite-tmp.py dist/pagekite-`python3 setup.py --version`.py
+
+combined: pagekite tools doc/MANPAGE.md dev .header defaults.cfg zipapp
 	@./scripts/blackbox-test.sh ./pagekite-tmp.py - \
 	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py - --nopyopenssl \
 	        && ./scripts/blackbox-test.sh ./pagekite-tmp.py - --nossl \
@@ -37,13 +24,7 @@ combined: pagekite tools doc/MANPAGE.md dev .header defaults.cfg
 	@mv pagekite-tmp.py dist/pagekite-`python3 setup.py --version`.py
 	@ls -l dist/pagekite-*.py
 
-untested: pagekite tools doc/MANPAGE.md dev .header defaults.cfg
-	@./scripts/breeder.py --compress --header .header \
-	             defaults.cfg sockschain $(BREED_PAGEKITE) \
-	             pagekite/__main__.py \
-	             >pagekite-tmp.py
-	@chmod +x pagekite-tmp.py
-	@mv pagekite-tmp.py dist/pagekite-`python3 setup.py --version`.py
+untested: pagekite tools doc/MANPAGE.md dev .header defaults.cfg zipapp
 	@ls -l dist/pagekite-*.py
 
 doc/MANPAGE.md: pagekite pagekite/manual.py
