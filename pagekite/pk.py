@@ -30,9 +30,13 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 import six
 from six.moves import range
 from six.moves import xmlrpc_client
-from six.moves.urllib.request import URLopener, urlopen
-from six.moves.urllib.parse import urlencode
 from six.moves.xmlrpc_server import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
+try:
+    from urllib.request import URLopener, urlopen
+    from urllib.parse import urlencode
+except ImportError:
+    from six.moves.urllib.request import URLopener, urlopen
+    from six.moves.urllib.parse import urlencode
 
 import base64
 import cgi

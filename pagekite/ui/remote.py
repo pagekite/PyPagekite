@@ -43,9 +43,9 @@ class RemoteUi(NullUi):
   ALLOWS_INPUT = True
   WANTS_STDERR = True
   EMAIL_RE = re.compile(r'^[a-z0-9!#$%&\'\*\+\/=?^_`{|}~-]+'
-                         '(?:\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'
-                         '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*'
-                         '(?:[a-zA-Z]{2,4}|museum)$')
+                        '(?:\\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*@'
+                        '(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)*'
+                        '(?:[a-zA-Z]{2,4}|museum)$')
 
   def __init__(self, welcome=None, wfile=sys.stderr, rfile=sys.stdin):
     NullUi.__init__(self, welcome=welcome, wfile=wfile, rfile=rfile)

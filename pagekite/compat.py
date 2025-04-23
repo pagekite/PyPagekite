@@ -24,7 +24,10 @@ along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
 import sys
-from six.moves.urllib.parse import parse_qs, urlparse
+try:
+    from urllib.parse import parse_qs, urlparse
+except ImportError:
+    from six.moves.urllib.parse import parse_qs, urlparse
 
 from . import common
 from .common import *

@@ -13,7 +13,7 @@ zipapp:
                 --output=pagekite-tmp.py \
                 pagekite sockschain $(PATH_SIX)
 	@chmod +x pagekite-tmp.py
-	@mv -v pagekite-tmp.py dist/pagekite-`python3 setup.py --version`.py
+	@cp -v pagekite-tmp.py dist/pagekite-`python3 setup.py --version`.py
 
 combined: pagekite tools doc/MANPAGE.md dev .header defaults.cfg zipapp
 	@./scripts/blackbox-test.sh ./pagekite-tmp.py - \
@@ -52,7 +52,7 @@ DEB_VERSION=`head -n1 debian/changelog | sed -e "s+.*(\(.*\)).*+\1+"`
 
 .deb: .debprep
 	@debuild -i -us -uc
-	@mv ../pagekite_*.deb dist/
+	@mv ../pagekite*.deb ../python*-pagekite_*.deb dist/
 
 .header: pagekite doc/header.txt
 	@sed -e "s/@VERSION@/$(VERSION)/g" \
