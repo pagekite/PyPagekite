@@ -6,7 +6,8 @@ PATH_SIX = $(shell python3 -c 'import six; print(six.__file__.replace(".pyc", ".
 
 zipapp:
 	python3 ./scripts/zipapp.py \
-                --python=/usr/bin/python3 \
+                --shebonk \
+                --python=python3,python \
                 --preamble=pagekite/__main__.py \
                 --main='pagekite.__main__:main' \
                 --compress \

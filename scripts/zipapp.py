@@ -43,16 +43,38 @@ def _maybe_open(archive, mode):
         yield archive
 
 
-def _write_file_prefix(f, interpreter, preamble):
+def _write_file_prefix(f, interpreter, shebonk, preamble):
     """Write a shebang line."""
     if interpreter:
-        shebang = b'#!' + interpreter.encode(shebang_encoding) + b'\n'
-        f.write(shebang)
+        versions = []
+        if (not 'python' in interpreter.lower()) or ',' in interpreter:
+            # Assume it's a list of versions
+            versions = interpreter.split(',')
+            ver = versions[0]
+            py = ver if ('python' in ver) else 'python%s' % ver
+            interpreter = py if ('/' in py) else ('/usr/bin/' + py)
+
+        if shebonk:
+            shebonk = ['#!/bin/sh',
+                '"""true"',
+                '# Extended shebang: Detect and run using default Python']
+            for ver in versions:
+                py = ver if ('python' in ver) else 'python%s' % ver
+                shebonk.append(
+                    '%s -c 1 2>/dev/null && exec %s "$0" "$@"' % (py, py))
+            shebonk.append('exit 127\n"""\n')
+            f.write(('\n'.join(shebonk)).encode(shebang_encoding))
+        else:
+            shebang = b'#!' + interpreter.encode(shebang_encoding) + b'\n'
+            f.write(shebang)
     if preamble:
         f.write(bytes(preamble, shebang_encoding))
 
 
-def _copy_archive(archive, new_archive, interpreter=None, preamble=None):
+def _copy_archive(archive, new_archive,
+        interpreter=None,
+        shebonk=False,
+        preamble=None):
     """Copy an application archive, modifying the shebang line."""
     with _maybe_open(archive, 'rb') as src:
         # Skip the shebang line from the source.
@@ -64,7 +86,7 @@ def _copy_archive(archive, new_archive, interpreter=None, preamble=None):
             src.readline()
 
         with _maybe_open(new_archive, 'wb') as dst:
-            _write_file_prefix(dst, interpreter, preamble)
+            _write_file_prefix(dst, interpreter, shebonk, preamble)
             # If there was no shebang, "first_2" contains the first 2 bytes
             # of the source file, so write them before copying the rest
             # of the file.
@@ -75,8 +97,14 @@ def _copy_archive(archive, new_archive, interpreter=None, preamble=None):
         os.chmod(new_archive, os.stat(new_archive).st_mode | stat.S_IEXEC)
 
 
-def create_archive(source, target=None, interpreter=None, main=None,
-                   preamble=None, filter=None, compressed=False):
+def create_archive(source,
+        target=None,
+        interpreter=None,
+        shebonk=False,
+        main=None,
+        preamble=None,
+        filter=None,
+        compressed=False):
     """Create an application archive from SOURCE.
 
     The SOURCE can be the name of a directory, or a filename or a file-like
@@ -106,7 +134,7 @@ def create_archive(source, target=None, interpreter=None, main=None,
             source_is_file = True
 
     if source_is_file:
-        _copy_archive(source0, target, interpreter)
+        _copy_archive(source0, target, shebonk, interpreter)
         return
 
     # We are creating a new archive from a directory.
@@ -141,7 +169,7 @@ def create_archive(source, target=None, interpreter=None, main=None,
             return [path]
 
     with _maybe_open(target, 'wb') as fd:
-        _write_file_prefix(fd, interpreter, preamble)
+        _write_file_prefix(fd, interpreter, shebonk, preamble)
         compression = (zipfile.ZIP_DEFLATED if compressed else
                        zipfile.ZIP_STORED)
         with zipfile.ZipFile(fd, 'w', compression=compression) as z:
@@ -190,8 +218,11 @@ def main(args=None):
             help="The name of the output archive. "
                  "Required if SOURCE is an archive.")
     parser.add_argument('--python', '-p', default=None,
-            help="The name of the Python interpreter to use "
-                 "(default: no shebang line).")
+            help="The name or version[s] of the Python interpreter to use "
+                 "(default: no shebang/shebonk).")
+    parser.add_argument('--shebonk', '-b', default=None, action='store_true',
+            help="Use a shebonk (extended shebang) to locate python "
+                 "(default: no shebonk).")
     parser.add_argument('--preamble', '-P', default=None,
             help="File containing text to prefix before the ZIP "
                  "data (default: none).")
@@ -231,6 +262,7 @@ def main(args=None):
 
     create_archive(args.source, args.output,
                    interpreter=args.python,
+                   shebonk=args.shebonk,
                    preamble=preamble,
                    main=args.main,
                    compressed=args.compress,
