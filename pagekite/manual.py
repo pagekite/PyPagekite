@@ -337,6 +337,15 @@ MAN_OPT_FRONTEND = ("""\
             Default name to use for SSL, if SNI (Server Name Indication)
             is missing from incoming HTTPS connections.
 
+    --tls_ciphers</b>=<a>cipher list</a> __
+            List of ciphers to use for front end server TLS sockets.
+            For example, Debian 11 and later may need <tt>DEFAULT@SECLEVEL=1</tt>
+            in order to allow TLSv1 connections from older embedded
+            backends. Make sure you know what you are doing when using this!
+
+    --tls_legacy   __Allow legacy TLS for front end servers.
+            Make sure you know what you are doing when using this!
+
     --tls_endpoint</b>=<a>name</a>:<a>/path/to/file</a> __
             Terminate SSL/TLS for a name using key/cert from a file.
 
@@ -355,7 +364,7 @@ MAN_OPT_SYSTEM = ("""\
     --savefile</b>=<a>/path/to/file</a> __
             Saved settings will be written to this file.
 
-    --save          __Save the current configuration to the savefile.
+    --save         __Save the current configuration to the savefile.
 
     --settings</b> __
             Dump the current settings to STDOUT, formatted as a configuration
