@@ -53,7 +53,7 @@ Package: python3-pagekite
 Section: net
 Architecture: all
 Depends: ${misc:Depends},
-         python3 (>= 3.2),
+         python3 (>= 3.5.3),
          python3-six,
          python3-socksipychain (>= 2.1.2),
          python3-openssl
