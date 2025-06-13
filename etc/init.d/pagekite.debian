@@ -38,10 +38,16 @@ SCRIPTNAME=/etc/init.d/$NAME
 grep -c ^abort_not_configured /etc/pagekite.d/10_account.rc \
   2>/dev/null >/dev/null && exit 0
 
-# Choose the best available Python interpretor
-PYTHON="python"
-[ -x "/usr/bin/python2" ] && PYTHON="/usr/bin/python2"
-[ -x "/usr/bin/python2.7" ] && PYTHON="/usr/bin/python2.7"
+# Choose the best available Python interpretor; it should
+# match whatever we installed.
+PYTHON="python3"
+if [ -d /usr/lib/pyshared/pagekite ]; then
+  [ -x "/usr/bin/python2" ] && PYTHON="/usr/bin/python2"
+  [ -x "/usr/bin/python2.7" ] && PYTHON="/usr/bin/python2.7"
+else
+  [ -x "/usr/bin/python3" ] && PYTHON="/usr/bin/python3"
+fi
+
 # This will allow pypy to work, but we leave it up to the brave admin to
 # enable pypy by setting PYTHON=/usr/bin/pypy in /etc/default/pagekite.
 if [ -d /usr/lib/python2.7/dist-packages/pagekite/ ]; then
