@@ -41,6 +41,8 @@ import sys
 import threading
 import time
 import traceback
+
+from pagekite.compat import *
  
 
 class YamonRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
@@ -49,7 +51,7 @@ class YamonRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     self.send_header('Content-Type', 'text/plain')
     self.send_header('Cache-Control', 'no-cache')
     self.end_headers()
-    self.wfile.write(self.server.yamond.render_vars_text())
+    self.wfile.write(b(self.server.yamond.render_vars_text()))
 
   def do_heapy(self):
     from guppy import hpy
@@ -57,19 +59,19 @@ class YamonRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     self.send_header('Content-Type', 'text/plain')
     self.send_header('Cache-Control', 'no-cache')
     self.end_headers()
-    self.wfile.write(hpy().heap())
+    self.wfile.write(b(hpy().heap()))
 
   def do_404(self):
     self.send_response(404)
     self.send_header('Content-Type', 'text/html')
     self.end_headers()
-    self.wfile.write('<h1>404: What? Where? Cannot find it!</h1>')
+    self.wfile.write(b('<h1>404: What? Where? Cannot find it!</h1>'))
 
   def do_root(self):
     self.send_response(200)
     self.send_header('Content-Type', 'text/html')
     self.end_headers()
-    self.wfile.write('<h1>Hello!</h1>')
+    self.wfile.write(b('<h1>Hello!</h1>'))
 
   def handle_path(self, path, query):
     if path == '/vars.txt':
