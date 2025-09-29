@@ -368,6 +368,7 @@ MAN_OPT_SYSTEM = ("""\
     --sslzlib      __Enable zlib compression in OpenSSL.
     --buffers</b>=<a>N</a>    __Buffer at most N kB of data before blocking.
     --logfile</b>=<a>F</a>    __Log to file F, <tt>stdio</tt> means standard output.
+    --loglevel</b>=<a>L</a>    __Log verbosity, L=none/err/info/warn/mach/debug/all
     --daemonize    __Run as a daemon.
     --runas</b>=<a>U</a>:<a>G</a>    __Set UID:GID after opening our listening sockets.
     --pidfile</b>=<a>P</a>    __Write PID to the named file.
