@@ -400,6 +400,8 @@ time the program defaults will Just Work.
      Buffer at most N kB of data before blocking.
    * <b>--logfile</b>=`F`  
      Log to file F, `stdio` means standard output.
+   * <b>--loglevel</b>=`L`  
+     Log verbosity, L=none/err/info/warn/mach/debug/all
    * <b>--daemonize</b>  
      Run as a daemon.
    * <b>--runas</b>=`U`:`G`  

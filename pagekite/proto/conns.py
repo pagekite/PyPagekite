@@ -241,8 +241,8 @@ class Tunnel(ChunkParser):
   def RecheckQuota(self, conns, when=None):
     if when is None: when = time.time()
     if (self.quota and
-        self.quota[0] is not None and
-        self.quota[1] and
+        (self.quota[0] is not None) and
+        (self.quota[1]) and
         (self.quota[2] < when-900)):
       self.quota[2] = when
       self.LogDebug('Rechecking: %s' % (self.quota, ))
@@ -334,7 +334,9 @@ class Tunnel(ChunkParser):
 
   def QuotaCallback(self, conns, results, log_info):
     # Report new values to the back-end... unless they are mobile.
-    if self.quota and (self.quota[0] >= 0):
+    if (self.quota and
+          (self.quota[0] is not None) and
+          (self.quota[0] >= 0)):
       if not self.server_info[self.S_IS_MOBILE]:
         self.SendQuota()
 
@@ -620,7 +622,7 @@ class Tunnel(ChunkParser):
       logged += 1
 
     if logged:
-      if self.quota and self.quota[0] is not None:
+      if self.quota and (self.quota[0] is not None):
         config.ui.NotifyQuota(self.quota[0], self.q_days, self.q_conns)
 
       # Also log the server capabilities
@@ -849,7 +851,9 @@ class Tunnel(ChunkParser):
 
   def SendPong(self, data):
     if (self.conns.config.isfrontend and
-        self.quota and (self.quota[0] >= 0)):
+        self.quota and
+        (self.quota[0] is not None) and
+        (self.quota[0] >= 0)):
       # May as well make ourselves useful!
       return self.SendQuota(pong=data[:64])
     else:
