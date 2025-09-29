@@ -3892,8 +3892,13 @@ class PageKite(object):
     for osock in oready:
       if osock:
         conn = self.conns.Connection(osock)
-        if conn and not conn.Send([], try_flush=True):
-          conn.Die(discard_buffer=True)
+        if conn:
+          try:
+            if not conn.Send([], try_flush=True):
+              conn.Die(discard_buffer=True)
+          except Exception as e:
+            logging.LogDebug('%s.Send() failed: %s' % (conn, e))
+            conn.Die(discard_buffer=True)
 
   def ProcessReadable(self, iready, throttle):
     if logging.DEBUG_IO:
@@ -3902,16 +3907,21 @@ class PageKite(object):
     for isock in iready:
       if isock is not None:
         conn = self.conns.Connection(isock)
-        if conn and not (conn.fd and conn.ReadData(maxread=throttle)):
-          conn.Die(discard_buffer=True)
+        if conn:
+          try:
+            if not (conn.fd and conn.ReadData(maxread=throttle)):
+              conn.Die(discard_buffer=True)
+          except Exception as e:
+            logging.LogDebug('%s.ReadData() failed: %s' % (conn, e))
+            conn.Die(discard_buffer=True)
 
   def ProcessDead(self, epoll=None):
     for conn in self.conns.DeadConns():
       if epoll and conn.fd:
         try:
           epoll.unregister(conn.fd)
-        except (IOError, TypeError):
-          pass
+        except Exception as e:
+          logging.LogDebug('epoll.unregister(%s) failed: %s' % (conn.fd, e))
       conn.Cleanup()
       self.conns.Remove(conn)
 
