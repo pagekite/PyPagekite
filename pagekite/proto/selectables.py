@@ -687,7 +687,7 @@ class MagicProtocolParser(LineParser):
           if server:
             return self.ProcessProto(data, 'xmpp', server)
 
-        elif data[1] == '\0':
+        elif (len(data) > 2) and (data[1] == '\0'):
           version, server, port = self.GetMinecraftInfo(data)
           if version and server and (port == self.on_port):
             return self.ProcessProto(data, 'minecraft', server)
