@@ -136,7 +136,7 @@ def LogError(msg, parms=None):
   Log(emsg, level=LOG_LEVEL_ERR)
 
   if common.gYamon:
-    common.gYamon.vadd('errors', 1, wrap=1000000)
+    common.gYamon.vadd('errors', 1, wrap=1000000, vtype='counter')
 
 def LogWarning(msg, parms=None):
   emsg = [('warn', msg)]

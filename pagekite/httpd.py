@@ -850,11 +850,15 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     photobackup = self.host_config.get('photobackup', False)
 
     if path == self.host_config.get('yamon', False):
-      if qs.get('view', [None])[0] == 'conns':
+      view = qs.get('view', [None])[0]
+      if view == 'conns':
         from pagekite.pk import Watchdog
         llines = []
         Watchdog.DumpConnState(self.server.pkite.conns, logfunc=llines.append)
         data['body'] = '\n'.join(llines) + '\n'
+      elif common.gYamon and view == 'openmetrics':
+        self.server.pkite.Overloaded(yamon=common.gYamon)
+        data['body'] = common.gYamon.render_vars_openmetrics()
       elif common.gYamon:
         self.server.pkite.Overloaded(yamon=common.gYamon)
         data['body'] = common.gYamon.render_vars_text(qs.get('view', [None])[0])
@@ -1120,7 +1124,7 @@ class UiHttpServer(socketserver.ThreadingMixIn, SimpleXMLRPCServer):
       gYamon.vset('version', APPVER)
       gYamon.vset('version_python', sys.version.replace('\n', ' '))
       gYamon.vset('httpd_ssl_enabled', self.enable_ssl)
-      gYamon.vset('errors', 0)
+      gYamon.vset('errors', 0, vtype='counter')
       gYamon.lcreate("tunnel_rtt", 100)
       gYamon.lcreate("tunnel_wrtt", 100)
       gYamon.lists['buffered_bytes'] = [1, 0, common.buffered_bytes]

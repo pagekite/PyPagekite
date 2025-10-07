@@ -46,6 +46,13 @@ from pagekite.compat import *
  
 
 class YamonRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+  def do_yamon_openmetrics(self):
+    self.send_response(200)
+    self.send_header('Content-Type', 'application/openmetrics-text; charset=utf-8')
+    self.send_header('Cache-Control', 'no-cache')
+    self.end_headers()
+    self.wfile.write(b(self.server.yamond.render_vars_openmetrics()))
+
   def do_yamon_vars(self):
     self.send_response(200)
     self.send_header('Content-Type', 'text/plain')
@@ -76,6 +83,8 @@ class YamonRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def handle_path(self, path, query):
     if path == '/vars.txt':
       self.do_yamon_vars()
+    if path == '/openmetrics.txt':
+      self.do_yamon_openmetrics()
     elif path == '/heap.txt':
       self.do_heapy()
     elif path == '/':
@@ -109,6 +118,7 @@ class YamonD(threading.Thread):
     self.httpd = None
     self.running = False
     self.values = {}
+    self.types = {}
     self.lists = {}
     self.views = {}
 
@@ -119,29 +129,37 @@ class YamonD(threading.Thread):
     #            things getting overwritten or rely on the GIL.
     self.lock = threading.RLock()
 
-  def vmax(self, var, value):
+  def vmax(self, var, value, vtype=None):
     # Unlocked, since we don't change the size of self.values
     if value > self.values[var]:
       self.values[var] = value
+    if vtype:
+      self.types[var] = vtype
 
-  def vmin(self, var, value):
+  def vmin(self, var, value, vtype=None):
     # Unlocked, since we don't change the size of self.values
     if value < self.values[var]:
       self.values[var] = value
+    if vtype:
+      self.types[var] = vtype
 
-  def vscale(self, var, ratio, add=0):
+  def vscale(self, var, ratio, add=0, vtype=None):
     if var not in self.values:
       with self.lock:
         self.values[var] = self.values.get(var, 0)
     # Unlocked, since we don't change the size of self.values
     self.values[var] *= ratio
     self.values[var] += add
+    if vtype:
+      self.types[var] = vtype
 
-  def vset(self, var, value):
+  def vset(self, var, value, vtype=None):
     with self.lock:
       self.values[var] = value
+      if vtype:
+        self.types[var] = vtype
 
-  def vadd(self, var, value, wrap=None):
+  def vadd(self, var, value, wrap=None, vtype=None):
     if var not in self.values:
       with self.lock:
         self.values[var] = self.values.get(var, 0)
@@ -149,11 +167,15 @@ class YamonD(threading.Thread):
     self.values[var] += value
     if wrap:
       self.values[var] %= wrap
+    if vtype:
+      self.types[var] = vtype
 
   def vdel(self, var):
     if var in self.values:
       with self.lock:
         del self.values[var]
+      if var in self.types:
+        del self.types[var]
 
   def lcreate(self, listn, elems):
     with self.lock:
@@ -198,6 +220,52 @@ class YamonD(threading.Thread):
         pass
 
     data.sort()
+    return ''.join(data)
+
+  def render_vars_openmetrics(self):
+    values, lists = self.values, self.lists
+    data = []
+    for var in sorted(values.keys()):
+      if '-' in var:
+        vn, vl = var.split('-')
+        vl = '{%s=%s}' % (vn[:1], vl)
+      else:
+        vn, vl = var, ''
+
+      dtype = self.types.get(var, 'gauge')
+
+      if isinstance(values[var], str):
+        val = values[var].replace('"', "'")
+        data.append('# TYPE %s %s\n' % (vn, dtype))
+        if ' ' in val:
+          v1, vN = val.split(' ', 1)
+          data.append('%s{%s="%s", details="%s"} 1\n' % (var, var, v1, vN))
+        else:
+          data.append('%s{%s="%s"} 1\n' % (var, var, val))
+      elif isinstance(values[var], bool):
+        data.append('# TYPE %s %s\n' % (vn, dtype))
+        data.append('%s%s %s\n' % (vn, vl, values[var] and 1 or 0))
+      else:
+        data.append('# TYPE %s %s\n' % (vn, dtype))
+        data.append('%s%s %s\n' % (vn, vl, values[var]))
+        if var == 'started':
+          data.append((
+            '# TYPE started_days_ago gauge\n'
+            'started_days_ago %.3f\n') % ((time.time() - values[var]) / 86400))
+
+    for lname in lists:
+      (elems, offset, lst) = lists[lname]
+      l = lst[offset:]
+      l.extend(lst[:offset])
+      try:
+        slist = sorted([float(i) for i in l if i])
+        if len(slist) >= 10:
+          data.append('%s_m50 %.2f\n' % (lname, slist[int(len(slist) * 0.5)]))
+          data.append('%s_m90 %.2f\n' % (lname, slist[int(len(slist) * 0.9)]))
+          data.append('%s_avg %.2f\n' % (lname, sum(slist) / len(slist)))
+      except (ValueError, TypeError, IndexError, ZeroDivisionError):
+        pass
+
     return ''.join(data)
 
   def quit(self):

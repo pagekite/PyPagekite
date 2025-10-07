@@ -306,8 +306,9 @@ class Selectable(object):
       self.LogTrafficStatus(final)
 
       if common.gYamon:
-        common.gYamon.vadd("bytes_all", self.wrote_bytes
-                                        + self.read_bytes, wrap=1000000000)
+        common.gYamon.vadd("bytes_all", self.wrote_bytes + self.read_bytes,
+          wrap=1000000000,
+          vtype='counter')
 
       log_info = [('wrote', '%d' % self.wrote_bytes),
                   ('wbps', '%d' % self.write_speed),

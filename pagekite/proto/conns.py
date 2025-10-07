@@ -190,7 +190,8 @@ class Tunnel(ChunkParser):
       for v in parser.Header(prefix+'-Version'):
         version = v
       if common.gYamon:
-        common.gYamon.vadd('version-%s' % version, 1, wrap=10000000)
+        common.gYamon.vadd('version-%s' % version, 1,
+          wrap=10000000, vtype='counter')
       self.server_info[self.S_VERSION] = version
 
       for replace in parser.Header(prefix+'-Replace'):
