@@ -1,10 +1,19 @@
 # Makefile for building combined pagekite.py files.
 export PYTHONPATH := .
 
-PATH_SIX = $(shell python3 -c 'import six; print(six.__file__.replace(".pyc", ".py"))')
+#PATH_SIX = $(shell python3 -c 'import six; print(six.__file__.replace(".pyc", ".py"))')
 
+build/legacy_cgi.py:
+	mkdir -p build
+	curl https://raw.githubusercontent.com/jackrosenthal/legacy-cgi/refs/heads/main/cgi.py \
+            >build/legacy_cgi.py
 
-zipapp:
+build/six.py:
+	mkdir -p build
+	curl https://raw.githubusercontent.com/benjaminp/six/refs/heads/main/six.py \
+            >build/six.py
+
+zipapp: build/six.py build/legacy_cgi.py
 	python3 ./scripts/zipapp.py \
                 --shebonk \
                 --python=python3,python \
@@ -12,7 +21,7 @@ zipapp:
                 --main='pagekite.__main__:main' \
                 --compress \
                 --output=pagekite-tmp.py \
-                pagekite sockschain $(PATH_SIX)
+                pagekite sockschain build/six.py build/legacy_cgi.py
 	@chmod +x pagekite-tmp.py
 	@cp -v pagekite-tmp.py dist/pagekite-`python3 setup.py --version`.py
 

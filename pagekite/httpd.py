@@ -32,7 +32,10 @@ from six.moves import http_cookies
 from six.moves.xmlrpc_server import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 
 import base64
-import cgi
+try:
+    import cgi
+except ImportError:
+    import legacy_cgi as cgi
 import datetime
 try:
   from html import escape as escape_html

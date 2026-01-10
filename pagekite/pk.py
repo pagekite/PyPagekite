@@ -31,15 +31,10 @@ import six
 from six.moves import range
 from six.moves import xmlrpc_client
 from six.moves.xmlrpc_server import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
-try:
-    from urllib.request import URLopener, urlopen
-    from urllib.parse import urlencode
-except ImportError:
-    from six.moves.urllib.request import URLopener, urlopen
-    from six.moves.urllib.parse import urlencode
+from six.moves.urllib.request import urlopen, urlretrieve
+from six.moves.urllib.parse import urlencode
 
 import base64
-import cgi
 import copy
 try:
   from html import escape as escape_html
@@ -1233,7 +1228,7 @@ class PageKite(object):
         ((found == own_pemfile) and (newest < time.time() - 365*24*3600))):
       # No bundle found or bundle old, download a new one from the cURL site.
       try:
-        URLopener().retrieve(CURL_CA_CERTS, filename=own_pemfile)
+        urlretrieve(CURL_CA_CERTS, own_pemfile)
         return self.FindCACerts(use_curl_bundle=False)
       except:
         pass
