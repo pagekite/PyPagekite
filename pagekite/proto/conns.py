@@ -1456,7 +1456,7 @@ class UserConn(Selectable):
           self.fd.settimeout(2.0) # Missing in Python 2.2
         except:
           self.fd.setblocking(1)
-      
+
         try:
           self.fd.connect(tuple(sspec))
           success = True

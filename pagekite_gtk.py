@@ -1,1 +1,0 @@
-scripts/pagekite_gtk
