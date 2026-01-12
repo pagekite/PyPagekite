@@ -3,17 +3,7 @@ export PYTHONPATH := .
 
 #PATH_SIX = $(shell python3 -c 'import six; print(six.__file__.replace(".pyc", ".py"))')
 
-build/legacy_cgi.py:
-	mkdir -p build
-	curl https://raw.githubusercontent.com/jackrosenthal/legacy-cgi/refs/heads/main/cgi.py \
-            >build/legacy_cgi.py
-
-build/six.py:
-	mkdir -p build
-	curl https://raw.githubusercontent.com/benjaminp/six/refs/heads/main/six.py \
-            >build/six.py
-
-zipapp: build/six.py build/legacy_cgi.py
+zipapp: build/six.py build/legacy_cgi.py sockschain
 	python3 ./scripts/zipapp.py \
                 --shebonk \
                 --python=python3,python \
@@ -24,6 +14,20 @@ zipapp: build/six.py build/legacy_cgi.py
                 pagekite sockschain build/six.py build/legacy_cgi.py
 	@chmod +x pagekite-tmp.py
 	@cp -v pagekite-tmp.py dist/pagekite-`python3 setup.py --version`.py
+
+sockschain:
+	ln -s ../PySocksipyChain/sockschain/ .
+
+build/legacy_cgi.py:
+	mkdir -p build
+	curl https://raw.githubusercontent.com/jackrosenthal/legacy-cgi/refs/heads/main/cgi.py \
+            >build/legacy_cgi.py
+
+build/six.py:
+	mkdir -p build
+	curl https://raw.githubusercontent.com/benjaminp/six/refs/heads/main/six.py \
+            >build/six.py
+
 
 combined: pagekite tools doc/MANPAGE.md dev .header defaults.cfg zipapp
 	@./scripts/blackbox-test.sh ./pagekite-tmp.py - \
