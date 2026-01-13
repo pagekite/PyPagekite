@@ -7,7 +7,7 @@ from __future__ import absolute_import
 
 LICENSE = """\
 This file is part of pagekite.py.
-Copyright 2010-2020, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+Copyright 2010-2026, the Beanstalks Project ehf. and Bjarni Runar Einarsson
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the  GNU  Affero General Public License as published by the Free
@@ -27,7 +27,7 @@ import random
 import time
 
 PROTOVER = '0.8'
-APPVER = '1.5.2.260110'
+APPVER = '1.5.2.260113'
 AUTHOR = 'Bjarni Runar Einarsson, http://bre.klaki.net/'
 WWWHOME = 'https://pagekite.net/'
 LICENSE_URL = 'http://www.gnu.org/licenses/agpl.html'
@@ -57,7 +57,7 @@ OS_CA_CERTS = (
   "/opt/local/etc/openssl/cert.pem",                   # OS X (Ports?)
   "/data/data/com.termux/files/usr/etc/tls/cert.pem")  # Android-Termux
 
-CURL_CA_CERTS = 'https://curl.haxx.se/ca/cacert.pem'
+CURL_CA_CERTS = 'https://pagekite.net/pk/cacert.pem'
 
 
 DEFAULT_CHARSET = 'utf-8'

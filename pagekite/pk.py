@@ -10,7 +10,7 @@ from __future__ import print_function
 ##############################################################################
 LICENSE = """\
 This file is part of pagekite.py.
-Copyright 2010-2020, the Beanstalks Project ehf. and Bjarni Runar Einarsson
+Copyright 2010-2026, the Beanstalks Project ehf. and Bjarni Runar Einarsson
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the  GNU  Affero General Public License as published by the Free
@@ -31,7 +31,7 @@ import six
 from six.moves import range
 from six.moves import xmlrpc_client
 from six.moves.xmlrpc_server import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
-from six.moves.urllib.request import urlopen, urlretrieve
+from six.moves.urllib.request import urlopen
 from six.moves.urllib.parse import urlencode
 
 import base64
@@ -107,11 +107,8 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'webaccess=', 'webindexes=', 'delete_backend=']
 
 
-# Enable system proxies
-# This will all fail if we don't have PySocksipyChain available.
-# FIXME: Move this code somewhere else?
+# Configure system proxies
 socks.usesystemdefaults()
-socks.wrapmodule(sys.modules[__name__])
 
 if socks.HAVE_SSL:
   # Secure otherwise cleartext connections to pagekite.net in SSL tunnels.
@@ -1084,14 +1081,14 @@ class PageKite(object):
     self.fe_certname = []
     #
     # This will automatically disable TLS certificate checks after
-    # Dec 1 00:00:00 2028 GMT, one month before the current bundled
-    # USERTrust certificate expires. We also bundle Comodo and ISRG
-    # roots which last longer, but this is our conservative cutoff.
-    # Context: https://pagekite.net/2020-05-31/TLS_Certificate_Bug
+    # May  4 11:04:38 2035 GMT, one month before the current bundled
+    # Let's Encrypt certificate expires. We also bundle Sectigo and
+    # USERTrust roots which last longer, but this is our conservative
+    # cutoff. See: https://pagekite.net/2020-05-31/TLS_Certificate_Bug
     #
     # FIXME: Update this when bundled certs get updated!
     #
-    self.fe_nocertcheck = (time.time() >= 1859241600)
+    self.fe_nocertcheck = (time.time() >= 2061889478)
 
     self.service_provider = SERVICE_PROVIDER
     self.service_xmlrpc = SERVICE_XMLRPC
@@ -1204,7 +1201,7 @@ class PageKite(object):
   def SetDefaultCACerts(self, **kwargs):
     # Look for CA Certificates. If we don't find them in the host OS,
     # we assume there might be something good in the program itself.
-    if self.ca_certs_default != self.pyfile:
+    if (self.ca_certs_default != self.pyfile) or kwargs.get('use_curl_bundle'):
       self.ca_certs_default = self.FindCACerts(**kwargs)
     self.ca_certs = self.ca_certs_default
 
@@ -1225,14 +1222,20 @@ class PageKite(object):
           # Choose the freshest bundle!
           found, newest = path, mtime
 
+    if use_curl_bundle == 'force':
+      found = False
+
     if use_curl_bundle and ((not found) or
         ((found == own_pemfile) and (newest < time.time() - 365*24*3600))):
       # No bundle found or bundle old, download a new one from the cURL site.
       try:
-        urlretrieve(CURL_CA_CERTS, own_pemfile)
+        urllib_request.urlretrieve(
+          CURL_CA_CERTS.replace('https:', 'http:'),  # socksipychain adds TLS
+          own_pemfile)
+        sys.stderr.write('Downloaded %s to %s\n' % (CURL_CA_CERTS, own_pemfile))
         return self.FindCACerts(use_curl_bundle=False)
-      except:
-        pass
+      except Exception as e:
+        sys.stderr.write('Downloading %s failed: %s\n' % (CURL_CA_CERTS, e))
 
     if found:
       return found
@@ -2482,7 +2485,6 @@ class PageKite(object):
 
         if not self.proxy_servers:
           # Make DynDNS updates go via the proxy.
-          socks.wrapmodule(urllib_request)
           self.proxy_servers = [arg]
         else:
           self.proxy_servers.append(arg)
@@ -2498,6 +2500,8 @@ class PageKite(object):
       elif opt == '--ca_certs':
         if arg == 'auto':
           self.SetDefaultCACerts(use_curl_bundle=True)
+        elif arg == 'curl':
+          self.SetDefaultCACerts(use_curl_bundle='force')
         else:
           self.ca_certs = arg
       elif opt == '--fe_certname':
@@ -2851,11 +2855,6 @@ class PageKite(object):
 
   def GetServiceXmlRpc(self):
     service = self.service_xmlrpc
-    try:
-      import http.client
-      socks.wrapmodule(http.client)
-    except ImportError:
-      pass
     return xmlrpc_client.ServerProxy(self.service_xmlrpc, None, None, False)
 
   def _KiteInfo(self, kitename):
@@ -2909,11 +2908,6 @@ class PageKite(object):
     # This is the default...
     be_specs = ['http:%s:localhost:80']
 
-    if self.ca_certs == self.ca_certs_default:
-      # We're using the defaults, but the defaults might be lame so we
-      # reset them here, allowing for downloading the cURL bundle.
-      self.SetDefaultCACerts(use_curl_bundle=True)
-
     service = self.GetServiceXmlRpc()
     service_accounts = {}
     if self.kitename and self.kitesecret:
@@ -2933,9 +2927,13 @@ class PageKite(object):
       state = ['choose_kite_account']
     else:
       state = ['use_service_question']
+
+    error = network_error = error_count = 0
     history = []
 
     def Goto(goto, back_skips_current=False):
+      if error and error_count > 4:
+          goto = 'abort'
       if not back_skips_current: history.append(state[0])
       state[0] = goto
     def Back():
@@ -2947,6 +2945,7 @@ class PageKite(object):
     register = is_cname_for or kitename
     account = email = None
     while 'end' not in state:
+      error = network_error = None
       try:
         if 'use_service_question' in state:
           ch = self.ui.AskYesNo('Use the PageKite.net service?',
@@ -3060,10 +3059,12 @@ class PageKite(object):
 
         elif ('service_signup_kitename' in state or
               'service_ask_kitename' in state):
+          warning = []
           try:
             self.ui.Working('Fetching list of available domains')
             domains = service.getAvailableDomains('', '')
-          except:
+          except Exception as e:
+            warning = ['', 'WARNING: Failed to connect to service, using defaults.']
             domains = ['.%s' % x for x in SERVICE_DOMAINS_SIGNUP]
 
           ch = self.ui.AskKiteName(domains, 'Name this kite:',
@@ -3072,7 +3073,8 @@ class PageKite(object):
                                       '',
                                       'Names are provided on a first-come,',
                                       'first-serve basis. You can create more',
-                                      'kites with different names later on.'],
+                                      'kites with different names later on.'
+                                      ] + warning,
                                  back=False)
           if ch:
             kitename = register = ch
@@ -3139,7 +3141,11 @@ class PageKite(object):
               return (register, details['secret'])
             else:
               error = details.get('error', 'unknown')
-          except IOError:
+          except IOError as e:
+            if error_count > 3:
+                network_error = traceback.format_exc()
+            else:
+                network_error = '%s' % e
             error = 'network'
           except:
             error = '%s at %s' % (sys.exc_info(), format_exc())
@@ -3158,7 +3164,7 @@ class PageKite(object):
             register, kitename = None, None
             Goto('service_signup_kitename', back_skips_current=True)
           elif error == 'network':
-            self.ui.ExplainError(error, 'Network error!',
+            self.ui.ExplainError(error, 'Network error! (%s)' % network_error,
                                  subject=self.service_provider)
             Goto('service_signup', back_skips_current=True)
           else:
@@ -3248,6 +3254,11 @@ class PageKite(object):
 
         else:
           raise ConfigError('Unknown state: %s' % state)
+
+        if error:
+          error_count += 1
+        else:
+          error_count = 0
 
       except KeyboardInterrupt:
         sys.stderr.write('\n')
@@ -4369,6 +4380,16 @@ def Configure(pk):
     print('%s' % APPVER)
     sys.exit(0)
 
+  if (not pk.no_proxy) and ('--noproxy' not in sys.argv):
+    socks.setdefaultcertfile(pk.pyfile)
+    socks.wrapmodule(sys.modules[__name__])
+    socks.wrapmodule(urllib_request)
+    try:
+      import http.client
+      socks.wrapmodule(http.client)
+    except ImportError:
+      pass
+
   if '--clean' not in sys.argv and '--help' not in sys.argv:
     try:
       pk.ConfigureFromFile('.SELF/defaults.cfg')
@@ -4387,6 +4408,11 @@ def Configure(pk):
   if '--settings' in sys.argv:
     pk.PrintSettings(safe=True)
     sys.exit(0)
+
+  if pk.ca_certs == pk.ca_certs_default:
+    # We're using the defaults, but the defaults might be lame so we
+    # reset them here, allowing for downloading the cURL bundle.
+    pk.SetDefaultCACerts(use_curl_bundle=True)
 
   if not list(six.iterkeys(pk.backends)) and (not pk.kitesecret or not pk.kitename):
     if '--signup' in sys.argv or friendly_mode:
