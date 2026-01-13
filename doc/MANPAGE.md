@@ -361,6 +361,16 @@ time the program defaults will Just Work.
      Default name to use for SSL, if SNI (Server Name Indication)
      is missing from incoming HTTPS connections.
 
+   * <b>--tls_ciphers</b>=`cipher list` <br />
+     List of ciphers to use for front end server TLS sockets.
+     For example, Debian 11 and later may need `DEFAULT@SECLEVEL=1`
+     in order to allow TLSv1 connections from older embedded
+     backends. Make sure you know what you are doing when using this!
+
+   * <b>--tls_legacy</b>  
+     Allow legacy TLS for front end servers.
+     Make sure you know what you are doing when using this!
+
    * <b>--tls_endpoint</b>=`name`:`/path/to/file` <br />
      Terminate SSL/TLS for a name using key/cert from a file.
 
@@ -516,7 +526,7 @@ lapcat(1), <http://pagekite.org/>, <https://pagekite.net/>
 
 ## Copyright and license ##
 
-Copyright 2010-2020, the Beanstalks Project ehf. and Bjarni R. Einarsson.
+Copyright 2010-2026, the Beanstalks Project ehf. and Bjarni R. Einarsson.
 
 This program is free software: you can redistribute it and/or modify it
 under the terms of the GNU Affero General Public License as published by
