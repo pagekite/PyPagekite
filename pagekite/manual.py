@@ -191,6 +191,8 @@ MAN_OPT_BACKEND = ("""\
             If authentication fails, reject tunnel requests. The default is
             to fail open and allow tunnels if the auth checks are broken.
 
+    --postauth</b>=<a>/path/to/app</a> __
+            Invoke an external application on successful tunnel authentication.
 
     --service_off</b>=<a>proto</a>:<a>kitename</a>:<a>host</a>:<a>port</a>:<a>secret</a> __
             Same as --service_on, except disabled by default.
