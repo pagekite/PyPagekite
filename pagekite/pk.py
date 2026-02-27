@@ -87,7 +87,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'dns_hints=',
             'defaults', 'whitelabel=', 'whitelabels=', 'local=', 'domain=',
-            'auththreads=', 'authdomain=', 'authfail_closed',
+            'auththreads=', 'authdomain=', 'authfail_closed', 'postauth=',
             'motd=', 'register=', 'host=', 'noupgradeinfo', 'upgradeinfo=',
             'ports=', 'protos=', 'portalias=', 'rawports=',
             'tls_legacy', 'tls_ciphers=', 'tls_default=', 'tls_endpoint=', 'selfsign',
@@ -355,6 +355,7 @@ class AuthThread(threading.Thread):
                 log_info.extend([('rejected', domain),
                                  ('duplicate', 'yes')])
               else:
+                self.conns.config.RunPostAuthApp([domain])
                 results.append(('%s-OK' % prefix, what))
                 quotas.append((quota, request))
                 if conns: q_conns.append(conns)
@@ -1044,6 +1045,7 @@ class PageKite(object):
   """Configuration and master select loop."""
 
   def __init__(self, ui=None, http_handler=None, http_server=None):
+    assert(subprocess is not None)
     self.progname = ((sys.argv[0] or 'pagekite.py').split('/')[-1]
                                                    .split('\\')[-1])
     self.pyfile = os.path.abspath(sys.argv[0])
@@ -1058,6 +1060,7 @@ class PageKite(object):
     self.auth_threads = 1
     self.auth_domain = None
     self.auth_domains = {}
+    self.post_auth = None
     self.auth_apps = {}
     self.authfail_closed = False
     self.motd = None
@@ -1525,6 +1528,7 @@ class PageKite(object):
                            ','.join(['%s' % x for x in sorted(self.server_raw_ports)] or [VIRTUAL_PN])),
         p('auththreads = %s', self.isfrontend and self.auth_threads, 1),
         p('authdomain = %s', self.isfrontend and self.auth_domain, 'foo.com'),
+        p('postauth = %s', self.isfrontend and self.post_auth, ''),
         (self.authfail_closed and 'authfail_closed' or
          '# authfail_closed  # Tunnel auth fails OPEN without this'),
         p('motd = %s', self.isfrontend and self.motd, '/path/to/motd.txt'),
@@ -1838,6 +1842,13 @@ class PageKite(object):
     if auth_app is None:
       self.auth_apps[command] = AuthApp(command)
     return self.auth_apps[command]
+
+  def RunPostAuthApp(self, args):
+    if not self.post_auth:
+      return
+    result = subprocess.run([self.post_auth] + args, stderr=subprocess.PIPE)
+    if result.returncode:
+      logging.LogError('Error when running postauth: %s' % result.stderr)
 
   def LookupDomainQuota(self, srand, token, sign, protoport, domain, adom):
     if '/' in adom:
@@ -2428,6 +2439,8 @@ class PageKite(object):
           self.auth_domain = arg
       elif opt == '--authfail_closed':
         self.authfail_closed = True
+      elif opt in ('--postauth'):
+        self.post_auth = arg
       elif opt == '--motd':
         self.motd = arg
         self.LoadMOTD()

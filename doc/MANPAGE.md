@@ -213,6 +213,8 @@ time the program defaults will Just Work.
      If authentication fails, reject tunnel requests. The default is
      to fail open and allow tunnels if the auth checks are broken.
 
+   * <b>--postauth</b>=`/path/to/app` <br />
+     Invoke an external application on successful tunnel authentication.
 
    * <b>--service_off</b>=`proto`:`kitename`:`host`:`port`:`secret` <br />
      Same as --service_on, except disabled by default.
