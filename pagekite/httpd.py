@@ -404,7 +404,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         if clength >= 50*1024*1024:
           raise Exception(("Refusing to parse giant posted query "
                            "string (%s bytes).") % clength)
-        posted = cgi.parse_qs(self.rfile.read(clength), 1)
+        posted = parse_qs(self.rfile.read(clength), 1)
       elif self.host_config.get('xmlrpc', False):
         with self.server.RCI.lock:
           return SimpleXMLRPCRequestHandler.do_POST(self)
