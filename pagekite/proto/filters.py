@@ -158,9 +158,10 @@ class HaproxyProtocolFilter(TunnelFilter):
         remote_ip = info['remote_ip']
         if '.' in remote_ip:
           remote_ip = remote_ip.rsplit(':', 1)[1]
-        data = 'PROXY TCP%s %s 0.0.0.0 %s %s\r\n%s' % (
+        data = 'PROXY TCP%s %s %s %s %s\r\n%s' % (
           '4' if ('.' in remote_ip) else '6',
-          remote_ip, info['remote_port'], info['port'], data or '')
+          remote_ip, '0.0.0.0' if ('.' in remote_ip) else '::',
+          info['remote_port'], info['port'], data or '')
       else:
         logging.LogError(
           'FIXME: Unimplemented PROXY protocol v%s\n' % info[self.ENABLE])
